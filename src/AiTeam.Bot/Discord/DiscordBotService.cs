@@ -24,8 +24,6 @@ public class DiscordBotService(
         await client.LoginAsync(TokenType.Bot, _settings.BotToken);
         await client.StartAsync();
 
-        await commandHandler.RegisterCommandsAsync();
-
         // 保持服務運行直到取消
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
@@ -41,6 +39,9 @@ public class DiscordBotService(
         logger.LogInformation("Discord Bot 已上線，登入為 {Username}", client.CurrentUser.Username);
         await client.SetStatusAsync(UserStatus.Online);
         await client.SetGameAsync("等待指令...");
+
+        // Ready 後 Guild 快取才完整，此時才能註冊斜線指令
+        await commandHandler.RegisterCommandsAsync();
     }
 
     private Task OnLog(LogMessage log)

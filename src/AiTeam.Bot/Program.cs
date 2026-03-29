@@ -1,4 +1,5 @@
 using Anthropic.SDK;
+using Microsoft.EntityFrameworkCore;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Data;
@@ -50,4 +51,12 @@ builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddHostedService<DiscordBotService>();
 
 var host = builder.Build();
+
+// 啟動時自動套用 EF Core Migrations
+using (var scope = host.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 host.Run();
