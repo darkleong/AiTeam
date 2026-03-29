@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AiTeam.AppHost/AiTeam.AppHost.csproj" />
+    <Project Path="src/AiTeam.Bot/AiTeam.Bot.csproj" />
+    <Project Path="src/AiTeam.ServiceDefaults/AiTeam.ServiceDefaults.csproj" />
+  </Folder>
+</Solution>
