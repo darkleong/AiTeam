@@ -9,4 +9,9 @@ public class GitHubSettings
     /// Dev Agent Clone repo 的本地工作目錄
     /// </summary>
     public string WorkspacePath { get; set; } = @"D:\AiTeam-Workspace";
+
+    /// <summary>
+    /// GitHub 帳號名稱（repo owner）
+    /// </summary>
+    public string Owner { get; set; } = "";
 }

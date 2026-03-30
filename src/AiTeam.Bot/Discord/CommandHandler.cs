@@ -2,6 +2,7 @@ using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Data;
 using AiTeam.Bot.Notion;
+using AiTeam.Bot.Ops;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
@@ -14,11 +15,14 @@ namespace AiTeam.Bot.Discord;
 public class CommandHandler(
     DiscordSocketClient client,
     IOptions<DiscordSettings> settings,
+    IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
     NotionService notionService,
+    OpsAgentService opsAgentService,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
+    private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
 
     // 等待確認的 CEO 決策暫存（messageId → CeoResponse）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingConfirmations = [];
@@ -182,14 +186,97 @@ public class CommandHandler(
         else if (interaction.Data.CustomId == "exec_yes")
         {
             await interaction.DeferAsync();
-            // TODO: Stage 3 — 呼叫對應 Agent 執行
             await interaction.FollowupAsync(
-                $"✅ 已確認，{pending.CeoResponse.TargetAgent} Agent 開始執行。（Agent 執行邏輯將於 Stage 3 實作）");
+                $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
+
+            _ = Task.Run(async () =>
+            {
+                try { await ExecuteAgentTaskAsync(pending); }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
+                }
+            }, CancellationToken.None);
         }
         else // confirm_no 或 exec_no
         {
             await interaction.RespondAsync("❌ 已取消。");
         }
+    }
+
+    #endregion
+
+    #region Agent 執行
+
+    private async Task ExecuteAgentTaskAsync(PendingConfirmation pending)
+    {
+        var owner = _gitHubSettings.Owner;
+        var repo  = pending.Project;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+
+        var task = await taskRepo.GetByIdAsync(pending.TaskId);
+        if (task is null)
+        {
+            logger.LogError("找不到 TaskItem（Id={Id}）", pending.TaskId);
+            return;
+        }
+
+        taskRepo.UpdateStatus(task, "running");
+        await taskRepo.SaveAsync();
+
+        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
+
+        try
+        {
+            if (pending.CeoResponse.TargetAgent == "Dev")
+            {
+                var devAgent = scope.ServiceProvider.GetRequiredService<DevAgentService>();
+                var rules    = await notionService.GetRulesAsync();
+                var plan     = await devAgent.BuildPlanAsync(task, owner, repo, rules);
+                var prUrl    = await devAgent.ExecuteAsync(task, plan, owner, repo);
+
+                taskRepo.UpdateStatus(task, "done");
+                await taskRepo.SaveAsync();
+
+                var embed = new EmbedBuilder()
+                    .WithTitle("✅ Dev Agent 執行完成")
+                    .WithColor(Color.Green)
+                    .AddField("任務", task.Title)
+                    .AddField("PR", prUrl)
+                    .WithTimestamp(DateTimeOffset.UtcNow)
+                    .Build();
+                if (notifyChannel is not null)
+                    await notifyChannel.SendMessageAsync(embed: embed);
+            }
+            else // Ops 或其他
+            {
+                // TODO: Ops 任務執行邏輯
+                await opsAgentService.AlertAsync(
+                    $"📋 Ops 任務待執行：{task.Title}（專案：{repo}）");
+                taskRepo.UpdateStatus(task, "done");
+                await taskRepo.SaveAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Agent 執行失敗：{Title}", task.Title);
+            taskRepo.UpdateStatus(task, "failed");
+            await taskRepo.SaveAsync();
+
+            var alertChannel = FindChannel(_settings.Channels.Alerts);
+            if (alertChannel is not null)
+                await alertChannel.SendMessageAsync(
+                    $"🚨 **{pending.CeoResponse.TargetAgent} Agent 失敗**\n任務：{task.Title}\n錯誤：{ex.Message}");
+        }
+    }
+
+    private IMessageChannel? FindChannel(string channelName)
+    {
+        if (!ulong.TryParse(_settings.GuildId, out var guildId)) return null;
+        return client.GetGuild(guildId)
+            ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
 
     #endregion
