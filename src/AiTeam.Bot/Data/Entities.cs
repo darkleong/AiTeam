@@ -42,7 +42,7 @@ public class AgentConfig
 public class TaskItem
 {
     public Guid Id { get; set; }
-    public Guid TeamId { get; set; }
+    public Guid? TeamId { get; set; }
     public Guid? ProjectId { get; set; }
     public string Title { get; set; } = "";
     public string TriggeredBy { get; set; } = ""; // Discord / GitHub / Schedule
@@ -51,7 +51,7 @@ public class TaskItem
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 
-    public Team Team { get; set; } = null!;
+    public Team? Team { get; set; }
     public Project? Project { get; set; }
     public ICollection<TaskLog> Logs { get; set; } = [];
 }

@@ -171,7 +171,6 @@ public class CommandHandler(
 
                 var task = new TaskItem
                 {
-                    TeamId = Guid.Empty, // TODO: 從設定載入 Software Team ID
                     Title = pending.CeoResponse.Task?.Title ?? pending.Description,
                     TriggeredBy = "Discord",
                     AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
