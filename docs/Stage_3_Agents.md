@@ -141,6 +141,143 @@ Runner 在本地直接執行部署腳本
 
 ---
 
+## Dev Agent 設計細節
+
+### 支援的任務類型
+
+| 任務類型 | 說明 |
+|---------|------|
+| 修復 Bug | 分析問題、修改程式碼、開 PR |
+| 新增功能 | 實作新需求、開 PR |
+| 重構 | 改善程式碼結構、開 PR |
+| Code Review | 審查現有程式碼，回報問題與建議 |
+
+### 操作程式碼的方式（混合模式）
+
+Dev Agent 根據任務類型自動選擇操作方式，你不需要介入：
+
+| 任務 | 方式 | 原因 |
+|------|------|------|
+| Code Review | GitHub API（只讀） | 不需要修改檔案 |
+| 修復 Bug / 新增功能 / 重構 | Clone repo 到本地 | 需要跨檔案操作 |
+
+```
+收到任務
+    ↓
+判斷任務類型
+    ↓
+Code Review → GitHub API 讀取程式碼 → 產出審查報告
+其他任務   → Clone repo → 修改檔案 → Commit → 開 PR → 清理本地暫存
+```
+
+### 確認流程
+
+Dev Agent 直接 commit 到 feature branch，你在 PR 審查時確認：
+
+```
+[Dev Agent] 已完成以下操作：
+- 修改：BookingService.cs
+- Branch：feature/fix-booking-overlap
+- PR #42 已開啟，請審查
+
+👉 PR 連結：https://github.com/xxx/ProjectA/pull/42
+```
+
+---
+
+## Ops Agent 設計細節
+
+### 監控項目
+
+| 事件 | 處理方式 |
+|------|---------|
+| Build 失敗 | 立刻通知你 |
+| 部署失敗（內層）| 自動回滾，通知你結果 |
+| 部署失敗（外層）| 通知你，等你指示 |
+| 服務健康檢查異常 | 立刻通知你 |
+| CPU / 記憶體超過門檻 | 立刻通知你 |
+| Docker 資源不足或異常 | 立刻通知你 |
+| 部署成功 | 通知你 |
+
+### 回滾策略
+
+```
+【內層失敗】Container 啟不來或立刻 crash
+    → 自動回滾到上一個穩定版本
+    → 通知你：「已自動回滾到 v1.2」
+
+【外層失敗】Container 啟來了，但健康檢查失敗
+    → 通知你，等你決定
+    → 你可以回覆「回滾」或「觀察」
+```
+
+### 部署腳本
+
+使用 PowerShell，由 Dev Agent 產出，放在 repo 內：
+
+```powershell
+# deploy.ps1
+docker-compose pull        # 拉取最新 image
+docker-compose up -d       # 啟動服務
+docker-compose ps          # 確認狀態
+```
+
+### 監控設定（appsettings.json）
+
+```json
+"OpsSettings": {
+  "HealthCheckIntervalMinutes": 30,
+  "CpuAlertThresholdPercent": 80,
+  "MemoryAlertThresholdPercent": 80
+}
+```
+
+門檻可隨時調整，不需要改動程式碼。
+
+---
+
+## 開發測試環境設定
+
+### 測試 Repo
+
+初期使用獨立的測試 repo `AiTeam-Test`，與主要 repo 完全隔離：
+
+- Dev Agent 第一次上線期間，所有 branch / commit / PR 都在 `AiTeam-Test` 進行
+- 確認 Agent 行為穩定後，再切換到真實 repo
+- 降低測試期間對主要 repo 造成污染的風險
+- **由 Claude Code 協助在 GitHub 上建立**
+
+### Webhook 內網穿透
+
+本地開發時 GitHub 無法直接打到你的電腦，使用 **Tailscale Funnel** 解決：
+
+```
+GitHub Webhook
+    ↓
+Tailscale Funnel（固定公開 URL）
+    ↓
+你的本地開發機（Tailscale 節點）
+    ↓
+Bot 程式接收 Webhook 事件（Port 5050）
+```
+
+選擇 Tailscale Funnel 的原因：
+- 專案本來就規劃使用 Tailscale，不需要額外安裝工具
+- URL 固定，GitHub Webhook 設定一次就不用再改
+- 開發與正式環境一致，不需要切換
+
+**Tailscale 尚未安裝，交由 Claude Code 協助安裝與設定 Funnel。**
+
+### 其他設定細節
+
+| 項目 | 決定 |
+|------|------|
+| Webhook 接收 Port | 5050（不與 Aspire Dashboard 衝突） |
+| Dev Agent Clone 路徑 | `D:\AiTeam-Workspace\` |
+| GitHub Webhook Secret | 由 Claude Code 產生並設定到 User Secrets |
+
+---
+
 ## 待討論事項
 
 - [ ] 測試 Agent 的細節（Stage 5 展開時討論）
