@@ -108,7 +108,6 @@ public class CommandHandler(
 
         await using var scope = serviceProvider.CreateAsyncScope();
         var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
         var rules = await notionService.GetRulesAsync();
         var agentList = new[] { "Dev", "Ops" };
@@ -124,8 +123,9 @@ public class CommandHandler(
                 embed: BuildCeoDecisionEmbed(ceoResponse, project),
                 components: BuildConfirmButtons());
 
+            // 注意：不存 TaskRepository，scope 結束後就 dispose，改在 confirm_yes 開新 scope
             _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
-                ceoResponse, project, description, taskRepo);
+                ceoResponse, project, description);
         }
         else
         {
@@ -163,25 +163,36 @@ public class CommandHandler(
         {
             await interaction.DeferAsync();
 
-            // 建立任務紀錄
-            var task = new TaskItem
+            try
             {
-                TeamId = Guid.Empty, // TODO: 從設定載入 Software Team ID
-                Title = pending.CeoResponse.Task?.Title ?? pending.Description,
-                TriggeredBy = "Discord",
-                AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
-                Status = "pending"
-            };
-            pending.TaskRepository.Add(task);
-            await pending.TaskRepository.SaveAsync();
+                // 開新 scope 儲存任務（原 HandleTaskCommandAsync 的 scope 已 dispose）
+                await using var scope = serviceProvider.CreateAsyncScope();
+                var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
-            // 第二層確認：執行層 Agent 說明即將執行的操作
-            var agentPlanEmbed = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
-            var agentConfirmMsg = await interaction.FollowupAsync(
-                embed: agentPlanEmbed,
-                components: BuildConfirmButtons("exec_yes", "exec_no"));
+                var task = new TaskItem
+                {
+                    TeamId = Guid.Empty, // TODO: 從設定載入 Software Team ID
+                    Title = pending.CeoResponse.Task?.Title ?? pending.Description,
+                    TriggeredBy = "Discord",
+                    AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
+                    Status = "pending"
+                };
+                taskRepo.Add(task);
+                await taskRepo.SaveAsync();
 
-            _pendingConfirmations[agentConfirmMsg.Id] = pending with { TaskId = task.Id };
+                // 第二層確認：執行層 Agent 說明即將執行的操作
+                var agentPlanEmbed = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
+                var agentConfirmMsg = await interaction.FollowupAsync(
+                    embed: agentPlanEmbed,
+                    components: BuildConfirmButtons("exec_yes", "exec_no"));
+
+                _pendingConfirmations[agentConfirmMsg.Id] = pending with { TaskId = task.Id };
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "confirm_yes 處理失敗");
+                await interaction.FollowupAsync("❌ 建立任務時發生錯誤，請查看 log。");
+            }
         }
         else if (interaction.Data.CustomId == "exec_yes")
         {
@@ -332,5 +343,4 @@ internal record PendingConfirmation(
     CeoResponse CeoResponse,
     string Project,
     string Description,
-    TaskRepository TaskRepository,
     Guid TaskId = default);
