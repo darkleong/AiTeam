@@ -42,6 +42,32 @@ public class DiscordBotService(
 
         // Ready 後 Guild 快取才完整，此時才能註冊斜線指令
         await commandHandler.RegisterCommandsAsync();
+        await EnsureChannelsAsync();
+    }
+
+    /// <summary>
+    /// 檢查並自動建立缺少的頻道。
+    /// </summary>
+    private async Task EnsureChannelsAsync()
+    {
+        if (!ulong.TryParse(_settings.GuildId, out var guildId)) return;
+        var guild = client.GetGuild(guildId);
+        if (guild is null) return;
+
+        var required = new[]
+        {
+            _settings.Channels.CommandCenter,
+            _settings.Channels.TaskUpdates,
+            _settings.Channels.Alerts,
+            _settings.Channels.DailySummary,
+        };
+
+        foreach (var name in required)
+        {
+            if (guild.TextChannels.Any(c => c.Name == name)) continue;
+            await guild.CreateTextChannelAsync(name);
+            logger.LogInformation("已建立 Discord 頻道：#{Name}", name);
+        }
     }
 
     private Task OnLog(LogMessage log)
