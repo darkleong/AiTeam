@@ -6,6 +6,7 @@ var postgres = builder.AddPostgres("postgres")
 
 builder.AddProject<Projects.AiTeam_Bot>("aiteam-bot")
     .WithReference(postgres)
-    .WaitFor(postgres);
+    .WaitFor(postgres)
+    .WithHttpEndpoint(port: 5050, name: "webhook");
 
 builder.Build().Run();
