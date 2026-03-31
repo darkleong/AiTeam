@@ -3,6 +3,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Notion;
+using AiTeam.Shared.Constants;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
@@ -52,6 +53,7 @@ public class CommandHandler(
                 .WithDescription("指派任務給 AI 團隊")
                 .AddOption("project", ApplicationCommandOptionType.String, "專案名稱", isRequired: true)
                 .AddOption("description", ApplicationCommandOptionType.String, "任務描述", isRequired: true)
+                .AddOption("image", ApplicationCommandOptionType.Attachment, "（選用）附圖截圖", isRequired: false)
                 .Build(),
 
             new SlashCommandBuilder()
@@ -106,6 +108,27 @@ public class CommandHandler(
         var project     = command.Data.Options.First(o => o.Name == "project").Value.ToString()!;
         var description = command.Data.Options.First(o => o.Name == "description").Value.ToString()!;
 
+        // 處理圖片附件（若有）
+        var images = new List<ImageAttachment>();
+        var attachmentOption = command.Data.Options.FirstOrDefault(o => o.Name == "image");
+        if (attachmentOption?.Value is IAttachment attachment &&
+            attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            try
+            {
+                using var http = new HttpClient();
+                var bytes  = await http.GetByteArrayAsync(attachment.Url);
+                var base64 = Convert.ToBase64String(bytes);
+                images.Add(new ImageAttachment(base64, attachment.ContentType));
+                logger.LogInformation("附圖已下載並轉為 Base64（{ContentType}，{Bytes} bytes）",
+                    attachment.ContentType, bytes.Length);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "附圖下載失敗，將忽略圖片繼續處理");
+            }
+        }
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
         var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
@@ -116,9 +139,10 @@ public class CommandHandler(
             .Select(a => new AgentDescriptor(a.Name, a.Description))
             .ToList();
 
-        // 呼叫 CEO Agent 分析
+        // 呼叫 CEO Agent 分析（含圖片）
         var ceoResponse = await ceoService.ProcessAsync(
-            description, project, agentList, rules);
+            description, project, agentList, rules,
+            images: images.Count > 0 ? images : null);
 
         // 雙層確認 — 第一層：CEO 回報決策給老闆審核
         if (ceoResponse.RequireConfirmation && ceoResponse.Action != "reply")
@@ -206,22 +230,143 @@ public class CommandHandler(
         else if (interaction.Data.CustomId == "exec_yes")
         {
             await interaction.DeferAsync();
+
+            // Requirements Agent 有第三層確認：先展示 Issue 清單，讓老闆確認後才建立
+            if (pending.CeoResponse.TargetAgent == AgentNames.Requirements)
+            {
+                await ShowRequirementsPreviewAsync(interaction, pending);
+            }
+            else
+            {
+                await interaction.FollowupAsync(
+                    $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
+
+                _ = Task.Run(async () =>
+                {
+                    try { await ExecuteAgentTaskAsync(pending); }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
+                    }
+                }, CancellationToken.None);
+            }
+        }
+        else if (interaction.Data.CustomId == "req_yes")
+        {
+            // 第三層確認通過：根據已分析的 Issue 清單實際建立
+            await interaction.DeferAsync();
             await interaction.FollowupAsync(
-                $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
+                $"⏳ Requirements Agent 開始建立 {pending.PreviewIssues?.Count ?? 0} 個 Issues，完成後通知 #{_settings.Channels.TaskUpdates}。");
 
             _ = Task.Run(async () =>
             {
-                try { await ExecuteAgentTaskAsync(pending); }
+                try { await ExecuteRequirementsFromPreviewAsync(pending); }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
+                    logger.LogError(ex, "Requirements 背景執行失敗（TaskId={TaskId}）", pending.TaskId);
                 }
             }, CancellationToken.None);
         }
-        else // confirm_no 或 exec_no
+        else // confirm_no、exec_no、req_no
         {
             await interaction.RespondAsync("❌ 已取消。");
         }
+    }
+
+    #endregion
+
+    #region Requirements 第三層確認
+
+    /// <summary>
+    /// exec_yes 後，針對 Requirements Agent 先做 LLM 分析並展示 Issue 預覽清單。
+    /// </summary>
+    private async Task ShowRequirementsPreviewAsync(
+        SocketMessageComponent interaction,
+        PendingConfirmation pending)
+    {
+        try
+        {
+            await using var scope   = serviceProvider.CreateAsyncScope();
+            var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
+
+            // TaskItem 已在 confirm_yes 時建立
+            var task = await taskRepo.GetByIdAsync(pending.TaskId);
+            if (task is null)
+            {
+                await interaction.FollowupAsync("❌ 找不到任務記錄，請查看 log。");
+                return;
+            }
+
+            await interaction.FollowupAsync("🔍 Requirements Agent 正在分析需求，請稍候...");
+
+            var issues = await reqService.AnalyzeOnlyAsync(task);
+            if (issues.Count == 0)
+            {
+                await interaction.FollowupAsync("❌ 需求分析未能產出有效 Issue，請調整描述後重新下指令。");
+                return;
+            }
+
+            // 展示 Issue 預覽清單（第三層確認）
+            var previewMsg = await interaction.FollowupAsync(
+                embed: BuildRequirementsPreviewEmbed(task.Title, issues),
+                components: BuildConfirmButtons("req_yes", "req_no"));
+
+            _pendingConfirmations[previewMsg.Id] = pending with { PreviewIssues = issues };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Requirements 需求預覽失敗");
+            await interaction.FollowupAsync("❌ 分析需求時發生錯誤，請查看 log。");
+        }
+    }
+
+    /// <summary>
+    /// req_yes 後，根據已確認的 Issue 清單實際建立 GitHub Issues。
+    /// </summary>
+    private async Task ExecuteRequirementsFromPreviewAsync(PendingConfirmation pending)
+    {
+        var owner = _gitHubSettings.Owner;
+        var repo  = pending.Project;
+
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
+
+        var task = await taskRepo.GetByIdAsync(pending.TaskId);
+        if (task is null)
+        {
+            logger.LogError("找不到 TaskItem（Id={Id}）", pending.TaskId);
+            return;
+        }
+
+        taskRepo.UpdateStatus(task, "running");
+        await taskRepo.SaveAsync();
+
+        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
+        var alertChannel  = FindChannel(_settings.Channels.Alerts);
+
+        var result = await reqService.CreateIssuesFromPreviewAsync(
+            task, owner, repo, pending.PreviewIssues!);
+
+        taskRepo.UpdateStatus(task, result.Success ? "done" : "failed");
+        await taskRepo.SaveAsync();
+
+        var embed = new EmbedBuilder()
+            .WithTitle(result.Success ? "✅ Requirements Agent 執行完成" : "❌ Requirements Agent 執行失敗")
+            .WithColor(result.Success ? Color.Green : Color.Red)
+            .AddField("任務", task.Title)
+            .AddField("摘要", result.Summary)
+            .WithTimestamp(DateTimeOffset.UtcNow);
+
+        if (!string.IsNullOrEmpty(result.OutputUrl))
+            embed.AddField("連結", result.OutputUrl);
+
+        if (notifyChannel is not null)
+            await notifyChannel.SendMessageAsync(embed: embed.Build());
+        else if (!result.Success && alertChannel is not null)
+            await alertChannel.SendMessageAsync(
+                $"🚨 **Requirements Agent 失敗**\n任務：{task.Title}\n錯誤：{result.Summary}");
     }
 
     #endregion
@@ -344,6 +489,31 @@ public class CommandHandler(
             .WithFooter("確認後開始執行，取消則中止。")
             .Build();
 
+    private static Embed BuildRequirementsPreviewEmbed(
+        string taskTitle,
+        IReadOnlyList<RequirementIssuePreview> issues)
+    {
+        var issueLines = issues.Select((iss, i) =>
+        {
+            var labels = iss.Labels.Count > 0 ? string.Join(", ", iss.Labels) : "無";
+            return $"{i + 1}. **{iss.Title}** — `{labels}`";
+        });
+
+        var issueList = string.Join("\n", issueLines);
+
+        // Discord embed description 上限 4096 字元
+        if (issueList.Length > 3900)
+            issueList = issueList[..3900] + "\n…（清單過長，已截斷）";
+
+        return new EmbedBuilder()
+            .WithTitle("📋 Requirements Agent — 請確認 Issue 清單")
+            .WithColor(Color.Gold)
+            .AddField("任務", taskTitle)
+            .WithDescription(issueList)
+            .WithFooter($"共 {issues.Count} 個 Issue，確認後開始建立，取消則中止。")
+            .Build();
+    }
+
     private static MessageComponent BuildConfirmButtons(
         string yesId = "confirm_yes",
         string noId  = "confirm_no")
@@ -362,4 +532,5 @@ internal record PendingConfirmation(
     CeoResponse CeoResponse,
     string Project,
     string Description,
-    Guid TaskId = default);
+    Guid TaskId = default,
+    IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null);

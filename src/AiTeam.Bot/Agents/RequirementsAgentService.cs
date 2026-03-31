@@ -39,12 +39,53 @@ public class RequirementsAgentService(
 
         try
         {
-            var issues = await AnalyzeRequirementsAsync(task, cancellationToken);
+            var issues = await AnalyzeOnlyAsync(task, cancellationToken);
             if (issues.Count == 0)
                 return new AgentExecutionResult(false, "LLM 未能解析出有效的 Issue 清單");
 
             AddLog(task, $"需求分析完成，共 {issues.Count} 個 Issue", "done");
 
+            return await CreateIssuesFromPreviewAsync(task, owner, repo, issues, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Requirements Agent 執行失敗：{Title}", task.Title);
+            AddLog(task, $"執行失敗：{ex.Message}", "failed");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("error");
+            return new AgentExecutionResult(false, $"Requirements Agent 執行失敗：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 僅執行 LLM 需求分析，回傳 Issue 預覽清單（不建立 GitHub Issues）。
+    /// 供 CommandHandler 在第三層確認前使用。
+    /// </summary>
+    internal async Task<List<RequirementIssuePreview>> AnalyzeOnlyAsync(
+        TaskItem task,
+        CancellationToken cancellationToken = default)
+    {
+        var raw = await AnalyzeRequirementsAsync(task, cancellationToken);
+        return raw.Select(i => new RequirementIssuePreview(i.Title, i.Body, i.Labels)).ToList();
+    }
+
+    /// <summary>
+    /// 根據已確認的預覽清單，實際建立 GitHub Issues。
+    /// 供 CommandHandler 在第三層 req_yes 後使用。
+    /// </summary>
+    internal async Task<AgentExecutionResult> CreateIssuesFromPreviewAsync(
+        TaskItem task,
+        string owner,
+        string repo,
+        IReadOnlyList<RequirementIssuePreview> issues,
+        CancellationToken cancellationToken = default)
+    {
+        AddLog(task, $"根據確認清單建立 {issues.Count} 個 Issues", "running");
+        await taskRepository.SaveAsync(cancellationToken);
+        await PushStatus("running", task.Title);
+
+        try
+        {
             var createdUrls = new List<string>();
             foreach (var issue in issues)
             {
@@ -56,19 +97,18 @@ public class RequirementsAgentService(
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("idle");
 
-            var firstUrl = createdUrls.FirstOrDefault();
             return new AgentExecutionResult(
                 true,
                 $"已建立 {createdUrls.Count} 個 GitHub Issues",
-                firstUrl);
+                createdUrls.FirstOrDefault());
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Requirements Agent 執行失敗：{Title}", task.Title);
+            logger.LogError(ex, "建立 Issues 失敗：{Title}", task.Title);
             AddLog(task, $"執行失敗：{ex.Message}", "failed");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("error");
-            return new AgentExecutionResult(false, $"Requirements Agent 執行失敗：{ex.Message}");
+            return new AgentExecutionResult(false, $"建立 Issues 失敗：{ex.Message}");
         }
     }
 
@@ -166,3 +206,11 @@ public class RequirementsAgentService(
         public List<string> Labels { get; set; } = [];
     }
 }
+
+/// <summary>
+/// Requirements Agent 分析出的 Issue 預覽，供 CommandHandler 雙層確認使用。
+/// </summary>
+internal sealed record RequirementIssuePreview(
+    string Title,
+    string Body,
+    IReadOnlyList<string> Labels);
