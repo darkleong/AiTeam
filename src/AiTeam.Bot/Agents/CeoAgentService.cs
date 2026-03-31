@@ -19,13 +19,15 @@ public class CeoAgentService(
 
     /// <summary>
     /// 處理使用者輸入，回傳 CEO 的分析結果。
+    /// 可選傳入圖片附件（如 Discord 截圖），模型將一併分析圖片內容。
     /// </summary>
     public async Task<CeoResponse> ProcessAsync(
         string userInput,
         string projectName,
         IReadOnlyList<AgentDescriptor> agentList,
         IReadOnlyList<string> rules,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<ImageAttachment>? images = null)
     {
         var provider = providerFactory.Create("CEO");
 
@@ -35,7 +37,7 @@ public class CeoAgentService(
         // 最多重試一次（回應格式錯誤時）
         for (var attempt = 1; attempt <= 2; attempt++)
         {
-            var response = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
+            var response = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken, images);
 
             var parsed = TryParseResponse(response.Content);
             if (parsed is not null)
