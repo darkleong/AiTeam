@@ -1,0 +1,25 @@
+# 1. 編譯輸出與中介檔案 (最佔空間的項目)
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# 2. 二進位檔案與快取 (防呆攔截)
+*.dll
+*.exe
+*.pdb
+*.so
+*.dylib
+*.cache
+*.cache.json
+*.Up2Date
+
+# 3. 原生執行環境相關
+runtimes/
+BuildHost-*/
+
+# 4. 本地端設定與機密資訊
+appsettings.Development.json
+appsettings.*.local.json
+.claude/settings.local.json
