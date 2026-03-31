@@ -1,8 +1,8 @@
 # Stage 3 — 第一批 Agent 上線
 
 > 所屬專案：AI 團隊實作總規劃  
-> 狀態：⏳ 待規劃  
-> 最後更新：2026-03-29
+> 狀態：✅ 已完成
+> 最後更新：2026-03-31
 
 ---
 
@@ -14,11 +14,11 @@
 
 ## 交付項目
 
-- [ ] Dev Agent 實作（GitHub API 整合、程式碼操作）
-- [ ] Ops Agent 實作（CI/CD 串接、部署監控）
-- [ ] GitHub Webhook 接收與處理
-- [ ] 事件自動觸發機制（PR 開啟、Issue 建立、Merge 事件）
-- [ ] 多專案支援（CEO 自動建立 Discord 頻道與 Notion 頁面）
+- [x] Dev Agent 實作（GitHub API 整合、程式碼操作）
+- [x] Ops Agent 實作（CI/CD 串接、部署監控）
+- [x] GitHub Webhook 接收與處理
+- [x] 事件自動觸發機制（PR 開啟、Issue 建立、Merge 事件）
+- [ ] 多專案支援（CEO 自動建立 Discord 頻道與 Notion 頁面）← 留 Stage 4
 
 ---
 
@@ -281,3 +281,34 @@ Bot 程式接收 Webhook 事件（Port 5050）
 ## 待討論事項
 
 - [ ] 測試 Agent 的細節（Stage 5 展開時討論）
+
+---
+
+## 實作重點紀錄
+
+### Dev Agent
+- 混合模式：Code Review 用 GitHub API（只讀），其他任務本地 Clone repo 操作
+- LibGit2Sharp 與 Octokit 都有 `Signature` 型別，需明確用 `LibGit2Sharp.Signature` 避免編譯錯誤
+- GitHub PAT 需有 `repo`、`workflow` 權限
+- `GitHub:Owner` 須加到 `appsettings.json`（Dev Agent 呼叫 `BuildPlanAsync` 需要此欄位）
+- Clone 路徑：`D:\AiTeam-Workspace\`，由 `GitHubSettings.WorkspacePath` 設定
+
+### Ops Agent
+- Discord namespace 衝突（`AiTeam.Bot.Discord` vs `Discord`）：
+  WebhookController 與 OpsAgentService 需加 `using DiscordNet = Discord;` alias
+- 健康檢查透過 `docker ps` 查詢容器狀態，Quartz.NET 排程定期執行
+
+### Webhook
+- GitHub Webhook 用 HMACSHA256 驗簽（`X-Hub-Signature-256` header）
+- Tailscale Funnel URL：`https://love-desktop.tailcd0255.ts.net/` → 本地 Port 5050
+- Webhook 路由：`[Route("webhook/github")]`，需在 `AppHost` 加 `.WithHttpEndpoint(port: 5050)`
+
+### Discord 頻道自動建立
+- Bot 在 `OnReady` 事件呼叫 `EnsureChannelsAsync()`，自動建立缺少的頻道
+- 所需頻道：#指令中心、#任務動態、#警報、#每日摘要
+- Bot 需要 Discord 伺服器的 **Manage Channels** 權限
+
+### 整合測試結果（2026-03-31）
+- 測試 Repo：AiTeam-Test（`github.com/darkleong/AiTeam-Test`）
+- 完整流程通過：`/task` → CEO 分析 → `confirm_yes` → `exec_yes` → Dev Agent 執行 → PR #1 建立成功
+- PR URL 自動回報到 Discord #任務動態 ✅

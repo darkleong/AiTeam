@@ -1,8 +1,8 @@
 # Stage 2 — 基礎建設
 
 > 所屬專案：AI 團隊實作總規劃  
-> 狀態：🔄 規劃中  
-> 最後更新：2026-03-29
+> 狀態：✅ 已完成
+> 最後更新：2026-03-31
 
 ---
 
@@ -14,13 +14,13 @@
 
 ## 交付項目
 
-- [ ] Discord Bot 框架（接收指令、發送確認訊息）
-- [ ] CEO Agent 基本實作（接指令 → 分析 → 回報）
-- [ ] Notion API 串接（讀取規則含 Cache、寫入任務摘要）
-- [ ] PostgreSQL 串接（tasks / task_logs EF Core）
-- [ ] 雙層確認機制實作
-- [ ] `/reload-rules` 指令實作
-- [ ] `appsettings.json` 系統參數設定
+- [x] Discord Bot 框架（接收指令、發送確認訊息）
+- [x] CEO Agent 基本實作（接指令 → 分析 → 回報）
+- [x] Notion API 串接（讀取規則含 Cache、寫入任務摘要）
+- [x] PostgreSQL 串接（tasks / task_logs EF Core）
+- [x] 雙層確認機制實作
+- [x] `/reload-rules` 指令實作
+- [x] `appsettings.json` 系統參數設定
 
 ---
 
@@ -222,6 +222,30 @@ public class GoogleProvider : ILlmProvider { ... }
 
 ---
 
-## 待討論事項
+---
 
-- [ ] 本地開發環境設定方式（交由 Claude Code 實作時處理）
+## 實作重點紀錄
+
+### 專案結構
+- SDK 用 `Microsoft.NET.Sdk.Web`（非 Worker），才支援 HTTP Controller（Webhook 用）
+- `nuget.config` 加 `<clear />`，繞過 Telerik NuGet 401 錯誤
+- `AiTeam.Bot` 改為 ASP.NET Core Web Application，`Program.cs` 使用 `WebApplication.CreateBuilder(args)`
+
+### 已知陷阱
+- Discord.Net 的 API 是 `BulkOverwriteApplicationCommandAsync`（無尾 S）
+- 斜線指令必須在 `OnReady()` 裡註冊，不能在 `ExecuteAsync` 裡（Guild 快取尚未就緒）
+- `appsettings.json` 不可有 `"Urls"` 欄位，會與 Aspire 動態 Port 管理衝突
+- `DailyReportCron` 需用 Quartz **6 欄**格式：`"0 0 9,21 * * ?"`（非標準 5 欄 cron）
+- `TaskItem.TeamId` 需設為可為 null（否則插入 `Guid.Empty` 會觸發 FK 違反約束）
+
+### 雙層確認機制設計注意
+- `PendingConfirmation` record **不可儲存** `TaskRepository`
+  - 原因：`HandleTaskCommandAsync` 的 `await using scope` 函式結束即 dispose
+  - 修法：`confirm_yes` 處理時開新 scope 取新的 `TaskRepository`
+- `exec_yes` 背景執行用 `Task.Run(..., CancellationToken.None)`
+  - 原因：Discord interaction 的 CT 生命週期短，背景任務需獨立 CT
+
+### Aspire 設定
+- `AppHost.cs` 需加 `.WithHttpEndpoint(port: 5050, name: "webhook")` 讓 Aspire 管理 Webhook Port
+- Bot 啟動時自動執行 `db.Database.MigrateAsync()` 套用所有 EF Core Migrations
+- `WaitFor(postgres)` 確保 PostgreSQL 容器就緒後才啟動 Bot
