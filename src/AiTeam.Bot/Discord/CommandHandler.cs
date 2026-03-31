@@ -1,6 +1,7 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
-using AiTeam.Bot.Data;
+using AiTeam.Data;
+using AiTeam.Data.Repositories;
 using AiTeam.Bot.Notion;
 using AiTeam.Bot.Ops;
 using Discord;

@@ -1,4 +1,4 @@
-namespace AiTeam.Bot.Data;
+namespace AiTeam.Data;
 
 public class Team
 {

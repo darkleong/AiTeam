@@ -1,5 +1,6 @@
 using System.Text.Json;
-using AiTeam.Bot.Data;
+using AiTeam.Data;
+using AiTeam.Data.Repositories;
 
 namespace AiTeam.Bot.Agents;
 
