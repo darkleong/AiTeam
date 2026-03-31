@@ -1,0 +1,51 @@
+@page "/projects"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>專案管理 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>專案管理</h2>
+</div>
+
+<TelerikGrid Data="@_projects"
+             TItem="ProjectDto"
+             Pageable="true"
+             PageSize="50"
+             Sortable="true"
+             OnRowClick="@OnRowClickAsync">
+    <GridColumns>
+        <GridColumn Field="@nameof(ProjectDto.Name)"      Title="專案名稱" />
+        <GridColumn Field="@nameof(ProjectDto.TeamName)"  Title="團隊"     Width="150px" />
+        <GridColumn Field="@nameof(ProjectDto.TaskCount)" Title="任務數"   Width="100px" />
+        <GridColumn Field="@nameof(ProjectDto.IsActive)"  Title="啟用"     Width="80px" />
+        <GridColumn Field="@nameof(ProjectDto.CreatedAt)" Title="建立時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd}" />
+    </GridColumns>
+</TelerikGrid>
+
+@if (_isDrawerOpen && _selectedProject is not null)
+{
+    <div class="slide-panel-overlay" @onclick="CloseDrawer"></div>
+    <div class="slide-panel">
+        <div class="drawer-header">
+            <h4>@_selectedProject.Name</h4>
+            <button class="btn-close" @onclick="CloseDrawer" aria-label="關閉">✕</button>
+        </div>
+        <div class="project-detail">
+            <p><strong>團隊：</strong>@_selectedProject.TeamName</p>
+            <p><strong>任務數量：</strong>@_selectedProject.TaskCount</p>
+            @if (_selectedProject.RepoUrl is not null)
+            {
+                <p><strong>Repo：</strong><a href="@_selectedProject.RepoUrl" target="_blank">@_selectedProject.RepoUrl</a></p>
+            }
+            @if (_selectedProject.TechStack is not null)
+            {
+                <div>
+                    <strong>技術棧：</strong>
+                    <pre>@_selectedProject.TechStack</pre>
+                </div>
+            }
+            <p><strong>建立時間：</strong>@_selectedProject.CreatedAt.ToString("yyyy/MM/dd")</p>
+        </div>
+    </div>
+}

@@ -1,0 +1,23 @@
+@inherits LayoutComponentBase
+
+<TelerikRootComponent>
+    <div class="layout-wrapper">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-logo">AI Team</span>
+            </div>
+            <NavMenu />
+            <div class="sidebar-footer">
+                <button class="theme-toggle" title="切換主題" id="theme-toggle-btn"
+                        onclick="var h=document.documentElement,t=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=t;localStorage.setItem('theme',t);this.textContent=t==='dark'?'☀':'🌙'">
+                    🌙
+                </button>
+            </div>
+        </nav>
+        <main class="main-content">
+            <div class="content-area">
+                @Body
+            </div>
+        </main>
+    </div>
+</TelerikRootComponent>

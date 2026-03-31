@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Team Dashboard</title>
+    <base href="/" />
+    <script>
+        (function(){
+            function applyTheme() {
+                var t = localStorage.getItem('theme') || 'light';
+                document.documentElement.dataset.theme = t;
+                var btn = document.getElementById('theme-toggle-btn');
+                if (btn) btn.textContent = t === 'dark' ? '☀' : '🌙';
+            }
+            // 立即套用，避免閃白
+            applyTheme();
+            // DOMContentLoaded 後同步按鈕圖示
+            document.addEventListener('DOMContentLoaded', applyTheme);
+            // Blazor Enhanced Navigation 會重設 <html> 的 data-theme
+            // MutationObserver 偵測屬性被移除時立即還原（observer 在初始載入建立，整個 session 有效）
+            new MutationObserver(function(ms) {
+                for (var m of ms) {
+                    if (m.attributeName === 'data-theme' && !document.documentElement.dataset.theme) {
+                        applyTheme();
+                    }
+                }
+            }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        })();
+    </script>
+    <link rel="stylesheet" href="_content/Telerik.UI.for.Blazor/css/kendo-theme-default/all.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <CascadingAuthenticationState>
+        <Router AppAssembly="@typeof(App).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
+                    <NotAuthorized>
+                        @if (context.User.Identity?.IsAuthenticated != true)
+                        {
+                            <RedirectToLogin />
+                        }
+                        else
+                        {
+                            <p>您沒有權限存取此頁面。</p>
+                        }
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+            </Found>
+            <NotFound>
+                <LayoutView Layout="@typeof(Layout.MainLayout)">
+                    <p>找不到此頁面。</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </CascadingAuthenticationState>
+
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/Telerik.UI.for.Blazor/js/telerik-blazor.js" defer></script>
+</body>
+
+</html>

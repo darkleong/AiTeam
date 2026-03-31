@@ -1,0 +1,47 @@
+@page "/tasks"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>任務中心 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>任務中心</h2>
+    <div class="page-filters">
+        <select @bind="_statusFilter" class="form-select">
+            <option value="">全部狀態</option>
+            <option value="pending">等待中</option>
+            <option value="running">執行中</option>
+            <option value="done">完成</option>
+            <option value="failed">失敗</option>
+        </select>
+        <button class="btn btn-secondary" @onclick="() => _gridRef.Rebind()">重新整理</button>
+    </div>
+</div>
+
+<TelerikGrid @ref="_gridRef"
+             Data="@_tasks"
+             TItem="TaskItemDto"
+             OnRead="@OnGridReadAsync"
+             Pageable="true"
+             PageSize="50"
+             Sortable="true"
+             OnRowClick="@OnRowClickAsync">
+    <GridColumns>
+        <GridColumn Field="@nameof(TaskItemDto.Status)" Title="狀態" Width="100px">
+            <Template>
+                @{ var item = context as TaskItemDto; }
+                <StatusBadge Status="@item!.Status" />
+            </Template>
+        </GridColumn>
+        <GridColumn Field="@nameof(TaskItemDto.Title)"         Title="任務標題" />
+        <GridColumn Field="@nameof(TaskItemDto.AssignedAgent)" Title="Agent"   Width="100px" />
+        <GridColumn Field="@nameof(TaskItemDto.ProjectName)"   Title="專案"    Width="150px" />
+        <GridColumn Field="@nameof(TaskItemDto.TriggeredBy)"   Title="觸發來源" Width="120px" />
+        <GridColumn Field="@nameof(TaskItemDto.CreatedAt)"     Title="建立時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd HH:mm}" />
+        <GridColumn Field="@nameof(TaskItemDto.CompletedAt)"   Title="完成時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd HH:mm}" />
+    </GridColumns>
+</TelerikGrid>
+
+<TaskLogDrawer @bind-IsOpen="@_isDrawerOpen"
+               SelectedTask="@_selectedTask"
+               Logs="@_selectedLogs" />

@@ -1,0 +1,27 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@* 登入表單 POST 直接打 MVC Controller，繞過 Blazor 的 UseAntiforgery 中介軟體 *@
+
+<div class="login-container">
+    <div class="login-card">
+        <h2>AI Team Dashboard</h2>
+        <form method="post" action="/account/login">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@_returnUrl" />
+            <div class="form-group">
+                <label>Email</label>
+                <input name="email" type="email" class="form-control" autocomplete="username" required />
+            </div>
+            <div class="form-group">
+                <label>密碼</label>
+                <input name="password" type="password" class="form-control" autocomplete="current-password" required />
+            </div>
+            @if (_errorMessage is not null)
+            {
+                <div class="alert alert-danger">@_errorMessage</div>
+            }
+            <button type="submit" class="btn btn-primary">登入</button>
+        </form>
+    </div>
+</div>

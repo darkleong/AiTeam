@@ -1,0 +1,63 @@
+@* 任務 Log 側邊抽屜組件（CSS slide panel） *@
+
+@if (IsOpen && SelectedTask is not null)
+{
+    <div class="slide-panel-overlay" @onclick="CloseAsync"></div>
+    <div class="slide-panel">
+        <div class="drawer-header">
+            <h4>@SelectedTask.Title</h4>
+            <StatusBadge Status="@SelectedTask.Status" />
+            <button class="btn-close" @onclick="CloseAsync" aria-label="關閉">✕</button>
+        </div>
+        <div class="drawer-meta">
+            <span>觸發：@SelectedTask.TriggeredBy</span>
+            <span>Agent：@SelectedTask.AssignedAgent</span>
+            <span>建立：@SelectedTask.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span>
+        </div>
+        <div class="drawer-logs">
+            <h5>執行步驟</h5>
+            @if (Logs.Count == 0)
+            {
+                <p class="no-data">尚無 Log 紀錄</p>
+            }
+            else
+            {
+                @foreach (var log in Logs)
+                {
+                    <div class="log-item log-@log.Status">
+                        <div class="log-header">
+                            <span class="log-agent">@log.Agent</span>
+                            <StatusBadge Status="@log.Status" />
+                            <small>@log.CreatedAt.ToLocalTime().ToString("HH:mm:ss")</small>
+                        </div>
+                        <p class="log-step">@log.Step</p>
+                        @if (!string.IsNullOrEmpty(log.Payload))
+                        {
+                            <details>
+                                <summary>Payload</summary>
+                                <pre class="log-payload">@log.Payload</pre>
+                            </details>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsOpenChanged { get; set; }
+
+    [Parameter]
+    public TaskItemDto? SelectedTask { get; set; }
+
+    [Parameter]
+    public List<TaskLogDto> Logs { get; set; } = [];
+
+    private async Task CloseAsync()
+        => await IsOpenChanged.InvokeAsync(false);
+}

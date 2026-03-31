@@ -1,0 +1,49 @@
+@page "/"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>首頁 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>總覽</h2>
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done,#22c55e)" : "var(--color-status-failed,#ef4444)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+        <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px;"
+                @onclick="TestSignalRAsync">測試推送</button>
+    </div>
+</div>
+
+<section class="agent-status-section">
+    <h3>Agent 狀態</h3>
+    <div class="agent-cards">
+        @foreach (var agent in _agentStatuses)
+        {
+            <AgentStatusCard Status="@agent" />
+        }
+        @if (_agentStatuses.Count == 0)
+        {
+            <p class="no-data">無 Agent 資料</p>
+        }
+    </div>
+</section>
+
+<section class="recent-tasks-section">
+    <h3>最近任務</h3>
+    <div class="task-list-simple">
+        @foreach (var task in _recentTasks)
+        {
+            <div class="task-row">
+                <StatusBadge Status="@task.Status" />
+                <span class="task-title">@task.Title</span>
+                <span class="task-agent">@task.AssignedAgent</span>
+                <small>@task.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
+            </div>
+        }
+        @if (_recentTasks.Count == 0)
+        {
+            <p class="no-data">尚無任務紀錄</p>
+        }
+    </div>
+</section>

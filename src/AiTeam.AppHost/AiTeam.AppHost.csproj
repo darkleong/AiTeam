@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AiTeam.Bot\AiTeam.Bot.csproj" />
+    <ProjectReference Include="..\AiTeam.Dashboard\AiTeam.Dashboard.csproj" />
   </ItemGroup>
 
 </Project>

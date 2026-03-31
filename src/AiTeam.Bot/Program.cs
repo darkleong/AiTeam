@@ -1,11 +1,13 @@
 using Anthropic.SDK;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
-using AiTeam.Bot.Data;
+using AiTeam.Data.Extensions;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Notion;
 using AiTeam.Bot.Ops;
+using AiTeam.Bot.Services;
+using AiTeam.Data;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Notion.Client;
@@ -15,8 +17,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-// PostgreSQL via Aspire
-builder.AddNpgsqlDbContext<AppDbContext>("AiTeamDb");
+// PostgreSQL via Aspire（AppDbContext + TaskRepository 由 AiTeam.Data 統一管理）
+builder.AddAiTeamData("AiTeamDb");
 
 // 設定
 builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection("Discord"));
@@ -40,13 +42,16 @@ builder.Services.AddSingleton<INotionClient>(_ => NotionClientFactory.Create(new
 }));
 builder.Services.AddSingleton<NotionService>();
 
-// Data
-builder.Services.AddScoped<TaskRepository>();
-
 // Agents
 builder.Services.AddScoped<CeoAgentService>();
 builder.Services.AddScoped<DevAgentService>();
 builder.Services.AddSingleton<OpsAgentService>();
+
+// Dashboard 推送（透過 Aspire Service Discovery 解析 aiteam-dashboard 的 "dashboard" 端點）
+// URL 格式：http+{端點名稱}://{服務名稱}，對應 AppHost 的 WithHttpEndpoint(name: "dashboard")
+builder.Services.AddHttpClient("aiteam-dashboard", client =>
+    client.BaseAddress = new Uri("http+dashboard://aiteam-dashboard"));
+builder.Services.AddSingleton<DashboardPushService>();
 
 // GitHub
 builder.Services.AddSingleton<GitHubService>();

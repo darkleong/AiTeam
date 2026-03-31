@@ -1,0 +1,91 @@
+using AiTeam.Dashboard.Identity;
+using AiTeam.Dashboard.Settings;
+using AiTeam.Dashboard.Services;
+using AiTeam.Data;
+using AiTeam.Data.Extensions;
+using AiTeam.Data.Hubs;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Notion.Client;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
+
+// 業務資料庫（AppDbContext + TaskRepository，共用同一個 PostgreSQL）
+builder.AddAiTeamData("AiTeamDb");
+
+// Identity 資料庫（DashboardDbContext，同一個 PostgreSQL，使用 "identity" schema）
+builder.AddNpgsqlDbContext<DashboardDbContext>("AiTeamDb");
+
+// Blazor Server
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+// Telerik
+builder.Services.AddTelerikBlazor();
+
+// SignalR（Hub 定義在 AiTeam.Data）
+builder.Services.AddSignalR();
+
+// ASP.NET Core Identity（AddIdentity 自動設定 Cookie scheme，包含 DefaultChallengeScheme）
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase       = false;
+    options.Password.RequireLowercase       = false;
+    options.Password.RequireDigit           = false;
+    options.Password.RequiredLength         = 8;
+})
+.AddEntityFrameworkStores<DashboardDbContext>()
+.AddDefaultTokenProviders();
+
+builder.Services.AddAuthorization();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath  = "/login";
+    options.LogoutPath = "/logout";
+});
+
+// Controllers（AgentStatusController 供 Bot 推送 SignalR；AccountController 處理登入 POST）
+// AddControllersWithViews 而非 AddControllers，才能使用 [ValidateAntiForgeryToken]
+builder.Services.AddControllersWithViews();
+
+// Notion（信任等級寫回用）
+var notionApiKey = builder.Configuration["Notion:ApiKey"] ?? "";
+builder.Services.AddSingleton<INotionClient>(_ => NotionClientFactory.Create(new ClientOptions
+{
+    AuthToken = notionApiKey
+}));
+builder.Services.Configure<NotionSettings>(builder.Configuration.GetSection("Notion"));
+
+// Dashboard Services
+builder.Services.AddScoped<DashboardTaskService>();
+builder.Services.AddScoped<DashboardProjectService>();
+builder.Services.AddScoped<DashboardAgentService>();
+builder.Services.AddScoped<NotionTrustLevelService>();
+
+var app = builder.Build();
+
+app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
+
+app.MapDefaultEndpoints();
+app.MapControllers();
+app.MapHub<AgentStatusHub>("/hubs/agent-status");
+app.MapRazorComponents<AiTeam.Dashboard.Components.App>()
+    .AddInteractiveServerRenderMode();
+
+// 啟動時只套用 Identity Migration（AppDbContext Migration 由 Bot 負責，避免兩個 Process 競爭）
+using (var scope = app.Services.CreateScope())
+{
+    var identityDb = scope.ServiceProvider.GetRequiredService<DashboardDbContext>();
+    await identityDb.Database.MigrateAsync();
+}
+
+await app.Services.EnsureAdminUserAsync(app.Configuration);
+
+app.Run();

@@ -1,0 +1,56 @@
+@page "/agents"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>Agent 設定 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>Agent 設定</h2>
+</div>
+
+@foreach (var agent in _agents)
+{
+    <div class="agent-setting-card">
+        <div class="agent-setting-header">
+            <h4>@agent.Name</h4>
+            <span class="team-label">@agent.TeamName</span>
+        </div>
+
+        <div class="trust-level-control">
+            <label>信任等級：<strong>Lv@_trustLevels[agent.Id]</strong></label>
+            <TelerikSlider @bind-Value="@_trustLevels[agent.Id]"
+                           Min="0" Max="3" Step="1"
+                           Width="200px" />
+        </div>
+
+        <div class="agent-rules">
+            <h5>Notion 規則</h5>
+            @if (agent.Rules.Count == 0)
+            {
+                <p class="no-data">尚無規則</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var rule in agent.Rules)
+                    {
+                        <li>@rule</li>
+                    }
+                </ul>
+            }
+        </div>
+
+        <div class="agent-setting-actions">
+            <button class="btn btn-primary"
+                    @onclick="() => SaveTrustLevelAsync(agent)"
+                    disabled="@_isSaving">
+                @(_isSaving ? "儲存中..." : "儲存信任等級")
+            </button>
+        </div>
+    </div>
+}
+
+@if (_saveMessage is not null)
+{
+    <div class="alert alert-success">@_saveMessage</div>
+}

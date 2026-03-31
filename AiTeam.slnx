@@ -2,6 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/AiTeam.AppHost/AiTeam.AppHost.csproj" />
     <Project Path="src/AiTeam.Bot/AiTeam.Bot.csproj" />
+    <Project Path="src/AiTeam.Dashboard/AiTeam.Dashboard.csproj" />
+    <Project Path="src/AiTeam.Data/AiTeam.Data.csproj" />
     <Project Path="src/AiTeam.ServiceDefaults/AiTeam.ServiceDefaults.csproj" />
+    <Project Path="src/AiTeam.Shared/AiTeam.Shared.csproj" />
   </Folder>
 </Solution>

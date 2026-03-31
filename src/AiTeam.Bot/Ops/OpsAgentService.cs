@@ -1,5 +1,8 @@
 using AiTeam.Bot.Configuration;
-using AiTeam.Bot.Data;
+using AiTeam.Bot.Services;
+using AiTeam.Data;
+using AiTeam.Data.Repositories;
+using AiTeam.Shared.ViewModels;
 using DiscordNet = Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
@@ -15,6 +18,7 @@ public class OpsAgentService(
     IOptions<OpsSettings> opsSettings,
     DiscordSocketClient discordClient,
     IServiceProvider serviceProvider,
+    DashboardPushService dashboardPush,
     ILogger<OpsAgentService> logger)
 {
     private readonly DiscordSettings _discord = discordSettings.Value;
@@ -45,6 +49,14 @@ public class OpsAgentService(
         taskRepo.Add(task);
         await taskRepo.SaveAsync(cancellationToken);
 
+        await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = "Ops",
+            Status           = "running",
+            CurrentTaskTitle = task.Title,
+            LastUpdated      = DateTime.UtcNow
+        });
+
         try
         {
             // 輪詢部署狀態（最多等 10 分鐘）
@@ -62,6 +74,21 @@ public class OpsAgentService(
             }
 
             await taskRepo.SaveAsync(cancellationToken);
+
+            await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName   = "Ops",
+                Status      = "idle",
+                LastUpdated = DateTime.UtcNow
+            });
+
+            await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                Status    = task.Status,
+                AgentName = "Ops"
+            });
         }
         catch (Exception ex)
         {
@@ -69,6 +96,21 @@ public class OpsAgentService(
             await AlertAsync($"⚠️ Ops Agent 監控例外：{repoName}\n{ex.Message}");
             taskRepo.UpdateStatus(task, "failed");
             await taskRepo.SaveAsync(cancellationToken);
+
+            await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName   = "Ops",
+                Status      = "error",
+                LastUpdated = DateTime.UtcNow
+            });
+
+            await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                Status    = "failed",
+                AgentName = "Ops"
+            });
         }
     }
 

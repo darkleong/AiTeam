@@ -1,0 +1,465 @@
+/* ========================================
+   CSS 變數定義 - 所有顏色使用變數，不寫死
+   ======================================== */
+
+:root {
+    --color-bg-primary:    #ffffff;
+    --color-bg-secondary:  #f8f9fa;
+    --color-bg-card:       #ffffff;
+    --color-text-primary:  #212529;
+    --color-text-secondary:#6c757d;
+    --color-accent:        #0d6efd;
+    --color-border:        #dee2e6;
+
+    --color-status-pending: #6c757d;
+    --color-status-running: #fd7e14;
+    --color-status-done:    #198754;
+    --color-status-failed:  #dc3545;
+    --color-status-idle:    #20c997;
+    --color-status-error:   #dc3545;
+
+    --shadow-card:    0 2px 8px rgba(0, 0, 0, 0.08);
+    --radius-card:    8px;
+    --sidebar-width:  220px;
+}
+
+html[data-theme="dark"] {
+    --color-bg-primary:    #1a1a2e;
+    --color-bg-secondary:  #16213e;
+    --color-bg-card:       #0f3460;
+    --color-text-primary:  #e9ecef;
+    --color-text-secondary:#adb5bd;
+    --color-accent:        #4dabf7;
+    --color-border:        #495057;
+    --shadow-card:    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ========================================
+   基礎佈局
+   ======================================== */
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+}
+
+.layout-wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ========================================
+   Sidebar
+   ======================================== */
+
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+}
+
+.sidebar-header {
+    padding: 20px 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-logo {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--color-accent);
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+.theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 4px;
+}
+
+/* ========================================
+   Nav Menu
+   ======================================== */
+
+.nav-menu {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+}
+
+.nav-item {
+    display: block;
+    padding: 10px 16px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 4px;
+    margin: 2px 8px;
+    transition: background 0.15s;
+}
+
+.nav-item:hover,
+.nav-item.active {
+    background: var(--color-accent);
+    color: #fff;
+}
+
+/* ========================================
+   Main Content
+   ======================================== */
+
+.main-content {
+    margin-left: var(--sidebar-width);
+    flex: 1;
+    padding: 24px;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.page-header h2 {
+    margin: 0;
+}
+
+.page-filters {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* ========================================
+   Agent Status Cards
+   ======================================== */
+
+.agent-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.agent-card {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    transition: box-shadow 0.15s;
+}
+
+.agent-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.agent-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.agent-name {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.agent-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+}
+
+.current-task {
+    font-size: 0.85rem;
+    color: var(--color-status-running);
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-card-footer {
+    margin-top: 8px;
+    color: var(--color-text-secondary);
+}
+
+/* ========================================
+   Status Badge
+   ======================================== */
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.status-pending  { background: var(--color-status-pending);  }
+.status-running  { background: var(--color-status-running);  }
+.status-done     { background: var(--color-status-done);     }
+.status-failed   { background: var(--color-status-failed);   }
+.status-idle     { background: var(--color-status-idle);     }
+.status-error    { background: var(--color-status-error);    }
+
+/* ========================================
+   Task List Simple (首頁)
+   ======================================== */
+
+.task-list-simple {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.task-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+}
+
+.task-title {
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+.task-agent {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    width: 60px;
+}
+
+/* ========================================
+   Login
+   ======================================== */
+
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+}
+
+.login-card {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    padding: 40px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: var(--shadow-card);
+}
+
+.login-card h2 {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+
+/* ========================================
+   Drawer
+   ======================================== */
+
+.drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-logs {
+    padding: 16px;
+}
+
+.log-item {
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    border-left: 3px solid var(--color-border);
+}
+
+.log-done    { border-left-color: var(--color-status-done);    }
+.log-failed  { border-left-color: var(--color-status-failed);  }
+.log-running { border-left-color: var(--color-status-running); }
+
+.log-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.log-agent {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.log-step {
+    font-size: 0.85rem;
+    margin: 4px 0;
+}
+
+.log-payload {
+    font-size: 0.75rem;
+    background: var(--color-bg-secondary);
+    padding: 8px;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 200px;
+}
+
+/* ========================================
+   Agent Setting Card
+   ======================================== */
+
+.agent-setting-card {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-card);
+}
+
+.agent-setting-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.team-label {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+.trust-level-control {
+    margin-bottom: 16px;
+}
+
+.agent-setting-actions {
+    margin-top: 16px;
+}
+
+/* ========================================
+   Coming Soon
+   ======================================== */
+
+.coming-soon-container {
+    display: flex;
+    justify-content: center;
+    padding-top: 60px;
+}
+
+.coming-soon-card {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    padding: 40px;
+    max-width: 500px;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+}
+
+.coming-soon-label {
+    color: var(--color-text-secondary);
+    font-style: italic;
+    margin: 12px 0;
+}
+
+.coming-soon-features {
+    text-align: left;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ========================================
+   Utilities
+   ======================================== */
+
+.no-data {
+    color: var(--color-text-secondary);
+    font-style: italic;
+    padding: 8px 0;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.15s;
+}
+
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-primary   { background: var(--color-accent); color: #fff; }
+.btn-secondary { background: var(--color-bg-secondary); border: 1px solid var(--color-border); color: var(--color-text-primary); }
+
+.alert {
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin-top: 12px;
+}
+
+.alert-danger  { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+.alert-success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+
+.form-control,
+.form-select {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+}

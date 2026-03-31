@@ -1,0 +1,36 @@
+@* Agent 狀態卡片組件，顯示在首頁 *@
+
+<div class="agent-card" @onclick="OnClick">
+    <div class="agent-card-header">
+        <span class="agent-name">@Status.AgentName</span>
+        <StatusBadge Status="@Status.Status" />
+    </div>
+    <div class="agent-card-body">
+        @if (Status.CurrentTaskTitle is not null)
+        {
+            <p class="current-task">@Status.CurrentTaskTitle</p>
+        }
+        <div class="agent-stats">
+            <span>信任等級：<strong>Lv@Status.TrustLevel</strong></span>
+            <span>今日完成：<strong>@Status.TodayCompletedCount</strong></span>
+            <span>失敗：<strong>@Status.TodayFailedCount</strong></span>
+        </div>
+    </div>
+    <div class="agent-card-footer">
+        <small>更新：@Status.LastUpdated.ToLocalTime().ToString("HH:mm:ss")</small>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public AgentStatusViewModel Status { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback<AgentStatusViewModel> OnCardClick { get; set; }
+
+    private async Task OnClick()
+    {
+        if (OnCardClick.HasDelegate)
+            await OnCardClick.InvokeAsync(Status);
+    }
+}

@@ -1,6 +1,9 @@
 using System.Text.Json;
-using AiTeam.Bot.Data;
+using AiTeam.Data;
+using AiTeam.Data.Repositories;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
+using AiTeam.Shared.ViewModels;
 
 namespace AiTeam.Bot.Agents;
 
@@ -11,6 +14,7 @@ public class DevAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
+    DashboardPushService dashboardPush,
     ILogger<DevAgentService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -72,6 +76,14 @@ public class DevAgentService(
         taskRepository.AddLog(logEntry);
         await taskRepository.SaveAsync(cancellationToken);
 
+        await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = "Dev",
+            Status           = "running",
+            CurrentTaskTitle = task.Title,
+            LastUpdated      = DateTime.UtcNow
+        });
+
         var localPath = "";
 
         try
@@ -118,6 +130,21 @@ public class DevAgentService(
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
 
+            await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName   = "Dev",
+                Status      = "idle",
+                LastUpdated = DateTime.UtcNow
+            });
+
+            await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                Status    = "done",
+                AgentName = "Dev"
+            });
+
             return prUrl;
         }
         catch (Exception ex)
@@ -126,6 +153,22 @@ public class DevAgentService(
             AddLog(task, $"執行失敗：{ex.Message}", "failed");
             taskRepository.UpdateStatus(task, "failed");
             await taskRepository.SaveAsync(cancellationToken);
+
+            await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName   = "Dev",
+                Status      = "error",
+                LastUpdated = DateTime.UtcNow
+            });
+
+            await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                Status    = "failed",
+                AgentName = "Dev"
+            });
+
             throw;
         }
         finally
