@@ -1,13 +1,15 @@
 using Anthropic.SDK;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Data;
 using AiTeam.Data.Extensions;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Notion;
 using AiTeam.Bot.Ops;
 using AiTeam.Bot.Services;
-using AiTeam.Data;
+using AiTeam.Data.Repositories;
+using AiTeam.Shared.Constants;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Notion.Client;
@@ -42,13 +44,25 @@ builder.Services.AddSingleton<INotionClient>(_ => NotionClientFactory.Create(new
 }));
 builder.Services.AddSingleton<NotionService>();
 
-// Agents
+// Agents（保留具名型別註冊以維持現有相依；同時加上 Keyed 介面，供 CommandHandler 動態分派）
 builder.Services.AddScoped<CeoAgentService>();
+
 builder.Services.AddScoped<DevAgentService>();
-builder.Services.AddSingleton<OpsAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, DevAgentService>(AgentNames.Dev);
+
+builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依
+builder.Services.AddKeyedSingleton<IAgentExecutor, OpsAgentService>(AgentNames.Ops);
+
+builder.Services.AddScoped<QaAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, QaAgentService>(AgentNames.Qa);
+
+builder.Services.AddScoped<DocAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, DocAgentService>(AgentNames.Doc);
+
+builder.Services.AddScoped<RequirementsAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, RequirementsAgentService>(AgentNames.Requirements);
 
 // Dashboard 推送（透過 Aspire Service Discovery 解析 aiteam-dashboard 的 "dashboard" 端點）
-// URL 格式：http+{端點名稱}://{服務名稱}，對應 AppHost 的 WithHttpEndpoint(name: "dashboard")
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri("http+dashboard://aiteam-dashboard"));
 builder.Services.AddSingleton<DashboardPushService>();
@@ -83,11 +97,12 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapControllers();
 
-// 啟動時自動套用 EF Core Migrations
+// 啟動時自動套用 EF Core Migrations，並 Seed 初始 AgentConfig 資料
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    await DbSeeder.SeedAsync(db);
 }
 
 app.Run();

@@ -165,6 +165,24 @@ public class GitHubService(
     }
 
     /// <summary>
+    /// 建立 GitHub Issue，回傳 Issue URL。
+    /// </summary>
+    public async Task<string> CreateIssueAsync(
+        string owner, string repo,
+        string title, string body,
+        IEnumerable<string> labels)
+    {
+        var client = CreateClient();
+        var newIssue = new NewIssue(title) { Body = body };
+        foreach (var label in labels)
+            newIssue.Labels.Add(label);
+
+        var issue = await client.Issue.Create(owner, repo, newIssue);
+        logger.LogInformation("Issue #{Number} 已建立：{Url}", issue.Number, issue.HtmlUrl);
+        return issue.HtmlUrl;
+    }
+
+    /// <summary>
     /// 清除本地 clone（任務完成後釋放磁碟空間）。
     /// </summary>
     public void CleanupLocalRepo(string localPath)

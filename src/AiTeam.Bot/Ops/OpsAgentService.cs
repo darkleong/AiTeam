@@ -1,3 +1,4 @@
+using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
@@ -19,10 +20,22 @@ public class OpsAgentService(
     DiscordSocketClient discordClient,
     IServiceProvider serviceProvider,
     DashboardPushService dashboardPush,
-    ILogger<OpsAgentService> logger)
+    ILogger<OpsAgentService> logger) : IAgentExecutor
 {
     private readonly DiscordSettings _discord = discordSettings.Value;
     private readonly OpsSettings _ops = opsSettings.Value;
+
+    /// <inheritdoc />
+    public async Task<AgentExecutionResult> ExecuteTaskAsync(
+        TaskItem task,
+        string owner,
+        string repo,
+        IReadOnlyList<string> rules,
+        CancellationToken cancellationToken = default)
+    {
+        await AlertAsync($"📋 Ops 任務待執行：{task.Title}（專案：{repo}）");
+        return new AgentExecutionResult(true, "Ops 警報已發送至 #警報 頻道");
+    }
 
     /// <summary>
     /// 監控 GitHub Actions 部署結果，成功通知，失敗自動回滾。

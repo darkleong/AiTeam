@@ -31,7 +31,8 @@ public class AgentConfig
 {
     public Guid Id { get; set; }
     public Guid TeamId { get; set; }
-    public string Name { get; set; } = ""; // CEO / Dev / Ops
+    public string Name { get; set; } = ""; // CEO / Dev / Ops / QA / Doc / Requirements
+    public string Description { get; set; } = ""; // CEO 系統提示用描述
     public int TrustLevel { get; set; } = 0;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -45,6 +46,7 @@ public class TaskItem
     public Guid? TeamId { get; set; }
     public Guid? ProjectId { get; set; }
     public string Title { get; set; } = "";
+    public string? Description { get; set; } // CEO 任務描述（供 Agent 使用）
     public string TriggeredBy { get; set; } = ""; // Discord / GitHub / Schedule
     public string AssignedAgent { get; set; } = "";
     public string Status { get; set; } = "pending"; // pending / running / done / failed

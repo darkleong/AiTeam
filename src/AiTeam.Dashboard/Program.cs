@@ -79,11 +79,24 @@ app.MapHub<AgentStatusHub>("/hubs/agent-status");
 app.MapRazorComponents<AiTeam.Dashboard.Components.App>()
     .AddInteractiveServerRenderMode();
 
-// 啟動時只套用 Identity Migration（AppDbContext Migration 由 Bot 負責，避免兩個 Process 競爭）
+// 啟動時套用 Identity Migration，並 Seed 基礎 Agent 資料
+// （AppDbContext schema migration 由 Bot 負責；Seed 為幂等操作，兩端皆可安全呼叫）
 using (var scope = app.Services.CreateScope())
 {
     var identityDb = scope.ServiceProvider.GetRequiredService<DashboardDbContext>();
     await identityDb.Database.MigrateAsync();
+
+    var appDb  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await DbSeeder.SeedAsync(appDb);
+        logger.LogInformation("DbSeeder 完成");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "DbSeeder 執行失敗，Agent 設定頁面將顯示空白");
+    }
 }
 
 await app.Services.EnsureAdminUserAsync(app.Configuration);

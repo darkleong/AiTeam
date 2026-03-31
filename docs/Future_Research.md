@@ -154,9 +154,142 @@ CEO 看懂圖片，分析問題，分派給 Dev
 
 ---
 
+## 七、顧問 Agent 設計
+
+### 背景
+
+目前 Claude.ai 扮演顧問角色，負責策略討論與設計決策。Discord CEO Agent 負責日常執行與任務協調。未來系統穩定後，可以考慮是否需要正式化顧問的角色。
+
+### 三種方向
+
+| 方案 | 說明 | 適合情境 |
+|------|------|---------|
+| 方案一：獨立顧問 Agent | 顧問與 CEO 完全分開，各自是獨立 Agent | 團隊規模大、決策複雜 |
+| 方案二：顧問能力整合進總 CEO | CEO 支援日常模式與顧問模式切換 | 希望單一窗口處理所有事 |
+| 方案三：維持現狀 | Claude.ai 繼續扮演顧問，Discord CEO 負責執行 | 現階段最適合 |
+
+### 目前建議
+
+- **短期**：維持方案三，不需要額外開發
+- **長期**：等 Stage 3-4 穩定後，評估是否採用方案二，把顧問能力整合進總 CEO
+
+### 優先級
+
+🔵 低優先級 — 等系統整體穩定後再討論
+
+---
+
+## 八、Requirements Agent 的雙層確認機制
+
+### 背景
+
+Stage 5 的 RequirementsAgentService 直接呼叫 GitHub Issues API 建立 Issue，沒有 PR 流程，因此繞過了原本設計的「雙層確認機制」。
+
+### 問題
+
+```
+你下指令 → CEO 分派給 Requirements Agent → 直接建立 GitHub Issues
+                                              ↑
+                                        沒有確認點！
+```
+
+建立 Issue 雖然不如 commit 程式碼風險高，但如果 Agent 誤解需求，可能會建立大量錯誤的 Issue。
+
+### 可能的解法
+
+- Requirements Agent 建立 Issue 前，先在 Discord 列出「準備建立的 Issue 清單」，等你確認後才執行
+- 或限制每次最多建立 N 個 Issue，超過需要你確認
+
+### 優先級
+
+🔵 低優先級 — 等 Stage 5 穩定運作後評估
+
+---
+
+## 九、Documentation Agent 的品質控管
+
+### 背景
+
+Stage 5 的 DocAgentService 自動產出技術文件並開 PR，目前沒有人工審查機制，文件品質完全依賴 LLM 的輸出。
+
+### 問題
+
+自動產出的文件可能：
+- 描述不準確或過時
+- 格式不符合團隊規範
+- 遺漏重要說明
+
+### 可能的解法
+
+- 維持現有 PR 流程，你在 merge 前審查文件內容（最簡單）
+- 加入 CEO 二次審查，由 CEO 評估文件品質後才通知你
+- 未來有 QA Agent 後，讓 QA 也審查文件正確性
+
+### 優先級
+
+🔵 低優先級 — 目前 PR 審查機制已有一定保護，等實際使用後再評估
+
+---
+
+## 十、Stage 5 Discord 端對端驗收測試
+
+### 背景
+
+Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中進行端對端測試。
+
+### 待驗收項目
+
+| # | 指令 / 操作 | 預期結果 |
+|---|-----------|---------|
+| 1 | `/task project:test-repo description:修復登入CSS` | CEO 只見 Dev/Ops（QA/Doc/Requirements 預設停用），分派 Dev，雙層確認 → PR 建立 |
+| 2 | Dashboard 啟用 QA → `/task ... description:請對 PR #5 補充自動化測試` | CEO 清單出現 QA，分派成功，xUnit 測試 PR 被建立 |
+| 3 | Dashboard 啟用 Requirements → `/task ... description:需求：匯出 PDF 報表` | CEO 分派給 Requirements，GitHub Issues 被建立 |
+| 4 | Dashboard 啟用 Doc → `/task ... description:請為 Agents 目錄產出 Markdown 文件` | Doc PR 被建立 |
+| 5 | DB 直接 INSERT 新 Agent 記錄（不改程式碼）→ 重啟 Bot → `/task ...` | CEO 自動偵測到新 Agent，動態框架驗證完成 |
+
+### 優先級
+
+🟡 中優先級 — Stage 5 功能驗收的最後一步，系統上線前需完成
+
+---
+
+## 十一、將 Telerik UI 全面替換為 MudBlazor
+
+### 背景
+
+目前 Dashboard 使用 Telerik UI for Blazor（v8.1.1）作為 UI 元件庫。實作過程中發現多個 Telerik 的 API 陷阱（`Step` 改名 `SmallStep`、`@bind-Value` 不支援 dictionary indexer 等），加上 Telerik 為商業授權，長期維護成本較高。
+
+### MudBlazor 的優勢
+
+| 項目 | Telerik | MudBlazor |
+|------|---------|-----------|
+| 授權 | 商業（需付費） | MIT（完全免費） |
+| 社群活躍度 | 中 | 高（GitHub stars 9k+） |
+| 文件品質 | 良好 | 良好 |
+| Material Design 風格 | 否 | 是 |
+| 元件 API 一致性 | 不穩定（版本間有破壞性變更） | 穩定 |
+
+### 影響範圍
+
+- `src/AiTeam.Dashboard/` 所有 `.razor` 頁面
+- 移除 `Telerik.UI.for.Blazor` NuGet 套件
+- 調整 `Program.cs` 的服務註冊（`AddTelerikBlazor()` → `AddMudServices()`）
+- `_Imports.razor` 更換 using 命名空間
+
+### 優先級
+
+🔵 低優先級 — Dashboard 功能穩定後統一處理，不影響目前開發進度
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
 |------|------|
 | 2026-03-30 | 初版建立 |
 | 2026-03-30 | 新增「Discord 圖片輸入支援」研究項目 |
+| 2026-03-30 | 新增「顧問 Agent 設計」研究項目 |
+| 2026-03-31 | 新增「Requirements Agent 雙層確認機制」研究項目 |
+| 2026-03-31 | 新增「Documentation Agent 品質控管」研究項目 |
+| 2026-04-01 | 新增「Stage 5 Discord 端對端驗收測試」待辦項目 |
+| 2026-04-01 | 新增「將 Telerik UI 全面替換為 MudBlazor」研究項目 |

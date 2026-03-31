@@ -13,6 +13,20 @@ public class DashboardAgentService(AppDbContext db)
 {
     #region Public Methods
 
+    /// <summary>切換 Agent 的啟用狀態，回傳更新後的 IsActive 值。</summary>
+    public async Task<bool> UpdateIsActiveAsync(
+        Guid agentId,
+        bool isActive,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
+        if (agent is null) return isActive;
+
+        agent.IsActive = isActive;
+        await db.SaveChangesAsync(cancellationToken);
+        return agent.IsActive;
+    }
+
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)
@@ -21,11 +35,12 @@ public class DashboardAgentService(AppDbContext db)
             .Include(a => a.Team)
             .Select(a => new AgentConfigDto
             {
-                Id       = a.Id,
-                Name     = a.Name,
-                TrustLevel = a.TrustLevel,
-                IsActive = a.IsActive,
-                TeamName = a.Team.Name
+                Id          = a.Id,
+                Name        = a.Name,
+                Description = a.Description,
+                TrustLevel  = a.TrustLevel,
+                IsActive    = a.IsActive,
+                TeamName    = a.Team.Name
             })
             .ToListAsync(cancellationToken);
 

@@ -3,9 +3,9 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Notion;
-using AiTeam.Bot.Ops;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Discord;
@@ -19,13 +19,12 @@ public class CommandHandler(
     IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
     NotionService notionService,
-    OpsAgentService opsAgentService,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
     private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
 
-    // 等待確認的 CEO 決策暫存（messageId → CeoResponse）
+    // 等待確認的 CEO 決策暫存（messageId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingConfirmations = [];
 
     /// <summary>
@@ -104,14 +103,18 @@ public class CommandHandler(
 
     private async Task HandleTaskCommandAsync(SocketSlashCommand command)
     {
-        var project = command.Data.Options.First(o => o.Name == "project").Value.ToString()!;
+        var project     = command.Data.Options.First(o => o.Name == "project").Value.ToString()!;
         var description = command.Data.Options.First(o => o.Name == "description").Value.ToString()!;
 
         await using var scope = serviceProvider.CreateAsyncScope();
-        var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
+        var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
+        var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
 
-        var rules = await notionService.GetRulesAsync();
-        var agentList = new[] { "Dev", "Ops" };
+        var rules        = await notionService.GetRulesAsync();
+        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
+        var agentList    = activeAgents
+            .Select(a => new AgentDescriptor(a.Name, a.Description))
+            .ToList();
 
         // 呼叫 CEO Agent 分析
         var ceoResponse = await ceoService.ProcessAsync(
@@ -124,7 +127,6 @@ public class CommandHandler(
                 embed: BuildCeoDecisionEmbed(ceoResponse, project),
                 components: BuildConfirmButtons());
 
-            // 注意：不存 TaskRepository，scope 結束後就 dispose，改在 confirm_yes 開新 scope
             _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
                 ceoResponse, project, description);
         }
@@ -142,8 +144,15 @@ public class CommandHandler(
 
     private async Task HandleStatusAsync(SocketSlashCommand command)
     {
-        // TODO: Stage 3 — 從資料庫查詢各 Agent 執行中任務數
-        await command.FollowupAsync("CEO / Dev / Ops — 所有 Agent 待機中。");
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var agentRepo = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+        var agents    = await agentRepo.GetActiveExecutorAgentsAsync();
+
+        var agentLines = agents.Count > 0
+            ? string.Join("\n", agents.Select(a => $"• {a.Name} — {(a.IsActive ? "啟用" : "停用")}"))
+            : "（尚未設定 Agent）";
+
+        await command.FollowupAsync($"**Agent 狀態**\n{agentLines}");
     }
 
     #endregion
@@ -166,22 +175,22 @@ public class CommandHandler(
 
             try
             {
-                // 開新 scope 儲存任務（原 HandleTaskCommandAsync 的 scope 已 dispose）
-                await using var scope = serviceProvider.CreateAsyncScope();
+                await using var scope  = serviceProvider.CreateAsyncScope();
                 var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
                 var task = new TaskItem
                 {
-                    Title = pending.CeoResponse.Task?.Title ?? pending.Description,
-                    TriggeredBy = "Discord",
+                    Title        = pending.CeoResponse.Task?.Title ?? pending.Description,
+                    Description  = pending.CeoResponse.Task?.Description,
+                    TriggeredBy  = "Discord",
                     AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
-                    Status = "pending"
+                    Status       = "pending"
                 };
                 taskRepo.Add(task);
                 await taskRepo.SaveAsync();
 
                 // 第二層確認：執行層 Agent 說明即將執行的操作
-                var agentPlanEmbed = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
+                var agentPlanEmbed  = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
                 var agentConfirmMsg = await interaction.FollowupAsync(
                     embed: agentPlanEmbed,
                     components: BuildConfirmButtons("exec_yes", "exec_no"));
@@ -217,14 +226,14 @@ public class CommandHandler(
 
     #endregion
 
-    #region Agent 執行
+    #region Agent 執行（動態分派）
 
     private async Task ExecuteAgentTaskAsync(PendingConfirmation pending)
     {
         var owner = _gitHubSettings.Owner;
         var repo  = pending.Project;
 
-        await using var scope = serviceProvider.CreateAsyncScope();
+        await using var scope    = serviceProvider.CreateAsyncScope();
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
         var task = await taskRepo.GetByIdAsync(pending.TaskId);
@@ -238,37 +247,48 @@ public class CommandHandler(
         await taskRepo.SaveAsync();
 
         var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
+        var alertChannel  = FindChannel(_settings.Channels.Alerts);
+
+        // 動態取得 Agent 實作（keyed DI）
+        var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(
+            pending.CeoResponse.TargetAgent);
+
+        if (executor is null)
+        {
+            logger.LogError("找不到 Agent 實作：{Agent}", pending.CeoResponse.TargetAgent);
+            taskRepo.UpdateStatus(task, "failed");
+            await taskRepo.SaveAsync();
+            if (alertChannel is not null)
+                await alertChannel.SendMessageAsync(
+                    $"🚨 找不到 Agent 實作：**{pending.CeoResponse.TargetAgent}**\n任務：{task.Title}");
+            return;
+        }
 
         try
         {
-            if (pending.CeoResponse.TargetAgent == "Dev")
-            {
-                var devAgent = scope.ServiceProvider.GetRequiredService<DevAgentService>();
-                var rules    = await notionService.GetRulesAsync();
-                var plan     = await devAgent.BuildPlanAsync(task, owner, repo, rules);
-                var prUrl    = await devAgent.ExecuteAsync(task, plan, owner, repo);
+            var rules  = await notionService.GetRulesAsync();
+            var result = await executor.ExecuteTaskAsync(task, owner, repo, rules);
 
-                taskRepo.UpdateStatus(task, "done");
-                await taskRepo.SaveAsync();
+            taskRepo.UpdateStatus(task, result.Success ? "done" : "failed");
+            await taskRepo.SaveAsync();
 
-                var embed = new EmbedBuilder()
-                    .WithTitle("✅ Dev Agent 執行完成")
-                    .WithColor(Color.Green)
-                    .AddField("任務", task.Title)
-                    .AddField("PR", prUrl)
-                    .WithTimestamp(DateTimeOffset.UtcNow)
-                    .Build();
-                if (notifyChannel is not null)
-                    await notifyChannel.SendMessageAsync(embed: embed);
-            }
-            else // Ops 或其他
-            {
-                // TODO: Ops 任務執行邏輯
-                await opsAgentService.AlertAsync(
-                    $"📋 Ops 任務待執行：{task.Title}（專案：{repo}）");
-                taskRepo.UpdateStatus(task, "done");
-                await taskRepo.SaveAsync();
-            }
+            var embedColor = result.Success ? Color.Green : Color.Red;
+            var embedTitle = result.Success
+                ? $"✅ {pending.CeoResponse.TargetAgent} Agent 執行完成"
+                : $"❌ {pending.CeoResponse.TargetAgent} Agent 執行失敗";
+
+            var embed = new EmbedBuilder()
+                .WithTitle(embedTitle)
+                .WithColor(embedColor)
+                .AddField("任務", task.Title)
+                .AddField("摘要", result.Summary)
+                .WithTimestamp(DateTimeOffset.UtcNow);
+
+            if (!string.IsNullOrEmpty(result.OutputUrl))
+                embed.AddField("連結", result.OutputUrl);
+
+            if (notifyChannel is not null)
+                await notifyChannel.SendMessageAsync(embed: embed.Build());
         }
         catch (Exception ex)
         {
@@ -276,7 +296,6 @@ public class CommandHandler(
             taskRepo.UpdateStatus(task, "failed");
             await taskRepo.SaveAsync();
 
-            var alertChannel = FindChannel(_settings.Channels.Alerts);
             if (alertChannel is not null)
                 await alertChannel.SendMessageAsync(
                     $"🚨 **{pending.CeoResponse.TargetAgent} Agent 失敗**\n任務：{task.Title}\n錯誤：{ex.Message}");
@@ -327,10 +346,10 @@ public class CommandHandler(
 
     private static MessageComponent BuildConfirmButtons(
         string yesId = "confirm_yes",
-        string noId = "confirm_no")
+        string noId  = "confirm_no")
         => new ComponentBuilder()
             .WithButton("✅ 確認", yesId, ButtonStyle.Success)
-            .WithButton("❌ 取消", noId, ButtonStyle.Danger)
+            .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
             .Build();
 
     #endregion

@@ -1,6 +1,7 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres")
+    .WithDataVolume("aiteam-postgres-data")  // 重啟 Aspire 後資料不消失
     .WithPgAdmin()
     .AddDatabase("AiTeamDb");
 

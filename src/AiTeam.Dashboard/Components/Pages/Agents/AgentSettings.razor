@@ -8,18 +8,43 @@
     <h2>Agent 設定</h2>
 </div>
 
+@if (_loadError is not null)
+{
+    <div class="alert alert-danger">
+        <strong>載入失敗：</strong>@_loadError
+    </div>
+}
+else if (_agents.Count == 0)
+{
+    <div class="alert alert-info">
+        尚未載入 Agent 資料，請確認 Bot 服務已啟動並重新整理頁面。
+    </div>
+}
+
 @foreach (var agent in _agents)
 {
     <div class="agent-setting-card">
         <div class="agent-setting-header">
             <h4>@agent.Name</h4>
             <span class="team-label">@agent.TeamName</span>
+            <label class="active-toggle" title="@(agent.IsActive ? "點擊停用" : "點擊啟用")">
+                <input type="checkbox"
+                       checked="@agent.IsActive"
+                       @onchange="(e) => ToggleIsActiveAsync(agent, (bool)e.Value!)" />
+                <span class="toggle-label">@(agent.IsActive ? "啟用中" : "已停用")</span>
+            </label>
         </div>
+
+        @if (!string.IsNullOrEmpty(agent.Description))
+        {
+            <p class="agent-description text-muted">@agent.Description</p>
+        }
 
         <div class="trust-level-control">
             <label>信任等級：<strong>Lv@_trustLevels[agent.Id]</strong></label>
-            <TelerikSlider @bind-Value="@_trustLevels[agent.Id]"
-                           Min="0" Max="3" Step="1"
+            <TelerikSlider Value="@_trustLevels[agent.Id]"
+                           ValueChanged="@((int v) => _trustLevels[agent.Id] = v)"
+                           Min="0" Max="3" SmallStep="1"
                            Width="200px" />
         </div>
 

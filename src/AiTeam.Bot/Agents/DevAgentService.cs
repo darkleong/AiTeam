@@ -15,7 +15,7 @@ public class DevAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ILogger<DevAgentService> logger)
+    ILogger<DevAgentService> logger) : IAgentExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -300,6 +300,26 @@ public class DevAgentService(
 
             請產出執行計畫 JSON。
             """;
+
+    /// <inheritdoc />
+    public async Task<AgentExecutionResult> ExecuteTaskAsync(
+        TaskItem task,
+        string owner,
+        string repo,
+        IReadOnlyList<string> rules,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var plan = await BuildPlanAsync(task, owner, repo, rules, cancellationToken);
+            var prUrl = await ExecuteAsync(task, plan, owner, repo, cancellationToken);
+            return new AgentExecutionResult(true, $"PR 已開啟：{prUrl}", prUrl);
+        }
+        catch (Exception ex)
+        {
+            return new AgentExecutionResult(false, $"Dev Agent 執行失敗：{ex.Message}");
+        }
+    }
 
     private static DevPlan? TryParsePlan(string content)
     {

@@ -6,6 +6,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Notion;
+using Microsoft.Extensions.DependencyInjection;
 using DiscordNet = Discord;
 using Discord.WebSocket;
 using Microsoft.AspNetCore.Mvc;
@@ -106,8 +107,12 @@ public class WebhookController(
         var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
-        var rules = await notionService.GetRulesAsync(cancellationToken);
-        var agentList = new[] { "Dev", "Ops" };
+        var agentRepo    = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+        var rules        = await notionService.GetRulesAsync(cancellationToken);
+        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync(cancellationToken);
+        var agentList    = activeAgents
+            .Select(a => new AgentDescriptor(a.Name, a.Description))
+            .ToList();
 
         var userInput = $"GitHub Issue 建立：{issueTitle}\n\n{issueBody}\n\nIssue URL：{issueUrl}";
         var ceoResponse = await ceoService.ProcessAsync(

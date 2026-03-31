@@ -5,6 +5,7 @@ public class AgentConfigDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
     public int TrustLevel { get; set; }
     public bool IsActive { get; set; }
     public string? TeamName { get; set; }

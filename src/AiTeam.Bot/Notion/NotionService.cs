@@ -70,23 +70,23 @@ public class NotionService(
         {
             var properties = new Dictionary<string, PropertyValue>
             {
-                ["任務標題"] = new TitlePropertyValue
+                ["Name"] = new TitlePropertyValue
                 {
                     Title = [new RichTextText { Text = new Text { Content = title } }]
                 },
-                ["執行 Agent"] = new RichTextPropertyValue
+                ["Agent"] = new RichTextPropertyValue
                 {
                     RichText = [new RichTextText { Text = new Text { Content = agentName } }]
                 },
-                ["輸入指令"] = new RichTextPropertyValue
+                ["Command"] = new RichTextPropertyValue
                 {
                     RichText = [new RichTextText { Text = new Text { Content = originalCommand } }]
                 },
-                ["執行結果"] = new RichTextPropertyValue
+                ["Result"] = new RichTextPropertyValue
                 {
                     RichText = [new RichTextText { Text = new Text { Content = result } }]
                 },
-                ["日期"] = new DatePropertyValue
+                ["Date"] = new DatePropertyValue
                 {
                     Date = new Date { Start = DateTime.UtcNow }
                 }
@@ -120,7 +120,7 @@ public class NotionService(
 
             foreach (var page in response.Results.OfType<Page>())
             {
-                if (page.Properties.TryGetValue("規則內容", out var prop)
+                if (page.Properties.TryGetValue("Rule Content", out var prop)
                     && prop is RichTextPropertyValue richText
                     && richText.RichText.Count > 0)
                 {

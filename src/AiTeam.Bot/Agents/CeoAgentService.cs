@@ -23,7 +23,7 @@ public class CeoAgentService(
     public async Task<CeoResponse> ProcessAsync(
         string userInput,
         string projectName,
-        IReadOnlyList<string> agentList,
+        IReadOnlyList<AgentDescriptor> agentList,
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
@@ -53,9 +53,10 @@ public class CeoAgentService(
         return new CeoResponse { Reply = "CEO 回應格式錯誤，請查看 log 或稍後再試。" };
     }
 
-    private static string BuildSystemPrompt(IReadOnlyList<string> agentList, IReadOnlyList<string> rules)
+    private static string BuildSystemPrompt(IReadOnlyList<AgentDescriptor> agentList, IReadOnlyList<string> rules)
     {
-        var agents = string.Join("\n", agentList.Select(a => $"- {a}"));
+        var agents = string.Join("\n", agentList.Select(a =>
+            string.IsNullOrWhiteSpace(a.Description) ? $"- {a.Name}" : $"- {a.Name}：{a.Description}"));
         var ruleList = rules.Count > 0
             ? string.Join("\n", rules.Select(r => $"- {r}"))
             : "（尚無規則）";
@@ -74,7 +75,7 @@ public class CeoAgentService(
             {
               "reply": "給老闆看的回應訊息（繁體中文）",
               "action": "reply | delegate | autonomous",
-              "target_agent": "Dev | Ops | null",
+              "target_agent": "Dev | Ops | QA | Doc | Requirements | null",
               "task": {
                 "title": "任務標題",
                 "project": "專案名稱",

@@ -86,6 +86,14 @@ public class NotionTrustLevelService(
             }
             return rules;
         }
+        catch (NotionApiException ex) when (ex.Message.Contains("not found for property"))
+        {
+            // Notion Rules DB 尚未建立此 Agent 的 select 選項屬於預期情況，降級為 Warning
+            logger.LogWarning(
+                "Notion Rules DB 尚無 Agent \"{AgentName}\" 的 select 選項，請在 Notion 中手動新增後即可設定規則",
+                agentName);
+            return [];
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "讀取 Agent {AgentName} 規則失敗", agentName);
