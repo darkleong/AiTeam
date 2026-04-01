@@ -155,7 +155,8 @@ public class CommandHandler(
         }
 
         // 雙層確認 — 第一層：CEO 回報決策給老闆審核
-        if (ceoResponse.RequireConfirmation && ceoResponse.Action != "reply")
+        // RequireConfirmation 欄位不可信（LLM 可能回傳 false），只要 action 非 reply 就一律顯示確認 Embed
+        if (ceoResponse.Action != "reply")
         {
             var confirmMessage = await command.FollowupAsync(
                 embed: BuildCeoDecisionEmbed(ceoResponse, project),

@@ -43,8 +43,8 @@ public class CeoAgentService(
             if (parsed is not null)
             {
                 logger.LogInformation(
-                    "CEO 回應解析成功（第 {Attempt} 次），InputTokens={Input} OutputTokens={Output}",
-                    attempt, response.InputTokens, response.OutputTokens);
+                    "CEO 回應解析成功（第 {Attempt} 次），action={Action} target={Agent} require_confirmation={Confirm} InputTokens={Input} OutputTokens={Output}",
+                    attempt, parsed.Action, parsed.TargetAgent, parsed.RequireConfirmation, response.InputTokens, response.OutputTokens);
                 return parsed;
             }
 
