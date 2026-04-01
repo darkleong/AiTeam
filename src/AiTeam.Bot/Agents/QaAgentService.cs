@@ -38,8 +38,9 @@ public class QaAgentService(
             if (prNumber <= 0)
                 return new AgentExecutionResult(false, "無法從任務描述中取得 PR 編號，格式：PR #123");
 
+            var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
             var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
-            // 只保留 source .cs，排除測試檔案（尚未合入 main，GetFileContentAsync 會 404）
+            // 只保留 source .cs，排除測試檔案本身
             var csFiles = prFiles
                 .Where(f => f.FileName.EndsWith(".cs")
                          && !f.FileName.EndsWith("Tests.cs")
@@ -59,7 +60,7 @@ public class QaAgentService(
 
             foreach (var file in csFiles)
             {
-                await GenerateAndWriteTestAsync(task, owner, repo, file.FileName, localPath, cancellationToken);
+                await GenerateAndWriteTestAsync(task, owner, repo, file.FileName, localPath, headRef, cancellationToken);
             }
 
             AddLog(task, "測試檔案生成完成", "done");
@@ -111,9 +112,10 @@ public class QaAgentService(
         string repo,
         string filePath,
         string localPath,
+        string headRef,
         CancellationToken cancellationToken)
     {
-        var sourceContent = await gitHubService.GetFileContentAsync(owner, repo, filePath);
+        var sourceContent = await gitHubService.GetFileContentAsync(owner, repo, filePath, headRef);
         if (string.IsNullOrWhiteSpace(sourceContent)) return;
 
         var provider = providerFactory.Create(AgentName);

@@ -23,13 +23,25 @@ public class GitHubService(
     // ────────────── 唯讀操作（Code Review 用）──────────────
 
     /// <summary>
-    /// 取得 repo 的檔案內容（Base64 解碼）。
+    /// 取得 repo 的檔案內容（Base64 解碼）。可指定 gitRef（branch / commit SHA），預設讀 default branch。
     /// </summary>
-    public async Task<string> GetFileContentAsync(string owner, string repo, string path)
+    public async Task<string> GetFileContentAsync(string owner, string repo, string path, string? gitRef = null)
     {
         var client = CreateClient();
-        var content = await client.Repository.Content.GetAllContents(owner, repo, path);
+        var content = gitRef is null
+            ? await client.Repository.Content.GetAllContents(owner, repo, path)
+            : await client.Repository.Content.GetAllContentsByRef(owner, repo, path, gitRef);
         return content.FirstOrDefault()?.Content ?? "";
+    }
+
+    /// <summary>
+    /// 取得 PR 的 head branch 名稱（用於從 head branch 讀取檔案內容）。
+    /// </summary>
+    public async Task<string> GetPullRequestHeadRefAsync(string owner, string repo, int prNumber)
+    {
+        var client = CreateClient();
+        var pr = await client.PullRequest.Get(owner, repo, prNumber);
+        return pr.Head.Ref;
     }
 
     /// <summary>
