@@ -45,13 +45,42 @@ public class GitHubService(
     }
 
     /// <summary>
-    /// 列出 repo 指定路徑下的所有檔案。
+    /// 遞迴列出 repo 指定路徑下的所有檔案（含子目錄）。
     /// </summary>
     public async Task<IReadOnlyList<RepositoryContent>> ListFilesAsync(
         string owner, string repo, string path = "")
     {
+        // GitHub API 不接受尾巴斜線
+        path = path.TrimEnd('/');
+
         var client = CreateClient();
-        return await client.Repository.Content.GetAllContents(owner, repo, path);
+        var result = new List<RepositoryContent>();
+        await CollectFilesAsync(client, owner, repo, path, result);
+        return result;
+    }
+
+    private static async Task CollectFilesAsync(
+        GitHubClient client, string owner, string repo, string path, List<RepositoryContent> result)
+    {
+        IReadOnlyList<RepositoryContent> items;
+        try
+        {
+            items = string.IsNullOrEmpty(path)
+                ? await client.Repository.Content.GetAllContents(owner, repo)
+                : await client.Repository.Content.GetAllContents(owner, repo, path);
+        }
+        catch (Octokit.NotFoundException)
+        {
+            return; // 路徑不存在時靜默跳過
+        }
+
+        foreach (var item in items)
+        {
+            if (item.Type == ContentType.File)
+                result.Add(item);
+            else if (item.Type == ContentType.Dir)
+                await CollectFilesAsync(client, owner, repo, item.Path, result);
+        }
     }
 
     /// <summary>

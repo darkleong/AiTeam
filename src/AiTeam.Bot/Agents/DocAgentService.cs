@@ -142,7 +142,7 @@ public class DocAgentService(
         // 嘗試從文字中找到路徑前綴（如 "src/AiTeam.Bot/Agents"）
         var segments = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var pathLike = segments.FirstOrDefault(s => s.Contains('/') && !s.StartsWith("http"));
-        return pathLike ?? "src";
+        return (pathLike ?? "src").TrimEnd('/');
     }
 
     private static bool IsXmlMode(string title)
