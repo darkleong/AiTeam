@@ -13,6 +13,42 @@ public class DashboardAgentService(AppDbContext db)
 {
     #region Public Methods
 
+    /// <summary>新增 Agent 設定，回傳新建的 AgentConfigDto。TeamId 自動使用第一個 Team。</summary>
+    public async Task<AgentConfigDto> CreateAgentAsync(
+        string name,
+        string description,
+        int trustLevel,
+        CancellationToken cancellationToken = default)
+    {
+        var teamId = await db.Teams
+            .AsNoTracking()
+            .Select(t => t.Id)
+            .FirstAsync(cancellationToken);
+
+        var agent = new AgentConfig
+        {
+            Name        = name.Trim(),
+            Description = description.Trim(),
+            TrustLevel  = trustLevel,
+            IsActive    = true,
+            TeamId      = teamId
+        };
+
+        db.AgentConfigs.Add(agent);
+        await db.SaveChangesAsync(cancellationToken);
+
+        var team = await db.Teams.FindAsync([teamId], cancellationToken);
+        return new AgentConfigDto
+        {
+            Id          = agent.Id,
+            Name        = agent.Name,
+            Description = agent.Description,
+            TrustLevel  = agent.TrustLevel,
+            IsActive    = agent.IsActive,
+            TeamName    = team?.Name ?? ""
+        };
+    }
+
     /// <summary>切換 Agent 的啟用狀態，回傳更新後的 IsActive 值。</summary>
     public async Task<bool> UpdateIsActiveAsync(
         Guid agentId,

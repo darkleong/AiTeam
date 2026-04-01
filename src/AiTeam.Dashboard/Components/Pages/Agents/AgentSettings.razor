@@ -6,7 +6,44 @@
 
 <div class="page-header">
     <h2>Agent 設定</h2>
+    <button class="btn btn-primary" @onclick="() => _showCreateForm = !_showCreateForm">
+        @(_showCreateForm ? "✕ 取消新增" : "+ 新增 Agent")
+    </button>
 </div>
+
+@if (_showCreateForm)
+{
+    <div class="agent-setting-card" style="margin-bottom:24px">
+        <h4>新增 Agent</h4>
+
+        <div class="form-group">
+            <label>名稱 <span style="color:red">*</span></label>
+            <input class="form-control" @bind="_newName" placeholder="例如：Analytics" />
+        </div>
+        <div class="form-group">
+            <label>描述</label>
+            <input class="form-control" @bind="_newDescription" placeholder="簡述此 Agent 的職責" />
+        </div>
+        <div class="form-group">
+            <label>信任等級：<strong>Lv@_newTrustLevel</strong></label>
+            <MudSlider Value="@_newTrustLevel"
+                       ValueChanged="@((int v) => _newTrustLevel = v)"
+                       Min="0" Max="3" Step="1"
+                       Style="width:200px" />
+        </div>
+
+        @if (_createError is not null)
+        {
+            <div class="alert alert-danger">@_createError</div>
+        }
+
+        <div class="agent-setting-actions">
+            <button class="btn btn-primary" @onclick="CreateAgentAsync" disabled="@_isCreating">
+                @(_isCreating ? "新增中..." : "確認新增")
+            </button>
+        </div>
+    </div>
+}
 
 @if (_loadError is not null)
 {
