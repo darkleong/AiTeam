@@ -39,7 +39,14 @@ public class QaAgentService(
                 return new AgentExecutionResult(false, "無法從任務描述中取得 PR 編號，格式：PR #123");
 
             var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
-            var csFiles = prFiles.Where(f => f.FileName.EndsWith(".cs")).ToList();
+            // 只保留 source .cs，排除測試檔案（尚未合入 main，GetFileContentAsync 會 404）
+            var csFiles = prFiles
+                .Where(f => f.FileName.EndsWith(".cs")
+                         && !f.FileName.EndsWith("Tests.cs")
+                         && !f.FileName.EndsWith("Spec.cs")
+                         && !f.FileName.Contains(".Tests/")
+                         && !f.FileName.Contains(".Test/"))
+                .ToList();
 
             if (csFiles.Count == 0)
                 return new AgentExecutionResult(false, $"PR #{prNumber} 未包含 .cs 檔案，略過 QA");
