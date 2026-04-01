@@ -366,14 +366,32 @@ public class CommandHandler(
         taskRepo.UpdateStatus(task, "running");
         await taskRepo.SaveAsync();
 
+        var pushService   = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
         var alertChannel  = FindChannel(_settings.Channels.Alerts);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = "running"
+        });
 
         var result = await reqService.CreateIssuesFromPreviewAsync(
             task, owner, repo, pending.PreviewIssues!);
 
-        taskRepo.UpdateStatus(task, result.Success ? "done" : "failed");
+        var finalStatus = result.Success ? "done" : "failed";
+        taskRepo.UpdateStatus(task, finalStatus);
         await taskRepo.SaveAsync();
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = finalStatus
+        });
 
         var embed = new EmbedBuilder()
             .WithTitle(result.Success ? "✅ Requirements Agent 執行完成" : "❌ Requirements Agent 執行失敗")
