@@ -280,6 +280,20 @@ Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中
 
 ---
 
+## 十二、Dashboard UI 微調清單
+
+> 狀態：🔵 低優先級 — 功能正確，待視覺打磨
+
+收集使用過程中發現的視覺細節問題，未來統一處理：
+
+| # | 問題描述 | 頁面 / 元件 |
+|---|---------|------------|
+| 1 | 側欄收合後 emoji 圖示顯示為色塊，字型未載入 emoji | NavMenu（sidebar 收合狀態） |
+| 2 | 整體 MudBlazor 色彩主題尚未依品牌色統一設定（目前用預設 MudBlazor 配色） | 全域 |
+| 3 | 首頁空白時沒有引導提示（Agent 尚未連線時的 Empty State） | 首頁 |
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
@@ -296,3 +310,4 @@ Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中
 | 2026-04-01 | 第六項（Discord 圖片輸入）✅ 完成：/task 加入 image 附件選項，AnthropicProvider 支援 Vision |
 | 2026-04-01 | 第八項（Requirements 確認機制）✅ 完成：新增第三層確認，exec_yes 後先展示 Issue 清單再建立 |
 | 2026-04-01 | 第十一項（Telerik → MudBlazor）✅ 完成：MudBlazor 8.15.0 取代 Telerik 8.1.1，MIT 授權 |
+| 2026-04-01 | 新增第十二項：Dashboard UI 微調清單（收合圖示、主題色、Empty State） |
