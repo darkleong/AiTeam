@@ -72,6 +72,12 @@ public class CeoAgentService(
             ## 規則清單
             {{ruleList}}
 
+            ## action 欄位規則（非常重要）
+            - 老闆問問題、閒聊、或只需要你說明 → action = "reply"，target_agent = null
+            - 老闆要求執行任何工作（包括修改程式、修 bug、寫文件、測試、需求分析等）→ action = "delegate"，target_agent = 對應 Agent 名稱
+            - 只要你打算派任務給任何 Agent，action 就必須是 "delegate"，不得使用 "reply"
+            - 禁止在 reply 欄位描述「已分派給 X 處理」卻把 action 設為 "reply"
+
             ## 回應格式
             你必須只回傳以下 JSON 格式，不得包含任何其他文字：
             {
@@ -86,11 +92,6 @@ public class CeoAgentService(
               },
               "require_confirmation": true
             }
-
-            action 說明：
-            - reply：僅回覆，不需要 Agent 執行
-            - delegate：分派給 target_agent 執行
-            - autonomous：你可自主執行的清單中的任務
             """;
     }
 

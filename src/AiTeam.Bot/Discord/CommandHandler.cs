@@ -144,6 +144,16 @@ public class CommandHandler(
             description, project, agentList, rules,
             images: images.Count > 0 ? images : null);
 
+        // LLM 有時會把 action 填為 "reply" 但 target_agent 卻有值（應為 delegate）
+        // 此處做防護修正，確保行為一致
+        if (!string.IsNullOrWhiteSpace(ceoResponse.TargetAgent) && ceoResponse.Action == "reply")
+        {
+            logger.LogWarning(
+                "CEO 回傳 action=reply 但 target_agent={Agent}，強制修正為 delegate",
+                ceoResponse.TargetAgent);
+            ceoResponse.Action = "delegate";
+        }
+
         // 雙層確認 — 第一層：CEO 回報決策給老闆審核
         if (ceoResponse.RequireConfirmation && ceoResponse.Action != "reply")
         {
