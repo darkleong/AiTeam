@@ -1,4 +1,4 @@
-using Telerik.Blazor.Components;
+using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Projects;
 
@@ -28,9 +28,9 @@ public partial class ProjectManagement
 
     #region Private Methods
 
-    private Task OnRowClickAsync(GridRowClickEventArgs args)
+    private Task OnRowClickAsync(TableRowClickEventArgs<ProjectDto> args)
     {
-        _selectedProject = args.Item as ProjectDto;
+        _selectedProject = args.Item;
         _isDrawerOpen    = _selectedProject is not null;
         return Task.CompletedTask;
     }

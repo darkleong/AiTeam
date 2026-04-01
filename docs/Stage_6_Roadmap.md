@@ -249,7 +249,9 @@ Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中
 
 ---
 
-## 十一、將 Telerik UI 全面替換為 MudBlazor
+## 十一、將 Telerik UI 全面替換為 MudBlazor ✅
+
+> **已於 Stage 6 完成。** MudBlazor 8.15.0 全面取代 Telerik 8.1.1，商業授權依賴移除。
 
 ### 背景
 
@@ -293,3 +295,4 @@ Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中
 | 2026-04-01 | 第五項（QA Agent）標記為 ✅ 已於 Stage 5 完成；第一項（Claude Code SDK）狀態更新為 🟡 |
 | 2026-04-01 | 第六項（Discord 圖片輸入）✅ 完成：/task 加入 image 附件選項，AnthropicProvider 支援 Vision |
 | 2026-04-01 | 第八項（Requirements 確認機制）✅ 完成：新增第三層確認，exec_yes 後先展示 Issue 清單再建立 |
+| 2026-04-01 | 第十一項（Telerik → MudBlazor）✅ 完成：MudBlazor 8.15.0 取代 Telerik 8.1.1，MIT 授權 |

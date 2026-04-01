@@ -16,7 +16,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.5" />
     <PackageReference Include="Notion.Net" Version="4.4.0" />
-    <PackageReference Include="Telerik.UI.for.Blazor" Version="8.1.1" />
+    <PackageReference Include="MudBlazor" Version="8.*" />
   </ItemGroup>
 
   <ItemGroup>

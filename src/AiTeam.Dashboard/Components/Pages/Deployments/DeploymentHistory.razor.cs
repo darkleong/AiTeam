@@ -1,4 +1,4 @@
-using Telerik.Blazor.Components;
+using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Deployments;
 
@@ -36,9 +36,9 @@ public partial class DeploymentHistory
 
     #region Private Methods
 
-    private async Task OnRowClickAsync(Telerik.Blazor.Components.GridRowClickEventArgs args)
+    private async Task OnRowClickAsync(TableRowClickEventArgs<TaskItemDto> args)
     {
-        _selectedTask = args.Item as TaskItemDto;
+        _selectedTask = args.Item;
         if (_selectedTask is null) return;
 
         _selectedLogs = await TaskService.GetTaskLogsAsync(_selectedTask.Id);

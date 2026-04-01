@@ -8,25 +8,31 @@
     <h2>部署紀錄</h2>
 </div>
 
-<TelerikGrid Data="@_deployments"
-             TItem="TaskItemDto"
-             Pageable="true"
-             PageSize="50"
-             Sortable="true"
-             OnRowClick="@OnRowClickAsync">
-    <GridColumns>
-        <GridColumn Field="@nameof(TaskItemDto.Status)" Title="狀態" Width="100px">
-            <Template>
-                @{ var item = context as TaskItemDto; }
-                <StatusBadge Status="@item!.Status" />
-            </Template>
-        </GridColumn>
-        <GridColumn Field="@nameof(TaskItemDto.Title)"       Title="任務標題" />
-        <GridColumn Field="@nameof(TaskItemDto.ProjectName)" Title="專案"    Width="150px" />
-        <GridColumn Field="@nameof(TaskItemDto.CreatedAt)"   Title="部署時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd HH:mm}" />
-        <GridColumn Field="@nameof(TaskItemDto.CompletedAt)" Title="完成時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd HH:mm}" />
-    </GridColumns>
-</TelerikGrid>
+<MudTable Items="@_deployments"
+          Dense="true"
+          Hover="true"
+          RowsPerPage="50"
+          T="TaskItemDto"
+          OnRowClick="OnRowClickAsync"
+          RowClass="cursor-pointer">
+    <HeaderContent>
+        <MudTh>狀態</MudTh>
+        <MudTh>任務標題</MudTh>
+        <MudTh>專案</MudTh>
+        <MudTh>部署時間</MudTh>
+        <MudTh>完成時間</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+        <MudTd>@context.Title</MudTd>
+        <MudTd>@context.ProjectName</MudTd>
+        <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
+        <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
 
 <TaskLogDrawer @bind-IsOpen="@_isDrawerOpen"
                SelectedTask="@_selectedTask"

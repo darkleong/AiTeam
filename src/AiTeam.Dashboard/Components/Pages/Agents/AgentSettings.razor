@@ -42,10 +42,10 @@ else if (_agents.Count == 0)
 
         <div class="trust-level-control">
             <label>信任等級：<strong>Lv@_trustLevels[agent.Id]</strong></label>
-            <TelerikSlider Value="@_trustLevels[agent.Id]"
-                           ValueChanged="@((int v) => _trustLevels[agent.Id] = v)"
-                           Min="0" Max="3" SmallStep="1"
-                           Width="200px" />
+            <MudSlider Value="@_trustLevels[agent.Id]"
+                       ValueChanged="@((int v) => _trustLevels[agent.Id] = v)"
+                       Min="0" Max="3" Step="1"
+                       Style="width:200px" />
         </div>
 
         <div class="agent-rules">

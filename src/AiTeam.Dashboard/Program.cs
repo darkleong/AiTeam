@@ -1,4 +1,5 @@
 using AiTeam.Dashboard.Identity;
+using MudBlazor.Services;
 using AiTeam.Dashboard.Settings;
 using AiTeam.Dashboard.Services;
 using AiTeam.Data;
@@ -22,8 +23,8 @@ builder.AddNpgsqlDbContext<DashboardDbContext>("AiTeamDb");
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Telerik
-builder.Services.AddTelerikBlazor();
+// MudBlazor
+builder.Services.AddMudServices();
 
 // SignalR（Hub 定義在 AiTeam.Data）
 builder.Services.AddSignalR();

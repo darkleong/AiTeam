@@ -8,20 +8,31 @@
     <h2>專案管理</h2>
 </div>
 
-<TelerikGrid Data="@_projects"
-             TItem="ProjectDto"
-             Pageable="true"
-             PageSize="50"
-             Sortable="true"
-             OnRowClick="@OnRowClickAsync">
-    <GridColumns>
-        <GridColumn Field="@nameof(ProjectDto.Name)"      Title="專案名稱" />
-        <GridColumn Field="@nameof(ProjectDto.TeamName)"  Title="團隊"     Width="150px" />
-        <GridColumn Field="@nameof(ProjectDto.TaskCount)" Title="任務數"   Width="100px" />
-        <GridColumn Field="@nameof(ProjectDto.IsActive)"  Title="啟用"     Width="80px" />
-        <GridColumn Field="@nameof(ProjectDto.CreatedAt)" Title="建立時間" Width="160px" DisplayFormat="{0:yyyy/MM/dd}" />
-    </GridColumns>
-</TelerikGrid>
+<MudTable Items="@_projects"
+          Dense="true"
+          Hover="true"
+          RowsPerPage="50"
+          T="ProjectDto"
+          OnRowClick="OnRowClickAsync"
+          RowClass="cursor-pointer">
+    <HeaderContent>
+        <MudTh>專案名稱</MudTh>
+        <MudTh>團隊</MudTh>
+        <MudTh>任務數</MudTh>
+        <MudTh>啟用</MudTh>
+        <MudTh>建立時間</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Name</MudTd>
+        <MudTd>@context.TeamName</MudTd>
+        <MudTd>@context.TaskCount</MudTd>
+        <MudTd>@(context.IsActive ? "✅" : "—")</MudTd>
+        <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd")</MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager />
+    </PagerContent>
+</MudTable>
 
 @if (_isDrawerOpen && _selectedProject is not null)
 {
