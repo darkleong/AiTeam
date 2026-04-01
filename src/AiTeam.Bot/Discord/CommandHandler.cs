@@ -481,12 +481,19 @@ public class CommandHandler(
 
     #region Embed 與按鈕建構
 
+    /// <summary>截斷字串，確保不超過 Discord Embed field 的 1024 字元上限。</summary>
+    private static string Truncate(string? value, int max = 1024)
+    {
+        if (string.IsNullOrEmpty(value)) return "—";
+        return value.Length <= max ? value : value[..(max - 3)] + "…";
+    }
+
     private static Embed BuildCeoDecisionEmbed(CeoResponse response, string project)
     {
         var builder = new EmbedBuilder()
             .WithTitle("📋 CEO 決策 — 請確認")
             .WithColor(Color.Blue)
-            .AddField("回應", response.Reply)
+            .AddField("回應", Truncate(response.Reply))
             .AddField("動作", response.Action, inline: true)
             .AddField("負責 Agent", response.TargetAgent ?? "—", inline: true)
             .AddField("專案", project, inline: true);
@@ -494,9 +501,9 @@ public class CommandHandler(
         if (response.Task is not null)
         {
             builder
-                .AddField("任務標題", response.Task.Title)
+                .AddField("任務標題", Truncate(response.Task.Title))
                 .AddField("優先度", response.Task.Priority, inline: true)
-                .AddField("描述", response.Task.Description);
+                .AddField("描述", Truncate(response.Task.Description));
         }
 
         return builder.Build();
@@ -506,8 +513,8 @@ public class CommandHandler(
         => new EmbedBuilder()
             .WithTitle($"🤖 {response.TargetAgent} Agent — 即將執行")
             .WithColor(Color.Orange)
-            .AddField("任務", response.Task?.Title ?? "—")
-            .AddField("描述", response.Task?.Description ?? "—")
+            .AddField("任務", Truncate(response.Task?.Title))
+            .AddField("描述", Truncate(response.Task?.Description))
             .AddField("任務 ID", taskId.ToString())
             .WithFooter("確認後開始執行，取消則中止。")
             .Build();
