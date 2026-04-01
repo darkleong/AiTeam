@@ -414,8 +414,17 @@ public class CommandHandler(
         taskRepo.UpdateStatus(task, "running");
         await taskRepo.SaveAsync();
 
+        var pushService   = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
         var alertChannel  = FindChannel(_settings.Channels.Alerts);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = "running"
+        });
 
         // 動態取得 Agent 實作（keyed DI）
         var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(
@@ -437,8 +446,17 @@ public class CommandHandler(
             var rules  = await notionService.GetRulesAsync();
             var result = await executor.ExecuteTaskAsync(task, owner, repo, rules);
 
-            taskRepo.UpdateStatus(task, result.Success ? "done" : "failed");
+            var finalStatus = result.Success ? "done" : "failed";
+            taskRepo.UpdateStatus(task, finalStatus);
             await taskRepo.SaveAsync();
+
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                AgentName = task.AssignedAgent,
+                Status    = finalStatus
+            });
 
             var embedColor = result.Success ? Color.Green : Color.Red;
             var embedTitle = result.Success
@@ -463,6 +481,14 @@ public class CommandHandler(
             logger.LogError(ex, "Agent 執行失敗：{Title}", task.Title);
             taskRepo.UpdateStatus(task, "failed");
             await taskRepo.SaveAsync();
+
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                Title     = task.Title,
+                AgentName = task.AssignedAgent,
+                Status    = "failed"
+            });
 
             if (alertChannel is not null)
                 await alertChannel.SendMessageAsync(
