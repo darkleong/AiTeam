@@ -82,8 +82,8 @@ body {
     font-weight: 700;
     font-size: 1.1rem;
     color: var(--color-accent);
-    transition: opacity 0.15s ease;
     white-space: nowrap;
+    overflow: hidden;
 }
 
 .sidebar-footer {
@@ -97,8 +97,8 @@ body {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 0.75rem;
-    padding: 4px 6px;
+    font-size: 0.85rem;
+    padding: 6px 10px;
     color: var(--color-text-secondary);
     border-radius: 4px;
     line-height: 1;
@@ -149,7 +149,8 @@ body {
 }
 
 .nav-text {
-    transition: opacity 0.15s ease;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .nav-item:hover,
@@ -176,19 +177,18 @@ body {
 }
 
 .layout-wrapper.sidebar-collapsed .sidebar-logo {
-    opacity: 0;
-    pointer-events: none;
+    display: none;
 }
 
 .layout-wrapper.sidebar-collapsed .nav-item {
     justify-content: center;
     padding: 10px 0;
     margin: 2px 4px;
+    gap: 0;
 }
 
 .layout-wrapper.sidebar-collapsed .nav-text {
-    opacity: 0;
-    pointer-events: none;
+    display: none;
 }
 
 .layout-wrapper.sidebar-collapsed .sidebar-footer {
