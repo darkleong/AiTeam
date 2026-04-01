@@ -8,12 +8,15 @@
     <base href="/" />
     <script>
         (function(){
+            var _sidebarObs = null;
+
             function applyTheme() {
                 var t = localStorage.getItem('theme') || 'light';
                 document.documentElement.dataset.theme = t;
                 var btn = document.getElementById('theme-toggle-btn');
                 if (btn) btn.textContent = t === 'dark' ? '☀' : '🌙';
             }
+
             function applySidebar() {
                 var lw = document.getElementById('layout-wrapper');
                 if (!lw) return;
@@ -22,12 +25,28 @@
                 var btn = document.getElementById('sidebar-toggle-btn');
                 if (btn) btn.textContent = collapsed ? '▶' : '◀';
             }
+
+            // 監控 layout-wrapper 的 class 屬性：
+            // Blazor Enhanced Navigation / Interactive hydration 可能重設 class，
+            // MutationObserver 偵測到後立刻還原（disconnect 防止自身觸發遞迴）
+            function watchSidebar() {
+                if (_sidebarObs) { _sidebarObs.disconnect(); _sidebarObs = null; }
+                var lw = document.getElementById('layout-wrapper');
+                if (!lw) return;
+                _sidebarObs = new MutationObserver(function() {
+                    _sidebarObs.disconnect();
+                    applySidebar();
+                    _sidebarObs.observe(lw, { attributes: true, attributeFilter: ['class'] });
+                });
+                _sidebarObs.observe(lw, { attributes: true, attributeFilter: ['class'] });
+            }
+
             // 立即套用主題，避免閃白
             applyTheme();
-            // DOMContentLoaded 後套用主題圖示與側欄狀態
-            document.addEventListener('DOMContentLoaded', function() { applyTheme(); applySidebar(); });
-            // Blazor Enhanced Navigation 後重新套用（DOM 可能被 Blazor patch 重設）
-            document.addEventListener('enhancedload', function() { applyTheme(); applySidebar(); });
+            // DOMContentLoaded 後套用狀態並啟動監聽
+            document.addEventListener('DOMContentLoaded', function() { applyTheme(); applySidebar(); watchSidebar(); });
+            // Blazor Enhanced Navigation 後重新套用（SSR patch 可能重設 DOM）
+            document.addEventListener('enhancedload', function() { applyTheme(); applySidebar(); watchSidebar(); });
             // MutationObserver 偵測 data-theme 被移除時立即還原
             new MutationObserver(function(ms) {
                 for (var m of ms) {
