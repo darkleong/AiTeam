@@ -17,6 +17,7 @@
 | [Stage_3_Agents.md](./Stage_3_Agents.md) | Stage 3：第一批 Agent 上線 | ✅ 已完成（2026-03-31） |
 | [Stage_4_Dashboard.md](./Stage_4_Dashboard.md) | Stage 4：Blazor Dashboard | ✅ 已完成（2026-03-31） |
 | [Stage_5_Expansion.md](./Stage_5_Expansion.md) | Stage 5：擴充更多 Agent | ✅ 已完成（2026-04-01） |
+| [Stage_6_Roadmap.md](./Stage_6_Roadmap.md) | Stage 6：未來路線圖與研究方向 | 🔵 規劃中 |
 
 ---
 
@@ -29,6 +30,7 @@
 | v1.2 | 2026-03-31 | Stage 2 & Stage 3 實作完成，補充實作重點紀錄 |
 | v1.3 | 2026-03-31 | Stage 4 實作完成，補充 Blazor Web App、Identity、SignalR、Aspire 陷阱紀錄 |
 | v1.4 | 2026-04-01 | Stage 5 實作完成，動態 Agent 框架 + QA / Doc / Requirements 三個新 Agent |
+| v1.5 | 2026-04-01 | Future_Research.md 升格為 Stage_6_Roadmap.md，納入正式規劃序列 |
 
 ---
 

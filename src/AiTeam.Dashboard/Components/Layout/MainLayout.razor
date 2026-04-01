@@ -1,14 +1,15 @@
 @inherits LayoutComponentBase
 
-<MudThemeProvider />
-<MudDialogProvider />
-<MudSnackbarProvider />
-<MudPopoverProvider />
+<MudProviders />
 
-<div class="layout-wrapper">
+<div class="layout-wrapper" id="layout-wrapper">
     <nav class="sidebar">
         <div class="sidebar-header">
             <span class="sidebar-logo">AI Team</span>
+            <button class="sidebar-toggle" id="sidebar-toggle-btn" title="收合選單"
+                    onclick="(function(){var lw=document.getElementById('layout-wrapper'),c=lw.classList.toggle('sidebar-collapsed');localStorage.setItem('sidebarCollapsed',c?'1':'');document.getElementById('sidebar-toggle-btn').textContent=c?'▶':'◀'})()">
+                ◀
+            </button>
         </div>
         <NavMenu />
         <div class="sidebar-footer">

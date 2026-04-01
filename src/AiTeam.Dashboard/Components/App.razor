@@ -14,12 +14,21 @@
                 var btn = document.getElementById('theme-toggle-btn');
                 if (btn) btn.textContent = t === 'dark' ? '☀' : '🌙';
             }
-            // 立即套用，避免閃白
+            function applySidebar() {
+                var lw = document.getElementById('layout-wrapper');
+                if (!lw) return;
+                var collapsed = localStorage.getItem('sidebarCollapsed') === '1';
+                lw.classList.toggle('sidebar-collapsed', collapsed);
+                var btn = document.getElementById('sidebar-toggle-btn');
+                if (btn) btn.textContent = collapsed ? '▶' : '◀';
+            }
+            // 立即套用主題，避免閃白
             applyTheme();
-            // DOMContentLoaded 後同步按鈕圖示
-            document.addEventListener('DOMContentLoaded', applyTheme);
-            // Blazor Enhanced Navigation 會重設 <html> 的 data-theme
-            // MutationObserver 偵測屬性被移除時立即還原（observer 在初始載入建立，整個 session 有效）
+            // DOMContentLoaded 後套用主題圖示與側欄狀態
+            document.addEventListener('DOMContentLoaded', function() { applyTheme(); applySidebar(); });
+            // Blazor Enhanced Navigation 後重新套用（DOM 可能被 Blazor patch 重設）
+            document.addEventListener('enhancedload', function() { applyTheme(); applySidebar(); });
+            // MutationObserver 偵測 data-theme 被移除時立即還原
             new MutationObserver(function(ms) {
                 for (var m of ms) {
                     if (m.attributeName === 'data-theme' && !document.documentElement.dataset.theme) {

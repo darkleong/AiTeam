@@ -147,4 +147,4 @@ await db.AgentConfigs
 | Dashboard Agent 設定頁面正常顯示 | ✅ |
 | IsActive 開關即時寫回 DB | ✅ |
 | Notion 規則欄位對應正確 | ✅ |
-| Discord 端對端測試（/task 全流程） | ⏳ 延後（見 Future_Research.md） |
+| Discord 端對端測試（/task 全流程） | ⏳ 延後（見 Stage_6_Roadmap.md） |
