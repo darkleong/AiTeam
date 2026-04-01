@@ -1,9 +1,11 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Notion;
 using AiTeam.Shared.Constants;
+using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
@@ -223,6 +225,16 @@ public class CommandHandler(
                 };
                 taskRepo.Add(task);
                 await taskRepo.SaveAsync();
+
+                // 任務建立後立即 push，讓任務中心即時顯示（狀態 pending）
+                var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = task.Id,
+                    Title     = task.Title,
+                    AgentName = task.AssignedAgent,
+                    Status    = task.Status
+                });
 
                 // 第二層確認：執行層 Agent 說明即將執行的操作
                 var agentPlanEmbed  = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
