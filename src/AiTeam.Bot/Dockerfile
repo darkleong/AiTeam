@@ -16,9 +16,6 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
-# LibGit2Sharp 需要 libgit2 native library
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgit2-1.8 \
-    && rm -rf /var/lib/apt/lists/*
+# LibGit2Sharp 0.31+ 內建 native binary（LibGit2Sharp.NativeBinaries），不需另外安裝 libgit2
 
 ENTRYPOINT ["dotnet", "AiTeam.Bot.dll"]
