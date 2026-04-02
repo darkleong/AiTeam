@@ -71,8 +71,7 @@ jobs:
         run: |
           dotnet test src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj \
             --no-build -c Release \
-            --logger "trx;LogFileName=results.trx" \
-            -- MSTest.Parallelize.Enabled=false
+            --logger "trx;LogFileName=results.trx"
 
       - name: Upload screenshots
         if: always()
