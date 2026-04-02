@@ -577,48 +577,49 @@ body {
    ======================================== */
 
 html[data-theme="dark"] .mud-paper {
-    background-color: #0f3460;
-    color: #e9ecef;
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
 }
 
 html[data-theme="dark"] .mud-table-root,
-html[data-theme="dark"] .mud-table-container {
-    background-color: #0f3460;
-    color: #e9ecef;
+html[data-theme="dark"] .mud-table-container,
+html[data-theme="dark"] .mud-table-container > div {
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
 }
 
 html[data-theme="dark"] .mud-table-head .mud-tr {
-    background-color: #16213e;
+    background-color: var(--color-bg-secondary) !important;
 }
 
 html[data-theme="dark"] .mud-table-body .mud-tr {
-    background-color: #0f3460;
-    color: #e9ecef;
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
 }
 
 html[data-theme="dark"] .mud-table-body .mud-tr:hover {
-    background-color: #16213e !important;
+    background-color: var(--color-bg-secondary) !important;
 }
 
 html[data-theme="dark"] .mud-td,
 html[data-theme="dark"] .mud-th {
-    color: #e9ecef;
-    border-bottom-color: #495057 !important;
+    color: var(--color-text-primary) !important;
+    border-bottom-color: var(--color-border) !important;
 }
 
 html[data-theme="dark"] .mud-table-pagination-toolbar,
 html[data-theme="dark"] .mud-toolbar {
-    background-color: #16213e;
-    color: #adb5bd;
+    background-color: var(--color-bg-secondary) !important;
+    color: var(--color-text-secondary) !important;
 }
 
-html[data-theme="dark"] .mud-table-pagination-select .mud-select-input,
-html[data-theme="dark"] .mud-table-pagination-select .mud-input-root {
-    color: #e9ecef;
+html[data-theme="dark"] .mud-table-pagination-select .mud-input-root,
+html[data-theme="dark"] .mud-table-pagination .mud-input-root {
+    color: var(--color-text-primary) !important;
 }
 
 html[data-theme="dark"] .mud-icon-button .mud-icon-root {
-    color: #adb5bd;
+    color: var(--color-text-secondary) !important;
 }
 
 /* ========================================
