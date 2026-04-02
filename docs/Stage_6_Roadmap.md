@@ -1,296 +1,170 @@
-# Stage 6：未來路線圖與研究方向
+# Stage 6：強化、驗收與技術債清償
 
-> 版本：v1.0
+> 版本：v2.0
 > 建立日期：2026-03-30
-> 狀態：🔵 規劃中
-> 說明：此文件記錄目前尚未實作、但值得未來探索的方向與想法。
+> 完成日期：2026-04-01
+> 狀態：✅ 已完成
 
 ---
 
-## 一、Dev Agent 使用 Claude Code 寫程式
+## 完成項目總覽
 
-### 背景
-
-目前 Dev Agent 是透過 Claude API + Git 指令操作 repo。但 Claude Code 本身在互動式開發上體驗更好，未來若能讓 Dev Agent 驅動 Claude Code，效果可能更佳。
-
-### 目前狀況
-
-- Claude Agent SDK 已正式推出且穩定，可程式化驅動 Claude Code 執行任務
-- 優先級應從 🔴 上升為 🟡，值得在 Stage 6 中期評估
-
-### 可能的方向
-
-| 方向 | 說明 | 成熟度 |
-|------|------|--------|
-| Claude Code SDK 模式 | 用程式化方式呼叫 Claude Code 執行任務 | 🟡 已可用，正式推出 |
-| Claude API + Git 操作 | 目前規劃的方式，最可控 | 🟢 穩定，已規劃 |
-| MCP（Model Context Protocol）| Anthropic 推出的工具整合協議，未來可能支援更深度整合 | 🟡 發展中 |
-
-### 行動建議
-
-- 目前維持 Claude API + Git 的方式
-- 定期關注 Claude Code SDK 的更新與文件完善程度
-- 等穩定後，只需替換 Dev Agent 的執行層，架構不需大改
+| # | 項目 | 說明 |
+|---|------|------|
+| 1 | Discord Vision 支援 | `/task` 新增 `image` 附件參數，CEO 可直接讀取截圖 |
+| 2 | Requirements Agent 三層確認 | `exec_yes` 後先展示 Issue 清單，老闆確認後才呼叫 GitHub API |
+| 3 | MudBlazor 全面替換 Telerik | 移除商業授權依賴，全面改用 MudBlazor 8.15.0（MIT） |
+| 4 | Blazor Circuit 隔離修正 | `MudProviders.razor` 解決 InteractiveServer / SSR 電路分離問題 |
+| 5 | Sidebar 收合展開 | MutationObserver 防止 Blazor DOM patch 重設收合狀態 |
+| 6 | CEO 委派強化 | Prompt 強化 + code-level `action=reply→delegate` 修正 |
+| 7 | Discord Embed 安全截斷 | 1024 字元限制保護，`Truncate()` helper |
+| 8 | QA Agent 強化 | PR head branch 讀取、測試檔過濾 |
+| 9 | Doc Agent 強化 | 遞迴目錄列舉、trailing slash 修正 |
+| 10 | SignalR 即時更新補全 | pending / running / done / failed 全路徑推送 |
+| 11 | Dashboard 新增 Agent UI | Agent 設定頁直接從 DB 新增，不需改程式碼 |
+| 12 | Stage 5 E2E 驗收 | 五項 Discord 端對端測試全部通過 |
 
 ---
 
-## 二、API 費用優化
+## Stage 6 實作重點紀錄
 
-### 背景
+### 1. Discord Vision 支援
 
-目前 CEO / Dev 使用 Claude Sonnet，Ops 使用 Gemini Flash。費用預估：
+- `/task` 指令新增選用 `image` 附件參數
+- `ILlmProvider` 介面擴充 `CompleteAsync` 支援 `ImageSource`
+- `AnthropicProvider` 下載圖片 → Base64 → 組裝 Vision content block
+- `CeoAgentService` 將圖片傳入 LLM，CEO 可直接理解截圖內容
 
-| 使用情境 | 預估月費（美金） |
-|---------|---------------|
-| 開發測試期 | $15 - $60 |
-| 輕度運作（每天 5-10 任務） | $10 - $30 |
-| 中度運作（每天 20-30 任務） | $30 - $80 |
-| 重度運作（每天 50+ 任務） | $80 - $200 |
+### 2. Requirements Agent 三層確認機制
 
-### 未來優化方向
+原本流程：老闆確認 → 直接建立 GitHub Issues（繞過安全確認）
 
-- **Fine-tuning**：如果某個 Agent 的任務很固定，未來可以考慮用 fine-tuned 模型，降低 token 消耗
-- **Prompt Caching**：Anthropic 支援 Prompt Cache，對於每次都重複帶入的規則清單，可以大幅降低費用
-- **模型降級策略**：信任等級高、任務單純的 Agent，可以逐步換成更便宜的模型
-
-### 行動建議
-
-- 先觀察實際運作 1-2 個月的用量
-- 再決定是否需要調整模型或引入 Prompt Caching
-
----
-
-## 三、MCP（Model Context Protocol）整合
-
-### 背景
-
-Anthropic 推出的 MCP 是一個開放協議，讓 LLM 能夠更標準化地使用外部工具。未來 AiTeam 的 Agent 可能可以透過 MCP 更方便地整合各種服務。
-
-### 潛在應用
-
-- Agent 透過 MCP 存取 Notion、GitHub、Discord
-- 減少自行維護 API 串接的成本
-- 更容易擴充新的工具給 Agent 使用
-
-### 行動建議
-
-- 持續關注 MCP 的生態系發展
-- Stage 5 擴充新 Agent 時，評估是否改用 MCP 架構
-
----
-
-## 四、Agent 個性與造型設定
-
-### 背景
-
-目前 Agent 個性與造型設定延後處理，不影響現有架構。
-
-### 預計包含
-
-- 每個 Agent 的名字與個性描述（寫進 System Prompt）
-- Dashboard 辦公室頁面的人物造型替換
-- 依狀態有對應動畫（忙碌打字、閒置發呆、錯誤冒汗）
-- 辦公區之外加入休息區（Agent 閒置時移動過去）
-
-### 行動建議
-
-- Stage 4 Dashboard 實作前，開一個專門的討論來設計細節
-
----
-
-## 五、測試 Agent（QA Agent）✅
-
-> **已在 Stage 5 完成實作。**
-> `QaAgentService` 已上線，使用 xUnit + NSubstitute + FluentAssertions，預設停用，可透過 Dashboard 啟用。
-
----
-
-## 六、Discord 圖片輸入支援 ✅
-
-> **已於 Stage 6 初期完成實作。**
-> `/task` 指令新增選用 `image` 附件參數；`ILlmProvider`、`AnthropicProvider`、`CeoAgentService` 均已擴充支援 Vision。
-
-### 背景
-
-你在 Discord 傳訊息給 CEO 時，可能會附上截圖（例如 UI 問題、錯誤畫面），希望 CEO 能直接看懂圖片內容並處理。
-
-### 技術可行性
-
-- Discord Bot 可以接收圖片附件（拿到圖片 URL）
-- Claude Sonnet（CEO 使用的模型）原生支援視覺輸入（Vision）
-- 完整流程：下載圖片 → 轉 Base64 → 連同文字一起傳給 Claude API
-
-### 實際使用情境
-
+新流程：
 ```
-你在 Discord 傳截圖：「這個頁面的 UI 有問題，幫我修一下」
-    ↓
-Bot 接收訊息 + 圖片附件
-    ↓
-下載圖片 → 轉 Base64
-    ↓
-連同文字一起傳給 Claude API
-    ↓
-CEO 看懂圖片，分析問題，分派給 Dev
+老闆下指令
+    ↓ CEO 分派（第一層確認）
+    ↓ Requirements Agent 說明操作（第二層確認）
+    ↓ LLM 分析需求，列出準備建立的 Issue 清單（第三層確認）
+    ↓ 老闆按 exec_yes
+    → 實際呼叫 GitHub Issues API
 ```
 
-### 注意事項
+### 3. MudBlazor 全面替換 Telerik
 
-- Discord 圖片 URL 有時效性，需要在過期前下載
-- 多張圖片需要一併處理
-- 圖片大小需要控管，避免 token 消耗過高
+**移除：**
+- `Telerik.UI.for.Blazor` NuGet（商業授權）
+- `AddTelerikBlazor()`、Telerik CSS/JS 引用
+- 4 個 Telerik using（`Telerik.Blazor` 等）
 
-### 行動建議
+**加入：**
+- `MudBlazor` NuGet（MIT 授權）
+- `AddMudServices()`、MudBlazor CSS/JS 引用
+- `@using MudBlazor`
 
-- 目前 Stage 2 尚未實作此功能
-- 可在 Stage 3 完成後，作為 Bot 功能的擴充項目實作
+**元件對應：**
 
----
+| Telerik | MudBlazor |
+|---------|-----------|
+| `TelerikRootComponent` | `MudThemeProvider` + `MudDialogProvider` + `MudSnackbarProvider` + `MudPopoverProvider` |
+| `TelerikGrid` (ServerData) | `MudTable ServerData="..."` |
+| `TelerikGrid` (靜態) | `MudTable Items="..."` |
+| `GridReadEventArgs` | `TableState` + `TableData<T>` |
+| `GridRowClickEventArgs` | `TableRowClickEventArgs<T>` |
+| `TelerikSlider SmallStep` | `MudSlider Step` |
 
-## 七、顧問 Agent 設計
+### 4. Blazor Circuit 隔離修正
 
-### 背景
+**問題：** `MudPopoverProvider` 在 SSR 的 `MainLayout` 中無法與 InteractiveServer 頁面共享電路，導致任務中心頁面空白。
 
-目前 Claude.ai 扮演顧問角色，負責策略討論與設計決策。Discord CEO Agent 負責日常執行與任務協調。未來系統穩定後，可以考慮是否需要正式化顧問的角色。
+**解法：** 新增 `MudProviders.razor`，設定 `@rendermode InteractiveServer`，由 `MainLayout` 引用。MudBlazor 的 providers 因此與頁面共享同一個 InteractiveServer 電路。
 
-### 三種方向
+### 5. Sidebar 收合展開
 
-| 方案 | 說明 | 適合情境 |
-|------|------|---------|
-| 方案一：獨立顧問 Agent | 顧問與 CEO 完全分開，各自是獨立 Agent | 團隊規模大、決策複雜 |
-| 方案二：顧問能力整合進總 CEO | CEO 支援日常模式與顧問模式切換 | 希望單一窗口處理所有事 |
-| 方案三：維持現狀 | Claude.ai 繼續扮演顧問，Discord CEO 負責執行 | 現階段最適合 |
+**問題：** Blazor Enhanced Navigation 觸發 DOM patch 時，會重設 JS 加入的 CSS class，導致收合狀態丟失。
 
-### 目前建議
+**解法：** 在 `App.razor` 使用 `MutationObserver` 監聽 `layout-wrapper` 的 `class` 屬性變更，偵測到變更後斷開觀察者、重新套用 localStorage 狀態、再重新連接，避免無限觸發。
 
-- **短期**：維持方案三，不需要額外開發
-- **長期**：等 Stage 3-4 穩定後，評估是否採用方案二，把顧問能力整合進總 CEO
+### 6. CEO 委派強化
 
-### 優先級
+**問題：** LLM 偶爾回傳 `action=reply`（但 `target_agent` 不為空），或 `require_confirmation=false`，導致不走確認流程。
 
-🔵 低優先級 — 等系統整體穩定後再討論
+**修法：**
+1. System Prompt 強化：明確規定派任務必須 `action="delegate"`
+2. Code-level 補丁：若 `target_agent` 非空但 `action=reply`，強制修正為 `delegate`
+3. 移除 `require_confirmation` 的 condition 判斷，一律走確認流程
 
----
+### 7. Discord Embed 安全截斷
 
-## 八、Requirements Agent 的雙層確認機制 ✅
+Discord Embed field value 上限 1024 字元，LLM 產出的說明文字可能超過。
 
-> **已於 Stage 6 初期完成實作。**
-> 在 `exec_yes` 後新增第三層確認：先由 LLM 分析需求並列出 Issue 清單，老闆確認後才執行 GitHub Issues API。
-
-### 背景
-
-Stage 5 的 RequirementsAgentService 直接呼叫 GitHub Issues API 建立 Issue，沒有 PR 流程，因此繞過了原本設計的「雙層確認機制」。
-
-### 問題
-
-```
-你下指令 → CEO 分派給 Requirements Agent → 直接建立 GitHub Issues
-                                              ↑
-                                        沒有確認點！
+```csharp
+private static string Truncate(string value, int max = 1024)
+    => value.Length <= max ? value : value[..(max - 3)] + "…";
 ```
 
-建立 Issue 雖然不如 commit 程式碼風險高，但如果 Agent 誤解需求，可能會建立大量錯誤的 Issue。
+套用於所有 Embed field（任務標題、說明、Agent 清單等）。
 
-### 可能的解法
+### 8. QA Agent 強化
 
-- Requirements Agent 建立 Issue 前，先在 Discord 列出「準備建立的 Issue 清單」，等你確認後才執行
-- 或限制每次最多建立 N 個 Issue，超過需要你確認
+**問題一：** PR 的原始碼檔案在 main branch 尚未存在，讀取時 404。
+**解法：** 呼叫 `GetPullRequestHeadRefAsync` 取得 PR 的 head branch，讀取檔案時指定 `gitRef`。
 
-### 優先級
+**問題二：** PR 包含測試檔（`*Tests.cs`）本身，嘗試為測試檔補測試導致 404 或無意義輸出。
+**解法：** 過濾 `*Tests.cs`、`*Spec.cs`、`.Tests/`、`.Test/` 路徑的檔案。
 
-🔵 低優先級 — 等 Stage 5 穩定運作後評估
+### 9. Doc Agent 強化
 
----
+**問題一：** `src/AiTeam.Bot/Agents/` 路徑帶尾巴斜線，GitHub Contents API 回傳 404。
+**解法：** `path = path.TrimEnd('/')`
 
-## 九、Documentation Agent 的品質控管
+**問題二：** `ListFilesAsync` 只列出一層目錄，子目錄內的 `.cs` 檔案找不到。
+**解法：** 改寫為遞迴實作 `CollectFilesAsync`，遇到 `Dir` 型別自動遞迴，遇到 `NotFoundException` 靜默略過。
 
-### 背景
+### 10. SignalR 即時更新補全
 
-Stage 5 的 DocAgentService 自動產出技術文件並開 PR，目前沒有人工審查機制，文件品質完全依賴 LLM 的輸出。
+原本 Dashboard 只在特定路徑有 SignalR 推送，任務中心需手動 F5 才更新。
 
-### 問題
+補全的推送時機：
+- `confirm_yes` 處理後（任務建立，`pending` 狀態）
+- `ExecuteAgentTaskAsync` 開始時（`running`）
+- `ExecuteAgentTaskAsync` 完成 / 失敗時
+- `ExecuteRequirementsFromPreviewAsync` 執行中 / 完成 / 失敗時
 
-自動產出的文件可能：
-- 描述不準確或過時
-- 格式不符合團隊規範
-- 遺漏重要說明
+### 11. Dashboard 新增 Agent UI
 
-### 可能的解法
+**新增 `DashboardAgentService.CreateAgentAsync`：**
+- 取得第一個 Team ID
+- 建立 `AgentConfig`（`IsActive = true`）
+- 回傳 `AgentConfigDto`
 
-- 維持現有 PR 流程，你在 merge 前審查文件內容（最簡單）
-- 加入 CEO 二次審查，由 CEO 評估文件品質後才通知你
-- 未來有 QA Agent 後，讓 QA 也審查文件正確性
+**`AgentSettings.razor` 新增表單：**
+- 名稱（必填，不可重複）、描述、信任等級 MudSlider
+- 送出後即時加入清單，顯示「重啟 Bot 後生效」提示
 
-### 優先級
+### 12. Stage 5 E2E 驗收結果
 
-🔵 低優先級 — 目前 PR 審查機制已有一定保護，等實際使用後再評估
-
----
-
-## 十、Stage 5 Discord 端對端驗收測試
-
-### 背景
-
-Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中進行端對端測試。
-
-### 待驗收項目
-
-| # | 指令 / 操作 | 預期結果 |
-|---|-----------|---------|
-| 1 | `/task project:test-repo description:修復登入CSS` | CEO 只見 Dev/Ops（QA/Doc/Requirements 預設停用），分派 Dev，雙層確認 → PR 建立 |
-| 2 | Dashboard 啟用 QA → `/task ... description:請對 PR #5 補充自動化測試` | CEO 清單出現 QA，分派成功，xUnit 測試 PR 被建立 |
-| 3 | Dashboard 啟用 Requirements → `/task ... description:需求：匯出 PDF 報表` | CEO 分派給 Requirements，GitHub Issues 被建立 |
-| 4 | Dashboard 啟用 Doc → `/task ... description:請為 Agents 目錄產出 Markdown 文件` | Doc PR 被建立 |
-| 5 | DB 直接 INSERT 新 Agent 記錄（不改程式碼）→ 重啟 Bot → `/task ...` | CEO 自動偵測到新 Agent，動態框架驗證完成 |
-
-### 優先級
-
-🟡 中優先級 — Stage 5 功能驗收的最後一步，系統上線前需完成
+| # | 測試項目 | 結果 |
+|---|---------|------|
+| 1 | Dev Agent 雙層確認、PR 建立 | ✅ |
+| 2 | QA Agent xUnit 測試 PR 建立 | ✅ |
+| 3 | Requirements Agent 三層確認、GitHub Issues | ✅ |
+| 4 | Doc Agent Markdown 文件 PR 建立 | ✅ |
+| 5 | Dashboard 新增 Agent → 重啟 Bot → 動態偵測 | ✅ |
 
 ---
 
-## 十一、將 Telerik UI 全面替換為 MudBlazor ✅
+## 未完成項目
 
-> **已於 Stage 6 完成。** MudBlazor 8.15.0 全面取代 Telerik 8.1.1，商業授權依賴移除。
+以下項目已轉移至 [Future_Feature.md](./Future_Feature.md)（未來功能候選清單）：
 
-### 背景
-
-目前 Dashboard 使用 Telerik UI for Blazor（v8.1.1）作為 UI 元件庫。實作過程中發現多個 Telerik 的 API 陷阱（`Step` 改名 `SmallStep`、`@bind-Value` 不支援 dictionary indexer 等），加上 Telerik 為商業授權，長期維護成本較高。
-
-### MudBlazor 的優勢
-
-| 項目 | Telerik | MudBlazor |
-|------|---------|-----------|
-| 授權 | 商業（需付費） | MIT（完全免費） |
-| 社群活躍度 | 中 | 高（GitHub stars 9k+） |
-| 文件品質 | 良好 | 良好 |
-| Material Design 風格 | 否 | 是 |
-| 元件 API 一致性 | 不穩定（版本間有破壞性變更） | 穩定 |
-
-### 影響範圍
-
-- `src/AiTeam.Dashboard/` 所有 `.razor` 頁面
-- 移除 `Telerik.UI.for.Blazor` NuGet 套件
-- 調整 `Program.cs` 的服務註冊（`AddTelerikBlazor()` → `AddMudServices()`）
-- `_Imports.razor` 更換 using 命名空間
-
-### 優先級
-
-🔵 低優先級 — Dashboard 功能穩定後統一處理，不影響目前開發進度
-
----
-
-## 十二、Dashboard UI 微調清單
-
-> 狀態：🔵 低優先級 — 功能正確，待視覺打磨
-
-收集使用過程中發現的視覺細節問題，未來統一處理：
-
-| # | 問題描述 | 頁面 / 元件 |
-|---|---------|------------|
-| 1 | 側欄收合後 emoji 圖示顯示為色塊，字型未載入 emoji | NavMenu（sidebar 收合狀態） |
-| 2 | 整體 MudBlazor 色彩主題尚未依品牌色統一設定（目前用預設 MudBlazor 配色） | 全域 |
-| 3 | 首頁空白時沒有引導提示（Agent 尚未連線時的 Empty State） | 首頁 |
+- Dev Agent 使用 Claude Code（🟡 中優先級）
+- API 費用優化
+- MCP 整合
+- Agent 個性與造型設定
+- 顧問 Agent 設計
+- Documentation Agent 品質控管
+- Dashboard UI 微調清單
+- 從 Dashboard 重啟 Bot
 
 ---
 
@@ -299,15 +173,8 @@ Stage 5 的程式碼實作已全部完成，但尚未在真實 Discord 環境中
 | 日期 | 內容 |
 |------|------|
 | 2026-03-30 | 初版建立 |
-| 2026-03-30 | 新增「Discord 圖片輸入支援」研究項目 |
-| 2026-03-30 | 新增「顧問 Agent 設計」研究項目 |
-| 2026-03-31 | 新增「Requirements Agent 雙層確認機制」研究項目 |
-| 2026-03-31 | 新增「Documentation Agent 品質控管」研究項目 |
-| 2026-04-01 | 新增「Stage 5 Discord 端對端驗收測試」待辦項目 |
-| 2026-04-01 | 新增「將 Telerik UI 全面替換為 MudBlazor」研究項目 |
-| 2026-04-01 | 文件從 Future_Research.md 升格為 Stage_6_Roadmap.md，納入正式規劃序列 |
-| 2026-04-01 | 第五項（QA Agent）標記為 ✅ 已於 Stage 5 完成；第一項（Claude Code SDK）狀態更新為 🟡 |
-| 2026-04-01 | 第六項（Discord 圖片輸入）✅ 完成：/task 加入 image 附件選項，AnthropicProvider 支援 Vision |
-| 2026-04-01 | 第八項（Requirements 確認機制）✅ 完成：新增第三層確認，exec_yes 後先展示 Issue 清單再建立 |
-| 2026-04-01 | 第十一項（Telerik → MudBlazor）✅ 完成：MudBlazor 8.15.0 取代 Telerik 8.1.1，MIT 授權 |
-| 2026-04-01 | 新增第十二項：Dashboard UI 微調清單（收合圖示、主題色、Empty State） |
+| 2026-04-01 | 第六項（Discord 圖片輸入）✅ 完成 |
+| 2026-04-01 | 第八項（Requirements 確認機制）✅ 完成 |
+| 2026-04-01 | 第十一項（Telerik → MudBlazor）✅ 完成 |
+| 2026-04-01 | 第十項（Stage 5 E2E 驗收）✅ 全部通過 |
+| 2026-04-01 | v2.0 Stage 6 結案，重組為實作紀錄格式；未完成項目轉移至 Stage_7_Roadmap.md |
