@@ -88,11 +88,11 @@ jobs:
     steps:
       - name: Pull latest images
         shell: powershell
-        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" pull
+        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" --env-file "$env:USERPROFILE\aiteam\.env" pull
 
       - name: Restart services
         shell: powershell
-        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" up -d --force-recreate
+        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" --env-file "$env:USERPROFILE\aiteam\.env" up -d --force-recreate
 
       - name: Clean up old images
         shell: powershell
