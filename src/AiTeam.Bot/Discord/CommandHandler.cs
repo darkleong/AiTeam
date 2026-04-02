@@ -135,7 +135,8 @@ public class CommandHandler(
             {
                 using var http  = new HttpClient();
                 var bytes       = await http.GetByteArrayAsync(attachment.Url);
-                images.Add(new ImageAttachment(Convert.ToBase64String(bytes), attachment.ContentType));
+                var mediaType   = DetectImageMediaType(bytes) ?? attachment.ContentType ?? "image/png";
+                images.Add(new ImageAttachment(Convert.ToBase64String(bytes), mediaType));
             }
             catch (Exception ex)
             {
@@ -342,11 +343,12 @@ public class CommandHandler(
             try
             {
                 using var http = new HttpClient();
-                var bytes  = await http.GetByteArrayAsync(attachment.Url);
-                var base64 = Convert.ToBase64String(bytes);
-                images.Add(new ImageAttachment(base64, attachment.ContentType));
+                var bytes     = await http.GetByteArrayAsync(attachment.Url);
+                var base64    = Convert.ToBase64String(bytes);
+                var mediaType = DetectImageMediaType(bytes) ?? attachment.ContentType ?? "image/png";
+                images.Add(new ImageAttachment(base64, mediaType));
                 logger.LogInformation("附圖已下載並轉為 Base64（{ContentType}，{Bytes} bytes）",
-                    attachment.ContentType, bytes.Length);
+                    mediaType, bytes.Length);
             }
             catch (Exception ex)
             {
@@ -1096,6 +1098,36 @@ public class CommandHandler(
             .Build();
 
     #endregion
+
+    // ────────────── Helpers ──────────────
+
+    /// <summary>
+    /// 從 magic bytes 偵測圖片真實媒體類型，避免信任 Discord 回傳的 ContentType。
+    /// </summary>
+    private static string? DetectImageMediaType(byte[] bytes)
+    {
+        if (bytes.Length < 4) return null;
+
+        // PNG: 89 50 4E 47
+        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            return "image/png";
+
+        // JPEG: FF D8 FF
+        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return "image/jpeg";
+
+        // GIF: 47 49 46 38
+        if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38)
+            return "image/gif";
+
+        // WebP: RIFF????WEBP
+        if (bytes.Length >= 12 &&
+            bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+            bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+            return "image/webp";
+
+        return null;
+    }
 }
 
 /// <summary>
