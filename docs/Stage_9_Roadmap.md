@@ -1,8 +1,8 @@
 # Stage 9：CEO 升級 + 可觀測性
 
-> 版本：v1.0
+> 版本：v1.1
 > 建立日期：2026-04-03
-> 狀態：🔵 規劃中
+> 狀態：✅ 已完成（2026-04-03）
 
 ---
 
@@ -149,8 +149,45 @@ CI/CD pipeline 起臨時容器跑測試
 
 ---
 
+## 實作重點與踩坑紀錄
+
+### Token 監控
+
+| 項目 | 決策 / 踩坑 |
+|------|------------|
+| 資料表 | 新增獨立 `token_logs` 資料表（而非寫 `task_logs.payload`），GROUP BY 查詢更乾淨 |
+| Decorator Pattern | `TokenTrackingProvider` 包裝任意 `ILlmProvider`，AgentService 零改動 |
+| Singleton → Scoped | `LlmProviderFactory` 從 Singleton 改 Scoped，讓 `TokenRepository` 可注入；`OpsAgentService` 本身是 Singleton 但不依賴 Factory，無衝突 |
+| 費率來源 | 從 `app_settings` 讀取（`TokenPricing:InputPer1kUsd` / `OutputPer1kUsd`），DbSeeder 補自動 upsert |
+| 即時更新 | `TokenTrackingProvider` 寫完 DB 後呼叫 `DashboardPushService.PushTokenUpdateAsync()`，Dashboard 訂閱 `ReceiveTokenUpdate` SignalR 事件自動 reload |
+| MudBlazor 8.x | `MudChart` 用 `ChartSeries="@list"` 不是 `Series="@list"`（否則 MUD0002 編譯警告）|
+
+### CEO 智慧分類 + 提案模式
+
+| 項目 | 決策 / 踩坑 |
+|------|------------|
+| 分類方式 | 不新增 action，直接在 `reply` 內容說明分類，保持 CEO 回應格式一致 |
+| 上下文注入 | 回應前並行查 `ListOpenPullRequestsAsync` + `ListOpenIssuesAsync`，結果注入 user message 前置段落（不放 system prompt，避免膨脹）|
+| Octokit 踩坑 | 查 Issues 要用 `RepositoryIssueRequest` 不是 `IssueRequest`（後者是 Create 用的）|
+| 提案確認按鈕 | 用現有 `PendingConfirmation` record 新增兩個 optional 欄位（`UiSpecMarkdown`、`IsProposal`），統一在 `OnButtonExecutedAsync` 分派 |
+| Rosa / Demi 草稿模式 | `AnalyzeOnlyAsync` / `GenerateDraftAsync` — 只回傳文字，不建 GitHub Issue / PR |
+
+### QA Playwright
+
+| 項目 | 決策 / 踩坑 |
+|------|------------|
+| 測試框架 | MSTest + `Microsoft.Playwright.MSTest 1.52.0`，繼承 `PageTest` |
+| Playwright 安裝 | CI 應用 `pwsh playwright.ps1 install chromium`，不能用 `dotnet playwright`（需全域安裝工具）|
+| CI 環境 | `postgres_data` volume 是 `external: true`，需在 CI 先 `docker volume create` |
+| CI Docker 啟動 | 需同時啟動 `postgres` + `aiteam-dashboard`，health check 改用 HTTP 狀態碼（200/302）|
+| MSTest 參數 | `-- MSTest.Parallelize.Enabled=false` 在新版 MSTest 語法不支援，直接移除 |
+| Discord ContentType | Discord CDN 有時將 PNG 圖片回報為 `image/webp`，改從 magic bytes 偵測真實格式 |
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
 |------|------|
 | 2026-04-03 | 初版建立 |
+| 2026-04-03 | 全部實作完成並驗收，補充實作重點與踩坑紀錄 |

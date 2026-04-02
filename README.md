@@ -48,16 +48,17 @@ src/
 ├── AiTeam.Shared/               ← 共用 DTO、介面、常數（AgentNames 等）
 ├── AiTeam.Data/                 ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                  ← Discord Bot 主程式
-│   ├── Agents/                  ← IAgentExecutor、各 AgentService、CeoAgentService
-│   ├── Api/                     ← InternalController（/internal/restart、/internal/deployment）
+│   ├── Agents/                  ← IAgentExecutor、各 AgentService、TokenTrackingProvider
+│   ├── Api/                     ← InternalController（/internal/tokens、/internal/deployment 等）
 │   ├── Configuration/           ← DiscordSettings、AgentSettings、GitHubSettings
 │   ├── Discord/                 ← DiscordBotService、CommandHandler
 │   ├── GitHub/                  ← GitHubService、WebhookController
 │   ├── Ops/                     ← OpsAgentService、HealthCheckJob
-│   └── Services/                ← AppSettingsService（動態設定 TTL 快取）、RulesService
-└── AiTeam.Dashboard/            ← Blazor Server Dashboard
-    ├── Components/Pages/        ← 首頁、任務中心、部署紀錄、Agent 設定、規則管理、專案管理
-    └── Services/                ← DashboardAgentService、DashboardRuleService、DashboardAppSettingsService
+│   └── Services/                ← AppSettingsService、RulesService、DashboardPushService
+├── AiTeam.Dashboard/            ← Blazor Server Dashboard
+│   ├── Components/Pages/        ← 首頁、任務中心、部署紀錄、Token 監控、Agent 設定、規則管理、專案管理
+│   └── Services/                ← DashboardAgentService、DashboardTokenService、DashboardAppSettingsService
+└── AiTeam.Tests.Playwright/     ← Playwright E2E 截圖測試（MSTest + Microsoft.Playwright）
 docs/
 ├── 00_Master_Plan.md
 ├── 01_Vision_and_Architecture.md
@@ -70,6 +71,7 @@ docs/
 ├── Stage_6_Roadmap.md           ← ✅ 完成
 ├── Stage_7_Roadmap.md           ← ✅ 完成
 ├── Stage_8_Roadmap.md           ← ✅ 完成
+├── Stage_9_Roadmap.md           ← ✅ 完成
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -94,6 +96,27 @@ docs/
   # 警報
   # 每日摘要
 ```
+
+---
+
+## CEO 智慧分類
+
+Victoria（CEO）在每次回應前會主動查詢 GitHub 開啟 PR / Issues，對老闆的輸入進行四類分類：
+
+| 分類 | CEO 行為 |
+|------|---------|
+| **新功能** | 進入提案模式：並行呼叫 Rosa + Demi 產出需求 + UI 規格，彙整為提案書 Embed（✅❌ 按鈕）|
+| **Bug** | 直接 delegate 給 Dev，說明判斷理由 |
+| **正常行為** | 直接回覆說明，不派任何任務 |
+| **疑問** | 直接回答，不派任何任務 |
+
+---
+
+## Token 監控
+
+Dashboard `/tokens` 頁面即時顯示各 Agent 的 Token 用量與 API 費用估算，每次 LLM 呼叫完成後透過 SignalR 自動更新，無需手動重整。
+
+費率可在 Dashboard → Agent 設定 → 系統設定 調整（`TokenPricing:InputPer1kUsd` / `OutputPer1kUsd`）。
 
 ---
 
@@ -219,6 +242,7 @@ docker compose --env-file .env up -d
 | Stage 6 | Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項強化 | ✅ 完成 |
 | Stage 7 | Reviewer / Release / Designer Agent、CI/CD、自然語言對話、Agent 專屬頻道 | ✅ 完成 |
 | Stage 8 | 系統可靠性補完、Notion 遷移、動態設定、規則管理、部署紀錄自動化 | ✅ 完成 |
+| Stage 9 | Token 監控 Dashboard（即時 SignalR）、CEO 智慧分類 + 提案模式、QA Playwright CI | ✅ 完成 |
 
 ---
 

@@ -20,7 +20,7 @@
 | [Stage_6_Roadmap.md](./Stage_6_Roadmap.md) | Stage 6：強化、驗收與技術債清償 | ✅ 已完成（2026-04-01） |
 | [Stage_7_Roadmap.md](./Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | ✅ 已完成（2026-04-02） |
 | [Stage_8_Roadmap.md](./Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | ✅ 已完成（2026-04-02） |
-| [Stage_9_Roadmap.md](./Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | 🔵 規劃中 |
+| [Stage_9_Roadmap.md](./Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | ✅ 已完成（2026-04-03） |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -41,6 +41,7 @@
 | v1.8 | 2026-04-02 | 新增 Stage_8_Roadmap.md（8 項：可靠性補完 + Notion 遷移 + 專案管理 + 部署紀錄）|
 | v1.9 | 2026-04-02 | Stage 8 全部 8 項完成：動態 AppSettings、per-agent Rules、Dark Mode CSS 覆寫、Notion 完全移除、OpsAgent 移除 docker CLI 依賴 |
 | v2.0 | 2026-04-03 | 新增 Stage_9_Roadmap.md（CEO 智慧分類 + 提案模式、Token 監控 Dashboard、QA Playwright）；Future_Feature.md 清理已完成項目 |
+| v2.1 | 2026-04-03 | Stage 9 全部完成並驗收：Token 監控即時 SignalR 更新、CEO 四類分類 + 提案模式、QA Playwright CI |
 
 ---
 
