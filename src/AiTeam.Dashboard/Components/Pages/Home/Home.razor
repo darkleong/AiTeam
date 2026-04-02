@@ -24,7 +24,11 @@
         }
         @if (_agentStatuses.Count == 0)
         {
-            <p class="no-data">無 Agent 資料</p>
+            <div class="empty-state">
+                <div class="empty-state-icon">🤖</div>
+                <p class="empty-state-title">尚未載入 Agent 資料</p>
+                <p class="empty-state-hint">請確認 Bot 服務已啟動，並重新整理頁面</p>
+            </div>
         }
     </div>
 </section>
@@ -43,7 +47,11 @@
         }
         @if (_recentTasks.Count == 0)
         {
-            <p class="no-data">尚無任務紀錄</p>
+            <div class="empty-state">
+                <div class="empty-state-icon">📭</div>
+                <p class="empty-state-title">還沒有任何任務</p>
+                <p class="empty-state-hint">去 Discord 的 <strong>#victoria-ceo</strong> 頻道下達指令，或直接在各 Agent 頻道分配任務</p>
+            </div>
         }
     </div>
 </section>

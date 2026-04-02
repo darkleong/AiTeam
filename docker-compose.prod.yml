@@ -39,19 +39,19 @@ services:
       Discord__Channels__ReleaseChannel: "rena-release"
       Discord__Channels__DesignerChannel: "demi-designer"
       Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
-      Notion__ApiKey: "${NOTION_API_KEY}"
-      Notion__RulesDatabaseId: "${NOTION_RULES_DB_ID}"
-      Notion__TaskSummaryDatabaseId: "${NOTION_TASK_SUMMARY_DB_ID}"
-      Notion__AgentStatusDatabaseId: "${NOTION_AGENT_STATUS_DB_ID}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
       GitHub__DefaultRepo: "AiTeam"
       GitHub__WorkspacePath: "C:\\AiTeam-Workspace"
       GitHub__WebhookSecret: "${GITHUB_WEBHOOK_SECRET}"
       Dashboard__PushUrl: "http://aiteam-dashboard:8080"
-      AgentSettings__NotionCacheTtlMinutes: "60"
+      AgentSettings__RulesCacheTtlMinutes: "60"
       AgentSettings__MonthlyTokenLimitK: "1000"
       AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
+      AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
+      AgentSettings__SkipCeoConfirm: "false"
+    ports:
+      - "5052:8080"
 
   aiteam-dashboard:
     image: ghcr.io/darkleong/aiteam-dashboard:latest
@@ -66,6 +66,8 @@ services:
       Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
       Dashboard__AdminPassword: "${DASHBOARD_ADMIN_PASSWORD}"
       Dashboard__HubBaseUrl: "http://localhost:8080"
+      Bot__InternalUrl: "http://aiteam-bot:8080"
+      Bot__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
       ASPNETCORE_HTTP_PORTS: "8080"
 
 volumes:

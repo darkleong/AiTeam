@@ -6,9 +6,25 @@
 
 <div class="page-header">
     <h2>Agent 設定</h2>
-    <button class="btn btn-primary" @onclick="() => _showCreateForm = !_showCreateForm">
-        @(_showCreateForm ? "✕ 取消新增" : "+ 新增 Agent")
-    </button>
+    <div style="display:flex; gap:8px">
+        <button class="btn btn-primary" @onclick="() => _showCreateForm = !_showCreateForm">
+            @(_showCreateForm ? "✕ 取消新增" : "+ 新增 Agent")
+        </button>
+        @if (_showRestartConfirm)
+        {
+            <button class="btn btn-secondary" style="color:var(--color-status-failed)"
+                    @onclick="RestartBotAsync" disabled="@_isRestarting">
+                @(_isRestarting ? "重啟中..." : "確認重啟")
+            </button>
+            <button class="btn btn-secondary" @onclick="() => _showRestartConfirm = false">取消</button>
+        }
+        else
+        {
+            <button class="btn btn-secondary" @onclick="() => _showRestartConfirm = true">
+                ↺ 重啟 Bot
+            </button>
+        }
+    </div>
 </div>
 
 @if (_showCreateForm)
@@ -83,23 +99,6 @@ else if (_agents.Count == 0)
                        ValueChanged="@((int v) => _trustLevels[agent.Id] = v)"
                        Min="0" Max="3" Step="1"
                        Style="width:200px" />
-        </div>
-
-        <div class="agent-rules">
-            <h5>Notion 規則</h5>
-            @if (agent.Rules.Count == 0)
-            {
-                <p class="no-data">尚無規則</p>
-            }
-            else
-            {
-                <ul>
-                    @foreach (var rule in agent.Rules)
-                    {
-                        <li>@rule</li>
-                    }
-                </ul>
-            }
         </div>
 
         <div class="agent-setting-actions">

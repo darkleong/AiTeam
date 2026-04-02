@@ -1,4 +1,5 @@
 using AiTeam.Bot.Configuration;
+using AiTeam.Data.Repositories;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
@@ -12,12 +13,16 @@ public class DiscordBotService(
     DiscordSocketClient client,
     CommandHandler commandHandler,
     IOptions<DiscordSettings> settings,
+    IServiceScopeFactory scopeFactory,
     ILogger<DiscordBotService> logger) : BackgroundService
 {
     private readonly DiscordSettings _settings = settings.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // 清理上次 Bot 非正常關閉留下的殘留「執行中」任務
+        await CleanupStaleTasksAsync(stoppingToken);
+
         client.Log += OnLog;
         client.Ready += OnReady;
 
@@ -77,6 +82,24 @@ public class DiscordBotService(
             if (guild.TextChannels.Any(c => c.Name == name)) continue;
             await guild.CreateTextChannelAsync(name);
             logger.LogInformation("已建立 Discord 頻道：#{Name}", name);
+        }
+    }
+
+    private async Task CleanupStaleTasksAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var count = await repo.MarkStaleRunningTasksAsync(cancellationToken);
+            if (count > 0)
+                logger.LogWarning("Bot 重啟清理：已將 {Count} 筆殘留「執行中」任務標記為「失敗」", count);
+            else
+                logger.LogInformation("Bot 重啟清理：無殘留「執行中」任務");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Bot 重啟清理殘留任務失敗");
         }
     }
 

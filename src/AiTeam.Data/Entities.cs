@@ -71,3 +71,15 @@ public class TaskLog
 
     public TaskItem Task { get; set; } = null!;
 }
+
+public class Rule
+{
+    public Guid Id { get; set; }
+    public Guid? TeamId { get; set; }
+    public string Content { get; set; } = "";
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; } = 0;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public Team? Team { get; set; }
+}

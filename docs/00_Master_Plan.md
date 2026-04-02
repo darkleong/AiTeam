@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v1.1  
+> 版本：v1.8
 > 建立日期：2026-03-29  
 > 狀態：進行中
 
@@ -18,7 +18,8 @@
 | [Stage_4_Dashboard.md](./Stage_4_Dashboard.md) | Stage 4：Blazor Dashboard | ✅ 已完成（2026-03-31） |
 | [Stage_5_Expansion.md](./Stage_5_Expansion.md) | Stage 5：擴充更多 Agent | ✅ 已完成（2026-04-01） |
 | [Stage_6_Roadmap.md](./Stage_6_Roadmap.md) | Stage 6：強化、驗收與技術債清償 | ✅ 已完成（2026-04-01） |
-| [Stage_7_Roadmap.md](./Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | 🔵 規劃中 |
+| [Stage_7_Roadmap.md](./Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | ✅ 已完成（2026-04-02） |
+| [Stage_8_Roadmap.md](./Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | 🔵 規劃中 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 
 ---
@@ -34,6 +35,8 @@
 | v1.4 | 2026-04-01 | Stage 5 實作完成，動態 Agent 框架 + QA / Doc / Requirements 三個新 Agent |
 | v1.5 | 2026-04-01 | Future_Research.md 升格為 Stage_6_Roadmap.md，納入正式規劃序列 |
 | v1.6 | 2026-04-01 | Stage 6 結案（Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項）；新增 Stage_7_Roadmap.md |
+| v1.7 | 2026-04-02 | Stage 7 結案（Reviewer/Release/Designer Agent、CI/CD、Discord 重設計、自然語言對話）；新增 Future_Feature.md |
+| v1.8 | 2026-04-02 | 新增 Stage_8_Roadmap.md（8 項：可靠性補完 + Notion 遷移 + 專案管理 + 部署紀錄）|
 
 ---
 

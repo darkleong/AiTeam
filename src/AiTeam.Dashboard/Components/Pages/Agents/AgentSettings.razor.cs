@@ -8,26 +8,30 @@ public partial class AgentSettings
     private DashboardAgentService AgentService { get; set; } = null!;
 
     [Inject]
-    private NotionTrustLevelService TrustLevelService { get; set; } = null!;
+    private DashboardBotService BotService { get; set; } = null!;
 
     #endregion
 
     #region Private Variables
 
-    private List<AgentConfigDto>     _agents       = [];
-    private Dictionary<Guid, int>    _trustLevels  = [];
-    private bool                     _isSaving;
-    private bool                     _isTogglingActive;
-    private string?                  _saveMessage;
-    private string?                  _loadError;
+    private List<AgentConfigDto>  _agents      = [];
+    private Dictionary<Guid, int> _trustLevels = [];
+    private bool                  _isSaving;
+    private bool                  _isTogglingActive;
+    private string?               _saveMessage;
+    private string?               _loadError;
+
+    // 重啟 Bot
+    private bool  _showRestartConfirm;
+    private bool  _isRestarting;
 
     // 新增 Agent 表單
-    private bool                     _showCreateForm;
-    private string                   _newName        = "";
-    private string                   _newDescription = "";
-    private int                      _newTrustLevel  = 1;
-    private bool                     _isCreating;
-    private string?                  _createError;
+    private bool    _showCreateForm;
+    private string  _newName        = "";
+    private string  _newDescription = "";
+    private int     _newTrustLevel  = 1;
+    private bool    _isCreating;
+    private string? _createError;
 
     #endregion
 
@@ -38,14 +42,8 @@ public partial class AgentSettings
         try
         {
             _agents = await AgentService.GetAgentConfigsAsync();
-
-            // 載入 Notion 規則（失敗不阻斷頁面）
             foreach (var agent in _agents)
-            {
-                var rules = await TrustLevelService.GetRulesAsync(agent.Name);
-                agent.Rules = rules;
                 _trustLevels[agent.Id] = agent.TrustLevel;
-            }
         }
         catch (Exception ex)
         {
@@ -97,15 +95,23 @@ public partial class AgentSettings
 
     private async Task SaveTrustLevelAsync(AgentConfigDto agent)
     {
-        _isSaving = true;
+        _isSaving    = true;
         _saveMessage = null;
 
-        await TrustLevelService.UpdateTrustLevelAsync(
-            agent.Name,
-            _trustLevels[agent.Id]);
+        await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
+        agent.TrustLevel = _trustLevels[agent.Id];
 
         _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
         _isSaving    = false;
+    }
+
+    private async Task RestartBotAsync()
+    {
+        _isRestarting = true;
+        var success = await BotService.RestartBotAsync();
+        _showRestartConfirm = false;
+        _saveMessage = success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定";
+        _isRestarting = false;
     }
 
     #endregion

@@ -63,6 +63,18 @@ public class DashboardAgentService(AppDbContext db)
         return agent.IsActive;
     }
 
+    /// <summary>更新 Agent 信任等級（寫入 PostgreSQL）。</summary>
+    public async Task UpdateTrustLevelAsync(
+        Guid agentId,
+        int trustLevel,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
+        if (agent is null) return;
+        agent.TrustLevel = trustLevel;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)

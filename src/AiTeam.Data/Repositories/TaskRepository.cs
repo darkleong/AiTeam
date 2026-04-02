@@ -41,4 +41,26 @@ public class TaskRepository(AppDbContext db)
 
     public async Task SaveAsync(CancellationToken cancellationToken = default)
         => await db.SaveChangesAsync(cancellationToken);
+
+    /// <summary>
+    /// Bot 重啟時，將所有殘留「執行中」任務標記為「失敗」。
+    /// 回傳清理的任務數量。
+    /// </summary>
+    public async Task<int> MarkStaleRunningTasksAsync(CancellationToken cancellationToken = default)
+    {
+        var staleTasks = await db.Tasks
+            .Where(t => t.Status == "running")
+            .ToListAsync(cancellationToken);
+
+        foreach (var task in staleTasks)
+        {
+            task.Status = "failed";
+            task.CompletedAt = DateTime.UtcNow;
+        }
+
+        if (staleTasks.Count > 0)
+            await db.SaveChangesAsync(cancellationToken);
+
+        return staleTasks.Count;
+    }
 }

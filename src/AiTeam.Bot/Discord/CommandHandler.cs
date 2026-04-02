@@ -3,7 +3,6 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
-using AiTeam.Bot.Notion;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
@@ -20,13 +19,15 @@ public class CommandHandler(
     DiscordSocketClient client,
     IOptions<DiscordSettings> settings,
     IOptions<GitHubSettings> gitHubSettings,
+    IOptions<AgentSettings> agentSettings,
     IServiceProvider serviceProvider,
-    NotionService notionService,
+    RulesService rulesService,
     ConversationContextStore contextStore,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
     private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
+    private readonly AgentSettings _agentSettings = agentSettings.Value;
 
     // 等待確認的 CEO 決策暫存（messageId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingConfirmations = [];
@@ -147,7 +148,7 @@ public class CommandHandler(
         var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
         var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
 
-        var rules        = await notionService.GetRulesAsync();
+        var rules        = await rulesService.GetRulesAsync();
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
         var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
 
@@ -183,12 +184,22 @@ public class CommandHandler(
             // 若 CEO 尚未取得專案名稱，以 task.project 補充
             var finalProject = ceoResponse.Task?.Project ?? projectName;
 
-            var confirmMessage = await msg.Channel.SendMessageAsync(
-                embed: BuildCeoDecisionEmbed(ceoResponse, finalProject),
-                components: BuildConfirmButtons());
+            if (_agentSettings.SkipCeoConfirm)
+            {
+                // 跳過 CEO 派工確認，直接進入 Agent 執行確認
+                await ShowDirectAgentConfirmAsync(
+                    async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
+                    ceoResponse, finalProject, msg.CleanContent);
+            }
+            else
+            {
+                var confirmMessage = await msg.Channel.SendMessageAsync(
+                    embed: BuildCeoDecisionEmbed(ceoResponse, finalProject),
+                    components: BuildConfirmButtons());
 
-            _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
-                ceoResponse, finalProject, msg.CleanContent);
+                _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
+                    ceoResponse, finalProject, msg.CleanContent);
+            }
         }
     }
 
@@ -338,7 +349,7 @@ public class CommandHandler(
         var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
         var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
 
-        var rules        = await notionService.GetRulesAsync();
+        var rules        = await rulesService.GetRulesAsync();
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
         var agentList    = activeAgents
             .Select(a => new AgentDescriptor(a.Name, a.Description))
@@ -363,12 +374,22 @@ public class CommandHandler(
         // RequireConfirmation 欄位不可信（LLM 可能回傳 false），只要 action 非 reply 就一律顯示確認 Embed
         if (ceoResponse.Action != "reply")
         {
-            var confirmMessage = await command.FollowupAsync(
-                embed: BuildCeoDecisionEmbed(ceoResponse, project),
-                components: BuildConfirmButtons());
+            if (_agentSettings.SkipCeoConfirm)
+            {
+                // 跳過 CEO 派工確認，直接進入 Agent 執行確認
+                await ShowDirectAgentConfirmAsync(
+                    async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
+                    ceoResponse, project, description);
+            }
+            else
+            {
+                var confirmMessage = await command.FollowupAsync(
+                    embed: BuildCeoDecisionEmbed(ceoResponse, project),
+                    components: BuildConfirmButtons());
 
-            _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
-                ceoResponse, project, description);
+                _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
+                    ceoResponse, project, description);
+            }
         }
         else
         {
@@ -378,8 +399,8 @@ public class CommandHandler(
 
     private async Task HandleReloadRulesAsync(SocketSlashCommand command)
     {
-        notionService.InvalidateCache();
-        await command.FollowupAsync("規則 Cache 已清除，下次任務將重新從 Notion 載入規則。");
+        rulesService.InvalidateCache();
+        await command.FollowupAsync("規則 Cache 已清除，下次任務將重新從資料庫載入規則。");
     }
 
     private async Task HandleStatusAsync(SocketSlashCommand command)
@@ -396,6 +417,46 @@ public class CommandHandler(
     }
 
     #endregion
+
+    /// <summary>
+    /// 跳過 CEO 確認，直接建立任務並顯示 Agent 執行確認（第二層）。
+    /// 由 <see cref="AgentSettings.SkipCeoConfirm"/> 控制是否啟用。
+    /// </summary>
+    private async Task ShowDirectAgentConfirmAsync(
+        Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
+        CeoResponse ceoResponse,
+        string project,
+        string description)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo  = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var task = new TaskItem
+        {
+            Title         = ceoResponse.Task?.Title ?? description,
+            Description   = ceoResponse.Task?.Description,
+            TriggeredBy   = "Discord",
+            AssignedAgent = ceoResponse.TargetAgent ?? "CEO",
+            Status        = "pending"
+        };
+        taskRepo.Add(task);
+        await taskRepo.SaveAsync();
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = task.Status
+        });
+
+        var agentPlanEmbed  = BuildAgentPlanEmbed(ceoResponse, task.Id);
+        var agentConfirmMsg = await sendAsync(agentPlanEmbed, BuildConfirmButtons("exec_yes", "exec_no"));
+
+        _pendingConfirmations[agentConfirmMsg.Id] = new PendingConfirmation(
+            ceoResponse, project, description) with { TaskId = task.Id };
+    }
 
     #region 雙層確認機制
 
@@ -666,7 +727,7 @@ public class CommandHandler(
 
         try
         {
-            var rules  = await notionService.GetRulesAsync();
+            var rules  = await rulesService.GetRulesAsync();
             var result = await executor.ExecuteTaskAsync(task, owner, repo, rules);
 
             var finalStatus = result.Success ? "done" : "failed";

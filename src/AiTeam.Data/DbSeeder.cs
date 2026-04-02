@@ -55,5 +55,31 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync();
+
+        // Seed 初始規則（如果 rules 表完全為空才新增）
+        if (!await db.Rules.AnyAsync())
+        {
+            var starterRules = new[]
+            {
+                (Content: "回應使用繁體中文，語氣專業但親切", SortOrder: 1),
+                (Content: "執行任務前必須先確認任務範圍與目標，避免做超出範圍的事", SortOrder: 2),
+                (Content: "程式碼修改必須遵循現有專案的命名慣例與架構設計", SortOrder: 3),
+                (Content: "有不確定之處應主動提問，而非自行假設", SortOrder: 4),
+                (Content: "所有 PR 說明必須包含：變更原因、影響範圍、測試方式", SortOrder: 5),
+            };
+
+            foreach (var (content, sortOrder) in starterRules)
+            {
+                db.Rules.Add(new Rule
+                {
+                    TeamId    = team.Id,
+                    Content   = content,
+                    IsActive  = true,
+                    SortOrder = sortOrder
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 }

@@ -8,7 +8,7 @@
     --color-bg-card:       #ffffff;
     --color-text-primary:  #212529;
     --color-text-secondary:#6c757d;
-    --color-accent:        #0d6efd;
+    --color-accent:        #6366f1;
     --color-border:        #dee2e6;
 
     --color-status-pending: #6c757d;
@@ -30,7 +30,7 @@ html[data-theme="dark"] {
     --color-bg-card:       #0f3460;
     --color-text-primary:  #e9ecef;
     --color-text-secondary:#adb5bd;
-    --color-accent:        #4dabf7;
+    --color-accent:        #818cf8;
     --color-border:        #495057;
     --shadow-card:    0 2px 8px rgba(0, 0, 0, 0.4);
 }
@@ -146,6 +146,10 @@ body {
     font-size: 1rem;
     width: 20px;
     text-align: center;
+    /* 強制使用系統 emoji 字型，避免 Windows 側欄收合時顯示色塊 */
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    line-height: 1.4;
+    display: inline-block;
 }
 
 .nav-text {
@@ -509,6 +513,40 @@ body {
     color: var(--color-text-secondary);
     font-style: italic;
     padding: 8px 0;
+}
+
+/* ========================================
+   Empty State
+   ======================================== */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.empty-state-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 6px;
+}
+
+.empty-state-hint {
+    font-size: 0.85rem;
+    margin: 0;
+    max-width: 360px;
+    line-height: 1.5;
 }
 
 .btn {

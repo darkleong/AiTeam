@@ -29,5 +29,49 @@ public class DashboardProjectService(AppDbContext db)
             })
             .ToListAsync(cancellationToken);
 
+    /// <summary>新增專案。</summary>
+    public async Task<ProjectDto> CreateProjectAsync(
+        string name,
+        string? repoUrl,
+        string? techStack,
+        CancellationToken cancellationToken = default)
+    {
+        var team = await db.Teams.FirstAsync(cancellationToken);
+        var project = new Project
+        {
+            TeamId    = team.Id,
+            Name      = name.Trim(),
+            RepoUrl   = string.IsNullOrWhiteSpace(repoUrl) ? null : repoUrl.Trim(),
+            TechStack = string.IsNullOrWhiteSpace(techStack) ? null : techStack.Trim(),
+            IsActive  = true
+        };
+        db.Projects.Add(project);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return new ProjectDto
+        {
+            Id        = project.Id,
+            Name      = project.Name,
+            RepoUrl   = project.RepoUrl,
+            TechStack = project.TechStack,
+            IsActive  = project.IsActive,
+            CreatedAt = project.CreatedAt,
+            TeamName  = team.Name,
+            TaskCount = 0
+        };
+    }
+
+    /// <summary>切換專案啟用狀態。</summary>
+    public async Task ToggleProjectActiveAsync(
+        Guid projectId,
+        bool isActive,
+        CancellationToken cancellationToken = default)
+    {
+        var project = await db.Projects.FindAsync([projectId], cancellationToken);
+        if (project is null) return;
+        project.IsActive = isActive;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     #endregion
 }

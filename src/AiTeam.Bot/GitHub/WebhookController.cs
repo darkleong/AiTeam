@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
-using AiTeam.Bot.Notion;
 using Microsoft.Extensions.DependencyInjection;
 using DiscordNet = Discord;
 using Discord.WebSocket;
@@ -23,7 +23,7 @@ public class WebhookController(
     IOptions<GitHubSettings> gitHubSettings,
     IOptions<DiscordSettings> discordSettings,
     DiscordSocketClient discordClient,
-    NotionService notionService,
+    RulesService rulesService,
     IServiceProvider serviceProvider,
     ILogger<WebhookController> logger) : ControllerBase
 {
@@ -108,7 +108,7 @@ public class WebhookController(
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
         var agentRepo    = scope.ServiceProvider.GetRequiredService<AgentRepository>();
-        var rules        = await notionService.GetRulesAsync(cancellationToken);
+        var rules        = await rulesService.GetRulesAsync(cancellationToken);
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync(cancellationToken);
         var agentList    = activeAgents
             .Select(a => new AgentDescriptor(a.Name, a.Description))

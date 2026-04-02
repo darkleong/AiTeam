@@ -1,13 +1,11 @@
 using AiTeam.Dashboard.Identity;
 using MudBlazor.Services;
-using AiTeam.Dashboard.Settings;
 using AiTeam.Dashboard.Services;
 using AiTeam.Data;
 using AiTeam.Data.Extensions;
 using AiTeam.Data.Hubs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Notion.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,19 +51,13 @@ builder.Services.ConfigureApplicationCookie(options =>
 // AddControllersWithViews 而非 AddControllers，才能使用 [ValidateAntiForgeryToken]
 builder.Services.AddControllersWithViews();
 
-// Notion（信任等級寫回用）
-var notionApiKey = builder.Configuration["Notion:ApiKey"] ?? "";
-builder.Services.AddSingleton<INotionClient>(_ => NotionClientFactory.Create(new ClientOptions
-{
-    AuthToken = notionApiKey
-}));
-builder.Services.Configure<NotionSettings>(builder.Configuration.GetSection("Notion"));
-
 // Dashboard Services
 builder.Services.AddScoped<DashboardTaskService>();
 builder.Services.AddScoped<DashboardProjectService>();
 builder.Services.AddScoped<DashboardAgentService>();
-builder.Services.AddScoped<NotionTrustLevelService>();
+builder.Services.AddScoped<DashboardRuleService>();
+builder.Services.AddScoped<DashboardBotService>();
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 

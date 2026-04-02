@@ -5,14 +5,12 @@ using AiTeam.Data;
 using AiTeam.Data.Extensions;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
-using AiTeam.Bot.Notion;
 using AiTeam.Bot.Ops;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
-using Notion.Client;
 using Quartz;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +25,6 @@ builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection("Di
 builder.Services.Configure<AgentSettings>(builder.Configuration.GetSection("AgentSettings"));
 builder.Services.Configure<AgentSettings>(o =>
     builder.Configuration.GetSection("Agents").Bind(o.Agents));
-builder.Services.Configure<NotionSettings>(builder.Configuration.GetSection("Notion"));
 builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection("GitHub"));
 builder.Services.Configure<OpsSettings>(builder.Configuration.GetSection("OpsSettings"));
 
@@ -36,13 +33,8 @@ var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";
 builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
 builder.Services.AddSingleton<LlmProviderFactory>();
 
-// Notion
-var notionApiKey = builder.Configuration["Notion:ApiKey"] ?? "";
-builder.Services.AddSingleton<INotionClient>(_ => NotionClientFactory.Create(new ClientOptions
-{
-    AuthToken = notionApiKey
-}));
-builder.Services.AddSingleton<NotionService>();
+// Rules（取代 Notion，從 PostgreSQL 讀取）
+builder.Services.AddSingleton<RulesService>();
 
 // Agents（保留具名型別註冊以維持現有相依；同時加上 Keyed 介面，供 CommandHandler 動態分派）
 builder.Services.AddScoped<CeoAgentService>();

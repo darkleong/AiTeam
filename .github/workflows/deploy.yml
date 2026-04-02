@@ -99,3 +99,24 @@ jobs:
       - name: Clean up old images
         shell: powershell
         run: docker image prune -f
+
+      - name: Record deployment
+        shell: powershell
+        run: |
+          $body = @{
+            project    = "${{ github.repository }}"
+            ref        = "${{ github.ref_name }}"
+            sha        = "${{ github.sha }}"
+            status     = "success"
+            triggeredBy = "github-actions"
+          } | ConvertTo-Json
+          try {
+            Invoke-RestMethod -Uri "http://localhost:5052/internal/deployment" `
+              -Method POST `
+              -Headers @{ "X-Api-Key" = "${{ secrets.BOT_INTERNAL_API_KEY }}" } `
+              -ContentType "application/json" `
+              -Body $body
+            Write-Host "部署記錄已寫入"
+          } catch {
+            Write-Warning "寫入部署記錄失敗（非阻斷）：$_"
+          }

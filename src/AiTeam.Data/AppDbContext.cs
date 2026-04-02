@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentConfig> AgentConfigs => Set<AgentConfig>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskLog> TaskLogs => Set<TaskLog>();
+    public DbSet<Rule> Rules => Set<Rule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.Payload).HasColumnType("jsonb");
             e.HasOne(x => x.Task).WithMany(t => t.Logs).HasForeignKey(x => x.TaskId);
+        });
+
+        modelBuilder.Entity<Rule>(e =>
+        {
+            e.ToTable("rules");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).IsRequired(false);
         });
     }
 }
