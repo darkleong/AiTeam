@@ -116,7 +116,7 @@ jobs:
               -Headers @{ "X-Api-Key" = "${{ secrets.BOT_INTERNAL_API_KEY }}" } `
               -ContentType "application/json" `
               -Body $body
-            Write-Host "部署記錄已寫入"
+            Write-Host "Deployment record written."
           } catch {
-            Write-Warning "寫入部署記錄失敗（非阻斷）：$_"
+            Write-Warning "Failed to write deployment record (non-blocking): $_"
           }
