@@ -764,15 +764,15 @@ public class CommandHandler(
             .WithTitle("📋 CEO 決策 — 請確認")
             .WithColor(Color.Blue)
             .AddField("回應", Truncate(response.Reply))
-            .AddField("動作", response.Action, inline: true)
+            .AddField("動作", Truncate(response.Action), inline: true)
             .AddField("負責 Agent", response.TargetAgent ?? "—", inline: true)
-            .AddField("專案", project, inline: true);
+            .AddField("專案", string.IsNullOrWhiteSpace(project) ? "—" : project, inline: true);
 
         if (response.Task is not null)
         {
             builder
                 .AddField("任務標題", Truncate(response.Task.Title))
-                .AddField("優先度", response.Task.Priority, inline: true)
+                .AddField("優先度", string.IsNullOrWhiteSpace(response.Task.Priority) ? "—" : response.Task.Priority, inline: true)
                 .AddField("描述", Truncate(response.Task.Description));
         }
 
