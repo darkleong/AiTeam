@@ -576,49 +576,55 @@ body {
    MudThemeProvider 無法從 JS 控制，以 CSS 補足
    ======================================== */
 
+/* Paper 容器（MudTable 外層） */
 html[data-theme="dark"] .mud-paper {
-    background-color: var(--color-bg-primary) !important;
+    background-color: var(--color-bg-card) !important;
     color: var(--color-text-primary) !important;
 }
 
+/* Table 容器與 empty state 區域 */
 html[data-theme="dark"] .mud-table-root,
 html[data-theme="dark"] .mud-table-container,
-html[data-theme="dark"] .mud-table-container > div {
-    background-color: var(--color-bg-primary) !important;
+html[data-theme="dark"] .mud-table-container > div,
+html[data-theme="dark"] .mud-table-container table {
+    background-color: var(--color-bg-card) !important;
     color: var(--color-text-primary) !important;
 }
 
-html[data-theme="dark"] .mud-table-head .mud-tr {
+/* Header 列 */
+html[data-theme="dark"] .mud-table-head .mud-tr,
+html[data-theme="dark"] .mud-table-head .mud-th {
     background-color: var(--color-bg-secondary) !important;
+    color: var(--color-text-primary) !important;
 }
 
+/* 資料列 */
 html[data-theme="dark"] .mud-table-body .mud-tr {
-    background-color: var(--color-bg-primary) !important;
-    color: var(--color-text-primary) !important;
+    background-color: var(--color-bg-card) !important;
 }
 
 html[data-theme="dark"] .mud-table-body .mud-tr:hover {
     background-color: var(--color-bg-secondary) !important;
 }
 
+/* 所有儲存格文字（含子元素，確保 MudBlazor 預設深色文字被蓋掉） */
 html[data-theme="dark"] .mud-td,
-html[data-theme="dark"] .mud-th {
+html[data-theme="dark"] .mud-td *,
+html[data-theme="dark"] .mud-th,
+html[data-theme="dark"] .mud-th * {
     color: var(--color-text-primary) !important;
     border-bottom-color: var(--color-border) !important;
 }
 
+/* 分頁列 */
 html[data-theme="dark"] .mud-table-pagination-toolbar,
-html[data-theme="dark"] .mud-toolbar {
+html[data-theme="dark"] .mud-table-foot .mud-toolbar {
     background-color: var(--color-bg-secondary) !important;
     color: var(--color-text-secondary) !important;
 }
 
-html[data-theme="dark"] .mud-table-pagination-select .mud-input-root,
-html[data-theme="dark"] .mud-table-pagination .mud-input-root {
-    color: var(--color-text-primary) !important;
-}
-
-html[data-theme="dark"] .mud-icon-button .mud-icon-root {
+html[data-theme="dark"] .mud-table-pagination-toolbar *,
+html[data-theme="dark"] .mud-table-foot .mud-toolbar * {
     color: var(--color-text-secondary) !important;
 }
 
