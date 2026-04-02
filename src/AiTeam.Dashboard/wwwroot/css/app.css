@@ -571,6 +571,60 @@ body {
 .alert-danger  { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
 .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
 
+/* ========================================
+   MudBlazor Dark Mode 覆蓋
+   MudThemeProvider 無法從 JS 控制，以 CSS 補足
+   ======================================== */
+
+html[data-theme="dark"] .mud-paper {
+    background-color: #0f3460;
+    color: #e9ecef;
+}
+
+html[data-theme="dark"] .mud-table-root,
+html[data-theme="dark"] .mud-table-container {
+    background-color: #0f3460;
+    color: #e9ecef;
+}
+
+html[data-theme="dark"] .mud-table-head .mud-tr {
+    background-color: #16213e;
+}
+
+html[data-theme="dark"] .mud-table-body .mud-tr {
+    background-color: #0f3460;
+    color: #e9ecef;
+}
+
+html[data-theme="dark"] .mud-table-body .mud-tr:hover {
+    background-color: #16213e !important;
+}
+
+html[data-theme="dark"] .mud-td,
+html[data-theme="dark"] .mud-th {
+    color: #e9ecef;
+    border-bottom-color: #495057 !important;
+}
+
+html[data-theme="dark"] .mud-table-pagination-toolbar,
+html[data-theme="dark"] .mud-toolbar {
+    background-color: #16213e;
+    color: #adb5bd;
+}
+
+html[data-theme="dark"] .mud-table-pagination-select .mud-select-input,
+html[data-theme="dark"] .mud-table-pagination-select .mud-input-root {
+    color: #e9ecef;
+}
+
+html[data-theme="dark"] .mud-icon-button .mud-icon-root {
+    color: #adb5bd;
+}
+
+/* ========================================
+   Form Controls
+   ======================================== */
+
 .form-control,
 .form-select {
     display: block;
