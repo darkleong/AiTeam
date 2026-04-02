@@ -1,8 +1,11 @@
+using AiTeam.Data.Hubs;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.SignalR.Client;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tokens;
 
-public partial class TokenMonitoring
+public partial class TokenMonitoring : IAsyncDisposable
 {
     #region Dependencies
 
@@ -11,6 +14,12 @@ public partial class TokenMonitoring
 
     [Inject]
     private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = null!;
+
+    [Inject]
+    private IConfiguration Configuration { get; set; } = null!;
 
     #endregion
 
@@ -22,13 +31,23 @@ public partial class TokenMonitoring
     private ChartSeries[]    _chartSeries = [];
     private string[]         _chartLabels = [];
     private ChartOptions     _chartOptions = new() { YAxisTicks = 5 };
+    private HubConnection?   _hubConnection;
 
     #endregion
 
     #region Override Methods
 
     protected override async Task OnInitializedAsync()
-        => await LoadDataAsync();
+    {
+        await LoadDataAsync();
+        await ConnectSignalRAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
 
     #endregion
 
@@ -67,6 +86,27 @@ public partial class TokenMonitoring
 
         _loading = false;
         StateHasChanged();
+    }
+
+    private async Task ConnectSignalRAsync()
+    {
+        var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
+        var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
+            ? Navigation.ToAbsoluteUri("/hubs/agent-status").ToString()
+            : $"{hubBaseUrl.TrimEnd('/')}/hubs/agent-status";
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On(AgentStatusHub.ReceiveTokenUpdate, async () =>
+        {
+            await InvokeAsync(LoadDataAsync);
+        });
+
+        try { await _hubConnection.StartAsync(); }
+        catch { /* 非關鍵，失敗不影響頁面正常使用 */ }
     }
 
     private void BuildChart()

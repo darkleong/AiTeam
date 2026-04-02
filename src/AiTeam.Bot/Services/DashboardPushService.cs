@@ -29,6 +29,20 @@ public class DashboardPushService(
         }
     }
 
+    /// <summary>通知 Dashboard Token 用量已更新，觸發 Token 監控頁即時重整。</summary>
+    public async Task PushTokenUpdateAsync()
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("aiteam-dashboard");
+            await client.PostAsync("/internal/agent-status/token", null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "推送 Token 更新至 Dashboard 失敗（非關鍵錯誤）");
+        }
+    }
+
     /// <summary>推送任務狀態變動至 Dashboard，由 Dashboard 轉發至 SignalR Hub，觸發任務中心自動重新整理。</summary>
     public async Task PushTaskUpdateAsync(TaskUpdateViewModel taskUpdate)
     {

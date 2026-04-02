@@ -1,3 +1,4 @@
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 
@@ -10,6 +11,7 @@ namespace AiTeam.Bot.Agents;
 public class TokenTrackingProvider(
     ILlmProvider inner,
     TokenRepository tokenRepository,
+    DashboardPushService dashboardPush,
     string agentName,
     string model) : ILlmProvider
 {
@@ -30,6 +32,9 @@ public class TokenTrackingProvider(
             CreatedAt    = DateTime.UtcNow
         });
         await tokenRepository.SaveAsync(cancellationToken);
+
+        // 通知 Dashboard 即時重整 Token 頁面
+        await dashboardPush.PushTokenUpdateAsync();
 
         return response;
     }

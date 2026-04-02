@@ -1,5 +1,6 @@
 using Anthropic.SDK;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using Microsoft.Extensions.Options;
 
@@ -8,12 +9,13 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// 根據 Agent 設定建立對應的 ILlmProvider 實作。
 /// 新增供應商只需在此加一個 case，不需動 Agent 核心邏輯。
-/// 自動包裝 TokenTrackingProvider，透明地記錄每次呼叫的 Token 用量。
+/// 自動包裝 TokenTrackingProvider，透明地記錄每次呼叫的 Token 用量並推送即時通知。
 /// </summary>
 public class LlmProviderFactory(
     AnthropicClient anthropicClient,
     IOptions<AgentSettings> settings,
-    TokenRepository tokenRepository)
+    TokenRepository tokenRepository,
+    DashboardPushService dashboardPush)
 {
     private readonly AgentSettings _settings = settings.Value;
 
@@ -31,6 +33,6 @@ public class LlmProviderFactory(
             _ => throw new NotSupportedException($"不支援的 LLM Provider：{config.Provider}")
         };
 
-        return new TokenTrackingProvider(inner, tokenRepository, agentName, config.Model);
+        return new TokenTrackingProvider(inner, tokenRepository, dashboardPush, agentName, config.Model);
     }
 }

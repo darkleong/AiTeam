@@ -31,6 +31,14 @@ public class AgentStatusController(IHubContext<AgentStatusHub> hubContext) : Con
         return Ok();
     }
 
+    /// <summary>Bot 呼叫此端點通知 Token 用量已更新，觸發 Token 監控頁即時重整。</summary>
+    [HttpPost("token")]
+    public async Task<IActionResult> PushTokenUpdateAsync()
+    {
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveTokenUpdate);
+        return Ok();
+    }
+
     /// <summary>測試用端點：直接觸發 SignalR 推送，驗證 Hub → Browser 的管道是否正常。</summary>
     [HttpPost("test")]
     public async Task<IActionResult> TestPushAsync()
