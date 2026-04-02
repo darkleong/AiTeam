@@ -705,6 +705,32 @@ public class CommandHandler(
             var agentChannel     = FindChannel(agentChannelName);
             if (agentChannel is not null && agentChannel.Id != notifyChannel?.Id)
                 await agentChannel.SendMessageAsync(embed: builtEmbed);
+
+            // Designer Agent：將 UI 規格書 Markdown 以檔案附件傳送到頻道
+            if (task.AssignedAgent == AgentNames.Designer && result.Success)
+            {
+                var specLog = task.Logs.FirstOrDefault(l => l.Step == "ui-spec-output");
+                if (specLog?.Payload is not null)
+                {
+                    try
+                    {
+                        var payload  = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(specLog.Payload);
+                        var markdown = payload.GetProperty("markdown").GetString();
+                        if (!string.IsNullOrWhiteSpace(markdown))
+                        {
+                            var fileName = $"ui-spec-{DateTime.UtcNow:yyyyMMdd-HHmm}.md";
+                            var stream   = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(markdown));
+                            var targetChannel = agentChannel ?? notifyChannel;
+                            if (targetChannel is not null)
+                                await targetChannel.SendFileAsync(stream, fileName, "📄 UI 規格文件");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "傳送 UI 規格文件附件失敗");
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
