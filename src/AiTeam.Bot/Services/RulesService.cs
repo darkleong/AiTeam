@@ -6,8 +6,10 @@ using Microsoft.Extensions.Options;
 namespace AiTeam.Bot.Services;
 
 /// <summary>
-/// 從 PostgreSQL rules 表讀取 CEO 規則，取代原 Notion 整合。
-/// 使用 TTL 記憶體快取，支援 /reload-rules 強制清除。
+/// 從 PostgreSQL rules 表讀取規則，取代原 Notion 整合。
+/// 快取所有啟用的規則物件，依 agentName 在記憶體中過濾：
+///   - AgentName == null  → 全域規則，所有 Agent 都適用
+///   - AgentName == agent → 僅套用到該 Agent
 /// </summary>
 public class RulesService(
     IServiceScopeFactory scopeFactory,
@@ -16,47 +18,54 @@ public class RulesService(
 {
     private readonly int _cacheTtlMinutes = agentSettings.Value.RulesCacheTtlMinutes;
 
-    private List<string> _cachedRules = [];
+    private List<Rule> _cachedRules = [];
     private DateTime _cacheExpiry = DateTime.MinValue;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     /// <summary>
-    /// 取得啟用的規則清單（TTL Cache，到期自動重新從 DB 讀取）。
+    /// 取得適用於指定 Agent 的規則內容清單（全域 + 該 Agent 專屬）。
+    /// agentName 傳 null 時只回傳全域規則。
     /// </summary>
-    public async Task<IReadOnlyList<string>> GetRulesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> GetRulesAsync(
+        string? agentName = null,
+        CancellationToken cancellationToken = default)
     {
-        if (DateTime.UtcNow < _cacheExpiry)
-            return _cachedRules;
+        await EnsureCacheAsync(cancellationToken);
 
-        await _cacheLock.WaitAsync(cancellationToken);
-        try
-        {
-            // 雙重檢查，避免多執行緒重複載入
-            if (DateTime.UtcNow < _cacheExpiry)
-                return _cachedRules;
-
-            _cachedRules = await FetchRulesFromDbAsync(cancellationToken);
-            _cacheExpiry = DateTime.UtcNow.AddMinutes(_cacheTtlMinutes);
-            logger.LogInformation("規則已從 DB 載入，共 {Count} 條，下次更新：{Expiry:HH:mm}", _cachedRules.Count, _cacheExpiry);
-        }
-        finally
-        {
-            _cacheLock.Release();
-        }
-
-        return _cachedRules;
+        return _cachedRules
+            .Where(r => r.AgentName == null || r.AgentName == agentName)
+            .Select(r => r.Content)
+            .ToList();
     }
 
-    /// <summary>
-    /// 強制清除 Cache，下次呼叫 GetRulesAsync 時重新從 DB 讀取。
-    /// </summary>
+    /// <summary>強制清除 Cache，下次呼叫時重新從 DB 讀取。</summary>
     public void InvalidateCache()
     {
         _cacheExpiry = DateTime.MinValue;
         logger.LogInformation("規則 Cache 已清除");
     }
 
-    private async Task<List<string>> FetchRulesFromDbAsync(CancellationToken cancellationToken)
+    private async Task EnsureCacheAsync(CancellationToken cancellationToken)
+    {
+        if (DateTime.UtcNow < _cacheExpiry) return;
+
+        await _cacheLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (DateTime.UtcNow < _cacheExpiry) return;
+
+            _cachedRules = await FetchRulesFromDbAsync(cancellationToken);
+            _cacheExpiry = DateTime.UtcNow.AddMinutes(_cacheTtlMinutes);
+            logger.LogInformation("規則已從 DB 載入，共 {Count} 條，下次更新：{Expiry:HH:mm}",
+                _cachedRules.Count, _cacheExpiry);
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    private async Task<List<Rule>> FetchRulesFromDbAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -68,7 +77,6 @@ public class RulesService(
                 .Where(r => r.IsActive)
                 .OrderBy(r => r.SortOrder)
                 .ThenBy(r => r.CreatedAt)
-                .Select(r => r.Content)
                 .ToListAsync(cancellationToken);
         }
         catch (Exception ex)

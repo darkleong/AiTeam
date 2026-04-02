@@ -148,7 +148,7 @@ public class CommandHandler(
         var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
         var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
 
-        var rules        = await rulesService.GetRulesAsync();
+        var rules        = await rulesService.GetRulesAsync(AgentNames.Ceo);
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
         var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
 
@@ -727,7 +727,7 @@ public class CommandHandler(
 
         try
         {
-            var rules  = await rulesService.GetRulesAsync();
+            var rules  = await rulesService.GetRulesAsync(pending.CeoResponse.TargetAgent);
             var result = await executor.ExecuteTaskAsync(task, owner, repo, rules);
 
             var finalStatus = result.Success ? "done" : "failed";

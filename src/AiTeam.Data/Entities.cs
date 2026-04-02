@@ -77,6 +77,8 @@ public class Rule
     public Guid Id { get; set; }
     public Guid? TeamId { get; set; }
     public string Content { get; set; } = "";
+    /// <summary>null = 全域規則；有值 = 僅套用到指定 Agent</summary>
+    public string? AgentName { get; set; }
     public bool IsActive { get; set; } = true;
     public int SortOrder { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

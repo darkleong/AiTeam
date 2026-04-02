@@ -21,6 +21,15 @@
                       placeholder="例如：回應使用繁體中文，語氣專業但親切"></textarea>
         </div>
         <div class="form-group">
+            <label>套用對象</label>
+            <select class="form-select" @bind="_newAgentName" style="width:200px">
+                @foreach (var opt in _agentOptions)
+                {
+                    <option value="@opt.Value">@opt.Label</option>
+                }
+            </select>
+        </div>
+        <div class="form-group">
             <label>排序</label>
             <input type="number" class="form-control" @bind="_newSortOrder" style="width:100px" />
         </div>
@@ -56,9 +65,20 @@ else
                 <div class="form-group">
                     <textarea class="form-control" @bind="_editContent" rows="3"></textarea>
                 </div>
-                <div class="form-group" style="display:flex; align-items:center; gap:8px">
-                    <label>排序：</label>
-                    <input type="number" class="form-control" @bind="_editSortOrder" style="width:80px" />
+                <div class="form-group" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+                    <div>
+                        <label>套用對象</label>
+                        <select class="form-select" @bind="_editAgentName" style="width:180px">
+                            @foreach (var opt in _agentOptions)
+                            {
+                                <option value="@opt.Value">@opt.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label>排序</label>
+                        <input type="number" class="form-control" @bind="_editSortOrder" style="width:80px" />
+                    </div>
                 </div>
                 <div style="display:flex; gap:8px; margin-top:8px">
                     <button class="btn btn-primary" @onclick="() => SaveEditAsync(rule.Id)">儲存</button>
@@ -78,6 +98,9 @@ else
                 </div>
                 <div style="display:flex; gap:8px; margin-top:8px; align-items:center">
                     <span style="font-size:0.75rem; color:var(--color-text-secondary)">排序: @rule.SortOrder</span>
+                    <span class="status-badge" style="background:@GetAgentColor(rule.AgentName)">
+                        @(rule.AgentName ?? "全域")
+                    </span>
                     <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px"
                             @onclick="() => StartEdit(rule)">編輯</button>
                     <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px; color:var(--color-status-failed)"

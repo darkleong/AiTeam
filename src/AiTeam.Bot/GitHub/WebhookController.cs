@@ -6,6 +6,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using AiTeam.Shared.Constants;
 using Microsoft.Extensions.DependencyInjection;
 using DiscordNet = Discord;
 using Discord.WebSocket;
@@ -108,7 +109,7 @@ public class WebhookController(
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
         var agentRepo    = scope.ServiceProvider.GetRequiredService<AgentRepository>();
-        var rules        = await rulesService.GetRulesAsync(cancellationToken);
+        var rules        = await rulesService.GetRulesAsync(AgentNames.Ceo, cancellationToken);
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync(cancellationToken);
         var agentList    = activeAgents
             .Select(a => new AgentDescriptor(a.Name, a.Description))

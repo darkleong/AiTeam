@@ -19,6 +19,7 @@ public class DashboardRuleService(AppDbContext db)
     /// <summary>新增規則。</summary>
     public async Task<Rule> CreateRuleAsync(
         string content,
+        string? agentName = null,
         int sortOrder = 0,
         CancellationToken cancellationToken = default)
     {
@@ -27,6 +28,7 @@ public class DashboardRuleService(AppDbContext db)
         {
             TeamId    = team.Id,
             Content   = content.Trim(),
+            AgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName,
             IsActive  = true,
             SortOrder = sortOrder
         };
@@ -39,12 +41,14 @@ public class DashboardRuleService(AppDbContext db)
     public async Task UpdateRuleAsync(
         Guid id,
         string content,
+        string? agentName,
         int sortOrder,
         CancellationToken cancellationToken = default)
     {
         var rule = await db.Rules.FindAsync([id], cancellationToken);
         if (rule is null) return;
         rule.Content   = content.Trim();
+        rule.AgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName;
         rule.SortOrder = sortOrder;
         await db.SaveChangesAsync(cancellationToken);
     }
