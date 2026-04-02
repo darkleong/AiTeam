@@ -41,10 +41,16 @@ public class ReviewerAgentService(
 
         try
         {
-            // 1. 從任務描述解析 PR 編號
+            // 1. 從任務描述解析 PR 編號；未指定時自動取最新 open PR
             var prNumber = ExtractPrNumber($"{task.Title} {task.Description}");
             if (prNumber <= 0)
-                return Fail(task, "無法從任務描述中取得 PR 編號，請指定格式：PR #123");
+            {
+                AddLog(task, "未指定 PR 編號，自動取最新 open PR", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                prNumber = await gitHubService.GetLatestOpenPullRequestNumberAsync(owner, repo);
+            }
+            if (prNumber <= 0)
+                return Fail(task, "找不到任何 open PR，請先開一個 PR 或指定格式：PR #123");
 
             // 2. 取得 PR 的變更檔案（僅審查 .cs 檔）
             var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);

@@ -329,6 +329,24 @@ public class GitHubService(
     }
 
     /// <summary>
+    /// 取得最新一個 open PR 的編號，若無則回傳 0。
+    /// </summary>
+    public async Task<int> GetLatestOpenPullRequestNumberAsync(string owner, string repo)
+    {
+        var client = CreateClient();
+        var prs = await client.PullRequest.GetAllForRepository(owner, repo,
+            new PullRequestRequest
+            {
+                State         = ItemStateFilter.Open,
+                SortProperty  = PullRequestSort.Created,
+                SortDirection = SortDirection.Descending
+            },
+            new ApiOptions { PageSize = 1, PageCount = 1 });
+
+        return prs.Count > 0 ? prs[0].Number : 0;
+    }
+
+    /// <summary>
     /// 在 GitHub 建立 Release，回傳 Release HTML URL。
     /// </summary>
     public async Task<string> CreateReleaseAsync(
