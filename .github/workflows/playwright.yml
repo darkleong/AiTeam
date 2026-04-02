@@ -35,8 +35,7 @@ jobs:
 
       - name: Install Playwright browsers
         run: |
-          cd src/AiTeam.Tests.Playwright
-          dotnet playwright install chromium --with-deps
+          pwsh src/AiTeam.Tests.Playwright/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
 
       - name: Start Dashboard (Docker)
         env:
