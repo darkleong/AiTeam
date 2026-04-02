@@ -620,7 +620,9 @@ public class CommandHandler(
     private async Task ExecuteAgentTaskAsync(PendingConfirmation pending)
     {
         var owner = _gitHubSettings.Owner;
-        var repo  = pending.Project;
+        var repo  = string.IsNullOrWhiteSpace(pending.Project)
+            ? _gitHubSettings.DefaultRepo
+            : pending.Project;
 
         await using var scope    = serviceProvider.CreateAsyncScope();
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();

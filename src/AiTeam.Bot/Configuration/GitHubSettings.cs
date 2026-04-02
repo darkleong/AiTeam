@@ -14,4 +14,9 @@ public class GitHubSettings
     /// GitHub 帳號名稱（repo owner）
     /// </summary>
     public string Owner { get; set; } = "";
+
+    /// <summary>
+    /// 預設 Repo 名稱，直接在 Agent 頻道指派任務時未指定 Project 的 fallback。
+    /// </summary>
+    public string DefaultRepo { get; set; } = "";
 }

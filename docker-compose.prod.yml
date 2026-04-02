@@ -45,6 +45,7 @@ services:
       Notion__AgentStatusDatabaseId: "${NOTION_AGENT_STATUS_DB_ID}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
+      GitHub__DefaultRepo: "AiTeam"
       GitHub__WorkspacePath: "C:\\AiTeam-Workspace"
       GitHub__WebhookSecret: "${GITHUB_WEBHOOK_SECRET}"
       Dashboard__PushUrl: "http://aiteam-dashboard:8080"
