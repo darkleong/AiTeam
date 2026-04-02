@@ -1,6 +1,8 @@
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using AiTeam.Shared.Dtos;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,6 +19,7 @@ public class InternalController(
     IOptions<AgentSettings> agentSettings,
     IServiceScopeFactory scopeFactory,
     IHostApplicationLifetime appLifetime,
+    AppSettingsService appSettings,
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
@@ -84,6 +87,69 @@ public class InternalController(
 
         logger.LogInformation("部署記錄已寫入：{Title}（{Status}）", task.Title, task.Status);
         return Ok(new { taskId = task.Id });
+    }
+
+    /// <summary>
+    /// 查詢指定時間區間的 Token 用量彙總，供 Dashboard Token 監控頁使用。
+    /// </summary>
+    [HttpGet("tokens")]
+    public async Task<IActionResult> GetTokenSummary(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        var fromDate = from?.ToUniversalTime() ?? DateTime.UtcNow.Date;
+        var toDate   = to?.ToUniversalTime()   ?? DateTime.UtcNow;
+
+        // 讀取費率設定（每千 token 美金，依模型設定）
+        var inputRateStr  = await appSettings.GetAsync("TokenPricing:InputPer1kUsd",  cancellationToken) ?? "0.003";
+        var outputRateStr = await appSettings.GetAsync("TokenPricing:OutputPer1kUsd", cancellationToken) ?? "0.015";
+        decimal.TryParse(inputRateStr,  System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var inputRate);
+        decimal.TryParse(outputRateStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var outputRate);
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var tokenRepo = scope.ServiceProvider.GetRequiredService<TokenRepository>();
+        var logs = await tokenRepo.GetByPeriodAsync(fromDate, toDate, cancellationToken);
+
+        // 依 Agent 彙總
+        var agentSummaries = logs
+            .GroupBy(l => l.AgentName)
+            .Select(g =>
+            {
+                var totalInput  = g.Sum(l => l.InputTokens);
+                var totalOutput = g.Sum(l => l.OutputTokens);
+                return new TokenAgentSummaryDto
+                {
+                    AgentName          = g.Key,
+                    Model              = g.OrderByDescending(l => l.CreatedAt).First().Model,
+                    TotalInputTokens   = totalInput,
+                    TotalOutputTokens  = totalOutput,
+                    EstimatedCostUsd   = Math.Round(
+                        (totalInput / 1000m) * inputRate + (totalOutput / 1000m) * outputRate, 4)
+                };
+            })
+            .OrderBy(s => s.AgentName)
+            .ToList();
+
+        // 每日數據點（供折線圖）
+        var dailyPoints = logs
+            .GroupBy(l => (l.CreatedAt.Date, l.AgentName))
+            .Select(g => new TokenDailyDataPointDto
+            {
+                Date       = g.Key.Date,
+                AgentName  = g.Key.AgentName,
+                TotalTokens = g.Sum(l => l.InputTokens + l.OutputTokens)
+            })
+            .OrderBy(p => p.Date)
+            .ToList();
+
+        return Ok(new TokenSummaryDto
+        {
+            AgentSummaries  = agentSummaries,
+            DailyDataPoints = dailyPoints
+        });
     }
 
     private bool IsAuthorized()

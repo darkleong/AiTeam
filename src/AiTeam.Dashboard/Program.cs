@@ -58,6 +58,7 @@ builder.Services.AddScoped<DashboardAgentService>();
 builder.Services.AddScoped<DashboardRuleService>();
 builder.Services.AddScoped<DashboardBotService>();
 builder.Services.AddScoped<DashboardAppSettingsService>();
+builder.Services.AddScoped<DashboardTokenService>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();

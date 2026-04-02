@@ -175,6 +175,16 @@ public class CommandHandler(
             // CEO 反問或純回覆，直接傳送文字，等待老闆下一輪回應
             await msg.Channel.SendMessageAsync(ceoResponse.Reply);
         }
+        else if (ceoResponse.Action == "propose")
+        {
+            // CEO 判定為新功能，進入提案模式（Rosa + Demi 並行產出，然後給老闆確認）
+            contextStore.Clear(msg.Channel.Id);
+            var finalProject = ceoResponse.Task?.Project ?? projectName;
+            await msg.Channel.SendMessageAsync(ceoResponse.Reply);
+            await ShowProposalAsync(
+                async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
+                ceoResponse, finalProject, msg.CleanContent);
+        }
         else
         {
             // 進入確認流程後清除對話歷史（任務已理解，不需繼續累積）
@@ -370,9 +380,17 @@ public class CommandHandler(
         }
 
         // 雙層確認 — 第一層：CEO 回報決策給老闆審核
-        // RequireConfirmation 欄位不可信（LLM 可能回傳 false），只要 action 非 reply 就一律顯示確認 Embed
-        if (ceoResponse.Action != "reply")
+        if (ceoResponse.Action == "propose")
         {
+            // 新功能提案模式：Rosa + Demi 並行產出提案書
+            await command.FollowupAsync(ceoResponse.Reply);
+            await ShowProposalAsync(
+                async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
+                ceoResponse, project, description);
+        }
+        else if (ceoResponse.Action != "reply")
+        {
+            // RequireConfirmation 欄位不可信（LLM 可能回傳 false），只要 action 非 reply 就一律顯示確認 Embed
             if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
             {
                 // 跳過 CEO 派工確認，直接進入 Agent 執行確認
@@ -512,6 +530,22 @@ public class CommandHandler(
                 logger.LogError(ex, "confirm_yes 處理失敗");
                 await interaction.FollowupAsync("❌ 建立任務時發生錯誤，請查看 log。");
             }
+        }
+        else if (interaction.Data.CustomId == "propose_yes")
+        {
+            // 提案書核准：建立 GitHub Issues（從 Rosa 分析結果）
+            await interaction.DeferAsync();
+            await interaction.FollowupAsync(
+                $"✅ 提案已核准！Rosa 開始建立 {pending.PreviewIssues?.Count ?? 0} 個 GitHub Issues...");
+
+            _ = Task.Run(async () =>
+            {
+                try { await ExecuteProposalApprovedAsync(pending); }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "提案核准後執行失敗（TaskId={TaskId}）", pending.TaskId);
+                }
+            }, CancellationToken.None);
         }
         else if (interaction.Data.CustomId == "exec_yes")
         {
@@ -671,6 +705,157 @@ public class CommandHandler(
         else if (!result.Success && alertChannel is not null)
             await alertChannel.SendMessageAsync(
                 $"🚨 **Requirements Agent 失敗**\n任務：{task.Title}\n錯誤：{result.Summary}");
+    }
+
+    #endregion
+
+    #region CEO 提案模式（Stage 9）
+
+    /// <summary>
+    /// CEO 判定為新功能時，並行呼叫 Rosa（需求分析）+ Demi（UI 規格），產出提案書讓老闆確認。
+    /// </summary>
+    private async Task ShowProposalAsync(
+        Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
+        CeoResponse ceoResponse,
+        string project,
+        string description)
+    {
+        var notifyMessage = $"🔍 CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...";
+
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
+        var designerService     = scope.ServiceProvider.GetRequiredService<DesignerAgentService>();
+
+        // 建立提案任務（狀態 pending，後續核准再執行）
+        var task = new TaskItem
+        {
+            Title         = ceoResponse.Task?.Title ?? description,
+            Description   = ceoResponse.Task?.Description ?? description,
+            TriggeredBy   = "Discord",
+            AssignedAgent = "CEO",
+            Status        = "pending"
+        };
+        taskRepo.Add(task);
+        await taskRepo.SaveAsync();
+
+        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
+        if (ceoChannel is not null)
+            await ceoChannel.SendMessageAsync(notifyMessage);
+
+        try
+        {
+            var reqRules      = await rulesService.GetRulesAsync(AgentNames.Requirements);
+            var designerRules = await rulesService.GetRulesAsync(AgentNames.Designer);
+
+            // 並行呼叫 Rosa + Demi
+            var issuesTask   = reqService.AnalyzeOnlyAsync(task);
+            var uiSpecTask   = designerService.GenerateDraftAsync(
+                task.Title, task.Description ?? task.Title, designerRules);
+
+            await Task.WhenAll(issuesTask, uiSpecTask);
+
+            var issues      = issuesTask.Result;
+            var uiSpec      = uiSpecTask.Result;
+
+            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec);
+            var confirmMsg    = await sendAsync(
+                proposalEmbed,
+                BuildConfirmButtons("propose_yes", "propose_no"));
+
+            _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
+                ceoResponse, project, description,
+                TaskId: task.Id,
+                PreviewIssues: issues,
+                UiSpecMarkdown: uiSpec,
+                IsProposal: true);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "CEO 提案模式失敗");
+            if (ceoChannel is not null)
+                await ceoChannel.SendMessageAsync("❌ 提案書產出失敗，請查看 log 或重新下指令。");
+        }
+    }
+
+    /// <summary>
+    /// 提案核准後：實際建立 GitHub Issues。
+    /// </summary>
+    private async Task ExecuteProposalApprovedAsync(PendingConfirmation pending)
+    {
+        if (pending.PreviewIssues is null or { Count: 0 }) return;
+
+        var owner = _gitHubSettings.Owner;
+        var repo  = string.IsNullOrWhiteSpace(pending.Project)
+            ? _gitHubSettings.DefaultRepo
+            : pending.Project;
+
+        await using var scope  = serviceProvider.CreateAsyncScope();
+        var taskRepo           = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var reqService         = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
+        var pushService        = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var task = await taskRepo.GetByIdAsync(pending.TaskId);
+        if (task is null)
+        {
+            logger.LogError("提案核准：找不到 TaskItem（Id={Id}）", pending.TaskId);
+            return;
+        }
+
+        taskRepo.UpdateStatus(task, "running");
+        await taskRepo.SaveAsync();
+
+        var result = await reqService.CreateIssuesFromPreviewAsync(
+            task, owner, repo, pending.PreviewIssues);
+
+        var finalStatus = result.Success ? "done" : "failed";
+        taskRepo.UpdateStatus(task, finalStatus);
+        await taskRepo.SaveAsync();
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = finalStatus
+        });
+
+        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
+        var embed = new EmbedBuilder()
+            .WithTitle(result.Success ? "✅ 提案已執行 — Issues 建立完成" : "❌ Issues 建立失敗")
+            .WithColor(result.Success ? Color.Green : Color.Red)
+            .AddField("任務", task.Title)
+            .AddField("摘要", result.Summary)
+            .WithTimestamp(DateTimeOffset.UtcNow);
+
+        if (!string.IsNullOrEmpty(result.OutputUrl))
+            embed.AddField("第一個 Issue", result.OutputUrl);
+
+        if (notifyChannel is not null)
+            await notifyChannel.SendMessageAsync(embed: embed.Build());
+    }
+
+    private static Embed BuildProposalEmbed(
+        string title,
+        IReadOnlyList<RequirementIssuePreview> issues,
+        string uiSpec)
+    {
+        var issueLines = issues.Count > 0
+            ? string.Join("\n", issues.Take(10).Select((i, idx) => $"{idx + 1}. **{i.Title}**"))
+            : "（無需求分析結果）";
+
+        // UI Spec 截斷避免超過 Discord embed 上限
+        var specPreview = uiSpec.Length > 800 ? uiSpec[..800] + "\n…（已截斷，完整版見 Demi 頻道）" : uiSpec;
+
+        return new EmbedBuilder()
+            .WithTitle("📋 CEO 提案書 — 請確認")
+            .WithColor(Color.Purple)
+            .AddField("功能名稱", title)
+            .AddField($"需求清單（共 {issues.Count} 項）", issueLines)
+            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview)
+            .WithFooter("確認後 Rosa 將建立 GitHub Issues；取消則中止。")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
     }
 
     #endregion
@@ -915,10 +1100,13 @@ public class CommandHandler(
 
 /// <summary>
 /// 等待確認的暫存資料。
+/// IsProposal = true 時代表這是 CEO 提案書，確認後才建立 Issues。
 /// </summary>
 internal record PendingConfirmation(
     CeoResponse CeoResponse,
     string Project,
     string Description,
     Guid TaskId = default,
-    IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null);
+    IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null,
+    string? UiSpecMarkdown = null,
+    bool IsProposal = false);

@@ -1,0 +1,123 @@
+name: Playwright Visual Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.razor'
+      - '**/*.css'
+      - 'src/AiTeam.Tests.Playwright/**'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  playwright-test:
+    name: Playwright UI Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # 允許在 PR 留 comment
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Playwright project
+        run: dotnet restore src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj
+
+      - name: Build Playwright project
+        run: dotnet build src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj --no-restore -c Release
+
+      - name: Install Playwright browsers
+        run: |
+          cd src/AiTeam.Tests.Playwright
+          dotnet playwright install chromium --with-deps
+
+      - name: Start Dashboard (Docker)
+        env:
+          AITEAM_ANTHROPIC_KEY: dummy-for-ui-test
+          AITEAM_DISCORD_TOKEN: dummy-for-ui-test
+          AITEAM_DISCORD_GUILD_ID: "0"
+          AITEAM_GITHUB_PAT: dummy-for-ui-test
+          AITEAM_DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
+          AITEAM_INTERNAL_API_KEY: test-key
+          AITEAM_BOT_INTERNAL_API_KEY: test-key
+        run: |
+          docker compose -f docker-compose.prod.yml up -d aiteam-dashboard
+          # 等待 Dashboard 健康
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5051/health > /dev/null; then
+              echo "Dashboard is up"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 3
+          done
+
+      - name: Run Playwright tests
+        env:
+          DASHBOARD_URL: http://localhost:5051
+          DASHBOARD_USER: ${{ secrets.DASHBOARD_TEST_USER }}
+          DASHBOARD_PASS: ${{ secrets.DASHBOARD_TEST_PASS }}
+        run: |
+          dotnet test src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj \
+            --no-build -c Release \
+            --logger "trx;LogFileName=results.trx" \
+            -- MSTest.Parallelize.Enabled=false
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots-${{ github.run_number }}
+          path: src/AiTeam.Tests.Playwright/screenshots/
+          if-no-files-found: ignore
+
+      - name: Post screenshots to PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const screenshotDir = 'src/AiTeam.Tests.Playwright/screenshots';
+
+            if (!fs.existsSync(screenshotDir)) {
+              console.log('No screenshots found');
+              return;
+            }
+
+            const files = fs.readdirSync(screenshotDir)
+              .filter(f => f.endsWith('.png'))
+              .slice(0, 10); // 最多顯示 10 張
+
+            if (files.length === 0) {
+              console.log('No PNG screenshots found');
+              return;
+            }
+
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+
+            let body = `## 📸 Playwright 視覺截圖測試結果\n\n`;
+            body += `**狀態**：${{ job.status == 'success' && '✅ 全部通過' || '❌ 有測試失敗' }}\n\n`;
+            body += `完整截圖：[下載 Artifacts](${runUrl})\n\n`;
+            body += `| 截圖 |\n|------|\n`;
+            files.forEach(f => {
+              body += `| \`${f}\` |\n`;
+            });
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Stop Dashboard
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down aiteam-dashboard || true

@@ -17,6 +17,7 @@ public static class DataServiceExtensions
         builder.AddNpgsqlDbContext<AppDbContext>(connectionName);
         builder.Services.AddScoped<TaskRepository>();
         builder.Services.AddScoped<AgentRepository>();
+        builder.Services.AddScoped<TokenRepository>();
         return builder;
     }
 }

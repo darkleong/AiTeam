@@ -31,7 +31,7 @@ builder.Services.Configure<OpsSettings>(builder.Configuration.GetSection("OpsSet
 // Anthropic
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";
 builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
-builder.Services.AddSingleton<LlmProviderFactory>();
+builder.Services.AddScoped<LlmProviderFactory>();
 
 // Rules（取代 Notion，從 PostgreSQL 讀取）
 builder.Services.AddSingleton<RulesService>();

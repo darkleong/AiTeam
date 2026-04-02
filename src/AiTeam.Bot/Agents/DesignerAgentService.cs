@@ -104,6 +104,23 @@ public class DesignerAgentService(
         }
     }
 
+    /// <summary>
+    /// 草稿模式：僅呼叫 LLM 產出 UI 規格 Markdown，不建立 GitHub PR。
+    /// 供 CEO 提案模式使用。
+    /// </summary>
+    internal async Task<string> GenerateDraftAsync(
+        string title,
+        string description,
+        IReadOnlyList<string> rules,
+        CancellationToken cancellationToken = default)
+    {
+        var provider     = providerFactory.Create(AgentName);
+        var systemPrompt = BuildDesignerSystemPrompt(rules);
+        var userMessage  = BuildDesignerUserMessage(new TaskItem { Title = title, Description = description });
+        var response     = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
+        return response.Content.Trim();
+    }
+
     // ────────────── Prompt 建構 ──────────────
 
     private static string BuildDesignerSystemPrompt(IReadOnlyList<string> rules)

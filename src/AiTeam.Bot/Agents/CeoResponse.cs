@@ -4,14 +4,16 @@ namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// CEO Agent 固定回傳的 JSON 結構。
+/// Stage 9：新增 propose action，支援提案模式。
 /// </summary>
 public class CeoResponse
 {
     [JsonPropertyName("reply")]
     public string Reply { get; set; } = "";
 
+    /// <summary>reply / delegate / propose</summary>
     [JsonPropertyName("action")]
-    public string Action { get; set; } = "reply"; // reply / delegate / autonomous
+    public string Action { get; set; } = "reply";
 
     [JsonPropertyName("target_agent")]
     public string? TargetAgent { get; set; }

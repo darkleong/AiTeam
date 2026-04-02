@@ -1,7 +1,7 @@
 # 02 基礎建設規劃
 
 > 所屬專案：AI 團隊實作總規劃  
-> 最後更新：2026-03-29
+> 最後更新：2026-04-02
 
 ---
 
@@ -38,95 +38,36 @@
 
 | 指令 | 說明 |
 |------|------|
-| `/task project:ProjectA [描述]` | 指定專案下達任務 |
-| `/reload-rules` | 強制重新拉取 Notion 規則（清除 Cache）|
+| 自然語言 | 直接在 `#victoria-ceo` 說話，不需格式（Stage 7）|
+| `/reload-rules` | 強制重新載入 DB 規則快取（Stage 8，原 Notion 版改為 DB 版）|
 | `/status` | 查詢目前各 Agent 狀態 |
 
 ---
 
 ## 二、資料儲存規劃
 
-### 2.1 Notion 與 PostgreSQL 分工原則
+> **Stage 8 更新（2026-04-02）：Notion 已完全移除，所有資料集中在 PostgreSQL，由 Dashboard 管理。**
 
-兩者都會有任務紀錄，但層次不同，互補而不重複：
+### 2.1 PostgreSQL 作為唯一儲存層
 
-| | Notion | PostgreSQL |
-|---|---|---|
-| **定位** | 人類可讀、Agent 學習參考 | 完整 raw 資料、Dashboard 來源 |
-| **任務紀錄內容** | 摘要、結論、你的修正備註 | 每個執行步驟的詳細 log |
-| **寫入頻率** | 每個任務一筆（任務結束後） | 每個執行步驟即時寫入（高頻） |
-| **查詢方式** | 你用眼睛看 | 程式查詢、圖表呈現 |
+| 資料 | 儲存位置 | 管理方式 |
+|------|---------|---------|
+| 任務 log | `tasks` / `task_logs` 表 | Dashboard 任務中心 |
+| Agent 規則 | `rules` 表 | Dashboard 規則管理頁（CRUD）|
+| Agent 設定 / 信任等級 | `agent_configs` 表 | Dashboard Agent 設定頁 |
+| 系統動態設定 | `app_settings` 表 | Dashboard 系統設定區塊 |
+| 專案 | `projects` 表 | Dashboard 專案管理頁 |
+| 部署紀錄 | `tasks` 表（Ops Agent 寫入）| Dashboard 部署紀錄頁 |
 
-> **一句話總結：PostgreSQL 記錄「發生了什麼」，Notion 記錄「值得記住什麼」。**
+### 2.2 規則 Cache 機制
 
----
+Agent 規則從 DB 載入，透過記憶體快取管理：
 
-### 2.2 寫入權限分區
+- **TTL：5 分鐘**（`RulesService` 快取）
+- **強制更新：** 下 `/reload-rules` 指令，立即清除記憶體快取並重新從 DB 載入
+- 任務執行中途修改規則，當次不生效，下次才套用
 
-| 寫入者 | 可寫入的內容 |
-|--------|-------------|
-| **你** | 規則庫（新增/修改）、Agent 信任等級 |
-| **CEO Agent** | 任務摘要（建立/更新）、每日摘要 |
-| **Dev Agent** | 任務摘要（執行結果、程式碼摘要） |
-| **Ops Agent** | 任務摘要（部署結果、環境狀態） |
-
-**規則庫與信任等級只有你能修改**，Agent 僅能讀取參考，無法自行修改自己的規則。
-
----
-
-### 2.3 規則 Cache 機制
-
-Agent 不會主動感知 Notion 的變更，規則透過 Cache 機制管理：
-
-- **TTL：1 小時**，到期後下次任務自動重新拉取
-- **強制更新：** 下 `/reload-rules` 指令，立即清除 Cache 並重新拉取
-- 任務執行中途的修改，當次不生效，下次才套用
-
-**TTL 設定位置：** `appsettings.json`
-```json
-{
-  "AgentSettings": {
-    "NotionCacheTtlMinutes": 60
-  }
-}
-```
-
----
-
-### 2.4 Notion 資料庫結構
-
-**規則庫（Rules）** — 只有你能寫入
-
-| 欄位 | 說明 |
-|------|------|
-| Agent | 適用的 Agent |
-| 規則內容 | 具體規定 |
-| 建立日期 | 何時加入 |
-| 來源 | 你的指示 / 自動歸納 |
-
-**任務摘要（Task Summary）** — Agent 寫入
-
-| 欄位 | 說明 |
-|------|------|
-| 任務標題 | 簡短描述 |
-| 執行 Agent | 由誰執行 |
-| 輸入指令 | 你下達的原始指令 |
-| 執行結果 | 成功 / 失敗 / 部分完成 |
-| 你的修正 | 若有修正，記錄在此 |
-| 日期 | 執行時間 |
-
-**Agent 狀態（Agent Status）** — 只有你能寫入
-
-| 欄位 | 說明 |
-|------|------|
-| Agent 名稱 | CEO / Dev / Ops / ... |
-| 信任等級 | Level 0 ~ 3 |
-| 自主決策清單 | 可自主執行的任務類型 |
-| 最後更新 | 上次調整時間 |
-
----
-
-### 2.5 PostgreSQL 資料表結構
+### 2.3 PostgreSQL 資料表結構
 
 **teams** — 團隊主表（預留多團隊）
 
@@ -176,6 +117,22 @@ Agent 不會主動感知 Notion 的變更，規則透過 Cache 機制管理：
 | payload | JSONB | 執行細節（raw data） |
 | created_at | TIMESTAMP | 時間戳 |
 
+**rules** — Agent 規則（Stage 8 新增，取代 Notion Rules）
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| id | UUID | 主鍵 |
+| agent_name | VARCHAR | 適用 Agent（nullable，null = 全域規則）|
+| content | TEXT | 規則內容 |
+| created_at | TIMESTAMP | 建立時間 |
+
+**app_settings** — 系統動態設定（Stage 8 新增）
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| key | VARCHAR | 設定鍵值（PK）|
+| value | VARCHAR | 設定值 |
+
 ---
 
 ## 三、已確認細節
@@ -183,9 +140,10 @@ Agent 不會主動感知 Notion 的變更，規則透過 Cache 機制管理：
 | 項目 | 決定 |
 |------|------|
 | 多語言支援 | 中文、英文都支援 |
-| 部署環境 | 本地伺服器（搭配 Tailscale 跨網路連線） |
+| 部署環境 | 本地伺服器（Docker Compose + GitHub Actions CI/CD）|
 | GitHub 整合範圍 | 初期個人 repo，預留公司組織 repo 擴充 |
 | Agent 個性設定 | 後期再設定，不影響現有架構 |
+| 規則儲存 | PostgreSQL `rules` 表（Stage 8 起，Notion 已移除）|
 
 ### GitHub 多帳號設計（預留）
 

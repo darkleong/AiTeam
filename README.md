@@ -19,7 +19,7 @@ CEO Agent（Victoria）—— 從 DB 動態載入 Agent 清單
     ├── Release Agent（Rena）    （版本管理、Changelog、建立 GitHub Release）
     └── Designer Agent（Demi）   （需求 → MudBlazor UI 規格文件）
          ↓
-    結果回報 Discord + 寫入 Notion + 詳細 log 寫入 PostgreSQL
+    結果回報 Discord + 詳細 log 寫入 PostgreSQL
 ```
 
 即時狀態透過 **Blazor Dashboard** 可視化（SignalR 推送）。
@@ -29,7 +29,7 @@ CEO Agent（Victoria）—— 從 DB 動態載入 Agent 清單
 | 用途 | 工具 |
 |------|------|
 | 溝通介面 | Discord（Discord.Net）自然語言對話 |
-| 規則與記憶 | Notion（Notion.Net） |
+| 規則管理 | PostgreSQL `rules` 資料表（Dashboard CRUD） |
 | 詳細 Log | PostgreSQL（EF Core + Npgsql） |
 | 視覺化 | Blazor Server Dashboard（MudBlazor） |
 | LLM | Anthropic Claude API |
@@ -49,14 +49,15 @@ src/
 ├── AiTeam.Data/                 ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                  ← Discord Bot 主程式
 │   ├── Agents/                  ← IAgentExecutor、各 AgentService、CeoAgentService
+│   ├── Api/                     ← InternalController（/internal/restart、/internal/deployment）
 │   ├── Configuration/           ← DiscordSettings、AgentSettings、GitHubSettings
 │   ├── Discord/                 ← DiscordBotService、CommandHandler
 │   ├── GitHub/                  ← GitHubService、WebhookController
-│   ├── Notion/                  ← NotionService
-│   └── Ops/                     ← OpsAgentService、HealthCheckJob
+│   ├── Ops/                     ← OpsAgentService、HealthCheckJob
+│   └── Services/                ← AppSettingsService（動態設定 TTL 快取）、RulesService
 └── AiTeam.Dashboard/            ← Blazor Server Dashboard
-    ├── Components/Pages/        ← 首頁、任務中心、部署紀錄、Agent 設定、Team Office
-    └── Services/                ← DashboardAgentService、NotionTrustLevelService
+    ├── Components/Pages/        ← 首頁、任務中心、部署紀錄、Agent 設定、規則管理、專案管理
+    └── Services/                ← DashboardAgentService、DashboardRuleService、DashboardAppSettingsService
 docs/
 ├── 00_Master_Plan.md
 ├── 01_Vision_and_Architecture.md
@@ -68,6 +69,7 @@ docs/
 ├── Stage_5_Expansion.md         ← ✅ 完成
 ├── Stage_6_Roadmap.md           ← ✅ 完成
 ├── Stage_7_Roadmap.md           ← ✅ 完成
+├── Stage_8_Roadmap.md           ← ✅ 完成
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -100,14 +102,16 @@ docs/
 ```
 你對 CEO 說自然語言（在 #victoria-ceo）
     ↓
-CEO Agent 解讀意圖 → 回報決策（Embed + ✅❌ 按鈕）
+CEO Agent 解讀意圖 → 回報決策（Embed + ✅❌ 按鈕）  ← 可用 SkipCeoConfirm 略過
     ↓ 你核准
 執行 Agent 說明即將操作 → 再次確認（Embed + ✅❌ 按鈕）
     ↓ 你核准
-實際執行 → 結果回報 Discord + 寫入 Notion + PostgreSQL
+實際執行 → 結果回報 Discord + PostgreSQL
 ```
 
 > 亦可在各 Agent 專屬頻道直接說話，繞過 CEO 直接指派，CEO 頻道會收到 CC 通知。
+>
+> **SkipCeoConfirm**：可在 Dashboard → Agent 設定 → 系統設定 開啟，跳過第一層 CEO 確認，直接進入 Agent 執行確認。5 分鐘內自動生效，不需重啟 Bot。
 
 ---
 
@@ -147,7 +151,7 @@ Self-hosted Runner（Windows 11 本機）
 | 指令 | 說明 |
 |------|------|
 | 自然語言 | 直接在 `#victoria-ceo` 說話，不需格式 |
-| `/reload-rules` | 強制重新載入 Notion 規則（清除 Cache） |
+| `/reload-rules` | 強制重新載入 DB 規則（清除記憶體快取） |
 | `/status` | 查詢各 Agent 目前狀態與啟用清單 |
 
 ---
@@ -169,13 +173,10 @@ cd src/AiTeam.Bot
 dotnet user-secrets set "Discord:BotToken"               "你的 Discord Bot Token"
 dotnet user-secrets set "Discord:GuildId"                "你的 Discord Server ID"
 dotnet user-secrets set "Anthropic:ApiKey"               "你的 Anthropic API Key"
-dotnet user-secrets set "Notion:ApiKey"                  "你的 Notion Integration Token"
-dotnet user-secrets set "Notion:RulesDatabaseId"         "Notion Rules DB ID"
-dotnet user-secrets set "Notion:TaskSummaryDatabaseId"   "Notion Task Summary DB ID"
-dotnet user-secrets set "Notion:AgentStatusDatabaseId"   "Notion Agent Status DB ID"
 dotnet user-secrets set "GitHub:PersonalAccessToken"     "你的 GitHub PAT"
 dotnet user-secrets set "GitHub:Owner"                   "你的 GitHub 帳號"
 dotnet user-secrets set "GitHub:DefaultRepo"             "預設 Repo 名稱"
+dotnet user-secrets set "AgentSettings:InternalApiKey"   "Dashboard 呼叫 Bot 用的 API Key"
 ```
 
 **Dashboard：**
@@ -183,10 +184,11 @@ dotnet user-secrets set "GitHub:DefaultRepo"             "預設 Repo 名稱"
 ```bash
 cd src/AiTeam.Dashboard
 
-dotnet user-secrets set "Notion:ApiKey"                  "你的 Notion Integration Token"
-dotnet user-secrets set "Notion:RulesDatabaseId"         "Notion Rules DB ID"
-dotnet user-secrets set "Notion:AgentStatusDatabaseId"   "Notion Agent Status DB ID"
+dotnet user-secrets set "BotSettings:InternalApiKey"     "Dashboard 呼叫 Bot 用的 API Key"
+dotnet user-secrets set "BotSettings:BaseUrl"            "http://localhost:5050"
 ```
+
+> Production 環境的 Secret 統一存放於 `C:\Users\darkl\aiteam\.env`，不進版控。
 
 ### 啟動（開發模式）
 
@@ -216,7 +218,7 @@ docker compose --env-file .env up -d
 | Stage 5 | 動態 Agent 框架 + QA / Doc / Requirements Agent | ✅ 完成 |
 | Stage 6 | Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項強化 | ✅ 完成 |
 | Stage 7 | Reviewer / Release / Designer Agent、CI/CD、自然語言對話、Agent 專屬頻道 | ✅ 完成 |
-| Stage 8 | 規劃中 | 🔵 規劃中 |
+| Stage 8 | 系統可靠性補完、Notion 遷移、動態設定、規則管理、部署紀錄自動化 | ✅ 完成 |
 
 ---
 

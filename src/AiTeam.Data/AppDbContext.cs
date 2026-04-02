@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AgentConfig> AgentConfigs => Set<AgentConfig>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskLog> TaskLogs => Set<TaskLog>();
+    public DbSet<TokenLog> TokenLogs => Set<TokenLog>();
     public DbSet<Rule> Rules => Set<Rule>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
@@ -62,6 +63,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).IsRequired(false);
+        });
+
+        modelBuilder.Entity<TokenLog>(e =>
+        {
+            e.ToTable("token_logs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).IsRequired(false);
         });
 
         modelBuilder.Entity<AppSetting>(e =>

@@ -20,6 +20,46 @@ public class GitHubService(
         Credentials = new Octokit.Credentials(_settings.PersonalAccessToken)
     };
 
+    // ────────────── CEO 智慧分類用（查詢 PR / Issue 上下文）──────────────
+
+    /// <summary>
+    /// 取得目前 open 的 PR 清單（最多 20 筆），供 CEO 判斷是否已有相關 PR。
+    /// </summary>
+    public async Task<IReadOnlyList<Octokit.PullRequest>> ListOpenPullRequestsAsync(string owner, string repo)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.PullRequest.GetAllForRepository(owner, repo,
+                new PullRequestRequest { State = ItemStateFilter.Open },
+                new ApiOptions { PageSize = 20, PageCount = 1 });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "取得 open PR 失敗：{Owner}/{Repo}", owner, repo);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// 取得目前 open 的 Issue 清單（最多 20 筆），供 CEO 判斷問題是否已被追蹤。
+    /// </summary>
+    public async Task<IReadOnlyList<Octokit.Issue>> ListOpenIssuesAsync(string owner, string repo)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.Issue.GetAllForRepository(owner, repo,
+                new RepositoryIssueRequest { State = ItemStateFilter.Open },
+                new ApiOptions { PageSize = 20, PageCount = 1 });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "取得 open Issue 失敗：{Owner}/{Repo}", owner, repo);
+            return [];
+        }
+    }
+
     // ────────────── 唯讀操作（Code Review 用）──────────────
 
     /// <summary>

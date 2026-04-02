@@ -6,5 +6,6 @@
     <Project Path="src/AiTeam.Data/AiTeam.Data.csproj" />
     <Project Path="src/AiTeam.ServiceDefaults/AiTeam.ServiceDefaults.csproj" />
     <Project Path="src/AiTeam.Shared/AiTeam.Shared.csproj" />
+    <Project Path="src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj" />
   </Folder>
 </Solution>

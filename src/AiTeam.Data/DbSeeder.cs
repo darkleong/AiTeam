@@ -82,19 +82,24 @@ public static class DbSeeder
             await db.SaveChangesAsync();
         }
 
-        // Seed 初始動態設定（如果 app_settings 表完全為空才新增）
-        if (!await db.AppSettings.AnyAsync())
+        // Seed 初始動態設定（逐一確認，缺少才新增，方便版本升級補 key）
+        await EnsureSettingAsync(db, "SkipCeoConfirm",                "false",  "跳過 CEO 派工確認，直接進入 Agent 執行確認（true/false）");
+        await EnsureSettingAsync(db, "TokenPricing:InputPer1kUsd",    "0.003",  "每千個 Input Token 費用（USD），預設 Sonnet 費率");
+        await EnsureSettingAsync(db, "TokenPricing:OutputPer1kUsd",   "0.015",  "每千個 Output Token 費用（USD），預設 Sonnet 費率");
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureSettingAsync(AppDbContext db, string key, string defaultValue, string description)
+    {
+        if (!await db.AppSettings.AnyAsync(s => s.Key == key))
         {
-            db.AppSettings.AddRange(
-                new AppSetting
-                {
-                    Key         = "SkipCeoConfirm",
-                    Value       = "false",
-                    Description = "跳過 CEO 派工確認，直接進入 Agent 執行確認（true/false）",
-                    UpdatedAt   = DateTime.UtcNow
-                }
-            );
-            await db.SaveChangesAsync();
+            db.AppSettings.Add(new AppSetting
+            {
+                Key         = key,
+                Value       = defaultValue,
+                Description = description,
+                UpdatedAt   = DateTime.UtcNow
+            });
         }
     }
 }

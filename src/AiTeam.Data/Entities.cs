@@ -72,6 +72,20 @@ public class TaskLog
     public TaskItem Task { get; set; } = null!;
 }
 
+/// <summary>每次 LLM 呼叫的 Token 用量記錄，供 Dashboard 費用監控使用。</summary>
+public class TokenLog
+{
+    public Guid Id { get; set; }
+    public string AgentName { get; set; } = ""; // e.g. "CEO", "Dev", "QA"
+    public string Model { get; set; } = "";      // e.g. "claude-sonnet-4-6"
+    public int InputTokens { get; set; }
+    public int OutputTokens { get; set; }
+    public Guid? TaskId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public TaskItem? Task { get; set; }
+}
+
 /// <summary>動態系統設定（key/value），可從 Dashboard 即時修改，免重啟 Bot。</summary>
 public class AppSetting
 {
