@@ -4,7 +4,8 @@ public class AgentSettings
 {
     public int RulesCacheTtlMinutes { get; set; } = 60;
     public int MonthlyTokenLimitK { get; set; } = 1000;
-    public string DailyReportCron { get; set; } = "0 9,21 * * *";
+    public string DailyReportCron { get; set; } = "0 0 9,21 * * ?";
+    public string HealthCheckCron { get; set; } = "0 */30 * * * ?";
     public string InternalApiKey { get; set; } = "";
     /// <summary>跳過 CEO 派工確認，直接進入 Agent 執行確認（準確率穩定後可啟用）。</summary>
     public bool SkipCeoConfirm { get; set; } = false;

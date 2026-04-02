@@ -94,7 +94,7 @@ builder.Services.AddQuartz(q =>
     q.AddTrigger(opts => opts
         .ForJob(jobKey)
         .WithIdentity("HealthCheck-trigger")
-        .WithCronSchedule(builder.Configuration["AgentSettings:DailyReportCron"] ?? "0 */30 * * * ?"));
+        .WithCronSchedule(builder.Configuration["AgentSettings:HealthCheckCron"] ?? "0 */30 * * * ?"));
 });
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
