@@ -15,6 +15,9 @@ public static class DbSeeder
         (AgentNames.Qa,           "負責自動化測試，讀取 PR 變更後產生測試案例，開 PR 提交測試檔案", false),
         (AgentNames.Doc,          "負責文件生成，讀取原始碼產出 Markdown 文件或 XML 註解，開 PR",   false),
         (AgentNames.Requirements, "負責需求分析，將原始需求拆解為 GitHub Issues 結構化清單",       false),
+        (AgentNames.Reviewer,     "負責 Code Review，讀取 PR 差異產出分級審查報告，並在 PR 上留下 Review Comments", false),
+        (AgentNames.Release,      "負責版本發佈，彙整 Commits 與 merged PRs，建立 Release tag 並產出 Changelog",   false),
+        (AgentNames.Designer,     "負責 UI 規格設計，將功能需求轉換為 MudBlazor 元件規格文件（Markdown）",          false),
     ];
 
     /// <summary>

@@ -14,7 +14,7 @@ using Microsoft.Extensions.Options;
 namespace AiTeam.Bot.Discord;
 
 /// <summary>
-/// 負責註冊與分派 Discord 斜線指令。
+/// 負責註冊斜線指令，以及監聽各 Agent 頻道的自然語言訊息並路由。
 /// </summary>
 public class CommandHandler(
     DiscordSocketClient client,
@@ -22,6 +22,7 @@ public class CommandHandler(
     IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
     NotionService notionService,
+    ConversationContextStore contextStore,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
@@ -73,8 +74,210 @@ public class CommandHandler(
         logger.LogInformation("斜線指令已向 Guild {GuildId} 註冊完成", guildId);
 
         client.SlashCommandExecuted += OnSlashCommandAsync;
-        client.ButtonExecuted += OnButtonExecutedAsync;
+        client.ButtonExecuted        += OnButtonExecutedAsync;
+        client.MessageReceived       += OnMessageReceivedAsync;
     }
+
+    #region 自然語言訊息路由（Stage 7）
+
+    /// <summary>
+    /// 監聽頻道訊息，將 CEO 頻道與各 Agent 頻道的訊息路由到對應的處理邏輯。
+    /// </summary>
+    private async Task OnMessageReceivedAsync(SocketMessage rawMessage)
+    {
+        // 忽略 Bot 自己的訊息與系統訊息
+        if (rawMessage is not SocketUserMessage msg) return;
+        if (msg.Author.IsBot) return;
+
+        // 若 MessageContent Intent 未啟用，content 會是空字串，靜默跳過
+        if (string.IsNullOrWhiteSpace(msg.CleanContent)) return;
+
+        var channelName = (msg.Channel as SocketTextChannel)?.Name ?? "";
+        var isCeoChannel = channelName.Equals(_settings.Channels.CeoChannel, StringComparison.OrdinalIgnoreCase);
+
+        var channelAgentMap = BuildChannelAgentMap();
+        var isAgentChannel  = channelAgentMap.TryGetValue(channelName, out var targetAgent);
+
+        if (!isCeoChannel && !isAgentChannel) return;
+
+        using var typing = msg.Channel.EnterTypingState();
+
+        try
+        {
+            if (isCeoChannel)
+                await HandleCeoChannelMessageAsync(msg);
+            else
+                await HandleDirectAgentChannelMessageAsync(msg, targetAgent!);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "處理自然語言訊息時發生錯誤（頻道={Channel}）", channelName);
+            try { await msg.Channel.SendMessageAsync("❌ 處理訊息時發生錯誤，請查看 log。"); }
+            catch { /* 發送錯誤訊息失敗時靜默忽略 */ }
+        }
+    }
+
+    /// <summary>
+    /// 在 CEO 頻道（#victoria-ceo）的自然語言處理。
+    /// 保留對話歷史供多輪對話使用，支援 CEO 反問機制。
+    /// </summary>
+    private async Task HandleCeoChannelMessageAsync(SocketUserMessage msg)
+    {
+        var history = contextStore.GetHistory(msg.Channel.Id);
+
+        // 下載圖片附件（若有）
+        var images = new List<ImageAttachment>();
+        foreach (var attachment in msg.Attachments)
+        {
+            if (attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) != true)
+                continue;
+            try
+            {
+                using var http  = new HttpClient();
+                var bytes       = await http.GetByteArrayAsync(attachment.Url);
+                images.Add(new ImageAttachment(Convert.ToBase64String(bytes), attachment.ContentType));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "附圖下載失敗，略過");
+            }
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
+        var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+
+        var rules        = await notionService.GetRulesAsync();
+        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
+        var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
+
+        // 從歷史對話嘗試提取專案名稱（取最後一次明確提到的專案）
+        var projectName = ExtractProjectFromHistory(history, msg.CleanContent);
+
+        var ceoResponse = await ceoService.ProcessAsync(
+            msg.CleanContent, projectName, agentList, rules,
+            images: images.Count > 0 ? images : null,
+            history: history);
+
+        // 防護修正（同 /task 指令邏輯）
+        if (!string.IsNullOrWhiteSpace(ceoResponse.TargetAgent) && ceoResponse.Action == "reply")
+        {
+            logger.LogWarning("CEO 回傳 action=reply 但 target_agent={Agent}，強制修正為 delegate", ceoResponse.TargetAgent);
+            ceoResponse.Action = "delegate";
+        }
+
+        // 更新對話歷史
+        contextStore.AddTurn(msg.Channel.Id, "user",      msg.CleanContent);
+        contextStore.AddTurn(msg.Channel.Id, "assistant", ceoResponse.Reply);
+
+        if (ceoResponse.Action == "reply")
+        {
+            // CEO 反問或純回覆，直接傳送文字，等待老闆下一輪回應
+            await msg.Channel.SendMessageAsync(ceoResponse.Reply);
+        }
+        else
+        {
+            // 進入確認流程後清除對話歷史（任務已理解，不需繼續累積）
+            contextStore.Clear(msg.Channel.Id);
+
+            // 若 CEO 尚未取得專案名稱，以 task.project 補充
+            var finalProject = ceoResponse.Task?.Project ?? projectName;
+
+            var confirmMessage = await msg.Channel.SendMessageAsync(
+                embed: BuildCeoDecisionEmbed(ceoResponse, finalProject),
+                components: BuildConfirmButtons());
+
+            _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
+                ceoResponse, finalProject, msg.CleanContent);
+        }
+    }
+
+    /// <summary>
+    /// 在各 Agent 專屬頻道（如 #cody-dev）的直接對話處理。
+    /// 自動 CC CEO 頻道，並直接路由到對應 Agent 走確認流程。
+    /// </summary>
+    private async Task HandleDirectAgentChannelMessageAsync(SocketUserMessage msg, string agentName)
+    {
+        // CC CEO 頻道：通知老闆繞過 CEO 直接找 Agent
+        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
+        if (ceoChannel is not null)
+        {
+            var ccEmbed = new EmbedBuilder()
+                .WithTitle($"📋 老闆直接指派給 {agentName} Agent")
+                .WithColor(Color.LightGrey)
+                .AddField("來源頻道", $"#{msg.Channel.Name}", inline: true)
+                .AddField("指派內容", Truncate(msg.CleanContent, 512))
+                .WithTimestamp(DateTimeOffset.UtcNow)
+                .Build();
+            await ceoChannel.SendMessageAsync(embed: ccEmbed);
+        }
+
+        // 建立模擬 CeoResponse 直接走第一層確認流程
+        var project = ExtractProjectFromChannelName(msg.Channel.Name);
+        var fakeResponse = new CeoResponse
+        {
+            Action      = "delegate",
+            TargetAgent = agentName,
+            Reply       = $"老闆直接指示，由 {agentName} Agent 處理。",
+            Task        = new CeoTaskPayload
+            {
+                Title       = TruncateTitle(msg.CleanContent),
+                Description = msg.CleanContent,
+                Project     = project,
+                Priority    = "normal"
+            }
+        };
+
+        var confirmMessage = await msg.Channel.SendMessageAsync(
+            embed: BuildCeoDecisionEmbed(fakeResponse, project),
+            components: BuildConfirmButtons());
+
+        _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
+            fakeResponse, project, msg.CleanContent);
+    }
+
+    /// <summary>頻道名稱 → Agent 名稱的對應表。</summary>
+    private Dictionary<string, string> BuildChannelAgentMap()
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            [_settings.Channels.DevChannel]          = AgentNames.Dev,
+            [_settings.Channels.OpsChannel]          = AgentNames.Ops,
+            [_settings.Channels.QaChannel]           = AgentNames.Qa,
+            [_settings.Channels.DocChannel]          = AgentNames.Doc,
+            [_settings.Channels.RequirementsChannel] = AgentNames.Requirements,
+            [_settings.Channels.ReviewerChannel]     = AgentNames.Reviewer,
+            [_settings.Channels.ReleaseChannel]      = AgentNames.Release,
+            [_settings.Channels.DesignerChannel]     = AgentNames.Designer,
+        };
+
+    /// <summary>
+    /// 從對話歷史中嘗試找出專案名稱（取最後一次明確提到的專案）。
+    /// 找不到時回傳空字串，讓 CEO 自行判斷或反問。
+    /// </summary>
+    private static string ExtractProjectFromHistory(
+        IReadOnlyList<ConversationTurn> history, string currentInput)
+    {
+        // 從最新的一輪往前找，看是否有明確提到專案名稱
+        foreach (var turn in history.Reverse())
+        {
+            if (!string.IsNullOrWhiteSpace(turn.Content))
+                return ""; // 讓 CEO 從對話內容自行理解
+        }
+        return "";
+    }
+
+    /// <summary>從 Agent 頻道名稱推測可能的專案名稱（無法確定時回傳空字串）。</summary>
+    private static string ExtractProjectFromChannelName(string channelName) => "";
+
+    /// <summary>截斷任務標題為不超過 100 字元的短標題。</summary>
+    private static string TruncateTitle(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "直接指派任務";
+        var firstLine = input.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? input;
+        return firstLine.Length <= 100 ? firstLine : firstLine[..97] + "…";
+    }
+
+    #endregion
 
     #region 斜線指令分派
 
@@ -491,8 +694,17 @@ public class CommandHandler(
             if (!string.IsNullOrEmpty(result.OutputUrl))
                 embed.AddField("連結", result.OutputUrl);
 
+            var builtEmbed = embed.Build();
+
+            // 推送到 #任務動態（現有）
             if (notifyChannel is not null)
-                await notifyChannel.SendMessageAsync(embed: embed.Build());
+                await notifyChannel.SendMessageAsync(embed: builtEmbed);
+
+            // 同時推送到 Agent 自己的頻道（Stage 7 新增）
+            var agentChannelName = GetAgentChannelName(task.AssignedAgent);
+            var agentChannel     = FindChannel(agentChannelName);
+            if (agentChannel is not null && agentChannel.Id != notifyChannel?.Id)
+                await agentChannel.SendMessageAsync(embed: builtEmbed);
         }
         catch (Exception ex)
         {
@@ -513,6 +725,20 @@ public class CommandHandler(
                     $"🚨 **{pending.CeoResponse.TargetAgent} Agent 失敗**\n任務：{task.Title}\n錯誤：{ex.Message}");
         }
     }
+
+    /// <summary>Agent 名稱 → 對應的 Discord 頻道名稱。</summary>
+    private string GetAgentChannelName(string agentName) => agentName switch
+    {
+        AgentNames.Dev          => _settings.Channels.DevChannel,
+        AgentNames.Ops          => _settings.Channels.OpsChannel,
+        AgentNames.Qa           => _settings.Channels.QaChannel,
+        AgentNames.Doc          => _settings.Channels.DocChannel,
+        AgentNames.Requirements => _settings.Channels.RequirementsChannel,
+        AgentNames.Reviewer     => _settings.Channels.ReviewerChannel,
+        AgentNames.Release      => _settings.Channels.ReleaseChannel,
+        AgentNames.Designer     => _settings.Channels.DesignerChannel,
+        _                       => _settings.Channels.TaskUpdates
+    };
 
     private IMessageChannel? FindChannel(string channelName)
     {

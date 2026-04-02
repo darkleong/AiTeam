@@ -240,4 +240,149 @@ public class GitHubService(
         foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
             File.SetAttributes(file, FileAttributes.Normal);
     }
+
+    // ────────────── Reviewer Agent 用 ──────────────
+
+    /// <summary>
+    /// 在 PR 上提交整體 Review（COMMENT 事件，不影響合併狀態）。
+    /// 回傳 Review HTML URL。
+    /// </summary>
+    public async Task<string> CreatePullRequestReviewAsync(
+        string owner, string repo, int prNumber,
+        string body)
+    {
+        var client = CreateClient();
+        var review = await client.PullRequest.Review.Create(owner, repo, prNumber,
+            new PullRequestReviewCreate
+            {
+                Body  = body,
+                Event = Octokit.PullRequestReviewEvent.Comment
+            });
+        logger.LogInformation("PR #{Pr} Review 已提交（ReviewId={Id}）", prNumber, review.Id);
+        return review.HtmlUrl;
+    }
+
+    // ────────────── Release Agent 用 ──────────────
+
+    /// <summary>
+    /// 取得最新的 Release tag 名稱，若無任何 Release 則回傳 null。
+    /// </summary>
+    public async Task<string?> GetLatestTagAsync(string owner, string repo)
+    {
+        var client = CreateClient();
+        try
+        {
+            var latest = await client.Repository.Release.GetLatest(owner, repo);
+            return latest.TagName;
+        }
+        catch (Octokit.NotFoundException)
+        {
+            return null; // 尚無任何 Release
+        }
+    }
+
+    /// <summary>
+    /// 取得指定 SHA 之後（不含）到 HEAD 的 commits。
+    /// 若 sinceSha 為 null，則取最近 50 筆 commits。
+    /// </summary>
+    public async Task<IReadOnlyList<GitHubCommit>> GetCommitsSinceAsync(
+        string owner, string repo, string? sinceSha)
+    {
+        var client = CreateClient();
+
+        if (sinceSha is null)
+        {
+            var commits = await client.Repository.Commit.GetAll(owner, repo,
+                new CommitRequest(), new ApiOptions { PageSize = 50, PageCount = 1 });
+            return commits;
+        }
+
+        // 取得 sinceSha 的日期，以此為起始點查詢
+        var refCommit  = await client.Repository.Commit.Get(owner, repo, sinceSha);
+        var sinceDate  = refCommit.Commit.Committer.Date;
+
+        var allCommits = await client.Repository.Commit.GetAll(owner, repo,
+            new CommitRequest { Since = sinceDate.AddSeconds(1) },
+            new ApiOptions { PageSize = 100, PageCount = 1 });
+
+        return allCommits;
+    }
+
+    /// <summary>
+    /// 取得指定日期之後已合併的 PRs。
+    /// </summary>
+    public async Task<IReadOnlyList<PullRequest>> GetMergedPullRequestsAsync(
+        string owner, string repo, DateTimeOffset since)
+    {
+        var client = CreateClient();
+        var prs = await client.PullRequest.GetAllForRepository(owner, repo,
+            new PullRequestRequest
+            {
+                State     = ItemStateFilter.Closed,
+                SortDirection = SortDirection.Descending
+            },
+            new ApiOptions { PageSize = 50, PageCount = 1 });
+
+        return prs
+            .Where(pr => pr.Merged && pr.MergedAt >= since)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 在 GitHub 建立 Release，回傳 Release HTML URL。
+    /// </summary>
+    public async Task<string> CreateReleaseAsync(
+        string owner, string repo,
+        string tagName, string releaseName, string body)
+    {
+        var client  = CreateClient();
+        var release = await client.Repository.Release.Create(owner, repo,
+            new NewRelease(tagName)
+            {
+                Name  = releaseName,
+                Body  = body,
+                Draft = false,
+            });
+        logger.LogInformation("Release {Tag} 已建立：{Url}", tagName, release.HtmlUrl);
+        return release.HtmlUrl;
+    }
+
+    /// <summary>
+    /// 建立或更新 repo 中的檔案（例如 CHANGELOG.md）。
+    /// 若檔案已存在，需傳入現有 SHA（透過 GetAllContents 取得），否則 GitHub API 會拒絕。
+    /// </summary>
+    public async Task CreateOrUpdateFileAsync(
+        string owner, string repo,
+        string path, string content, string commitMessage)
+    {
+        var client     = CreateClient();
+        var rawContent = System.Text.Encoding.UTF8.GetBytes(content);
+
+        // 嘗試取得現有檔案 SHA
+        string? existingSha = null;
+        try
+        {
+            var existing = await client.Repository.Content.GetAllContents(owner, repo, path);
+            existingSha  = existing.FirstOrDefault()?.Sha;
+        }
+        catch (Octokit.NotFoundException)
+        {
+            // 檔案不存在，建立新檔案
+        }
+
+        var base64Content = System.Convert.ToBase64String(rawContent);
+
+        if (existingSha is null)
+        {
+            await client.Repository.Content.CreateFile(owner, repo, path,
+                new CreateFileRequest(commitMessage, base64Content, true));
+            logger.LogInformation("檔案已建立：{Path}", path);
+        }
+        else
+        {
+            await client.Repository.Content.UpdateFile(owner, repo, path,
+                new UpdateFileRequest(commitMessage, base64Content, existingSha, true));
+            logger.LogInformation("檔案已更新：{Path}", path);
+        }
+    }
 }

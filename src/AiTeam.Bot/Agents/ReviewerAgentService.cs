@@ -1,0 +1,302 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
+using AiTeam.Data;
+using AiTeam.Data.Repositories;
+using AiTeam.Shared.ViewModels;
+
+namespace AiTeam.Bot.Agents;
+
+/// <summary>
+/// Reviewer Agent（Vera）：讀取 PR 差異，呼叫 LLM 產出分級審查報告，
+/// 並透過 GitHub Review API 在 PR 上留下整體審查意見。
+/// </summary>
+public class ReviewerAgentService(
+    LlmProviderFactory providerFactory,
+    GitHubService gitHubService,
+    TaskRepository taskRepository,
+    DashboardPushService dashboardPush,
+    ILogger<ReviewerAgentService> logger) : IAgentExecutor
+{
+    private const string AgentName = "Reviewer";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    /// <inheritdoc />
+    public async Task<AgentExecutionResult> ExecuteTaskAsync(
+        TaskItem task,
+        string owner,
+        string repo,
+        IReadOnlyList<string> rules,
+        CancellationToken cancellationToken = default)
+    {
+        AddLog(task, "Reviewer Agent 開始執行", "running");
+        await taskRepository.SaveAsync(cancellationToken);
+        await PushStatus("running", task.Title);
+
+        try
+        {
+            // 1. 從任務描述解析 PR 編號
+            var prNumber = ExtractPrNumber($"{task.Title} {task.Description}");
+            if (prNumber <= 0)
+                return Fail(task, "無法從任務描述中取得 PR 編號，請指定格式：PR #123");
+
+            // 2. 取得 PR 的變更檔案（僅審查 .cs 檔）
+            var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
+            var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
+            var csFiles = prFiles
+                .Where(f => f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (csFiles.Count == 0)
+                return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
+
+            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔待審查", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            // 3. 逐檔讀取內容並呼叫 LLM 審查
+            var provider = providerFactory.Create(AgentName);
+            var allIssues = new List<ReviewIssue>();
+            var fileSummaries = new List<string>();
+
+            foreach (var file in csFiles)
+            {
+                try
+                {
+                    var content = await gitHubService.GetFileContentAsync(owner, repo, file.FileName, headRef);
+                    if (string.IsNullOrWhiteSpace(content)) continue;
+
+                    var systemPrompt = BuildReviewSystemPrompt(rules);
+                    var userMessage  = BuildReviewUserMessage(file.FileName, file.Patch ?? "", content);
+
+                    var response = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
+                    var report   = TryParseReviewReport(response.Content);
+
+                    if (report is not null)
+                    {
+                        allIssues.AddRange(report.Critical.Select(i => i with { File = file.FileName, Severity = "critical" }));
+                        allIssues.AddRange(report.Warning .Select(i => i with { File = file.FileName, Severity = "warning"  }));
+                        allIssues.AddRange(report.Info    .Select(i => i with { File = file.FileName, Severity = "info"     }));
+                        if (!string.IsNullOrWhiteSpace(report.Summary))
+                            fileSummaries.Add($"**{file.FileName}**：{report.Summary}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "審查檔案失敗，略過：{File}", file.FileName);
+                }
+            }
+
+            // 4. 組建整體 Review Body
+            var reviewBody = BuildReviewBody(allIssues, fileSummaries, prNumber);
+
+            // 5. 在 GitHub PR 上提交 Review
+            AddLog(task, "提交 GitHub Review 中...", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            var reviewUrl = await gitHubService.CreatePullRequestReviewAsync(owner, repo, prNumber, reviewBody);
+
+            var criticalCount = allIssues.Count(i => i.Severity == "critical");
+            var warningCount  = allIssues.Count(i => i.Severity == "warning");
+            var infoCount     = allIssues.Count(i => i.Severity == "info");
+            var summary = $"PR #{prNumber} 審查完成：🔴 {criticalCount} 個必修 / 🟡 {warningCount} 個建議 / 🟢 {infoCount} 個優化";
+
+            AddLog(task, summary, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("done", task.Title);
+
+            return new AgentExecutionResult(true, summary, reviewUrl);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Reviewer Agent 執行失敗（TaskId={Id}）", task.Id);
+            AddLog(task, $"執行失敗：{ex.Message}", "failed");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("failed", task.Title);
+            return Fail(task, ex.Message);
+        }
+    }
+
+    // ────────────── Prompt 建構 ──────────────
+
+    private static string BuildReviewSystemPrompt(IReadOnlyList<string> rules)
+    {
+        var ruleList = rules.Count > 0
+            ? string.Join("\n", rules.Select(r => $"- {r}"))
+            : "（尚無額外規則）";
+
+        return $$"""
+            你是資深 C# / .NET / Blazor 程式碼審查工程師 Vera，負責程式碼品質把關。
+
+            ## 審查面向
+            - 邏輯正確性：功能是否符合預期、邊界情況是否處理
+            - 程式碼品質：是否符合 C# 命名規範、async/await 正確使用
+            - 效能：是否有 N+1 查詢、不必要迴圈、記憶體洩漏
+            - 安全性：是否有 SQL Injection、敏感資訊洩露、未驗證輸入
+            - 可維護性：是否過度複雜、是否需要重構
+
+            ## 專案規則
+            {{ruleList}}
+
+            ## 回應格式（JSON，不得包含任何其他文字）
+            {
+              "critical": [{"file": "路徑", "line": 0, "message": "問題說明（繁體中文）"}],
+              "warning":  [{"file": "路徑", "line": 0, "message": "建議說明（繁體中文）"}],
+              "info":     [{"file": "路徑", "line": 0, "message": "優化建議（繁體中文）"}],
+              "summary":  "這個檔案的整體評語（一句話，繁體中文）"
+            }
+
+            - critical：安全漏洞、嚴重 bug、資源洩漏 → 必須修改才能合併
+            - warning：效能問題、違反 SOLID、缺少 null 處理 → 建議修改
+            - info：命名改善、可讀性提升 → 可選優化
+            - 若無問題，對應陣列留空 []
+            - line 填原始檔案中大約的行號（不確定時填 0）
+            """;
+    }
+
+    private static string BuildReviewUserMessage(string filePath, string patch, string content)
+        => $"""
+            ## 檔案路徑
+            {filePath}
+
+            ## diff（PR 變更）
+            ```diff
+            {patch}
+            ```
+
+            ## 完整檔案內容
+            ```csharp
+            {content}
+            ```
+
+            請依照格式審查此檔案。
+            """;
+
+    // ────────────── Review Body 組建 ──────────────
+
+    private static string BuildReviewBody(
+        IReadOnlyList<ReviewIssue> issues,
+        IReadOnlyList<string> fileSummaries,
+        int prNumber)
+    {
+        if (issues.Count == 0)
+            return $"## ✅ PR #{prNumber} 程式碼審查通過\n\n未發現任何問題，程式碼品質良好。";
+
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine($"## 🔍 PR #{prNumber} 程式碼審查報告");
+        lines.AppendLine();
+
+        var criticals = issues.Where(i => i.Severity == "critical").ToList();
+        var warnings  = issues.Where(i => i.Severity == "warning" ).ToList();
+        var infos     = issues.Where(i => i.Severity == "info"    ).ToList();
+
+        if (criticals.Count > 0)
+        {
+            lines.AppendLine("### 🔴 必須修改（Critical）");
+            foreach (var i in criticals)
+                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+            lines.AppendLine();
+        }
+
+        if (warnings.Count > 0)
+        {
+            lines.AppendLine("### 🟡 建議修改（Warning）");
+            foreach (var i in warnings)
+                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+            lines.AppendLine();
+        }
+
+        if (infos.Count > 0)
+        {
+            lines.AppendLine("### 🟢 優化建議（Info）");
+            foreach (var i in infos)
+                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+            lines.AppendLine();
+        }
+
+        if (fileSummaries.Count > 0)
+        {
+            lines.AppendLine("### 📝 各檔案總結");
+            foreach (var s in fileSummaries)
+                lines.AppendLine($"- {s}");
+        }
+
+        lines.AppendLine();
+        lines.AppendLine("---");
+        lines.AppendLine("*由 Vera（Reviewer Agent）自動審查*");
+
+        return lines.ToString();
+    }
+
+    // ────────────── 解析 ──────────────
+
+    private ReviewReport? TryParseReviewReport(string content)
+    {
+        try
+        {
+            var start = content.IndexOf('{');
+            var end   = content.LastIndexOf('}');
+            if (start < 0 || end < 0) return null;
+
+            return JsonSerializer.Deserialize<ReviewReport>(content[start..(end + 1)], JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ReviewReport 解析失敗");
+            return null;
+        }
+    }
+
+    private static int ExtractPrNumber(string text)
+    {
+        var match = Regex.Match(text, @"PR\s*#(\d+)", RegexOptions.IgnoreCase);
+        return match.Success ? int.Parse(match.Groups[1].Value) : 0;
+    }
+
+    // ────────────── 輔助方法 ──────────────
+
+    private void AddLog(TaskItem task, string step, string status)
+        => task.Logs.Add(new TaskLog
+        {
+            TaskId    = task.Id,
+            Agent     = AgentName,
+            Step      = step,
+            Status    = status,
+            CreatedAt = DateTime.UtcNow
+        });
+
+    private async Task PushStatus(string status, string title)
+        => await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = Guid.Empty,
+            Title     = title,
+            AgentName = AgentName,
+            Status    = status
+        });
+
+    private static AgentExecutionResult Fail(TaskItem task, string message)
+        => new(false, message);
+}
+
+// ────────────── 資料模型 ──────────────
+
+public class ReviewReport
+{
+    [JsonPropertyName("critical")] public List<ReviewIssue> Critical { get; set; } = [];
+    [JsonPropertyName("warning")]  public List<ReviewIssue> Warning  { get; set; } = [];
+    [JsonPropertyName("info")]     public List<ReviewIssue> Info     { get; set; } = [];
+    [JsonPropertyName("summary")]  public string Summary             { get; set; } = "";
+}
+
+public record ReviewIssue
+{
+    [JsonPropertyName("file")]     public string File     { get; init; } = "";
+    [JsonPropertyName("line")]     public int    Line     { get; init; }
+    [JsonPropertyName("message")]  public string Message  { get; init; } = "";
+    public string Severity { get; init; } = "info"; // 由 ReviewerAgentService 填入
+}

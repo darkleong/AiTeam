@@ -9,4 +9,7 @@ public static class AgentNames
     public const string Qa           = "QA";
     public const string Doc          = "Doc";
     public const string Requirements = "Requirements";
+    public const string Reviewer     = "Reviewer";
+    public const string Release      = "Release";
+    public const string Designer     = "Designer";
 }

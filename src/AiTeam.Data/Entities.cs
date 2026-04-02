@@ -35,6 +35,7 @@ public class AgentConfig
     public string Description { get; set; } = ""; // CEO 系統提示用描述
     public int TrustLevel { get; set; } = 0;
     public bool IsActive { get; set; } = true;
+    public string? DiscordChannelId { get; set; } // Discord 頻道 ID（ulong 存為字串）
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Team Team { get; set; } = null!;

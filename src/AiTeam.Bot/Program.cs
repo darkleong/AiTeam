@@ -62,6 +62,15 @@ builder.Services.AddKeyedScoped<IAgentExecutor, DocAgentService>(AgentNames.Doc)
 builder.Services.AddScoped<RequirementsAgentService>();
 builder.Services.AddKeyedScoped<IAgentExecutor, RequirementsAgentService>(AgentNames.Requirements);
 
+builder.Services.AddScoped<ReviewerAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, ReviewerAgentService>(AgentNames.Reviewer);
+
+builder.Services.AddScoped<ReleaseAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, ReleaseAgentService>(AgentNames.Release);
+
+builder.Services.AddScoped<DesignerAgentService>();
+builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames.Designer);
+
 // Dashboard 推送（透過 Aspire Service Discovery 解析 aiteam-dashboard 的 "dashboard" 端點）
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri("http+dashboard://aiteam-dashboard"));
@@ -71,12 +80,16 @@ builder.Services.AddSingleton<DashboardPushService>();
 builder.Services.AddSingleton<GitHubService>();
 builder.Services.AddControllers();
 
-// Discord
+// Discord（Stage 7：加入 GuildMessages + MessageContent 以接收自然語言訊息）
+// 注意：MessageContent 是 Privileged Intent，需在 Discord Developer Portal 手動開啟
 builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
 {
-    LogLevel = Discord.LogSeverity.Info,
+    LogLevel       = Discord.LogSeverity.Info,
     GatewayIntents = Discord.GatewayIntents.Guilds
+                   | Discord.GatewayIntents.GuildMessages
+                   | Discord.GatewayIntents.MessageContent
 }));
+builder.Services.AddSingleton<ConversationContextStore>();
 builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddHostedService<DiscordBotService>();
 
