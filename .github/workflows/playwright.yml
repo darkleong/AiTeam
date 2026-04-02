@@ -35,27 +35,31 @@ jobs:
 
       - name: Install Playwright browsers
         run: |
-          cd src/AiTeam.Tests.Playwright
-          dotnet playwright install chromium --with-deps
+          pwsh src/AiTeam.Tests.Playwright/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
 
       - name: Start Dashboard (Docker)
         env:
-          AITEAM_ANTHROPIC_KEY: dummy-for-ui-test
-          AITEAM_DISCORD_TOKEN: dummy-for-ui-test
-          AITEAM_DISCORD_GUILD_ID: "0"
-          AITEAM_GITHUB_PAT: dummy-for-ui-test
-          AITEAM_DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
-          AITEAM_INTERNAL_API_KEY: test-key
-          AITEAM_BOT_INTERNAL_API_KEY: test-key
+          POSTGRES_PASSWORD: ci-test-password
+          DISCORD_BOT_TOKEN: dummy
+          DISCORD_GUILD_ID: "0"
+          GITHUB_PAT: dummy
+          GITHUB_WEBHOOK_SECRET: dummy
+          BOT_INTERNAL_API_KEY: test-key
+          DASHBOARD_ADMIN_EMAIL: ${{ secrets.DASHBOARD_TEST_USER }}
+          DASHBOARD_ADMIN_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
         run: |
-          docker compose -f docker-compose.prod.yml up -d aiteam-dashboard
-          # 等待 Dashboard 健康
+          # external volume 在 CI 環境不存在，先建立
+          docker volume create aiteam-postgres-data 2>/dev/null || true
+          # 啟動 postgres + dashboard（dashboard 依賴 postgres healthy）
+          docker compose -f docker-compose.prod.yml up -d postgres aiteam-dashboard
+          # 等待 Dashboard 就緒（最多 90 秒）
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:5051/health > /dev/null; then
-              echo "Dashboard is up"
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5051/ 2>/dev/null || echo "000")
+            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
+              echo "Dashboard is up (HTTP $status)"
               break
             fi
-            echo "Waiting... ($i/30)"
+            echo "Waiting... ($i/30) status=$status"
             sleep 3
           done
 
@@ -67,8 +71,7 @@ jobs:
         run: |
           dotnet test src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj \
             --no-build -c Release \
-            --logger "trx;LogFileName=results.trx" \
-            -- MSTest.Parallelize.Enabled=false
+            --logger "trx;LogFileName=results.trx"
 
       - name: Upload screenshots
         if: always()
