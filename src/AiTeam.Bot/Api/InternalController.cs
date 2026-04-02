@@ -59,15 +59,24 @@ public class InternalController(
         var shortSha  = request.Sha?.Length >= 7 ? request.Sha[..7] : request.Sha ?? "unknown";
         var refName   = request.Ref ?? "unknown";
 
+        // 從 "owner/repo" 取出 repo 名稱，比對 DB 中的專案
+        var repoName  = request.Project?.Contains('/') == true
+            ? request.Project.Split('/').Last()
+            : request.Project;
+        var project   = repoName is not null
+            ? await db.Projects.FirstOrDefaultAsync(p => p.Name == repoName, cancellationToken)
+            : null;
+
         var task = new TaskItem
         {
-            TeamId       = team.Id,
-            Title        = $"Deploy {refName} ({shortSha})",
-            Description  = $"Project: {request.Project}\nRef: {request.Ref}\nSHA: {request.Sha}\nStatus: {request.Status}",
-            TriggeredBy  = "GitHubActions",
+            TeamId        = team.Id,
+            ProjectId     = project?.Id,
+            Title         = $"Deploy {refName} ({shortSha})",
+            Description   = $"Project: {request.Project}\nRef: {request.Ref}\nSHA: {request.Sha}\nStatus: {request.Status}",
+            TriggeredBy   = "GitHubActions",
             AssignedAgent = "Ops",
-            Status       = request.Status == "success" ? "done" : "failed",
-            CompletedAt  = DateTime.UtcNow
+            Status        = request.Status == "success" ? "done" : "failed",
+            CompletedAt   = DateTime.UtcNow
         };
 
         repo.Add(task);
