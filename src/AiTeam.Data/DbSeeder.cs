@@ -10,6 +10,7 @@ public static class DbSeeder
 {
     private static readonly (string Name, string Description, bool Active)[] AgentSeeds =
     [
+        (AgentNames.Ceo,          "負責解讀老闆指令、協調 AI 團隊分工、發起任務並監控進度",          true),
         (AgentNames.Dev,          "負責程式碼開發、Bug 修復、功能實作，操作 GitHub PR",             true),
         (AgentNames.Ops,          "負責部署監控、健康檢查、自動回滾，處理基礎設施問題",             true),
         (AgentNames.Qa,           "負責自動化測試，讀取 PR 變更後產生測試案例，開 PR 提交測試檔案", false),
