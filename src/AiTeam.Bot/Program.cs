@@ -71,9 +71,10 @@ builder.Services.AddKeyedScoped<IAgentExecutor, ReleaseAgentService>(AgentNames.
 builder.Services.AddScoped<DesignerAgentService>();
 builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames.Designer);
 
-// Dashboard 推送（透過 Aspire Service Discovery 解析 aiteam-dashboard 的 "dashboard" 端點）
+// Dashboard 推送（本機 Aspire 用 http+dashboard://，Docker 用 Dashboard:PushUrl 設定）
+var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashboard://aiteam-dashboard";
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
-    client.BaseAddress = new Uri("http+dashboard://aiteam-dashboard"));
+    client.BaseAddress = new Uri(dashboardPushUrl));
 builder.Services.AddSingleton<DashboardPushService>();
 
 // GitHub

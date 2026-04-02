@@ -47,6 +47,7 @@ services:
       GitHub__Owner: "darkleong"
       GitHub__WorkspacePath: "C:\\AiTeam-Workspace"
       GitHub__WebhookSecret: "${GITHUB_WEBHOOK_SECRET}"
+      Dashboard__PushUrl: "http://aiteam-dashboard:8080"
       AgentSettings__NotionCacheTtlMinutes: "60"
       AgentSettings__MonthlyTokenLimitK: "1000"
       AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
