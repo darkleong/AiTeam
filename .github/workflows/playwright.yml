@@ -39,22 +39,28 @@ jobs:
 
       - name: Start Dashboard (Docker)
         env:
+          POSTGRES_PASSWORD: ci-test-password
           AITEAM_ANTHROPIC_KEY: dummy-for-ui-test
           AITEAM_DISCORD_TOKEN: dummy-for-ui-test
           AITEAM_DISCORD_GUILD_ID: "0"
           AITEAM_GITHUB_PAT: dummy-for-ui-test
           AITEAM_DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
+          DASHBOARD_ADMIN_EMAIL: ${{ secrets.DASHBOARD_TEST_USER }}
+          DASHBOARD_ADMIN_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
           AITEAM_INTERNAL_API_KEY: test-key
           AITEAM_BOT_INTERNAL_API_KEY: test-key
+          BOT_INTERNAL_API_KEY: test-key
         run: |
-          docker compose -f docker-compose.prod.yml up -d aiteam-dashboard
-          # 等待 Dashboard 健康
+          # 啟動 postgres + dashboard（dashboard 依賴 postgres）
+          docker compose -f docker-compose.prod.yml up -d postgres aiteam-dashboard
+          # 等待 Dashboard 健康（最多 90 秒）
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:5051/health > /dev/null; then
-              echo "Dashboard is up"
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5051/ 2>/dev/null || echo "000")
+            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
+              echo "Dashboard is up (HTTP $status)"
               break
             fi
-            echo "Waiting... ($i/30)"
+            echo "Waiting... ($i/30) status=$status"
             sleep 3
           done
 
