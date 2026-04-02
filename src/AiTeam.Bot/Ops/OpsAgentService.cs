@@ -4,6 +4,7 @@ using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using AiTeam.Shared.ViewModels;
 using DiscordNet = Discord;
 using Discord.WebSocket;
@@ -209,6 +210,7 @@ public class OpsAgentService(
 
     /// <summary>
     /// 健康檢查（Quartz 排程觸發）。
+    /// 使用 DB 連線 + 記憶體用量，不依賴容器內不存在的 docker CLI。
     /// </summary>
     public async Task RunHealthCheckAsync(CancellationToken cancellationToken = default)
     {
@@ -217,25 +219,23 @@ public class OpsAgentService(
         var issues = new List<string>();
 
         // 檢查記憶體使用率
-        var memUsage = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
-        logger.LogInformation("目前記憶體使用：{Mem:F1} MB", memUsage);
+        var memUsageMb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
+        logger.LogInformation("目前記憶體使用：{Mem:F1} MB", memUsageMb);
+        if (memUsageMb > 512)
+            issues.Add($"記憶體使用偏高：{memUsageMb:F1} MB");
 
-        // 檢查 Docker 容器（透過 docker ps）
+        // 檢查 DB 連線
         try
         {
-            var result = await RunProcessAsync("docker", "ps --format \"{{.Names}} {{.Status}}\"", cancellationToken);
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
-            {
-                if (!line.Contains("Up"))
-                    issues.Add($"Container 異常：{line.Trim()}");
-            }
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.ExecuteSqlRawAsync("SELECT 1", cancellationToken);
+            logger.LogInformation("DB 連線正常");
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Docker 健康檢查失敗");
-            issues.Add($"Docker 檢查失敗：{ex.Message}");
+            logger.LogWarning(ex, "DB 健康檢查失敗");
+            issues.Add($"DB 連線失敗：{ex.Message}");
         }
 
         if (issues.Count > 0)
@@ -267,14 +267,15 @@ public class OpsAgentService(
 
     private async Task<bool> PollDeploymentAsync(string repoName, CancellationToken cancellationToken)
     {
-        // 等待 GitHub Actions 完成（簡化版：等 30 秒後檢查 docker ps）
+        // 等待 GitHub Actions 完成後，透過 DB 連線確認服務正常
         await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
 
         try
         {
-            var result = await RunProcessAsync("docker", "ps --format \"{{.Names}} {{.Status}}\"", cancellationToken);
-            // 如果有對應服務且狀態為 Up，視為成功
-            return result.Contains("Up");
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.ExecuteSqlRawAsync("SELECT 1", cancellationToken);
+            return true;
         }
         catch
         {
@@ -288,48 +289,24 @@ public class OpsAgentService(
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
-        logger.LogWarning("部署失敗，開始回滾：{Repo}", repoName);
+        logger.LogWarning("部署失敗，通知老闆手動處理：{Repo}", repoName);
 
         taskRepo.AddLog(new TaskLog
         {
             TaskId = task.Id,
-            Agent = "Ops",
-            Step = "開始回滾",
-            Status = "running"
+            Agent  = "Ops",
+            Step   = "部署異常，待人工介入",
+            Status = "failed"
         });
         await taskRepo.SaveAsync(cancellationToken);
 
-        try
-        {
-            // docker-compose 回滾到上一個 image
-            await RunProcessAsync("docker-compose", "down", cancellationToken);
-            await RunProcessAsync("docker-compose", "up -d", cancellationToken);
+        // Bot 容器內無法執行 docker-compose，改為通知老闆手動回滾
+        await AlertAsync(
+            $"🚨 **部署異常，請手動處理！**\n" +
+            $"Repo：{repoName}\n" +
+            $"請至 Docker Desktop 或主機執行回滾操作。");
 
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId = task.Id,
-                Agent = "Ops",
-                Step = "回滾完成",
-                Status = "done"
-            });
-
-            await AlertAsync($"🔄 **自動回滾完成**\nRepo：{repoName}\n已恢復到上一個穩定版本。");
-            taskRepo.UpdateStatus(task, "done");
-        }
-        catch (Exception ex)
-        {
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId = task.Id,
-                Agent = "Ops",
-                Step = $"回滾失敗：{ex.Message}",
-                Status = "failed"
-            });
-
-            await AlertAsync($"🚨 **回滾失敗，請立即手動處理！**\nRepo：{repoName}\n錯誤：{ex.Message}");
-            taskRepo.UpdateStatus(task, "failed");
-        }
-
+        taskRepo.UpdateStatus(task, "failed");
         await taskRepo.SaveAsync(cancellationToken);
     }
 
@@ -357,24 +334,6 @@ public class OpsAgentService(
         return guild.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
 
-    private static async Task<string> RunProcessAsync(
-        string command, string args, CancellationToken cancellationToken)
-    {
-        using var process = new System.Diagnostics.Process();
-        process.StartInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = command,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        process.Start();
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        return output;
-    }
 }
 
 /// <summary>
