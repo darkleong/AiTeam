@@ -1,10 +1,7 @@
 @inherits LayoutComponentBase
 @inject IJSRuntime JS
 
-<MudThemeProvider Theme="_customTheme" IsDarkMode="_isDarkMode" />
-<MudDialogProvider />
-<MudSnackbarProvider />
-<MudPopoverProvider />
+<MudProviders Theme="_customTheme" IsDarkMode="_isDarkMode" />
 
 <div class="layout-wrapper" id="layout-wrapper">
     <nav class="sidebar">
