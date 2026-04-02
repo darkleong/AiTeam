@@ -86,13 +86,15 @@ jobs:
     needs: build-and-push
     runs-on: self-hosted
     steps:
+      - uses: actions/checkout@v4
+
       - name: Pull latest images
         shell: powershell
-        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" --env-file "$env:USERPROFILE\aiteam\.env" pull
+        run: docker compose -f "$env:GITHUB_WORKSPACE\docker-compose.prod.yml" --env-file "$env:USERPROFILE\aiteam\.env" pull
 
       - name: Restart services
         shell: powershell
-        run: docker compose -f "$env:USERPROFILE\aiteam\docker-compose.yml" --env-file "$env:USERPROFILE\aiteam\.env" up -d --force-recreate
+        run: docker compose -f "$env:GITHUB_WORKSPACE\docker-compose.prod.yml" --env-file "$env:USERPROFILE\aiteam\.env" up -d --force-recreate
 
       - name: Clean up old images
         shell: powershell

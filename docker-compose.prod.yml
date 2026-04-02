@@ -1,0 +1,71 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: aiteam
+      POSTGRES_USER: aiteam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiteam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  aiteam-bot:
+    image: ghcr.io/darkleong/aiteam-bot:latest
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
+      Discord__BotToken: "${DISCORD_BOT_TOKEN}"
+      Discord__GuildId: "${DISCORD_GUILD_ID}"
+      Discord__Channels__CommandCenter: "指令中心"
+      Discord__Channels__TaskUpdates: "任務動態"
+      Discord__Channels__Alerts: "警報"
+      Discord__Channels__DailySummary: "每日摘要"
+      Discord__Channels__CeoChannel: "victoria-ceo"
+      Discord__Channels__DevChannel: "cody-dev"
+      Discord__Channels__OpsChannel: "maya-ops"
+      Discord__Channels__QaChannel: "quinn-qa"
+      Discord__Channels__DocChannel: "sage-doc"
+      Discord__Channels__RequirementsChannel: "rosa-requirements"
+      Discord__Channels__ReviewerChannel: "vera-reviewer"
+      Discord__Channels__ReleaseChannel: "rena-release"
+      Discord__Channels__DesignerChannel: "demi-designer"
+      Anthropic__ApiKey: "${ANTHROPIC_API_KEY}"
+      Notion__ApiKey: "${NOTION_API_KEY}"
+      Notion__RulesDatabaseId: "${NOTION_RULES_DB_ID}"
+      Notion__TaskSummaryDatabaseId: "${NOTION_TASK_SUMMARY_DB_ID}"
+      Notion__AgentStatusDatabaseId: "${NOTION_AGENT_STATUS_DB_ID}"
+      GitHub__PersonalAccessToken: "${GITHUB_PAT}"
+      GitHub__Owner: "darkleong"
+      GitHub__WorkspacePath: "C:\\AiTeam-Workspace"
+      GitHub__WebhookSecret: "${GITHUB_WEBHOOK_SECRET}"
+      AgentSettings__NotionCacheTtlMinutes: "60"
+      AgentSettings__MonthlyTokenLimitK: "1000"
+      AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
+
+  aiteam-dashboard:
+    image: ghcr.io/darkleong/aiteam-dashboard:latest
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5051:8080"
+    environment:
+      ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
+      Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
+      Dashboard__AdminPassword: "${DASHBOARD_ADMIN_PASSWORD}"
+      ASPNETCORE_HTTP_PORTS: "8080"
+
+volumes:
+  postgres_data:
+    name: aiteam-postgres-data
+    external: true

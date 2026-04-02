@@ -16,6 +16,9 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
-# LibGit2Sharp 0.31+ 內建 native binary（LibGit2Sharp.NativeBinaries），不需另外安裝 libgit2
+# Npgsql GSSAPI 支援（可選，避免 libgssapi_krb5.so.2 警告）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["dotnet", "AiTeam.Bot.dll"]
