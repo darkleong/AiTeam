@@ -40,20 +40,19 @@ jobs:
       - name: Start Dashboard (Docker)
         env:
           POSTGRES_PASSWORD: ci-test-password
-          AITEAM_ANTHROPIC_KEY: dummy-for-ui-test
-          AITEAM_DISCORD_TOKEN: dummy-for-ui-test
-          AITEAM_DISCORD_GUILD_ID: "0"
-          AITEAM_GITHUB_PAT: dummy-for-ui-test
-          AITEAM_DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
+          DISCORD_BOT_TOKEN: dummy
+          DISCORD_GUILD_ID: "0"
+          GITHUB_PAT: dummy
+          GITHUB_WEBHOOK_SECRET: dummy
+          BOT_INTERNAL_API_KEY: test-key
           DASHBOARD_ADMIN_EMAIL: ${{ secrets.DASHBOARD_TEST_USER }}
           DASHBOARD_ADMIN_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
-          AITEAM_INTERNAL_API_KEY: test-key
-          AITEAM_BOT_INTERNAL_API_KEY: test-key
-          BOT_INTERNAL_API_KEY: test-key
         run: |
-          # 啟動 postgres + dashboard（dashboard 依賴 postgres）
+          # external volume 在 CI 環境不存在，先建立
+          docker volume create aiteam-postgres-data 2>/dev/null || true
+          # 啟動 postgres + dashboard（dashboard 依賴 postgres healthy）
           docker compose -f docker-compose.prod.yml up -d postgres aiteam-dashboard
-          # 等待 Dashboard 健康（最多 90 秒）
+          # 等待 Dashboard 就緒（最多 90 秒）
           for i in $(seq 1 30); do
             status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5051/ 2>/dev/null || echo "000")
             if [ "$status" = "200" ] || [ "$status" = "302" ]; then
