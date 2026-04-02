@@ -21,6 +21,9 @@ public partial class Home : IAsyncDisposable
     private IHttpClientFactory HttpClientFactory { get; set; } = null!;
 
     [Inject]
+    private IConfiguration Configuration { get; set; } = null!;
+
+    [Inject]
     private ILogger<Home> Logger { get; set; } = null!;
 
     #endregion
@@ -49,8 +52,14 @@ public partial class Home : IAsyncDisposable
 
     private async Task ConnectSignalRAsync()
     {
+        // Docker 容器內部用 Dashboard__HubBaseUrl 覆蓋（避免用外部 port 連不到自己）
+        var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
+        var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
+            ? Navigation.ToAbsoluteUri("/hubs/agent-status").ToString()
+            : $"{hubBaseUrl.TrimEnd('/')}/hubs/agent-status";
+
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/hubs/agent-status"))
+            .WithUrl(hubUrl)
             .WithAutomaticReconnect()
             .Build();
 

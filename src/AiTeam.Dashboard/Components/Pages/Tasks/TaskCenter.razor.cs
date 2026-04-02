@@ -14,6 +14,9 @@ public partial class TaskCenter : IAsyncDisposable
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
+    [Inject]
+    private IConfiguration Configuration { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -40,8 +43,13 @@ public partial class TaskCenter : IAsyncDisposable
 
     private async Task ConnectSignalRAsync()
     {
+        var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
+        var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
+            ? Navigation.ToAbsoluteUri("/hubs/agent-status").ToString()
+            : $"{hubBaseUrl.TrimEnd('/')}/hubs/agent-status";
+
         _hubConnection = new HubConnectionBuilder()
-            .WithUrl(Navigation.ToAbsoluteUri("/hubs/agent-status"))
+            .WithUrl(hubUrl)
             .WithAutomaticReconnect()
             .Build();
 

@@ -63,6 +63,7 @@ services:
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
       Dashboard__AdminPassword: "${DASHBOARD_ADMIN_PASSWORD}"
+      Dashboard__HubBaseUrl: "http://localhost:8080"
       ASPNETCORE_HTTP_PORTS: "8080"
 
 volumes:
