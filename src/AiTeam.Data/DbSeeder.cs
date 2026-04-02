@@ -81,5 +81,20 @@ public static class DbSeeder
 
             await db.SaveChangesAsync();
         }
+
+        // Seed 初始動態設定（如果 app_settings 表完全為空才新增）
+        if (!await db.AppSettings.AnyAsync())
+        {
+            db.AppSettings.AddRange(
+                new AppSetting
+                {
+                    Key         = "SkipCeoConfirm",
+                    Value       = "false",
+                    Description = "跳過 CEO 派工確認，直接進入 Agent 執行確認（true/false）",
+                    UpdatedAt   = DateTime.UtcNow
+                }
+            );
+            await db.SaveChangesAsync();
+        }
     }
 }

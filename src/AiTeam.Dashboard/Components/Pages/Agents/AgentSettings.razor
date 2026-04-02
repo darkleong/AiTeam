@@ -115,3 +115,25 @@ else if (_agents.Count == 0)
 {
     <div class="alert alert-success">@_saveMessage</div>
 }
+
+<hr style="margin: 32px 0; border-color: var(--color-border)" />
+
+<h3 style="margin-bottom:16px">系統設定</h3>
+
+<div class="agent-setting-card">
+    <div class="agent-setting-header">
+        <div>
+            <strong>跳過 CEO 派工確認</strong>
+            <p style="font-size:0.85rem; color:var(--color-text-secondary); margin:4px 0 0">
+                啟用後，老闆下指令時將直接進入 Agent 執行確認，省略 CEO 決策 Embed。<br/>
+                建議 CEO 準確率穩定後再開啟。修改後 5 分鐘內自動生效，免重啟 Bot。
+            </p>
+        </div>
+        <label class="active-toggle">
+            <input type="checkbox"
+                   checked="@_skipCeoConfirm"
+                   @onchange="OnSkipCeoConfirmChanged" />
+            <span class="toggle-label">@(_skipCeoConfirm ? "啟用" : "停用")</span>
+        </label>
+    </div>
+</div>

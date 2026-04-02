@@ -35,6 +35,8 @@ builder.Services.AddSingleton<LlmProviderFactory>();
 
 // Rules（取代 Notion，從 PostgreSQL 讀取）
 builder.Services.AddSingleton<RulesService>();
+// 動態系統設定（TTL cache，免重啟生效）
+builder.Services.AddSingleton<AppSettingsService>();
 
 // Agents（保留具名型別註冊以維持現有相依；同時加上 Keyed 介面，供 CommandHandler 動態分派）
 builder.Services.AddScoped<CeoAgentService>();

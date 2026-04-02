@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskLog> TaskLogs => Set<TaskLog>();
     public DbSet<Rule> Rules => Set<Rule>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasOne(x => x.Team).WithMany().HasForeignKey(x => x.TeamId).IsRequired(false);
+        });
+
+        modelBuilder.Entity<AppSetting>(e =>
+        {
+            e.ToTable("app_settings");
+            e.HasKey(x => x.Key);
         });
     }
 }

@@ -19,15 +19,14 @@ public class CommandHandler(
     DiscordSocketClient client,
     IOptions<DiscordSettings> settings,
     IOptions<GitHubSettings> gitHubSettings,
-    IOptions<AgentSettings> agentSettings,
     IServiceProvider serviceProvider,
     RulesService rulesService,
+    AppSettingsService appSettings,
     ConversationContextStore contextStore,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
     private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
-    private readonly AgentSettings _agentSettings = agentSettings.Value;
 
     // 等待確認的 CEO 決策暫存（messageId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingConfirmations = [];
@@ -184,7 +183,7 @@ public class CommandHandler(
             // 若 CEO 尚未取得專案名稱，以 task.project 補充
             var finalProject = ceoResponse.Task?.Project ?? projectName;
 
-            if (_agentSettings.SkipCeoConfirm)
+            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
             {
                 // 跳過 CEO 派工確認，直接進入 Agent 執行確認
                 await ShowDirectAgentConfirmAsync(
@@ -374,7 +373,7 @@ public class CommandHandler(
         // RequireConfirmation 欄位不可信（LLM 可能回傳 false），只要 action 非 reply 就一律顯示確認 Embed
         if (ceoResponse.Action != "reply")
         {
-            if (_agentSettings.SkipCeoConfirm)
+            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
             {
                 // 跳過 CEO 派工確認，直接進入 Agent 執行確認
                 await ShowDirectAgentConfirmAsync(
@@ -420,7 +419,7 @@ public class CommandHandler(
 
     /// <summary>
     /// 跳過 CEO 確認，直接建立任務並顯示 Agent 執行確認（第二層）。
-    /// 由 <see cref="AgentSettings.SkipCeoConfirm"/> 控制是否啟用。
+    /// 由 AppSettings["SkipCeoConfirm"] 控制是否啟用（可從 Dashboard 即時修改）。
     /// </summary>
     private async Task ShowDirectAgentConfirmAsync(
         Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,

@@ -10,6 +10,9 @@ public partial class AgentSettings
     [Inject]
     private DashboardBotService BotService { get; set; } = null!;
 
+    [Inject]
+    private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -24,6 +27,9 @@ public partial class AgentSettings
     // 重啟 Bot
     private bool  _showRestartConfirm;
     private bool  _isRestarting;
+
+    // 系統設定
+    private bool _skipCeoConfirm;
 
     // 新增 Agent 表單
     private bool    _showCreateForm;
@@ -44,6 +50,9 @@ public partial class AgentSettings
             _agents = await AgentService.GetAgentConfigsAsync();
             foreach (var agent in _agents)
                 _trustLevels[agent.Id] = agent.TrustLevel;
+
+            var skipSetting = await AppSettingsService.GetAsync("SkipCeoConfirm");
+            _skipCeoConfirm = bool.TryParse(skipSetting?.Value, out var v) && v;
         }
         catch (Exception ex)
         {
@@ -103,6 +112,13 @@ public partial class AgentSettings
 
         _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
         _isSaving    = false;
+    }
+
+    private async Task OnSkipCeoConfirmChanged(ChangeEventArgs e)
+    {
+        _skipCeoConfirm = (bool)e.Value!;
+        await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
+        _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
     }
 
     private async Task RestartBotAsync()

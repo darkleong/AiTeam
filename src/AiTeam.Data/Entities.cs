@@ -72,6 +72,15 @@ public class TaskLog
     public TaskItem Task { get; set; } = null!;
 }
 
+/// <summary>動態系統設定（key/value），可從 Dashboard 即時修改，免重啟 Bot。</summary>
+public class AppSetting
+{
+    public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+    public string? Description { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 public class Rule
 {
     public Guid Id { get; set; }
