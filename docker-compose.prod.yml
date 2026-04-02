@@ -38,7 +38,7 @@ services:
       Discord__Channels__ReviewerChannel: "vera-reviewer"
       Discord__Channels__ReleaseChannel: "rena-release"
       Discord__Channels__DesignerChannel: "demi-designer"
-      Anthropic__ApiKey: "${ANTHROPIC_API_KEY}"
+      Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
       Notion__ApiKey: "${NOTION_API_KEY}"
       Notion__RulesDatabaseId: "${NOTION_RULES_DB_ID}"
       Notion__TaskSummaryDatabaseId: "${NOTION_TASK_SUMMARY_DB_ID}"
