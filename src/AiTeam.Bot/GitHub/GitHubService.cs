@@ -144,6 +144,14 @@ public class GitHubService(
         var localPath = Path.Combine(_settings.WorkspacePath, repo);
         Directory.CreateDirectory(_settings.WorkspacePath);
 
+        // 防護：目錄存在但沒有 .git（上次清理不完整），強制刪除後重新 clone
+        if (Directory.Exists(localPath) && !Directory.Exists(Path.Combine(localPath, ".git")))
+        {
+            logger.LogWarning("發現殘留 workspace（無 .git），強制清理：{Path}", localPath);
+            SetNormalAttributes(localPath);
+            Directory.Delete(localPath, recursive: true);
+        }
+
         if (Directory.Exists(Path.Combine(localPath, ".git")))
         {
             logger.LogInformation("Repo {Repo} 已存在，執行 Pull", repo);
@@ -184,14 +192,30 @@ public class GitHubService(
     }
 
     /// <summary>
-    /// 在本地建立新 branch 並切換。
+    /// 切換到指定 branch。若 remote 已有同名 branch（fix loop 場景），
+    /// 先 checkout remote branch 追蹤；否則從 HEAD 建立新 branch。
     /// </summary>
     public void CreateAndCheckoutBranch(string localPath, string branchName)
     {
         using var gitRepo = new LibGit2Sharp.Repository(localPath);
-        var branch = gitRepo.CreateBranch(branchName);
-        Commands.Checkout(gitRepo, branch);
-        logger.LogInformation("已切換到 branch {Branch}", branchName);
+
+        // 先嘗試 checkout 已存在的 remote branch（fix loop 修復既有 PR 用）
+        var remoteBranch = gitRepo.Branches[$"origin/{branchName}"];
+        if (remoteBranch != null)
+        {
+            var localBranch = gitRepo.Branches[branchName]
+                ?? gitRepo.CreateBranch(branchName, remoteBranch.Tip);
+            gitRepo.Branches.Update(localBranch,
+                b => b.TrackedBranch = remoteBranch.CanonicalName);
+            Commands.Checkout(gitRepo, localBranch);
+            logger.LogInformation("已切換到既有 remote branch {Branch}", branchName);
+        }
+        else
+        {
+            var branch = gitRepo.CreateBranch(branchName);
+            Commands.Checkout(gitRepo, branch);
+            logger.LogInformation("已建立並切換到新 branch {Branch}", branchName);
+        }
     }
 
     /// <summary>
