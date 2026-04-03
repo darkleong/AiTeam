@@ -20,6 +20,11 @@ public class DevAgentService(
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>
+    /// 回傳 Dev Agent 目前版本號。
+    /// </summary>
+    public string GetVersion() => "1.0.0";
+
+    /// <summary>
     /// 處理 CEO 分派的任務，回傳執行計畫（給老闆第二層確認用）。
     /// Stage 10：制定計畫前先取得 repo 結構（2 層），並解析 task.Description 中的 metadata block。
     /// </summary>
@@ -402,31 +407,4 @@ public class DevAgentService(
         {
             var start = content.IndexOf('{');
             var end = content.LastIndexOf('}');
-            if (start < 0 || end < 0) return null;
-            var json = content[start..(end + 1)];
-            return JsonSerializer.Deserialize<DevPlan>(json, JsonOptions);
-        }
-        catch { return null; }
-    }
-}
-
-/// <summary>
-/// Dev Agent 產出的執行計畫。
-/// </summary>
-public class DevPlan
-{
-    [System.Text.Json.Serialization.JsonPropertyName("task_type")]
-    public string TaskType { get; set; } = "";
-
-    [System.Text.Json.Serialization.JsonPropertyName("branch_name")]
-    public string BranchName { get; set; } = "";
-
-    [System.Text.Json.Serialization.JsonPropertyName("files_to_modify")]
-    public List<string> FilesToModify { get; set; } = [];
-
-    [System.Text.Json.Serialization.JsonPropertyName("commit_message")]
-    public string CommitMessage { get; set; } = "";
-
-    [System.Text.Json.Serialization.JsonPropertyName("summary")]
-    public string Summary { get; set; } = "";
-}
+            if (start < 0 || end
