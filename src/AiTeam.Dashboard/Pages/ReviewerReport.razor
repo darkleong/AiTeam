@@ -1,0 +1,157 @@
+
+```csharp
+@page "/reviewer-report"
+@using AiTeam.Dashboard.Models
+@using AiTeam.Dashboard.Pages
+@inherits ReviewerReportBase
+
+<div class="container-fluid mt-4">
+    <h2 class="mb-4">Reviewer 報告</h2>
+    
+    @if (IsLoading)
+    {
+        <div class="d-flex justify-content-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">載入中...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (ReviewItems != null && ReviewItems.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>檔案</th>
+                            <th>行號</th>
+                            <th>類型</th>
+                            <th>訊息</th>
+                            <th>嚴重程度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in ReviewItems)
+                        {
+                            <tr class="@GetRowClass(item.Severity)">
+                                <td>@item.FilePath</td>
+                                <td>@item.LineNumber</td>
+                                <td>@item.IssueType</td>
+                                <td>@item.Message</td>
+                                <td>
+                                    <span class="badge @GetBadgeClass(item.Severity)">
+                                        @GetSeverityText(item.Severity)
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 問題總結統計行 -->
+            @if (Summary != null)
+            {
+                <div class="card mt-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">問題總結統計</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <div class="card border-secondary">
+                                    <div class="card-body">
+                                        <h3 class="card-title text-secondary">@Summary.TotalCount</h3>
+                                        <p class="card-text">總計問題</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <div class="card border-danger">
+                                    <div class="card-body">
+                                        <h3 class="card-title text-danger">@Summary.ErrorCount</h3>
+                                        <p class="card-text">
+                                            <i class="bi bi-x-circle-fill text-danger me-1"></i>
+                                            錯誤
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <div class="card border-warning">
+                                    <div class="card-body">
+                                        <h3 class="card-title text-warning">@Summary.WarningCount</h3>
+                                        <p class="card-text">
+                                            <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                                            警告
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-sm-6 mb-3">
+                                <div class="card border-info">
+                                    <div class="card-body">
+                                        <h3 class="card-title text-info">@Summary.SuggestionCount</h3>
+                                        <p class="card-text">
+                                            <i class="bi bi-lightbulb-fill text-info me-1"></i>
+                                            建議
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 統計摘要列 -->
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <strong>審查結果摘要：</strong>
+                                    <span class="ms-2">
+                                        @if (Summary.ErrorCount == 0 && Summary.WarningCount == 0)
+                                        {
+                                            <span class="text-success">
+                                                <i class="bi bi-check-circle-fill me-1"></i>
+                                                程式碼品質良好
+                                            </span>
+                                        }
+                                        else if (Summary.ErrorCount > 0)
+                                        {
+                                            <span class="text-danger">
+                                                <i class="bi bi-x-circle-fill me-1"></i>
+                                                需要立即修正
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-warning">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                                需要注意警告
+                                            </span>
+                                        }
+                                    </span>
+                                </div>
+                                <div class="col-md-6 text-md-end">
+                                    <small class="text-muted">
+                                        錯誤: <strong class="text-danger">@Summary.ErrorCount</strong> |
+                                        警告: <strong class="text-warning">@Summary.WarningCount</strong> |
+                                        建議: <strong class="text-info">@Summary.SuggestionCount</strong> |
+                                        總計: <strong>@Summary.TotalCount</strong>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle me-2"></i>
+                目前沒有審查項目。
+            </div>
+        }
+    }
+</div>
+```
