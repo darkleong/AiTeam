@@ -102,6 +102,9 @@ public class CeoAgentService(
             當判斷為新功能時，使用 action = "propose"：
             - 若資訊充足，直接進入提案
             - 若資訊不足，先用 action = "reply" 問一個關鍵問題再繼續
+            - 若老闆是在回答你上一輪的反問（例如「C兩者都支援」、「用選項A」等簡短回覆），
+              請根據對話歷史重新判斷原始需求的分類，不要因為這句話很短就改為 delegate；
+              若原始需求是新功能，本輪依然應回傳 action = "propose"
 
             ## action 欄位規則（非常重要）
             - 老闆問問題、閒聊、或只需要你說明 → action = "reply"，target_agent = null
