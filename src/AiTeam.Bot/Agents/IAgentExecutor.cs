@@ -41,7 +41,8 @@ public record AgentExecutionResult(
     string? QuestionType = null,
     string? Question = null,
     int CriticalReviewCount = 0,
-    string? ReviewBody = null)
+    string? ReviewBody = null,
+    IReadOnlyList<string>? OutputUrls = null)
 {
     /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
     public static AgentExecutionResult PauseAndAsk(string questionType, string question)

@@ -90,6 +90,13 @@ public class TaskGroupService(
             return;
         }
 
+        // 防止 Race Condition：若 TaskGroup 已結束（done/failed），不重複推進
+        if (group.Status is "done" or "failed")
+        {
+            logger.LogDebug("HandleAgentCompleted：TaskGroup {Id} 已結束（{Status}），略過", groupId, group.Status);
+            return;
+        }
+
         // 更新 DevPrUrl（若本次有 PR 產出）
         if (!string.IsNullOrWhiteSpace(devPrUrl) && string.IsNullOrWhiteSpace(group.DevPrUrl))
         {

@@ -100,7 +100,8 @@ public class RequirementsAgentService(
             return new AgentExecutionResult(
                 true,
                 $"已建立 {createdUrls.Count} 個 GitHub Issues",
-                createdUrls.FirstOrDefault());
+                createdUrls.FirstOrDefault(),
+                OutputUrls: createdUrls);
         }
         catch (Exception ex)
         {

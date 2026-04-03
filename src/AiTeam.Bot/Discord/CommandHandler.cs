@@ -953,8 +953,10 @@ public class CommandHandler(
             try
             {
                 // 將 Issue URLs 序列化為 JSON（存入 TaskGroup.IssueUrls）
-                var issueUrlsList = pending.PreviewIssues
-                    .Select((_, i) => result.OutputUrl ?? "")  // 第一個 Issue URL
+                // 優先使用 OutputUrls（所有 Issue URL），fallback 到 OutputUrl（第一個）
+                var issueUrlsList = (result.OutputUrls is { Count: > 0 }
+                    ? result.OutputUrls
+                    : (result.OutputUrl is not null ? [result.OutputUrl] : Array.Empty<string>()))
                     .Where(u => !string.IsNullOrEmpty(u))
                     .ToList();
                 var issueUrlsJson = System.Text.Json.JsonSerializer.Serialize(issueUrlsList);
