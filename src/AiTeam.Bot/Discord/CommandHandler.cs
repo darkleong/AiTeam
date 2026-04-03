@@ -262,7 +262,8 @@ public class CommandHandler(
         }
 
         // 建立模擬 CeoResponse 直接走第一層確認流程
-        var project = ExtractProjectFromChannelName(msg.Channel.Name);
+        var projectRaw = ExtractProjectFromChannelName(msg.Channel.Name);
+        var project    = string.IsNullOrEmpty(projectRaw) ? _gitHubSettings.DefaultRepo : projectRaw;
         var fakeResponse = new CeoResponse
         {
             Action      = "delegate",
