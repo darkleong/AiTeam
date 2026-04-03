@@ -276,11 +276,19 @@ public class DevAgentService(
                 "你是資深 C# 工程師，直接回傳修改後的完整程式碼，不加任何說明。",
                 prompt, cancellationToken);
 
+            // 去除 LLM 可能加上的 markdown 程式碼區塊標記（```csharp / ```）
+            var content = StripCodeBlockMarkers(response.Content);
+
+            // 防護：若 LLM 回傳的是對話文字而非程式碼，拋出例外避免污染檔案
+            if (IsConversationalResponse(content))
+                throw new InvalidOperationException(
+                    $"LLM 回傳了說明文字而非程式碼（{filePath}）：{content[..Math.Min(120, content.Length)]}");
+
             // 確保目錄存在
             var dir = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-            await File.WriteAllTextAsync(fullPath, response.Content, cancellationToken);
+            await File.WriteAllTextAsync(fullPath, content, cancellationToken);
             logger.LogInformation("已寫入 {File}", filePath);
         }
     }
@@ -311,6 +319,9 @@ public class DevAgentService(
 
             ## 重要規則
             - 若任務訊息中提供了 `fix_branch`，`branch_name` 欄位必須**完全照用**該值，一字不差，不得自行修改或重新命名。
+            - `files_to_modify` 中**絕對不能**包含 `tests/` 或 `test/` 目錄下的任何檔案。
+            - `files_to_modify` 中的路徑必須是 Repo 結構中**確實存在**的檔案，不要憑空新增全新的 Razor 頁面或服務類別。
+            - 只修改生產程式碼（Production code），不要新增或修改測試檔案。
 
             ## 回應格式（只回傳 JSON，不要加任何說明）
             {
@@ -399,6 +410,57 @@ public class DevAgentService(
             else if (trimmed.StartsWith("fix_loop:"))
                 isFixLoop = trimmed.Contains("true", StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>
+    /// 去除 LLM 回傳內容中的 markdown 程式碼區塊標記（```csharp 或 ```）。
+    /// </summary>
+    private static string StripCodeBlockMarkers(string content)
+    {
+        content = content.Trim();
+        if (!content.StartsWith("```")) return content;
+
+        // 移除第一行（```csharp 或 ```）
+        var firstNewline = content.IndexOf('\n');
+        if (firstNewline >= 0)
+            content = content[(firstNewline + 1)..].TrimStart('\r', '\n');
+
+        // 移除結尾的 ```
+        var trimmed = content.TrimEnd();
+        if (trimmed.EndsWith("```"))
+            content = trimmed[..trimmed.LastIndexOf("```")].TrimEnd();
+
+        return content;
+    }
+
+    /// <summary>
+    /// 偵測 LLM 是否回傳了對話文字而非程式碼。
+    /// 若是，應拒絕寫入檔案。
+    /// </summary>
+    private static bool IsConversationalResponse(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return true;
+
+        var lower = content.TrimStart().ToLowerInvariant();
+
+        // 常見的 LLM 詢問句開頭
+        var conversationalPrefixes = new[]
+        {
+            "i need", "i would", "could you", "please provide", "based on",
+            "to implement", "you need", "i don't have", "i cannot", "i can't",
+            "unfortunately", "it seems", "the provided", "before i can",
+            "in order to"
+        };
+        if (conversationalPrefixes.Any(p => lower.StartsWith(p))) return true;
+
+        // 若完全沒有任何 C# 程式碼跡象
+        var codeIndicators = new[]
+        {
+            "namespace ", "using ", "class ", "public ", "private ", "protected ",
+            "internal ", "void ", "async ", "return ", "//", "/*", "@page", "@using",
+            "<", "{", "}"
+        };
+        return !codeIndicators.Any(indicator => content.Contains(indicator));
     }
 
     /// <summary>從描述文字中提取 PR 編號（支援 /pull/123 與 PR #123 兩種格式）。</summary>
