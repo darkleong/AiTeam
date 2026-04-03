@@ -1,12 +1,18 @@
 using Microsoft.AspNetCore.Components;
 using AiTeam.Dashboard.Models.ReviewerReport;
+using AiTeam.Dashboard.Services;
 
 namespace AiTeam.Dashboard.Components.Pages;
 
 public partial class ReviewerReport : ComponentBase
 {
+    [Inject]
+    private IReviewerReportService ReviewerReportService { get; set; } = default!;
+
     private List<ReviewerReportRow> reportRows = new();
     private ReviewerReportSummary summary = new();
+    private bool isLoading = false;
+    private string? errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -14,42 +20,24 @@ public partial class ReviewerReport : ComponentBase
         CalculateSummary();
     }
 
-    #region STUB
-    // TODO: 合併至主線分支前，必須將以下假資料替換為實際的資料來源（Service 注入或 API 呼叫）。
-    // 此方法目前僅作為開發階段的暫時 Stub，禁止以此狀態合併至 main/production 分支。
-    private Task LoadReportDataAsync()
+    private async Task LoadReportDataAsync()
     {
-        reportRows = new List<ReviewerReportRow>
+        isLoading = true;
+        errorMessage = null;
+        try
         {
-            new() {
-                ReviewerName = "Alice",
-                TotalReviews = 15,
-                ApprovedCount = 10,
-                RejectedCount = 3,
-                PendingCount = 2,
-                AverageReviewTimeHours = 4.5
-            },
-            new() {
-                ReviewerName = "Bob",
-                TotalReviews = 20,
-                ApprovedCount = 14,
-                RejectedCount = 4,
-                PendingCount = 2,
-                AverageReviewTimeHours = 6.2
-            },
-            new() {
-                ReviewerName = "Carol",
-                TotalReviews = 10,
-                ApprovedCount = 7,
-                RejectedCount = 2,
-                PendingCount = 1,
-                AverageReviewTimeHours = 3.8
-            }
-        };
-
-        return Task.CompletedTask;
+            reportRows = await ReviewerReportService.GetReviewerReportRowsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"載入資料時發生錯誤：{ex.Message}";
+            reportRows = new List<ReviewerReportRow>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
-    #endregion
 
     private void CalculateSummary()
     {
@@ -59,14 +47,23 @@ public partial class ReviewerReport : ComponentBase
             return;
         }
 
-        int totalReviews = reportRows.Sum(r => r.TotalReviews);
-        int totalApproved = reportRows.Sum(r => r.ApprovedCount);
-        int totalRejected = reportRows.Sum(r => r.RejectedCount);
-        int totalPending = reportRows.Sum(r => r.PendingCount);
-        double averageReviewTime = totalReviews > 0
-            ? reportRows.Sum(r => r.AverageReviewTimeHours * r.TotalReviews) / totalReviews
-            : 0.0;
-        double approvalRate = totalReviews > 0 ? (double)totalApproved / totalReviews * 100.0 : 0.0;
+        int totalReviews = 0;
+        int totalApproved = 0;
+        int totalRejected = 0;
+        int totalPending = 0;
+        double weightedReviewTimeSum = 0.0;
+
+        foreach (var r in reportRows)
+        {
+            totalReviews += r.TotalReviews;
+            totalApproved += r.ApprovedCount;
+            totalRejected += r.RejectedCount;
+            totalPending += r.PendingCount;
+            weightedReviewTimeSum += r.AverageReviewTimeHours * r.TotalReviews;
+        }
+
+        double averageReviewTime = weightedReviewTimeSum / totalReviews;
+        double approvalRate = (double)totalApproved / totalReviews * 100.0;
 
         summary = new ReviewerReportSummary
         {
