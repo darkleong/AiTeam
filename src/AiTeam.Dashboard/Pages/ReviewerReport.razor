@@ -1,0 +1,405 @@
+
+```csharp
+@page "/reviewer-report"
+@using AiTeam.Dashboard.Models
+@using AiTeam.Dashboard.Services
+@inject ReviewerReportService ReportService
+
+<PageTitle>Reviewer Agent 報告</PageTitle>
+
+<div class="reviewer-report-container">
+    <h1 class="report-title">Reviewer Agent 報告</h1>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">載入中...</span>
+            </div>
+            <p>載入報告中...</p>
+        </div>
+    }
+    else if (report == null)
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            無法載入報告資料，請稍後再試。
+        </div>
+    }
+    else
+    {
+        <div class="report-header mb-4">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="text-muted mb-1">報告產生時間：@report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                    <p class="text-muted mb-1">審查版本：@report.ReviewVersion</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-muted mb-1">審查者：@report.ReviewerName</p>
+                    <p class="text-muted mb-1">目標分支：@report.TargetBranch</p>
+                </div>
+            </div>
+        </div>
+
+        @if (report.Issues != null && report.Issues.Any())
+        {
+            <div class="issues-table-container mb-4">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">嚴重性</th>
+                            <th scope="col">類別</th>
+                            <th scope="col">描述</th>
+                            <th scope="col">檔案</th>
+                            <th scope="col">行號</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (issue, index) in report.Issues.Select((item, i) => (item, i + 1)))
+                        {
+                            <tr class="@GetRowClass(issue.Severity)">
+                                <td>@index</td>
+                                <td>
+                                    <span class="badge @GetBadgeClass(issue.Severity)">
+                                        <i class="bi @GetSeverityIcon(issue.Severity) me-1"></i>
+                                        @issue.Severity
+                                    </span>
+                                </td>
+                                <td>@issue.Category</td>
+                                <td>@issue.Description</td>
+                                <td class="font-monospace small">@issue.FilePath</td>
+                                <td>@(issue.LineNumber.HasValue ? issue.LineNumber.ToString() : "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 問題總結統計行 Summary Stats Row -->
+            <div class="summary-stats-row" aria-label="問題總結統計">
+                <div class="summary-stats-card">
+                    <div class="row align-items-center g-3">
+                        <div class="col-12">
+                            <h5 class="summary-stats-title mb-3">
+                                <i class="bi bi-bar-chart-fill me-2"></i>
+                                問題總結統計
+                            </h5>
+                        </div>
+
+                        @if (summaryStats != null)
+                        {
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-total">
+                                    <div class="stat-count">@summaryStats.Total</div>
+                                    <div class="stat-label">總計</div>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-error">
+                                    <div class="stat-icon">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                    </div>
+                                    <div class="stat-count">@summaryStats.ErrorCount</div>
+                                    <div class="stat-label">Error</div>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-warning">
+                                    <div class="stat-icon">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                    </div>
+                                    <div class="stat-count">@summaryStats.WarningCount</div>
+                                    <div class="stat-label">Warning</div>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-info">
+                                    <div class="stat-icon">
+                                        <i class="bi bi-info-circle-fill"></i>
+                                    </div>
+                                    <div class="stat-count">@summaryStats.InfoCount</div>
+                                    <div class="stat-label">Info</div>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-hint">
+                                    <div class="stat-icon">
+                                        <i class="bi bi-lightbulb-fill"></i>
+                                    </div>
+                                    <div class="stat-count">@summaryStats.HintCount</div>
+                                    <div class="stat-label">Hint</div>
+                                </div>
+                            </div>
+
+                            <div class="col-6 col-sm-4 col-md-2">
+                                <div class="stat-item stat-other">
+                                    <div class="stat-icon">
+                                        <i class="bi bi-question-circle-fill"></i>
+                                    </div>
+                                    <div class="stat-count">@summaryStats.OtherCount</div>
+                                    <div class="stat-label">其他</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (summaryStats != null && summaryStats.Total > 0)
+                    {
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="progress-bar-container">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <small class="text-muted">問題分佈</small>
+                                        <small class="text-muted">共 @summaryStats.Total 個問題</small>
+                                    </div>
+                                    <div class="progress" style="height: 12px;" role="progressbar">
+                                        @if (summaryStats.ErrorCount > 0)
+                                        {
+                                            <div class="progress-bar bg-danger"
+                                                 style="width: @GetPercentage(summaryStats.ErrorCount, summaryStats.Total)%"
+                                                 title="Error: @summaryStats.ErrorCount">
+                                            </div>
+                                        }
+                                        @if (summaryStats.WarningCount > 0)
+                                        {
+                                            <div class="progress-bar bg-warning"
+                                                 style="width: @GetPercentage(summaryStats.WarningCount, summaryStats.Total)%"
+                                                 title="Warning: @summaryStats.WarningCount">
+                                            </div>
+                                        }
+                                        @if (summaryStats.InfoCount > 0)
+                                        {
+                                            <div class="progress-bar bg-info"
+                                                 style="width: @GetPercentage(summaryStats.InfoCount, summaryStats.Total)%"
+                                                 title="Info: @summaryStats.InfoCount">
+                                            </div>
+                                        }
+                                        @if (summaryStats.HintCount > 0)
+                                        {
+                                            <div class="progress-bar bg-success"
+                                                 style="width: @GetPercentage(summaryStats.HintCount, summaryStats.Total)%"
+                                                 title="Hint: @summaryStats.HintCount">
+                                            </div>
+                                        }
+                                        @if (summaryStats.OtherCount > 0)
+                                        {
+                                            <div class="progress-bar bg-secondary"
+                                                 style="width: @GetPercentage(summaryStats.OtherCount, summaryStats.Total)%"
+                                                 title="其他: @summaryStats.OtherCount">
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-success" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                恭喜！本次審查未發現任何問題。
+            </div>
+
+            <!-- 空狀態的統計行 -->
+            <div class="summary-stats-row" aria-label="問題總結統計">
+                <div class="summary-stats-card">
+                    <div class="row align-items-center g-3">
+                        <div class="col-12">
+                            <h5 class="summary-stats-title mb-3">
+                                <i class="bi bi-bar-chart-fill me-2"></i>
+                                問題總結統計
+                            </h5>
+                        </div>
+                        <div class="col-12">
+                            <div class="stat-item stat-total d-inline-flex align-items-center gap-2">
+                                <div class="stat-count">0</div>
+                                <div class="stat-label">總計問題數</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .reviewer-report-container {
+        padding: 1.5rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .report-title {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: #2c3e50;
+        border-bottom: 3px solid #3498db;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        gap: 1rem;
+    }
+
+    .issues-table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .issues-table-container .table {
+        margin-bottom: 0;
+    }
+
+    /* 問題總結統計行樣式 */
+    .summary-stats-row {
+        margin-top: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .summary-stats-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .summary-stats-title {
+        color: #2c3e50;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .stat-item {
+        text-align: center;
+        padding: 1rem 0.75rem;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border-top: 4px solid transparent;
+    }
+
+    .stat-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-count {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6c757d;
+    }
+
+    /* 各類型統計樣式 */
+    .stat-total {
+        border-top-color: #6c757d;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    }
+
+    .stat-total .stat-count {
+        color: #2c3e50;
+    }
+
+    .stat-error {
+        border-top-color: #dc3545;
+    }
+
+    .stat-error .stat-icon {
+        color: #dc3545;
+    }
+
+    .stat-error .stat-count {
+        color: #dc3545;
+    }
+
+    .stat-warning {
+        border-top-color: #ffc107;
+    }
+
+    .stat-warning .stat-icon {
+        color: #e6a800;
+    }
+
+    .stat-warning .stat-count {
+        color: #e6a800;
+    }
+
+    .stat-info {
+        border-top-color: #0dcaf0;
+    }
+
+    .stat-info .stat-icon {
+        color: #0dcaf0;
+    }
+
+    .stat-info .stat-count {
+        color: #0aa2c0;
+    }
+
+    .stat-hint {
+        border-top-color: #198754;
+    }
+
+    .stat-hint .stat-icon {
+        color: #198754;
+    }
+
+    .stat-hint .stat-count {
+        color: #198754;
+    }
+
+    .stat-other {
+        border-top-color: #6c757d;
+    }
+
+    .stat-other .stat-icon {
+        color: #6c757d;
+    }
+
+    .stat-other .stat-count {
+        color: #6c757d;
+    }
+
+    /* 進度條容器 */
+    .progress-bar-container {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    }
+
+    /* 表格行顏色 */
+    .row-error {
+        background-
