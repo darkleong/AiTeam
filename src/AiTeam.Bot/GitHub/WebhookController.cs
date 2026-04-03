@@ -262,7 +262,6 @@ public class WebhookController(
         var guild = discordClient.GetGuild(guildId);
         if (guild is null) return null;
 
-        await guild.DownloadUsersAsync();
         return guild.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
 

@@ -327,7 +327,7 @@ public class TaskGroupService(
     {
         var desc = group.Title;
 
-        if (step.AgentName is AgentNames.Dev or AgentNames.Reviewer)
+        if (step.AgentName is AgentNames.Dev or AgentNames.Reviewer or AgentNames.Qa or AgentNames.Doc)
         {
             var parts = new List<string> { desc };
 
