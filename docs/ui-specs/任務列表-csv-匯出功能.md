@@ -1,1 +1,191 @@
-IyBVSSDopo/moLzmlofku7bvvJrku7vli5nliJfooaggQ1NWIOWMr+WHuuWKn+iDvQoKLS0tCgojIyAxLiDpoIHpnaLnm67nmoQKCuWcqOePvuacieS7u+WLmeS4reW/g+mggemdouS4iu+8jOiuk+S9v+eUqOiAheiDveWkoOWwh+eVtuWJjeevqemBuOaineS7tuS4i+eahOS7u+WLmeWIl+ihqOWMr+WHuueCuiBDU1Yg5qqU5qGI77yM5Lul5L6/6YCy6KGM6Zui57ea5YiG5p6Q5oiW5aCx6KGo55So6YCU44CCCgotLS0KCiMjIDIuIOmggemdoue1kOaniwoK5pys5Yqf6IO95LiN5paw5aKe542o56uL6aCB6Z2i77yM6ICM5piv5ZyoKirku7vli5nkuK3lv4PvvIhUYXNrIENlbnRlcu+8ieePvuaciemggemdoioq5LiK5pO05YWFIFVJIOWFg+e0oO+8jOe1kOani+iqv+aVtOWmguS4i++8mgoKIyMjIDIuMSDpoIHpnaLpoILpg6jlt6XlhbfliJfljYDloYrvvIhUb29sYmFy77yJCgrnj77mnInlt6XlhbfliJflt7LljIXlkKvmkJzlsIvmrITkvY3oiIfnr6npgbjlmajvvIzlnKjlt6XlhbfliJcqKuWPs+WBtOWwvuerryoq5paw5aKe44CM5Yyv5Ye6IENTVuOAjeaMiemIle+8jOiIh+ePvuacieevqemBuOWFg+S7tuWQjOWIl+Wwjem9iuOAggoKYGBgClsg5pCc5bCL5qyEIF0gWyDni4DmhYvnr6npgbggXSBbIEFnZW50IOevqemBuCBdIFsg5bCI5qGI56+p6YG4IF0gWyDml6XmnJ/nr4TlnI0gXSAg4oaSICBbIOWMr+WHuiBDU1Yg4oaTIF0KYGBgCgojIyMgMi4yIOWMr+WHuuS4reeLgOaFi+aPkOekuuWNgOWhigoK5oyJ6YiV6Ke455m85b6M77yM5pa86aCB6Z2i5Y+z5LiL6KeS5Ye654++ICoqU25hY2tiYXIg5o+Q56S6KirvvIzlkYrnn6Xkvb/nlKjogIXljK/lh7rkvZzmpa3pgLLooYzkuK3vvIzlrozmiJDlvozoh6rli5XmtojlpLHkuKbmj5DnpLrmiJDlip/miJblpLHmlZfoqIrmga/jgIIKCiMjIyAyLjMg5Li76KaB6LOH5paZ5Y2A5aGK77yIRGF0YUdyaWTvvIkKCkRhdGFHcmlkIOacrOi6q+eEoee1kOani+eVsOWLle+8jOWDheS9nOeCuuimluimuueiuuiqjeebruWJjemBjua/vue1kOaenOeahOWPg+iAg+OAggoKLS0tCgojIyAzLiDlhYPku7bopo/moLwKCiMjIyAzLjEg5Yyv5Ye65oyJ6YiV77yaYE11ZEJ1dHRvbmAKCnwg5bGs5oCnIHwg5YC8IC8g6Kqq5piOIHwKfC0tLS0tLXwtLS0tLS0tLS0tLXwKfCBgVmFyaWFudGAgfCBgVmFyaWFudC5PdXRsaW5lZGAgfAp8IGBTdGFydEljb25gIHwgYEljb25zLk1hdGVyaWFsLkZpbGxlZC5GaWxlRG93bmxvYWRgIHwKfCBgU2l6ZWAgfCBgU2l6ZS5NZWRpdW1gIHwKfCBgRGlzYWJsZWRgIHwg55W25Yyv5Ye65L2c5qWt6YCy6KGM5Lit77yIYGlzRXhwb3J0aW5nID09IHRydWVg77yJ5pmC6Kit54K6IGB0cnVlYCB8CnwgYE9uQ2xpY2tgIHwg6Ke455m85Yyv5Ye65rWB56iL77yI6KaL56ysIDUg56+A5LqS5YuV6KGM54K677yJIHwKfCDmjInpiJXmloflrZcgfCBg5Yyv5Ye6IENTVmAgfAp8IOS9jee9riB8IOW3peWFt+WIl+acgOWPs+WBtO+8jOiIh+WFtuS7luevqemBuOWFg+S7tuWQjOS4gCBSb3cgfAoKPiAqKuiqquaYjioq77ya5L2/55SoIGBPdXRsaW5lZGAg6ICM6Z2eIGBGaWxsZWRg77yM6YG/5YWN6KaW6Ka65qyK6YeN6IiH5Li76KaB5pON5L2c77yI5aaC44CM5paw5aKe5Lu75YuZ44CN77yJ6KGd56qB44CCCgotLS0KCiMjIyAzLjIg5Yyv5Ye65LitIExvYWRpbmcg5oyH56S677yaYE11ZFByb2dyZXNzQ2lyY3VsYXJg77yISW5saW5l77yJCgrnlbYgYGlzRXhwb3J0aW5nID09IHRydWVgIOaZgu+8jOaMiemIleWFp+mDqOeahCBgU3RhcnRJY29uYCDmm7/mj5vngrogYE11ZFByb2dyZXNzQ2lyY3VsYXJg77yaCgp8IOWxrOaApyB8IOWAvCAvIOiqquaYjiB8CnwtLS0tLS18LS0tLS0tLS0tLS18CnwgYFNpemVgIHwgYFNpemUuU21hbGxgIHwKfCBgSW5kZXRlcm1pbmF0ZWAgfCBgdHJ1ZWAgfAp8IOmhr+ekuuaineS7tiB8IOWDheWcqCBgaXNFeHBvcnRpbmcgPT0gdHJ1ZWAg5pyf6ZaT6aGv56S677yM5Y+W5Luj5Y6f5pys55qE5LiL6LyJIEljb24gfAoKLS0tCgojIyMgMy4zIOaTjeS9nOWbnumli++8mmBNdWRTbmFja2JhcmDvvIjpgI/pgY4gYElTbmFja2JhcmAg5pyN5YuZ5ZG85Y+r77yJCgp8IOaDheWigyB8IFNldmVyaXR5IHwg6KiK5oGv5paH5a2XIHwKfC0tLS0tLXwtLS0tLS0tLS0tfC0tLS0tLS0tLS18Cnwg5Yyv5Ye66ZaL5aeLIHwgYFNldmVyaXR5LkluZm9gIHwgYOato+WcqOeUoueUnyBDU1bvvIzoq4vnqI3lgJnigKZgIHwKfCDljK/lh7rmiJDlip8gfCBgU2V2ZXJpdHkuU3VjY2Vzc2AgfCBgQ1NWIOW3suaIkOWKn+S4i+i8ie+8iOWFsSB7Tn0g562G77yJYCB8Cnwg5Yyv5Ye65aSx5pWXIHwgYFNldmVyaXR5LkVycm9yYCB8IGDljK/lh7rlpLHmlZfvvIzoq4vnqI3lvozlho3oqabmiJboga/ntaHnrqHnkIblk6FgIHwKfCDntZDmnpzngrrnqbogfCBgU2V2ZXJpdHkuV2FybmluZ2AgfCBg55uu5YmN56+p6YG45qKd5Lu25LiL54Sh5Lu75L2V5Lu75YuZ6LOH5paZ77yM54Sh5rOV5Yyv5Ye6YCB8Cgo+ICoq6Kqq5piOKirvvJrmiJDlip/oqIrmga/kuK3nmoQgYHtOfWAg54K65a+m6Zqb5Yyv5Ye6562G5pW477yM6ZyA55Sx5b6M56uv5Zue5YKz5oiW5YmN56uv6KiI566X5b6M5bi25YWl44CCCgotLS0KCiMjIyAzLjQg56m66LOH5paZ56K66KqN5bCN6Kmx5qGG77yI6YG45pOH5oCn6Ke455m877yJ77yaYE11ZERpYWxvZ2AKCueVtuS9v+eUqOiAhem7nuaTiuWMr+WHuuaMiemIle+8jOS4lOWJjeerr+W3suefpeeVtuWJjemBjua/vue1kOaenOethuaVuOeCuiAqKjAqKiDmmYLvvIwqKuS4jeebtOaOpeWRvOWPq+W+jOerryoq77yM5pS55LulIGBNdWREaWFsb2dgIOaPkOekuu+8mgoKfCDlsazmgKcgfCDlgLwgLyDoqqrmmI4gfAp8LS0tLS0tfC0tLS0tLS0tLS0tfAp8IGBUaXRsZUNvbnRlbnRgIHwgYOeEoeWPr+WMr+WHuueahOizh+aWmWAgfAp8IOWFp+aWhyB8IGDnm67liY3nmoTnr6npgbjmop3ku7bmspLmnInnrKblkIjnmoTku7vli5nvvIzoq4voqr/mlbTnr6npgbjlvozlho3oqabjgIJgIHwKfCDmjInpiJUgfCDlg4XkuIDlgIvjgIznorroqo3jgI3mjInpiJXvvIzpu57mk4rlvozpl5zplokgRGlhbG9nIHwKCi0tLQoKIyMgNC4g6LOH5paZ5L6G5rqQCgojIyMgNC4xIOevqemBuOaineS7tuS+hua6kAoK5Yyv5Ye65pmCKirkuI3lj6booYzlkJHkvb/nlKjogIXmlLbpm4bnr6npgbjmop3ku7YqKu+8jOebtOaOpeiugOWPluS7u+WLmeS4reW/g+mggemdoueVtuWJjeW3suWll+eUqOeahOevqemBuOeLgOaFi++8iOmggemdouWxpOe0mueahOWFseS6q+eLgOaFi+eJqeS7tuaIliBgQ2FzY2FkaW5nUGFyYW1ldGVyYO+8ie+8jOWMheWQq++8mgoKfCDnr6npgbjmrITkvY0gfCDkvobmupAgfAp8LS0tLS0tLS0tLXwtLS0tLS18Cnwg6Zec6Y215a2X77yI5Lu75YuZ5qiZ6aGM5pCc5bCL77yJfCDnj77mnInmkJzlsIvmrITkvY3nmoTntoHlrprlgLwgfAp8IOS7u+WLmeeLgOaFiyB8IOePvuacieeLgOaFi+evqemBuOWZqOeahOmBuOWPluWAvCB8CnwgQWdlbnQgfCDnj77mnIkgQWdlbnQg56+p6YG45Zmo55qE6YG45Y+W5YC8IHwKfCDlsIjmoYggfCDnj77mnInlsIjmoYjnr6npgbjlmajnmoTpgbjlj5blgLwgfAp8IOinuOeZvOS+hua6kCB8IOePvuacieinuOeZvOS+hua6kOevqemBuOWZqOeahOmBuOWPluWAvO+8iOiLpeacie+8iSB8Cnwg5bu656uL5pmC6ZaT56+E5ZyNIHwg54++5pyJ5pel5pyf56+E5ZyN56+p6YG45Zmo55qE6YG45Y+W5YC8IHwKCiMjIyA0LjIgQ1NWIOeUoueUn+aWueW8jwoKfCDpoIXnm64gfCDoqqrmmI4gfAp8LS0tLS0tfC0tLS0tLXwKfCDnlKLnlJ/kvY3nva4gfCAqKlNlcnZlciDnq6/nlKLnlJ8qKu+8iEJsYXpvciBTZXJ2ZXIg5p625qeL5LiL5LiN57aTIFdlYiBBUEnvvIznm7TmjqXnlLEgU2VydmljZSDlsaTnlKLnlJ8gYnl0ZSBhcnJhee+8iSB8Cnwg5ZG85Y+r5pa55byPIHwg6YCP6YGO5rOo5YWl55qEIGBJVGFza0V4cG9ydFNlcnZpY2Vg77yI5oiW5pei5pyJ55qEIFRhc2sgU2VydmljZSDmk7TlhYXmlrnms5XvvInvvIzlgrPlhaXnlbbliY3nr6npgbjmop3ku7YgRFRPIHwKfCDkuIvovInop7jnmbwgfCBTZXJ2ZXIg56uv55Si55Sf5a6M5oiQ5b6M77yM6YCP6YGOIGBJSlNSdW50aW1lYCDlkbzlj6sgSmF2YVNjcmlwdCBpbnRlcm9w77yM5LulIGBCbG9iYCDmlrnlvI/op7jnmbzngI/opr3lmajkuIvovIkgfAoKIyMjIDQuMyBDU1Yg5qyE5L2N5a6a576pCgp8IENTViDmrITmqJnpoYzvvIhIZWFkZXLvvIkgfCDlsI3mh4nos4fmlpnmrITkvY0gfCDlgpnoqLsgfAp8LS0tLS0tLS0tLS0tLS0tLS0tLS0tLXwtLS0tLS0tLS0tLS0tfC0tLS0tLXwKfCBg5Lu75YuZ5qiZ6aGMYCB8IGBUYXNrLlRpdGxlYCB8IHwKfCBg54uA5oWLYCB8IGBUYXNrLlN0YXR1c2AgfCDovLjlh7rngrrkuK3mlofpoa/npLrlgLzvvIjlpoLjgIzln7fooYzkuK3jgI3vvInvvIzogIzpnZ4gRW51bSDljp/lp4vlgLwgfAp8IGBBZ2VudGAgfCBgVGFzay5BZ2VudE5hbWVgIHwgfAp8IGDlsIjmoYhgIHwgYFRhc2suUHJvamVjdE5hbWVgIHwgfAp8IGDop7jnmbzkvobmupBgIHwgYFRhc2suVHJpZ2dlclNvdXJjZWAgfCB8CnwgYOW7uueri+aZgumWk2AgfCBgVGFzay5DcmVhdGVkQXRgIHwg5qC85byP77yaYHl5eXktTU0tZGQgSEg6bW06c3NgIHwKfCBg5a6M5oiQ5pmC6ZaTYCB8IGBUYXNrLkNvbXBsZXRlZEF0YCB8IOagvOW8j++8mmB5eXl5LU1NLWRkIEhIOm1tOnNzYO+8m+iLpeacquWujOaIkOWJh+i8uOWHuuepuuWtl+S4siB8CgojIyMgNC40IOaqlOahiOWRveWQjeimj+WJhwoKYGBgCnRhc2tzX3t5eXl5TU1kZH0uY3N2CuevhOS+i++8mnRhc2tzXzIwMjUwMTE0LmNzdgpgYGAKCuaXpeacn+WPlioq5Ly65pyN5Zmo56uv55Si55Sf55W25LiL55qE5pys5Zyw5pel5pyfKirvvIjmiJbkvp3lsIjmoYjntbHkuIDmmYLljYDoqK3lrprvvInjgIIKCiMjIyA0LjUg57eo56K86Kit5a6aCgotIOe3qOeivO+8mioqVVRGLTggd2l0aCBCT00qKu+8iGBuZXcgVVRGOEVuY29kaW5nKGVuY29kZXJTaG91bGRFbWl0VVRGOElkZW50aWZpZXI6IHRydWUpYO+8iQotIOebrueahO+8mueiuuS/nSBFeGNlbCDnm7TmjqXplovllZ/mmYLkuK3mlofkuI3kuoLnorwKCi0tLQoKIyMgNS4g5LqS5YuV6KGM54K6CgojIyMgNS4xIOaomea6luWMr+WHuua1geeoi++8iOacieizh+aWme+8iQoKYGBgCuS9v+eUqOiAhem7nuaTiuOAjOWMr+WHuiBDU1bjgI0KICAgIOKGkwrliY3nq6/norroqo3nlbbliY3pgY7mv77nrYbmlbggPiAwCiAgICDihpMK5oyJ6YiV6YCy5YWlIERpc2FibGVkIOeLgOaFi++8jEljb24g5o+b54K6IExvYWRpbmcgU3Bpbm5lcgogICAg4oaTCumhr+ekuiBTbmFja2Jhcu+8muOAjOato+WcqOeUoueUnyBDU1bvvIzoq4vnqI3lgJnigKbjgI0KICAgIOKGkwrlkbzlj6sgU2VydmVyIOerryBJVGFza0V4cG9ydFNlcnZpY2XvvIzlgrPlhaXnlbbliY3nr6npgbjmop3ku7YKICAgIOKGkwpTZXJ2ZXIg56uv5p+l6Kmi6LOH5paZ44CB55Si55SfIENTViBieXRlIGFycmF577yIVVRGLTggQk9N77yJCiAgICDihpMK6YCP6YGOIEpTIEludGVyb3Ag6Ke455m854CP6Ka95Zmo5LiL6LyJ77yIQmxvYiArIOWLleaFiyA8YT4g6bue5pOK77yJCiAgICDihpMK5oyJ6YiV5oGi5b6p5Y+v6bue5pOK54uA5oWL77yMSWNvbiDpgoTljp8KICAgIOKGkwrpoa/npLogU25hY2tiYXLvvJrjgIxDU1Yg5bey5oiQ5Yqf5LiL6LyJ77yI5YWxIE4g562G77yJ44CNCmBgYAoKIyMjIDUuMiDnqbros4fmlpnmtYHnqIsKCmBgYArkvb/nlKjogIXpu57mk4rjgIzljK/lh7ogQ1NW44CNCiAgICDihpMK5YmN56uv56K66KqN55W25YmN6YGO5r++562G5pW4ID09IDAKICAgIOKGkwrplovllZ8gTXVkRGlhbG9n77ya44CM54Sh5Y+v5Yyv5Ye655qE6LOH5paZ44CNCiAgICDihpMK5L2/55So6ICF6bue5pOK44CM56K66KqN44CN77yMRGlhbG9nIOmXnOmWiQogICAg4oaTIO+8iOa1geeoi+e1kOadn++8jOS4jeWRvOWPqyBTZXJ2ZXIg56uv77yJCmBgYAoKIyMjIDUuMyDljK/lh7rlpLHmlZfmtYHnqIsKCmBgYApTZXJ2ZXIg56uv5ouL5Ye65L6L5aSWIOaIliDlm57lgrPpjK/oqqQKICAgIOKGkwrmjInpiJXmgaLlvqnlj6/pu57mk4rni4DmhYvvvIxJY29uIOmChOWOnwogICAg4oaTCumhr+ekuiBTbmFja2Jhcu+8muOAjOWMr+WHuuWkseaVl++8jOiri+eojeW+jOWGjeippuaIluiBr+e1oeeuoeeQhuWToeOAje+8iFNldmVyaXR5LkVycm9y77yJCiAgICDihpMg77yI5LiN6Ke455m85Lu75L2V5LiL6LyJ6KGM54K677yJCmBgYAoKIyMjIDUuNCDpmLLph43opIfpu57mk4oKCi0g5Yyv5Ye66YCy6KGM5Lit77yIYGlzRXhwb3J0aW5nID09IHRydWVg77yJ77yM5oyJ6YiVIGBEaXNhYmxlZGAg54K6IGB0cnVlYO+8jOmYu+atoumHjeikh+inuOeZvOOAggotIOWNs+S9v+mAj+mBjuWFtuS7luaJi+auteinuOeZvO+8jFNlcnZpY2Ug5bGk5oeJ5pyJ5Yaq562J5L+d6K2377yI6Z2eIFVJIOWxpOiyrOS7u++8jOWCmeiou+e1puW+jOerr++8ieOAggoKLS0tCgojIyA2LiDms6jmhI/kuovpoIUKCiMjIyA2LjEgQmxhem9yIFNlcnZlciDpm7vot6/vvIhDaXJjdWl077yJ6ICD6YePCgotIENTViDnlKLnlJ/ngroqKuWQjOatpemYu+WhnuaTjeS9nCoq77yI6LOH5paZ6YeP5aSn5pmC77yJ77yM5b+F6aCI5ZyoIFNlcnZpY2Ug5bGk5LulIGBhc3luYy9hd2FpdGAg6YWN5ZCIIGBUYXNrLlJ1bmAg6JmV55CG77yM6YG/5YWN5L2U55SoIFNpZ25hbFIg6Zu76Lev5Z+36KGM57eS77yM6YCg5oiQIFVJIOWHjee1kOOAggotIEpTIEludGVyb3Ag5ZG85Y+r77yI6Ke455m85LiL6LyJ77yJ5b+F6aCI5ZyoIEJsYXpvciDpm7vot6/lhafvvIjljbMgYEBpbmplY3QgSUpTUnVudGltZWDvvInvvIzkuI3lj6/np7voh7Pog4zmma/ln7fooYznt5Lnm7TmjqXlkbzlj6vjgIIKCiMjIyA2LjIg5aSn6YeP6LOH5paZ5pWI6IO9CgotIOW7uuitsOWcqCBTZXJ2aWNlIOWxpOWKoOS4iioq5Yyv5Ye6562G5pW45LiK6ZmQKirvvIjkvovlpoIgMTAsMDAwIOethu+8ie+8jOi2hemBjuS4iumZkOaZguaUueS7pSBgU2V2ZXJpdHkuV2FybmluZ2Ag55qEIFNuYWNrYmFyIOaPkOekuuS9v+eUqOiAhe+8jOS4puW7uuitsOe4ruWwj+evqemBuOevhOWcje+8jOS4jeebtOaOpeaIquaWt+izh+aWme+8iOaIquaWt+acg+mAoOaIkOS9v+eUqOiAheiqpOino++8ieOAggotIOWFt+mrlOS4iumZkOaVuOWAvOiri+iIhyBDaHJpc3Qg56K66KqN5b6M5rG65a6a44CCCgojIyMgNi4zIEpTIEludGVyb3Ag5LiL6LyJ5a+m5L2cCgotIOmcgOWcqCBgd3d3cm9vdGAg5Lit5paw5aKe5oiW5pO05YWF54++5pyJ55qEIEpTIGhlbHBlciDmqpTmoYjvvIzmj5DkvpsgYGRvd25sb2FkRmlsZUZyb21CeXRlcyhmaWxlbmFtZSwgY29udGVudFR5cGUsIGJ5dGVzKWAg5Ye95byP44CCCi0g5LiN5L2/55SoIE5hdmlnYXRpb25NYW5hZ2VyIOWwjuWQke+8jOWboOeCuiBCbG9iIFVSTCDmlrnlvI/lnKggQmxhem9yIFNlcnZlciDkuIvmm7Tlj6/pnaDjgIIKCiMjIyA2LjQg56+p6YG45qKd5Lu25ZCM5q2lCgotIOWMr+WHuuaMiemIleiugOWPlueahOevqemBuOaineS7tioq5b+F6aCI6IiHIERhdGFHcmlkIOmhr+ekuueahOizh+aWmeS4gOiHtCoq77yM6aCI56K66KqN56+p6YG454uA5oWL55qE55Sf5ZG96YCx5pyf6IiH5YWx5Lqr5pa55byP77yIQ29tcG9uZW50IOWPg+aVuOOAgeeItuWxpOeLgOaFi+OAgeaIliBTZXJ2aWNlIOWxpOW/q+WPlu+8ie+8jOmBv+WFjSBSYWNlIENvbmRpdGlvbu+8iOS9v+eUqOiAheWJm+aUueWujOevqemBuOWwseaMieWMr+WHuu+8ieOAggoKIyMjIDYuNSDlhYPku7bni4DmhYvnrqHnkIYKCi0gYGlzRXhwb3J0aW5nYCDngrrpoIHpnaLlsaTntJrnmoQgYHByaXZhdGUgYm9vbGDvvIzlnKggYGFzeW5jYCDmk43kvZzliY3lvozpnIDmkK3phY0gYFN0YXRlSGFzQ2hhbmdlZCgpYCDnorrkv50gVUkg5Y2z5pmC5pu05paw44CCCgotLS0KCj4gKirlvoXnorroqo3poIXnm67vvIjoq4vlnKjlr6bkvZzliY3lkJEgQ2hyaXN0IOeiuuiqje+8iSoqCj4gMS4g5Yyv5Ye6562G5pW45LiK6ZmQ55qE5Y+v5o6l5Y+X5pW45YC854K65L2V77yfCj4gMi4g44CM6Ke455m85L6G5rqQ44CN5qyE5L2N5Zyo54++5pyJ6LOH5paZ5qih5Z6L5Lit55qE5qyE5L2N5ZCN56ix6IiH5Z6L5Yil54K65L2V77yf77yI6YG/5YWN5pig5bCE6Yyv6Kqk77yJCj4gMy4g5a6M5oiQ5pmC6ZaT77yIYENvbXBsZXRlZEF0YO+8ieiLpeS7u+WLmeeLgOaFi+eCuuOAjOWkseaVl+OAje+8jOaYr+WQpuS7jemcgOi8uOWHuuaZgumWk+aIs++8nw==
+# UI 規格文件：任務列表 CSV 匯出功能
+
+---
+
+## 1. 頁面目的
+
+在任務中心頁面提供 CSV 匯出入口，讓使用者可將任務列表資料（全部或依當前篩選條件）下載為 CSV 檔案，以便進行離線分析或報表製作。
+
+---
+
+## 2. 頁面結構
+
+本功能不新增獨立頁面，而是在**現有任務中心頁面**的工具列（Toolbar）區塊新增匯出控制項。
+
+### 整體佈局調整描述
+
+```
+┌─────────────────────────────────────────────────────┐
+│  任務中心                                            │
+├─────────────────────────────────────────────────────┤
+│  [搜尋欄]  [狀態篩選]  [Agent篩選]  ... │ [匯出按鈕▼]│  ← Toolbar 區
+├─────────────────────────────────────────────────────┤
+│  任務列表（MudDataGrid）                             │
+│  ...                                                 │
+└─────────────────────────────────────────────────────┘
+```
+
+- **匯出按鈕** 置於 Toolbar 最右側，與現有篩選元件同行
+- 點擊後展開 **下拉選單**，提供兩個選項：「匯出全部」與「匯出篩選結果」
+- 匯出進行中時，按鈕區域顯示 **行內載入指示器**（不使用全頁 Loading）
+
+---
+
+## 3. 元件規格
+
+### 3-1. 匯出觸發按鈕組：`MudButtonGroup` + `MudMenu`
+
+採用 **Split Button 模式**（主按鈕 + 下拉箭頭分離），以明確區分兩種匯出模式。
+
+| 屬性 | 規格 |
+|------|------|
+| 元件 | `MudButtonGroup`，內含一個 `MudButton` 與一個 `MudMenu`（箭頭觸發） |
+| `Variant` | `Variant.Outlined` |
+| `Size` | `Size.Medium` |
+| 主按鈕文字 | `匯出篩選結果`（預設行為，對應當前篩選狀態） |
+| 主按鈕 Icon | `Icons.Material.Filled.FileDownload`，置於文字左側 |
+| 下拉箭頭 Icon | `Icons.Material.Filled.ArrowDropDown` |
+| `Disabled` 條件 | 匯出作業進行中（`isExporting == true`）時整組 Disabled |
+
+### 3-2. 下拉選單：`MudMenu`（附屬於箭頭按鈕）
+
+| `MudMenuItem` | 說明 |
+|---------------|------|
+| 匯出篩選結果 | 依當前搜尋／篩選條件查詢並匯出；若無任何篩選條件，行為等同「匯出全部」 |
+| 匯出全部 | 忽略所有篩選條件，匯出完整任務資料 |
+
+> **備註**：選單項目前方加上對應小 Icon 增加識別性：
+> - 匯出篩選結果：`Icons.Material.Outlined.FilterAlt`
+> - 匯出全部：`Icons.Material.Outlined.SelectAll`
+
+### 3-3. 進行中狀態：`MudProgressCircular`
+
+| 屬性 | 規格 |
+|------|------|
+| 元件 | `MudProgressCircular` |
+| `Size` | `Size.Small` |
+| `Indeterminate` | `true` |
+| 顯示條件 | `isExporting == true` 時，取代主按鈕的 Icon 位置顯示 |
+| 伴隨文字 | 主按鈕文字改為「匯出中…」 |
+
+### 3-4. 筆數提示：`MudTooltip`
+
+- 包裹整個 `MudButtonGroup`
+- `Tooltip` 內容動態顯示：
+  - 有篩選條件時：`目前篩選結果共 {filteredCount} 筆`
+  - 無篩選條件時：`共 {totalCount} 筆任務`
+- `Placement`：`Placement.Bottom`
+
+### 3-5. 結果回饋：`MudSnackbar`
+
+| 情境 | 訊息內容 | Severity |
+|------|----------|----------|
+| 匯出成功 | `已成功匯出 {n} 筆任務（{fileName}）` | `Severity.Success` |
+| 匯出結果為空 | `篩選結果為空，無可匯出的資料` | `Severity.Warning` |
+| 匯出失敗 | `匯出失敗，請稍後再試` | `Severity.Error` |
+
+- 使用現有專案的 `ISnackbar` service 注入，不額外新增元件
+- `VisibleStateDuration`：4000ms
+
+---
+
+## 4. 資料來源
+
+### 4-1. 匯出篩選結果
+
+- **來源**：呼叫與當前 `MudDataGrid` 相同的資料查詢服務方法
+- **參數**：直接傳入現有頁面 State 中已綁定的篩選參數物件（搜尋關鍵字、狀態、Agent、專案、觸發來源、日期區間等）
+- **分頁處理**：匯出時**忽略分頁參數**，取得全量符合條件的資料（`pageSize = int.MaxValue` 或呼叫專用的「不分頁」查詢方法，詳見注意事項）
+
+### 4-2. 匯出全部
+
+- **來源**：同上查詢服務，但傳入**空白（預設）篩選參數**
+- **分頁處理**：同上，忽略分頁
+
+### 4-3. CSV 產生
+
+- **責任歸屬**：由後端 Service 或 Blazor Server 端處理，不在瀏覽器端產生
+- **欄位對應**：
+
+| CSV 欄位名稱（Header） | 對應資料屬性 | 備註 |
+|------------------------|--------------|------|
+| 任務標題 | `Task.Title` | |
+| 狀態 | `Task.Status` | 輸出人類可讀的中文標籤，如「執行中」、「已完成」 |
+| Agent | `Task.AgentName` | |
+| 專案 | `Task.ProjectName` | 無專案時輸出空字串 |
+| 觸發來源 | `Task.TriggerSource` | |
+| 建立時間 | `Task.CreatedAt` | 格式：`yyyy-MM-dd HH:mm:ss` |
+| 完成時間 | `Task.CompletedAt` | 未完成時輸出空字串 |
+
+- **檔案命名規則**：
+  - 匯出篩選結果：`tasks_filtered_{yyyyMMddHHmm}.csv`
+  - 匯出全部：`tasks_all_{yyyyMMddHHmm}.csv`
+- **編碼**：UTF-8 with BOM（確保 Excel 開啟時中文不亂碼）
+
+### 4-4. 檔案下載觸發
+
+- 透過 `IJSRuntime` 呼叫 JS interop，將後端產生的 CSV byte array 以 Blob 方式觸發瀏覽器下載
+- 不導頁、不開新分頁
+
+---
+
+## 5. 互動行為
+
+### 5-1. 主流程：點擊「匯出篩選結果」
+
+1. 使用者點擊主按鈕（或從下拉選單選擇「匯出篩選結果」）
+2. 按鈕組進入 Disabled 狀態，主按鈕 Icon 替換為 `MudProgressCircular`，文字改為「匯出中…」
+3. 前端呼叫後端匯出方法，傳入當前篩選參數
+4. **後端**查詢資料 → 產生 CSV byte array → 回傳至前端
+5. 前端透過 JS Interop 觸發瀏覽器下載
+6. 按鈕組恢復正常狀態，顯示成功 Snackbar
+
+### 5-2. 主流程：點擊「匯出全部」
+
+- 流程同 5-1，差異僅在步驟 3 傳入空白篩選參數
+
+### 5-3. 匯出結果為空
+
+- 後端查詢結果筆數為 0 時，**不產生 CSV 檔**，直接回傳空結果訊號
+- 前端顯示 Warning Snackbar，按鈕組恢復正常
+
+### 5-4. 匯出失敗（例外處理）
+
+- 後端拋出例外或回傳錯誤時，前端顯示 Error Snackbar
+- 按鈕組恢復正常，不殘留 Loading 狀態
+
+### 5-5. 防重複觸發
+
+- `isExporting` flag 為 `true` 期間，整個 `MudButtonGroup` 設為 `Disabled`
+- 確保使用者無法在匯出進行中重複觸發
+
+### 5-6. 篩選條件變更時的 Tooltip 更新
+
+- 每次篩選條件異動（`OnFilterChanged` 等事件）後，重新計算 `filteredCount` 並更新 Tooltip 內容
+- 此計算可複用現有的 DataGrid 資料計數，**不額外發出查詢請求**
+
+---
+
+## 6. 注意事項
+
+### 6-1. 大量資料效能考量
+- 匯出全部情境下，若任務總筆數可能超過 **10,000 筆**，需與後端確認是否採用串流寫入（`IAsyncEnumerable`），避免一次性載入大量資料至記憶體
+- 建議後端匯出方法加上**逾時保護**（例如 30 秒），超時時回傳錯誤
+
+### 6-2. Blazor Server 電路（Circuit）考量
+- JS Interop 下載呼叫必須在 Blazor 電路存活期間執行；若使用者在匯出完成前關閉頁面，應在後端服務中妥善處理 `OperationCanceledException`
+- `isExporting` 狀態變更後必須呼叫 `StateHasChanged()`，確保 UI 即時反映（特別是在 `async` 方法的 `await` 前後）
+
+### 6-3. JS Interop 檔案下載
+- 建議封裝為專案共用的 `IFileDownloadService`（或類似命名），而非在頁面元件中直接散落 JS Interop 呼叫
+- 若專案中已有類似工具方法，優先複用，不重複建立
+
+### 6-4. 「不分頁查詢」方法設計
+- 避免在現有分頁查詢方法上以 `pageSize = int.MaxValue` 方式取得全量資料（可能影響 ORM 生成的 SQL）
+- 建議後端提供獨立的 `ExportTasksAsync(FilterParams filter)` 方法，與列表查詢邏輯解耦
+
+### 6-5. 狀態文字本地化
+- CSV 中的「狀態」欄位輸出需與 UI 顯示保持一致，建議複用現有的狀態對照表（如 `enum` extension method 或 resource 檔），避免硬編碼字串
+
+### 6-6. 權限控管
+- 若任務中心頁面有角色權限控制，匯出按鈕的顯示／隱藏應遵循相同的授權邏輯，建議以 `<AuthorizeView>` 包裹或在 `OnInitializedAsync` 中判斷
