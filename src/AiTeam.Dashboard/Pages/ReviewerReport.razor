@@ -51,6 +51,17 @@ else
                             </tr>
                         }
                     </tbody>
+                    <tfoot>
+                        <tr class="summary-row-table">
+                            <td colspan="4" class="summary-footer-cell">
+                                共發現 <strong>@ComputedTotalCount</strong> 個問題：
+                                <span class="error-text">@ComputedErrorCount 個 Error</span>、
+                                <span class="warning-text">@ComputedWarningCount 個 Warning</span>、
+                                <span class="info-text">@ComputedInfoCount 個 Info</span>、
+                                <span class="suggestion-text">@ComputedSuggestionCount 個 Suggestion</span>
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         }
@@ -220,6 +231,16 @@ else
 
     .issue-row.severity-suggestion {
         background-color: #faf0ff;
+    }
+
+    .summary-row-table {
+        background-color: #f8f9fa;
+    }
+
+    .summary-footer-cell {
+        padding: 12px;
+        font-size: 0.95em;
+        border-top: 2px solid #dee2e6;
     }
 
     .summary-section {

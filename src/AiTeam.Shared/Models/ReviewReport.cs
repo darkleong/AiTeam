@@ -1,6 +1,9 @@
+
 ```csharp
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace AiTeam.Shared.Models
 {
@@ -33,6 +36,22 @@ namespace AiTeam.Shared.Models
         public void RecalculateSummary()
         {
             Summary.RecalculateFromIssues(Issues);
+        }
+
+        public string GetReportWithSummaryLine()
+        {
+            var sb = new StringBuilder();
+
+            if (!string.IsNullOrEmpty(Content))
+            {
+                sb.AppendLine(Content);
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("---");
+            sb.AppendLine(Summary.SummaryLine);
+
+            return sb.ToString();
         }
     }
     
@@ -168,6 +187,38 @@ namespace AiTeam.Shared.Models
                         IssuesByFile[issue.FilePath] = 1;
                 }
             }
+        }
+
+        public string ToDetailedSummaryBlock()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("---");
+            sb.AppendLine(SummaryLine);
+
+            if (IssuesByFile.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("依檔案統計：");
+                foreach (var kvp in IssuesByFile.OrderByDescending(x => x.Value))
+                {
+                    sb.AppendLine($"  {kvp.Key}: {kvp.Value} 個問題");
+                }
+            }
+
+            if (IssuesByCategory.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("依類別統計：");
+                foreach (var kvp in IssuesByCategory.OrderByDescending(x => x.Value))
+                {
+                    sb.AppendLine($"  {kvp.Key}: {kvp.Value} 個問題");
+                }
+            }
+
+            sb.AppendLine($"整體狀態：{OverallStatus}");
+            sb.Append("---");
+
+            return sb.ToString();
         }
     }
     

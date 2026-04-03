@@ -1,5 +1,3 @@
-根據規格文件的要求，以下是修改後的完整程式碼：
-
 ```csharp
 using System;
 using System.Collections.Generic;
