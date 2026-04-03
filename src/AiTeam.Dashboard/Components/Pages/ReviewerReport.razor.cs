@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using AiTeam.Dashboard.Models.ReviewerReport;
 
 namespace AiTeam.Dashboard.Components.Pages;
 
@@ -13,15 +14,14 @@ public partial class ReviewerReport : ComponentBase
         CalculateSummary();
     }
 
-    private async Task LoadReportDataAsync()
+    #region STUB
+    // TODO: 合併至主線分支前，必須將以下假資料替換為實際的資料來源（Service 注入或 API 呼叫）。
+    // 此方法目前僅作為開發階段的暫時 Stub，禁止以此狀態合併至 main/production 分支。
+    private Task LoadReportDataAsync()
     {
-        // Simulate loading data
-        await Task.Delay(0);
-
         reportRows = new List<ReviewerReportRow>
         {
-            new ReviewerReportRow
-            {
+            new() {
                 ReviewerName = "Alice",
                 TotalReviews = 15,
                 ApprovedCount = 10,
@@ -29,8 +29,7 @@ public partial class ReviewerReport : ComponentBase
                 PendingCount = 2,
                 AverageReviewTimeHours = 4.5
             },
-            new ReviewerReportRow
-            {
+            new() {
                 ReviewerName = "Bob",
                 TotalReviews = 20,
                 ApprovedCount = 14,
@@ -38,8 +37,7 @@ public partial class ReviewerReport : ComponentBase
                 PendingCount = 2,
                 AverageReviewTimeHours = 6.2
             },
-            new ReviewerReportRow
-            {
+            new() {
                 ReviewerName = "Carol",
                 TotalReviews = 10,
                 ApprovedCount = 7,
@@ -48,11 +46,14 @@ public partial class ReviewerReport : ComponentBase
                 AverageReviewTimeHours = 3.8
             }
         };
+
+        return Task.CompletedTask;
     }
+    #endregion
 
     private void CalculateSummary()
     {
-        if (reportRows == null || !reportRows.Any())
+        if (!reportRows.Any())
         {
             summary = new ReviewerReportSummary();
             return;
@@ -62,7 +63,9 @@ public partial class ReviewerReport : ComponentBase
         int totalApproved = reportRows.Sum(r => r.ApprovedCount);
         int totalRejected = reportRows.Sum(r => r.RejectedCount);
         int totalPending = reportRows.Sum(r => r.PendingCount);
-        double averageReviewTime = reportRows.Average(r => r.AverageReviewTimeHours);
+        double averageReviewTime = totalReviews > 0
+            ? reportRows.Sum(r => r.AverageReviewTimeHours * r.TotalReviews) / totalReviews
+            : 0.0;
         double approvalRate = totalReviews > 0 ? (double)totalApproved / totalReviews * 100.0 : 0.0;
 
         summary = new ReviewerReportSummary
@@ -75,27 +78,4 @@ public partial class ReviewerReport : ComponentBase
             ApprovalRate = Math.Round(approvalRate, 2)
         };
     }
-}
-
-public class ReviewerReportRow
-{
-    public string ReviewerName { get; set; } = string.Empty;
-    public int TotalReviews { get; set; }
-    public int ApprovedCount { get; set; }
-    public int RejectedCount { get; set; }
-    public int PendingCount { get; set; }
-    public double AverageReviewTimeHours { get; set; }
-
-    public double ApprovalRate =>
-        TotalReviews > 0 ? Math.Round((double)ApprovedCount / TotalReviews * 100.0, 2) : 0.0;
-}
-
-public class ReviewerReportSummary
-{
-    public int TotalReviews { get; set; }
-    public int TotalApproved { get; set; }
-    public int TotalRejected { get; set; }
-    public int TotalPending { get; set; }
-    public double AverageReviewTimeHours { get; set; }
-    public double ApprovalRate { get; set; }
 }
