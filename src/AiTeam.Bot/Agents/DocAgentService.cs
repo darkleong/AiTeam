@@ -43,7 +43,7 @@ public class DocAgentService(
                 return new AgentExecutionResult(false, $"路徑 '{pathPrefix}' 下未找到 .cs 檔案");
 
             var xmlMode = IsXmlMode(task.Title);
-            localPath = gitHubService.CloneOrPull(owner, repo);
+            localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
             AddLog(task, "Git Clone/Pull 完成", "done");
 
             var branchName = $"docs/auto-{task.Id.ToString()[..8]}";

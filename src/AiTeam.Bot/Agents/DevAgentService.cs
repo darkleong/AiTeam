@@ -101,7 +101,7 @@ public class DevAgentService(
                 return await ExecuteCodeReviewAsync(task, plan, owner, repo, cancellationToken);
 
             // Clone / Pull
-            localPath = gitHubService.CloneOrPull(owner, repo);
+            localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
             AddLog(task, "Git Clone/Pull 完成", "done");
 
             // 建立 feature branch

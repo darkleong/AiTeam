@@ -59,7 +59,7 @@ public class QaAgentService(
             if (!hasUiChanges && csFiles.Count == 0)
                 return new AgentExecutionResult(false, $"PR #{prNumber} 未包含可測試的 .cs / .razor / .css 檔案，略過 QA");
 
-            localPath = gitHubService.CloneOrPull(owner, repo);
+            localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
             AddLog(task, "Git Clone/Pull 完成", "done");
 
             var branchName = $"test/qa-{task.Id.ToString()[..8]}";

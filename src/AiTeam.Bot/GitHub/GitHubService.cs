@@ -139,9 +139,11 @@ public class GitHubService(
     /// Clone repo 到本地工作目錄，若已存在則 pull 最新。
     /// 回傳本地路徑。
     /// </summary>
-    public string CloneOrPull(string owner, string repo)
+    /// <param name="uniqueSuffix">可選，用於區隔並行 Agent 的工作目錄（建議傳入 taskId 的前 8 碼）。</param>
+    public string CloneOrPull(string owner, string repo, string? uniqueSuffix = null)
     {
-        var localPath = Path.Combine(_settings.WorkspacePath, repo);
+        var dirName  = string.IsNullOrWhiteSpace(uniqueSuffix) ? repo : $"{repo}_{uniqueSuffix}";
+        var localPath = Path.Combine(_settings.WorkspacePath, dirName);
         Directory.CreateDirectory(_settings.WorkspacePath);
 
         // 防護：目錄存在但沒有 .git（上次清理不完整），強制刪除後重新 clone
