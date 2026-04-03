@@ -479,13 +479,18 @@ public class CommandHandler(
         var taskRepo  = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
 
+        var projectId = string.IsNullOrWhiteSpace(project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(project);
+
         var task = new TaskItem
         {
             Title         = ceoResponse.Task?.Title ?? description,
             Description   = ceoResponse.Task?.Description,
             TriggeredBy   = "Discord",
             AssignedAgent = ceoResponse.TargetAgent ?? "CEO",
-            Status        = "pending"
+            Status        = "pending",
+            ProjectId     = projectId,
         };
         taskRepo.Add(task);
         await taskRepo.SaveAsync();
@@ -526,13 +531,18 @@ public class CommandHandler(
                 await using var scope  = serviceProvider.CreateAsyncScope();
                 var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
+                var projectId = string.IsNullOrWhiteSpace(pending.Project)
+                    ? (Guid?)null
+                    : await taskRepo.GetProjectIdByNameAsync(pending.Project);
+
                 var task = new TaskItem
                 {
-                    Title        = pending.CeoResponse.Task?.Title ?? pending.Description,
-                    Description  = pending.CeoResponse.Task?.Description,
-                    TriggeredBy  = "Discord",
+                    Title         = pending.CeoResponse.Task?.Title ?? pending.Description,
+                    Description   = pending.CeoResponse.Task?.Description,
+                    TriggeredBy   = "Discord",
                     AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
-                    Status       = "pending"
+                    Status        = "pending",
+                    ProjectId     = projectId,
                 };
                 taskRepo.Add(task);
                 await taskRepo.SaveAsync();
@@ -793,13 +803,18 @@ public class CommandHandler(
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
 
         // 建立提案任務（狀態 pending，後續核准再執行）
+        var projectId = string.IsNullOrWhiteSpace(project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(project);
+
         var task = new TaskItem
         {
             Title         = ceoResponse.Task?.Title ?? description,
             Description   = ceoResponse.Task?.Description ?? description,
             TriggeredBy   = "Discord",
             AssignedAgent = "CEO",
-            Status        = "pending"
+            Status        = "pending",
+            ProjectId     = projectId,
         };
         taskRepo.Add(task);
         await taskRepo.SaveAsync();
