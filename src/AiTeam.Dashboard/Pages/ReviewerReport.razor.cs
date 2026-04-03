@@ -46,6 +46,7 @@ public partial class ReviewerReport : ComponentBase
         var summary = new ReviewerReportSummary
         {
             TotalCount = items.Count,
+            BugCount = items.Count(i => i.IssueType == IssueType.Bug),
             ErrorCount = items.Count(i => i.IssueType == IssueType.Error),
             WarningCount = items.Count(i => i.IssueType == IssueType.Warning),
             SuggestionCount = items.Count(i => i.IssueType == IssueType.Suggestion),
