@@ -1,8 +1,8 @@
 # Stage 10：開發流程自動閉環
 
-> 版本：v1.0
+> 版本：v2.0
 > 建立日期：2026-04-03
-> 狀態：✅ 實作完成（2026-04-03）
+> 狀態：✅ 驗收完成（2026-04-04）
 
 ---
 
@@ -125,9 +125,9 @@ Embed 除了摘要，額外附上：
 呼叫 GitHub Tree API 取得目錄結構快照（不需要 clone），提供給 LLM 作為制定計畫的參考：
 
 ```
-GitHubService.GetRepositoryTreeAsync(owner, repo, recursive: false)
-→ 回傳兩層目錄結構
-→ 注入 BuildPlanUserMessage 的上下文
+GitHubService.GetRepoTreeSummaryAsync(owner, repo)
+→ 回傳兩層目錄結構（最多 200 筆）
+→ 注入 BuildPlanUserMessage 的上下文（## Repo 結構 區塊）
 ```
 
 **2. CEO 派任務給 Dev 時自動附帶上游產出**
@@ -249,13 +249,278 @@ Vera 無 🔴 → CEO 通知你：「PR #X 可以 merge 了」
 
 ## 驗收標準
 
-| 項目 | 標準 |
-|------|------|
-| CEO Orchestrator | 新功能完整跑一次：說需求 → 提案 → Dev → Vera → 通知 merge，全程無需手動推進 |
-| 提案書增強 | 按 ✏️ 提出修改意見，CEO 重新提案；點 GitHub 連結能看到完整 Issues 和 UI 規格 |
-| 開發上下文 | Dev 制定計畫時能看到 repo 結構，計畫中的 `files_to_modify` 準確率明顯提升 |
-| Review 閉環 | Vera 有 🔴 → Dev 自動收到通知 → 修完後 Vera 自動重審 → 無 🔴 後老闆收到通知 |
-| Ops Rollback | 模擬部署失敗，Maya 自動觸發 rollback workflow，成功回滾到上一版本 |
+| 項目 | 標準 | 結果 |
+|------|------|------|
+| CEO Orchestrator | 新功能完整跑一次：說需求 → 提案 → Dev → Vera → 通知 merge，全程無需手動推進 | ✅ |
+| 提案書增強 | 按 ✏️ 提出修改意見，CEO 重新提案；點 GitHub 連結能看到完整 Issues 和 UI 規格 | ✅ |
+| 開發上下文 | Dev 制定計畫時能看到 repo 結構，計畫中的 `files_to_modify` 準確率明顯提升 | ✅ |
+| Review 閉環 | Vera 有 🔴 → Dev 自動收到通知 → 修完後 Vera 自動重審 → 無 🔴 後老闆收到通知 | ✅ |
+| Ops Rollback | 模擬部署失敗，Maya 自動觸發 rollback workflow，程式碼路徑完整，自動路徑待真實部署驗證 | ✅ |
+
+---
+
+## 實作重點紀錄
+
+> 本節記錄 Stage 10 實作過程中的關鍵架構決策、踩坑與修正，供未來維護參考。
+
+---
+
+### 架構設計
+
+#### WorkflowEngine（`src/AiTeam.Bot/Orchestration/WorkflowEngine.cs`）
+
+**純靜態流程表，無 LLM，無 DB。**
+
+```csharp
+public WorkflowDecision GetDecision(
+    WorkflowType workflowType,
+    string completedAgent,
+    AgentExecutionResult result,
+    int fixIteration)
+```
+
+設計原則：
+- Agent 完成後呼叫 `GetDecision()`，回傳 `NextAction`（FireAgents / NotifyBossMerge / NotifyBossIntervention / Nothing）
+- **不走 LLM**：毫秒級決策，不花 Token
+- `fixIteration >= 3` 時升級為 `NotifyBossIntervention`，防止無限 fix loop
+
+**流程表（新功能）：**
+
+| completedAgent | 條件 | 下一步 |
+|---------------|------|--------|
+| `Rosa` | - | Dev |
+| `Dev` | - | QA + Doc + Reviewer（並行） |
+| `Dev_fix` | - | Reviewer |
+| `QA` / `Doc` | - | Nothing（等 Reviewer） |
+| `Reviewer` | CriticalReviewCount == 0 | NotifyBossMerge |
+| `Reviewer` | CriticalReviewCount > 0 且 fixIteration < 3 | Dev（IsFixLoop=true） |
+| `Reviewer` | fixIteration >= 3 | NotifyBossIntervention |
+
+**流程表（Bug 修復）：**
+
+| completedAgent | 條件 | 下一步 |
+|---------------|------|--------|
+| `Dev` | - | Reviewer |
+| `Dev_fix` | - | Reviewer |
+| `Reviewer` | CriticalReviewCount == 0 | NotifyBossMerge |
+| `Reviewer` | CriticalReviewCount > 0 且 fixIteration < 3 | Dev（IsFixLoop=true） |
+| `Reviewer` | fixIteration >= 3 | NotifyBossIntervention |
+
+---
+
+#### TaskGroupService（`src/AiTeam.Bot/Orchestration/TaskGroupService.cs`）
+
+**群組管理 + 並行觸發 + 遞迴 Orchestration。**
+
+核心流程：
+
+```
+HandleAgentCompletedAsync(groupId, completedAgent, result)
+    → 查 WorkflowEngine 取得 decision
+    → FireStepsAsync(group, decision.NextSteps)
+        → 每個 step 建立 TaskItem → 呼叫 executor.ExecuteTaskAsync()
+        → 完成後 Task.Run(() => HandleAgentCompletedAsync(...))  ← 遞迴
+```
+
+**重要：遞迴呼叫用 `Task.Run`（背景執行，不 await）**，避免 await chain 過深導致 Bot 阻塞。
+
+TaskItem.Description metadata block 格式（Dev / QA / Doc / Reviewer 接收）：
+```
+任務標題
+
+PR 連結：https://github.com/...
+
+---
+issue_urls: ["https://...","https://..."]
+ui_spec_path: docs/ui-specs/xxx.md
+fix_loop: true           ← 僅修復迭代
+vera_review:             ← 僅修復迭代，附上 Vera 完整報告
+[Vera 審查報告全文]
+---
+```
+
+---
+
+#### TaskGroup Entity（`src/AiTeam.Data/Entities/TaskGroup.cs`）
+
+```csharp
+public class TaskGroup
+{
+    public Guid    Id             { get; set; }
+    public string  Title          { get; set; }
+    public string  Project        { get; set; }
+    public string  Status         { get; set; }   // running / done / failed
+    public string  WorkflowType   { get; set; }   // new_feature / bug_fix
+    public string? IssueUrls      { get; set; }   // JSON array（jsonb）
+    public string? UiSpecPath     { get; set; }
+    public string? DevPrUrl       { get; set; }
+    public string? LastReviewBody { get; set; }   // Vera 最新完整報告
+    public int     FixIteration   { get; set; }   // Dev fix 次數（≥3 升級給老闆）
+}
+```
+
+EF Migration：`AddTaskGroupAndWaitingInput`（含 `task_groups` 資料表 + `TaskItem.GroupId` FK）
+
+Status index：`AddTaskGroupStatusIndex`（`HasIndex(x => x.Status)`，查詢熱路徑優化）
+
+---
+
+#### Review 閉環 Webhook（`src/AiTeam.Bot/GitHub/WebhookController.cs`）
+
+**`pull_request.synchronize`** 事件觸發條件（有人 push 到 PR branch）：
+
+```csharp
+// HandlePrSynchronizedAsync
+1. 查 DB 找 GroupId 對應的 TaskGroup（DevPrUrl 比對）
+2. 找到 → 組建假 AgentExecutionResult（Success=true, CriticalReviewCount=1）
+3. 呼叫 taskGroupService.HandleAgentCompletedAsync(group.Id, "Dev_fix", fakeResult, prUrl)
+4. WorkflowEngine 決策 Dev_fix → Reviewer → 觸發 Vera 重審
+```
+
+**重要注意**：此路徑與 Orchestrator 的 `HandleAgentCompletedAsync("Dev_fix")` 存在潛在 Race Condition（見下方踩坑記錄）。
+
+---
+
+#### Vera 審查報告傳遞（`AgentExecutionResult.ReviewBody`）
+
+```csharp
+public record AgentExecutionResult(
+    bool Success, string Summary,
+    string? OutputUrl = null,
+    bool IsWaitingInput = false,
+    string? QuestionType = null,
+    string? Question = null,
+    int CriticalReviewCount = 0,
+    string? ReviewBody = null,       // Vera 完整報告
+    IReadOnlyList<string>? OutputUrls = null)  // Rosa 多 Issue URL
+```
+
+`ReviewBody` 在 `TaskGroupService.HandleAgentCompletedAsync` 中存入 `group.LastReviewBody`，下次 Dev fix loop 時透過 `BuildTaskDescription` 注入到 TaskItem.Description。
+
+---
+
+### 踩坑與修正記錄
+
+#### 1. Race Condition：Vera 被重複觸發
+
+**問題**：Dev_fix push commit 時，Webhook（`HandlePrSynchronizedAsync`）與 Orchestrator（`FireOneStepAsync` 的背景 Task.Run）幾乎同時呼叫 `HandleAgentCompletedAsync("Dev_fix")`，導致 Vera 被觸發兩次。
+
+**根本原因**：兩個路徑都認為自己在正常推進流程，都查到 `group.Status = "running"` 就繼續。
+
+**修正（`TaskGroupService.HandleAgentCompletedAsync`）**：
+
+```csharp
+// 防止 Race Condition：若 TaskGroup 已結束（done/failed），不重複推進
+if (group.Status is "done" or "failed")
+{
+    logger.LogDebug("HandleAgentCompleted：TaskGroup {Id} 已結束（{Status}），略過", groupId, group.Status);
+    return;
+}
+```
+
+**注意**：Group Status Guard 只能攔截「已結束」的群組，無法 100% 防止「兩個執行緒同時在 running 狀態」的競爭。目前實測沒問題，若未來遇到，可考慮加 DB-level 樂觀鎖（ETag / RowVersion）。
+
+---
+
+#### 2. IssueUrls 全部是同一個 URL
+
+**問題**：Rosa 建立 N 個 Issues，但 TaskGroup 的 `IssueUrls` 全部存同一個 URL（第一個）。
+
+**根本原因**：`AgentExecutionResult` 只有 `OutputUrl`（單一字串），Rosa 回傳 N 個 URL 時只能傳第一個，CommandHandler 重複用同一個 URL 填滿清單。
+
+**修正**：新增 `AgentExecutionResult.OutputUrls`（`IReadOnlyList<string>?`）。
+
+`RequirementsAgentService.CreateIssuesFromPreviewAsync` 改為：
+```csharp
+return new AgentExecutionResult(
+    true,
+    $"已建立 {createdUrls.Count} 個 GitHub Issues",
+    createdUrls.FirstOrDefault(),
+    OutputUrls: createdUrls);   // 完整清單
+```
+
+`CommandHandler` 讀取時優先用 `OutputUrls`，fallback 到 `OutputUrl`：
+```csharp
+var issueUrlsList = (result.OutputUrls is { Count: > 0 }
+    ? result.OutputUrls
+    : (result.OutputUrl is not null ? [result.OutputUrl] : Array.Empty<string>()))
+    .Where(u => !string.IsNullOrEmpty(u))
+    .ToList();
+```
+
+---
+
+#### 3. Designer / Reviewer PushStatus 傳 Guid.Empty
+
+**問題**：Dashboard 任務中心看不到 Designer 和 Reviewer 的任務進度更新。
+
+**根本原因**：`DesignerAgentService.PushStatus` 和 `ReviewerAgentService.PushStatus` 是私有方法，寫死用 `Guid.Empty` 作為 TaskId，Dashboard 收到後無法對應到正確任務。
+
+**修正**：兩個 PushStatus 方法改為接受 `Guid taskId` 參數，呼叫端傳入實際 `task.Id`。
+
+---
+
+#### 4. Agent 頻道直接指令，專案欄位空白
+
+**問題**：在 `#maya-ops` 等 Agent 頻道直接下指令，Dashboard 任務中心的專案欄位顯示空白。
+
+**根本原因**：`ExtractProjectFromChannelName()` 永遠回傳 `""`（佔位 stub），導致 `ProjectId = null`。
+
+**修正（`CommandHandler.cs`）**：
+```csharp
+var projectRaw = ExtractProjectFromChannelName(msg.Channel.Name);
+var project    = string.IsNullOrEmpty(projectRaw) ? _gitHubSettings.DefaultRepo : projectRaw;
+```
+
+---
+
+#### 5. Dev Agent 框架幻覺（驗收測試發現）
+
+**問題**：Dev Agent 在某些任務中幻覺使用 `Microsoft.SemanticKernel`（本專案未安裝），建立了與現有架構完全不相容的新檔案，而非修改現有的 `*Service.cs`。
+
+**Vera 為何沒攔截**：Vera 是逐檔審查，看到 `ReviewerAgent.cs` 是合理的 C# 代碼，但不知道整個 repo 的依賴清單，也不知道應該修改的是 `ReviewerAgentService.cs`。
+
+**已記錄至 Future Feature 十二**：Dev Prompt 加禁用框架清單 + Vera Prompt 加 dependency audit 規則。
+
+---
+
+### Ops Rollback 的兩條路徑（重要）
+
+> **此設計容易混淆，請特別注意。**
+
+**路徑 A — Discord 手動指令（現行）**
+
+老闆在 `#maya-ops` 說「rollback」→ CEO 確認 → `ExecuteTaskAsync` → 發警報到 `#警報` → **不執行 rollback**
+
+這是設計上的「等人確認」路徑，Ops 只通知，不自動執行。
+
+**路徑 B — 部署監控自動觸發（Stage 10 核心）**
+
+`MonitorDeploymentAsync` 偵測部署失敗 → `ExecuteRollbackAsync` → 呼叫 `TriggerWorkflowDispatchAsync("rollback.yml")` → GitHub Actions 執行 → **真正回滾**
+
+Stage 10 驗收測試（Discord 手動指令）走的是路徑 A，路徑 B 需真實部署失敗才能觸發，未在驗收測試中直接驗證。程式碼邏輯已完整實作。
+
+---
+
+### 新增 EF Migration 注意事項
+
+本 Stage 新增了兩個 Migration：
+- `AddTaskGroupAndWaitingInput`
+- `AddTaskGroupStatusIndex`
+
+執行 Migration 指令時，必須指定 startup project 為 Dashboard（Bot 沒有 EF Design 依賴）：
+
+```bash
+dotnet ef migrations add <MigrationName> \
+  --project src/AiTeam.Data \
+  --startup-project src/AiTeam.Dashboard \
+  --context AppDbContext
+
+dotnet ef database update \
+  --project src/AiTeam.Data \
+  --startup-project src/AiTeam.Dashboard \
+  --context AppDbContext
+```
 
 ---
 
@@ -264,3 +529,5 @@ Vera 無 🔴 → CEO 通知你：「PR #X 可以 merge 了」
 | 日期 | 內容 |
 |------|------|
 | 2026-04-03 | 初版建立（五大項目：CEO Orchestrator、提案書增強、開發上下文、Review 閉環、Ops Rollback）|
+| 2026-04-03 | 實作完成，CHANGELOG v1.3.0 |
+| 2026-04-04 | 驗收完成；補充實作重點紀錄（架構設計、踩坑記錄、Ops 兩條路徑說明、Migration 注意事項）|

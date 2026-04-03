@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v2.3
+> 版本：v2.4
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -45,6 +45,7 @@
 | v2.1 | 2026-04-03 | Stage 9 全部完成並驗收：Token 監控即時 SignalR 更新、CEO 四類分類 + 提案模式、QA Playwright CI |
 | v2.2 | 2026-04-03 | 新增 Stage_10_Roadmap.md（CEO Orchestrator、提案書增強、開發上下文、Review 閉環、Ops Rollback）；修復 CHANGELOG.md base64 問題並補上 v1.1.0 / v1.2.0 |
 | v2.3 | 2026-04-03 | Stage 10 實作完成：WorkflowEngine、TaskGroupService、✏️ 提案調整按鈕、Dev repo tree 上下文、Review 閉環 webhook、Ops Rollback GitHub Actions |
+| v2.4 | 2026-04-04 | Stage 10 驗收完成；Stage_10_Roadmap.md 補充詳細實作紀錄（架構設計、踩坑、Race Condition、Ops 路徑說明、Migration 指令）；v1.3.1 修正 7 項驗收後 bug |
 
 ---
 

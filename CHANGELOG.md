@@ -1,3 +1,16 @@
+## v1.3.1 — 2026-04-04
+
+### Bug 修復
+- **Race Condition 防護**：`TaskGroupService.HandleAgentCompletedAsync` 加入 Group Status Guard，`TaskGroup.Status` 已為 `done/failed` 時直接跳過，防止 Webhook 與 Orchestrator 同時觸發 Vera 兩次
+- **IssueUrls 重複 bug**：`AgentExecutionResult` 新增 `OutputUrls`（`IReadOnlyList<string>?`），`RequirementsAgentService` 回傳完整 Issue URL 清單，`CommandHandler` 優先讀 `OutputUrls`，解決所有 Issue 存成同一個 URL 的問題
+- **DesignerAgentService PushStatus**：`PushStatus` 改接受 `Guid taskId` 參數取代寫死 `Guid.Empty`，Dashboard 任務追蹤正常顯示 Designer 執行進度
+- **ReviewerAgentService PushStatus**：同上
+- **Agent 頻道直接指令專案欄位空白**：`ExtractProjectFromChannelName` 回傳空字串時 fallback 到 `DefaultRepo`，修正 `#maya-ops` 等頻道觸發的任務在 Dashboard 任務中心專案欄位顯示空白的問題
+- **移除 dead code**：`DesignerAgentService.ContainsPrKeyword()` 從未被呼叫（Stage 10 改為一律提交），已移除
+- **EF Index**：`task_groups.status` 新增索引（EF Migration `AddTaskGroupStatusIndex`），優化 Orchestrator 熱路徑查詢效能
+
+---
+
 ## v1.3.0 — 2026-04-03
 
 ### 新功能

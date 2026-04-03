@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。
 
 ---
 
@@ -72,6 +72,7 @@ docs/
 ├── Stage_7_Roadmap.md           ← ✅ 完成
 ├── Stage_8_Roadmap.md           ← ✅ 完成
 ├── Stage_9_Roadmap.md           ← ✅ 完成
+├── Stage_10_Roadmap.md          ← ✅ 完成（含詳細實作紀錄）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -96,6 +97,40 @@ docs/
   # 警報
   # 每日摘要
 ```
+
+---
+
+## CEO Orchestrator（Stage 10）
+
+Stage 10 起，CEO 從「任務路由器」升級為「任務生命週期全程指揮官」。
+
+**新功能完整流程（無需手動推進）：**
+```
+老闆說需求
+    ↓
+CEO 進入提案模式：Rosa（需求） + Demi（UI 規格）並行產出
+    ↓
+提案書 Embed（含 GitHub Issue 連結 + UI 規格連結）
+  [✅ 核准] [✏️ 需調整] [❌ 取消]
+    ↓ 老闆核准
+CEO 自動派 Dev（附帶 Issues + UI 規格 + repo 結構）
+    ↓
+Dev 開發 → PR 開出
+    ↓ CEO 自動觸發
+QA + Doc + Vera 並行執行
+    ↓
+Vera 發現 🔴 → Dev 自動修正 → Vera 自動重審（最多 3 次）
+Vera 無 🔴 → CEO 通知老闆：「PR 可以 merge 了」
+    ↓
+老闆 merge
+```
+
+老闆只需要做兩件事：**核准提案書** + **最後 merge PR**。
+
+核心組件：
+- `WorkflowEngine`：純靜態流程表，無 LLM，毫秒級路由
+- `TaskGroupService`：群組管理 + 並行觸發 + 遞迴 Orchestration
+- `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecPath、DevPrUrl、LastReviewBody、FixIteration）
 
 ---
 
@@ -243,6 +278,7 @@ docker compose --env-file .env up -d
 | Stage 7 | Reviewer / Release / Designer Agent、CI/CD、自然語言對話、Agent 專屬頻道 | ✅ 完成 |
 | Stage 8 | 系統可靠性補完、Notion 遷移、動態設定、規則管理、部署紀錄自動化 | ✅ 完成 |
 | Stage 9 | Token 監控 Dashboard（即時 SignalR）、CEO 智慧分類 + 提案模式、QA Playwright CI | ✅ 完成 |
+| Stage 10 | CEO Orchestrator 全自動流程、提案書 ✏️ 調整按鈕、Dev repo 結構上下文、Review 閉環、Ops Rollback | ✅ 完成 |
 
 ---
 
