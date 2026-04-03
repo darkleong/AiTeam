@@ -1,0 +1,285 @@
+
+```csharp
+@page "/reviewer-report"
+@using AiTeam.Dashboard.Models
+@using AiTeam.Dashboard.Services
+@inject ReviewReportService ReviewReportService
+
+<PageTitle>Reviewer Agent 報告</PageTitle>
+
+<h1>Reviewer Agent 報告</h1>
+
+@if (isLoading)
+{
+    <p>載入中...</p>
+}
+else if (report == null)
+{
+    <p>尚無報告資料。</p>
+}
+else
+{
+    <div class="report-container">
+        <div class="report-header">
+            <h2>@report.Title</h2>
+            <p class="report-date">產生時間：@report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss")</p>
+        </div>
+
+        @if (report.Issues != null && report.Issues.Any())
+        {
+            <div class="issues-section">
+                <h3>問題清單</h3>
+                <table class="issues-table">
+                    <thead>
+                        <tr>
+                            <th>嚴重等級</th>
+                            <th>描述</th>
+                            <th>檔案</th>
+                            <th>行號</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var issue in report.Issues)
+                        {
+                            <tr class="issue-row @GetSeverityClass(issue.Severity)">
+                                <td>
+                                    <span class="severity-badge @GetSeverityClass(issue.Severity)">
+                                        @issue.Severity
+                                    </span>
+                                </td>
+                                <td>@issue.Description</td>
+                                <td>@issue.FilePath</td>
+                                <td>@issue.LineNumber</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="no-issues">沒有發現任何問題。</p>
+        }
+
+        <div class="summary-section">
+            <h3>問題統計總結</h3>
+            <div class="summary-row">
+                <div class="summary-item error">
+                    <span class="summary-label">Error</span>
+                    <span class="summary-count">@report.Summary.ErrorCount</span>
+                </div>
+                <div class="summary-item warning">
+                    <span class="summary-label">Warning</span>
+                    <span class="summary-count">@report.Summary.WarningCount</span>
+                </div>
+                <div class="summary-item info">
+                    <span class="summary-label">Info</span>
+                    <span class="summary-count">@report.Summary.InfoCount</span>
+                </div>
+                <div class="summary-item total">
+                    <span class="summary-label">總計</span>
+                    <span class="summary-count">@report.Summary.TotalCount</span>
+                </div>
+            </div>
+            <p class="summary-text">
+                共發現 <strong>@report.Summary.TotalCount</strong> 個問題：
+                <span class="error-text">@report.Summary.ErrorCount 個 Error</span>、
+                <span class="warning-text">@report.Summary.WarningCount 個 Warning</span>、
+                <span class="info-text">@report.Summary.InfoCount 個 Info</span>
+            </p>
+        </div>
+    </div>
+}
+
+@code {
+    private ReviewReport? report;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            report = await ReviewReportService.GetLatestReportAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetSeverityClass(string severity)
+    {
+        return severity?.ToLower() switch
+        {
+            "error" => "severity-error",
+            "warning" => "severity-warning",
+            "info" => "severity-info",
+            _ => "severity-unknown"
+        };
+    }
+}
+
+<style>
+    .report-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .report-header {
+        margin-bottom: 24px;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 16px;
+    }
+
+    .report-date {
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+
+    .issues-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 24px;
+    }
+
+    .issues-table th,
+    .issues-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .issues-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+
+    .severity-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: 600;
+    }
+
+    .severity-error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .severity-warning {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .severity-info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .severity-unknown {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .issue-row.severity-error {
+        background-color: #fff5f5;
+    }
+
+    .issue-row.severity-warning {
+        background-color: #fffdf0;
+    }
+
+    .issue-row.severity-info {
+        background-color: #f0f9ff;
+    }
+
+    .summary-section {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 24px;
+    }
+
+    .summary-section h3 {
+        margin-top: 0;
+        margin-bottom: 16px;
+    }
+
+    .summary-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+
+    .summary-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px 24px;
+        border-radius: 8px;
+        min-width: 100px;
+    }
+
+    .summary-item.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .summary-item.warning {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+
+    .summary-item.info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+
+    .summary-item.total {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+
+    .summary-label {
+        font-size: 0.85em;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .summary-count {
+        font-size: 2em;
+        font-weight: 700;
+    }
+
+    .summary-text {
+        margin-top: 8px;
+        font-size: 0.95em;
+    }
+
+    .error-text {
+        color: #721c24;
+        font-weight: 600;
+    }
+
+    .warning-text {
+        color: #856404;
+        font-weight: 600;
+    }
+
+    .info-text {
+        color: #0c5460;
+        font-weight: 600;
+    }
+
+    .no-issues {
+        color: #28a745;
+        font-size: 1.1em;
+        padding: 16px;
+        background-color: #d4edda;
+        border-radius: 4px;
+    }
+</style>
+```
