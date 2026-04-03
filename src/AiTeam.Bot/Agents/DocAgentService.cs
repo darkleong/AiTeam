@@ -140,8 +140,12 @@ public class DocAgentService(
     private static string ExtractPathPrefix(string text)
     {
         // 嘗試從文字中找到路徑前綴（如 "src/AiTeam.Bot/Agents"）
-        var segments = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var pathLike = segments.FirstOrDefault(s => s.Contains('/') && !s.StartsWith("http"));
+        // 分割所有空白與換行，過濾 URL（含 ://）與過長字串（URL 通常很長）
+        var segments = text.Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var pathLike = segments.FirstOrDefault(s =>
+            s.Contains('/') &&
+            !s.Contains("://") &&   // 排除 http:// https:// 等 URL
+            s.Length < 80);         // 排除超長字串
         return (pathLike ?? "src").TrimEnd('/');
     }
 

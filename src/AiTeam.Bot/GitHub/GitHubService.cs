@@ -256,6 +256,7 @@ public class GitHubService(
 
     /// <summary>
     /// 開啟 Pull Request，回傳 PR URL。
+    /// 若 PR 已存在（fix loop 重複呼叫），回傳現有 PR URL 而非拋出例外。
     /// </summary>
     public async Task<string> OpenPullRequestAsync(
         string owner, string repo,
@@ -263,12 +264,33 @@ public class GitHubService(
         string head, string baseBranch = "main")
     {
         var client = CreateClient();
-        var pr = await client.PullRequest.Create(owner, repo, new NewPullRequest(title, head, baseBranch)
+        try
         {
-            Body = body
-        });
-        logger.LogInformation("PR #{Number} 已開啟：{Url}", pr.Number, pr.HtmlUrl);
-        return pr.HtmlUrl;
+            var pr = await client.PullRequest.Create(owner, repo, new NewPullRequest(title, head, baseBranch)
+            {
+                Body = body
+            });
+            logger.LogInformation("PR #{Number} 已開啟：{Url}", pr.Number, pr.HtmlUrl);
+            return pr.HtmlUrl;
+        }
+        catch (ApiValidationException)
+        {
+            // PR 已存在（fix loop 場景）：查詢現有 open PR 並回傳其 URL
+            logger.LogWarning("PR 已存在（branch={Head}），嘗試取得現有 PR URL", head);
+            var existing = await client.PullRequest.GetAllForRepository(owner, repo,
+                new PullRequestRequest
+                {
+                    State = ItemStateFilter.Open,
+                    Head  = $"{owner}:{head}"
+                });
+            var existingPr = existing.FirstOrDefault();
+            if (existingPr is not null)
+            {
+                logger.LogInformation("回傳現有 PR URL：{Url}", existingPr.HtmlUrl);
+                return existingPr.HtmlUrl;
+            }
+            throw;
+        }
     }
 
     /// <summary>

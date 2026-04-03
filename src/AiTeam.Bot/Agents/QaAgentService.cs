@@ -198,8 +198,13 @@ public class QaAgentService(
 
     private static int ExtractPrNumber(string text)
     {
+        // 先嘗試 PR #123 格式
         var match = Regex.Match(text, @"PR\s*#(\d+)", RegexOptions.IgnoreCase);
-        return match.Success && int.TryParse(match.Groups[1].Value, out var num) ? num : 0;
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var num)) return num;
+
+        // 再嘗試 GitHub URL /pull/123 格式（Orchestrator 傳入的 PR 連結）
+        match = Regex.Match(text, @"/pull/(\d+)", RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups[1].Value, out num) ? num : 0;
     }
 
     private static string BuildTestFilePath(string sourcePath)

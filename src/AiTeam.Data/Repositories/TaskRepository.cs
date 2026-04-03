@@ -27,6 +27,13 @@ public class TaskRepository(AppDbContext db)
             .Select(p => p.Name)
             .ToListAsync(cancellationToken);
 
+    /// <summary>依名稱查詢啟用中的專案 ID（Orchestrator 建立 TaskItem 時設定 ProjectId 用）。</summary>
+    public async Task<Guid?> GetProjectIdByNameAsync(string projectName, CancellationToken cancellationToken = default)
+        => await db.Projects
+            .Where(p => p.IsActive && p.Name == projectName)
+            .Select(p => (Guid?)p.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     /// <summary>查詢指定專案的最近 N 筆任務（CEO 組 Prompt 用）。</summary>
     public async Task<List<TaskItem>> GetRecentByProjectAsync(
         string projectName,

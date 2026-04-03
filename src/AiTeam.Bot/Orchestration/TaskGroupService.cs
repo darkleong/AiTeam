@@ -181,6 +181,11 @@ public class TaskGroupService(
 
         // 建立 TaskItem
         var description = BuildTaskDescription(group, step);
+        // 查詢專案 ID（供任務中心顯示專案欄位）
+        var projectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+
         var taskItem = new TaskItem
         {
             Title         = $"{group.Title}（{step.AgentName}）",
@@ -189,6 +194,7 @@ public class TaskGroupService(
             AssignedAgent = step.AgentName,
             Status        = "running",
             GroupId       = group.Id,
+            ProjectId     = projectId,
         };
 
         taskRepo.Add(taskItem);
