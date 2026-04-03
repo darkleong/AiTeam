@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 
@@ -11,6 +7,8 @@ namespace AiTeam.Bot.Agents
 {
     public class ReviewerAgent
     {
+        private const int MaxContextLength = 2000;
+
         private readonly Kernel _kernel;
         private readonly IChatCompletionService _chatCompletion;
 
@@ -22,6 +20,14 @@ namespace AiTeam.Bot.Agents
 
         public async Task<string> ReviewCodeAsync(string code, string context = "")
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(code);
+
+            var sanitizedContext = string.IsNullOrEmpty(context)
+                ? string.Empty
+                : context.Length > MaxContextLength
+                    ? context.Substring(0, MaxContextLength)
+                    : context;
+
             var systemPrompt = @"你是一位資深的程式碼審查專家。請仔細審查提供的程式碼，並給出詳細的審查報告。
 
 審查報告應包含以下幾個面向：
@@ -38,9 +44,9 @@ namespace AiTeam.Bot.Agents
 
 請用繁體中文回覆。";
 
-            var userPrompt = string.IsNullOrEmpty(context)
-                ? $"請審查以下程式碼：\n\n{code}"
-                : $"背景資訊：{context}\n\n請審查以下程式碼：\n\n{code}";
+            var userPrompt = string.IsNullOrEmpty(sanitizedContext)
+                ? $"請審查以下程式碼：\n\n<code>\n{code}\n</code>"
+                : $"背景資訊：\n<context>\n{sanitizedContext}\n</context>\n\n請審查以下程式碼：\n\n<code>\n{code}\n</code>";
 
             var chatHistory = new ChatHistory();
             chatHistory.AddSystemMessage(systemPrompt);
