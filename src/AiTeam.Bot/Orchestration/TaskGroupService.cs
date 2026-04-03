@@ -97,6 +97,15 @@ public class TaskGroupService(
             await taskRepo.SaveAsync(cancellationToken);
         }
 
+        // 更新 LastReviewBody（Vera 完成審查時，存下完整報告供 Dev fix loop 使用）
+        if (!string.IsNullOrWhiteSpace(result.ReviewBody))
+        {
+            group.LastReviewBody = result.ReviewBody;
+            await taskRepo.SaveAsync(cancellationToken);
+            logger.LogInformation("TaskGroup {Id} 已儲存 Vera 審查報告（{Len} 字）",
+                groupId, result.ReviewBody.Length);
+        }
+
         var workflowType = group.WorkflowType == "new_feature"
             ? WorkflowType.NewFeature
             : WorkflowType.BugFix;
@@ -347,7 +356,12 @@ public class TaskGroupService(
             if (!string.IsNullOrWhiteSpace(group.UiSpecPath))
                 meta.Add($"ui_spec_path: {group.UiSpecPath}");
             if (step.IsFixLoop)
+            {
                 meta.Add("fix_loop: true");
+                // 把 Vera 最新的審查報告帶給 Dev，讓 Dev 知道要修什麼
+                if (!string.IsNullOrWhiteSpace(group.LastReviewBody))
+                    meta.Add($"vera_review:\n{group.LastReviewBody}");
+            }
 
             if (meta.Count > 0)
             {

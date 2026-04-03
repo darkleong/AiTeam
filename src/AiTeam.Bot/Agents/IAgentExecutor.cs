@@ -32,6 +32,7 @@ public interface IAgentExecutor
 /// <param name="QuestionType">問題類型：requirement / ui_spec / business_decision。</param>
 /// <param name="Question">暫停時要問的問題內容。</param>
 /// <param name="CriticalReviewCount">Vera 審查出的 critical 問題數量，0 表示通過。</param>
+/// <param name="ReviewBody">Vera 的完整審查報告 markdown（fix loop 傳給 Dev 用）。</param>
 public record AgentExecutionResult(
     bool Success,
     string Summary,
@@ -39,7 +40,8 @@ public record AgentExecutionResult(
     bool IsWaitingInput = false,
     string? QuestionType = null,
     string? Question = null,
-    int CriticalReviewCount = 0)
+    int CriticalReviewCount = 0,
+    string? ReviewBody = null)
 {
     /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
     public static AgentExecutionResult PauseAndAsk(string questionType, string question)

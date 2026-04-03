@@ -51,6 +51,7 @@ public class TaskGroup
     public string? IssueUrls { get; set; }   // JSONB string[]
     public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md
     public string? DevPrUrl { get; set; }
+    public string? LastReviewBody { get; set; } // Vera 最新一次的完整審查報告（fix loop 傳給 Dev 用）
     public int FixIteration { get; set; } = 0; // 防止無限 Review loop，超過 3 次升級給老闆
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

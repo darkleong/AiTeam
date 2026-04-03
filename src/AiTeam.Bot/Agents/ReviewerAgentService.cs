@@ -117,7 +117,8 @@ public class ReviewerAgentService(
             await PushStatus("done", task.Title);
 
             return new AgentExecutionResult(true, summary, reviewUrl,
-                CriticalReviewCount: criticalCount);
+                CriticalReviewCount: criticalCount,
+                ReviewBody: reviewBody);
         }
         catch (Exception ex)
         {

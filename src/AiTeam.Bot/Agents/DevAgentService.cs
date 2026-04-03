@@ -39,7 +39,7 @@ public class DevAgentService(
 
         // 解析 task.Description 中的 Orchestrator metadata block
         ParseDescriptionMeta(task.Description,
-            out var issueUrls, out var uiSpecPath, out var isFixLoop);
+            out var issueUrls, out var uiSpecPath, out var isFixLoop, out var veraReview);
 
         // fix loop：取得既有 PR 的 branch name，確保 LLM 不自創新 branch
         string? fixBranch = null;
@@ -60,7 +60,7 @@ public class DevAgentService(
             }
         }
 
-        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop, fixBranch);
+        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop, fixBranch, veraReview);
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
@@ -252,6 +252,10 @@ public class DevAgentService(
     {
         var provider = providerFactory.Create("Dev");
 
+        // 解析 Vera 報告（fix loop 時可用）
+        ParseDescriptionMeta(task.Description,
+            out _, out _, out var isFixLoop, out var veraReview);
+
         foreach (var filePath in plan.FilesToModify)
         {
             var fullPath = Path.Combine(localPath, filePath.Replace('/', Path.DirectorySeparatorChar));
@@ -259,21 +263,34 @@ public class DevAgentService(
             // 讀取現有內容（若存在）
             var existingContent = File.Exists(fullPath) ? await File.ReadAllTextAsync(fullPath, cancellationToken) : "";
 
+            // Vera 報告區段（fix loop 時提供，讓 Dev 知道要修什麼）
+            var veraSection = isFixLoop && !string.IsNullOrWhiteSpace(veraReview)
+                ? $"""
+
+                ## Vera 審查報告（請依此修改 🔴 必須修改的項目）
+                {veraReview}
+                """
+                : "";
+
             var prompt = $"""
                 任務：{task.Title}
-                描述：{plan.Summary}
+                描述：{task.Description ?? plan.Summary}
+                計畫摘要：{plan.Summary}
                 檔案：{filePath}
-
+                {veraSection}
                 ## 現有程式碼
                 ```
                 {existingContent}
                 ```
 
-                請直接回傳修改後的完整程式碼，不要加任何說明文字或 markdown 格式。
+                請直接回傳修改後的完整 C# 程式碼。
+                - 不要加任何說明文字
+                - 不要用 ```csharp 或 ``` 包裝
+                - 只回傳純粹的程式碼內容
                 """;
 
             var response = await provider.CompleteAsync(
-                "你是資深 C# 工程師，直接回傳修改後的完整程式碼，不加任何說明。",
+                "你是資深 C# 工程師。回傳修改後的完整程式碼，不加任何說明、不加 markdown 標記。只回傳純程式碼。",
                 prompt, cancellationToken);
 
             // 去除 LLM 可能加上的 markdown 程式碼區塊標記（```csharp / ```）
@@ -342,7 +359,8 @@ public class DevAgentService(
         string? issueUrls,
         string? uiSpecPath,
         bool isFixLoop,
-        string? fixBranch = null)
+        string? fixBranch = null,
+        string? veraReview = null)
     {
         var issueSection  = string.IsNullOrWhiteSpace(issueUrls)  ? "（無）" : issueUrls;
         var uiSpecSection = string.IsNullOrWhiteSpace(uiSpecPath) ? "（無）" : uiSpecPath;
@@ -350,6 +368,16 @@ public class DevAgentService(
             ? $"\n⚠️ 這是 Vera 審查後的修復迭代，不要建立新 PR。\n" +
               $"fix_branch（branch_name 必須完全照用此值）：`{fixBranch ?? "（查詢失敗，請沿用原 PR 的 branch）"}`"
             : "";
+
+        var veraSection = string.IsNullOrWhiteSpace(veraReview)
+            ? ""
+            : $"""
+
+            ## ⚠️ Vera 審查報告（你必須根據以下問題修改，只修改被指出的檔案和問題）
+            {veraReview}
+
+            **重點：只修改上述報告中 🔴 必須修改的項目，不要重寫整個檔案，不要修改其他檔案。**
+            """;
 
         return $"""
             ## 任務
@@ -359,7 +387,7 @@ public class DevAgentService(
 
             ## 任務描述
             {task.Description ?? task.Title}
-
+            {veraSection}
             ## Repo 結構（2 層，供選擇修改檔案參考）
             {repoTree}
 
@@ -387,29 +415,66 @@ public class DevAgentService(
         string? description,
         out string? issueUrls,
         out string? uiSpecPath,
-        out bool isFixLoop)
+        out bool isFixLoop,
+        out string? veraReview)
     {
         issueUrls  = null;
         uiSpecPath = null;
         isFixLoop  = false;
+        veraReview = null;
 
         if (string.IsNullOrWhiteSpace(description)) return;
 
         var lines = description.Split('\n');
         var inMeta = false;
+        var inVeraReview = false;
+        var reviewLines = new List<string>();
+
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (trimmed == "---") { inMeta = !inMeta; continue; }
+            if (trimmed == "---")
+            {
+                if (inVeraReview) inVeraReview = false; // 結束 vera_review 區段
+                inMeta = !inMeta;
+                continue;
+            }
             if (!inMeta) continue;
 
-            if (trimmed.StartsWith("issue_urls:"))
+            // vera_review 是多行區段，從 "vera_review:" 開始到下一個 key 或 ---
+            if (inVeraReview)
+            {
+                // 遇到其他 key 時結束 vera_review 收集
+                if (trimmed.StartsWith("issue_urls:") || trimmed.StartsWith("ui_spec_path:")
+                    || trimmed.StartsWith("fix_loop:"))
+                {
+                    inVeraReview = false;
+                    // 繼續往下判斷這行本身是哪個 key
+                }
+                else
+                {
+                    reviewLines.Add(line);
+                    continue;
+                }
+            }
+
+            if (trimmed.StartsWith("vera_review:"))
+            {
+                inVeraReview = true;
+                var remainder = trimmed["vera_review:".Length..].Trim();
+                if (!string.IsNullOrEmpty(remainder))
+                    reviewLines.Add(remainder);
+            }
+            else if (trimmed.StartsWith("issue_urls:"))
                 issueUrls = trimmed["issue_urls:".Length..].Trim();
             else if (trimmed.StartsWith("ui_spec_path:"))
                 uiSpecPath = trimmed["ui_spec_path:".Length..].Trim();
             else if (trimmed.StartsWith("fix_loop:"))
                 isFixLoop = trimmed.Contains("true", StringComparison.OrdinalIgnoreCase);
         }
+
+        if (reviewLines.Count > 0)
+            veraReview = string.Join("\n", reviewLines).Trim();
     }
 
     /// <summary>
