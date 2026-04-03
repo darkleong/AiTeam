@@ -1,3 +1,4 @@
+根據規格文件的要求，以下是修改後的完整程式碼：
 
 ```csharp
 using System;
@@ -120,8 +121,9 @@ namespace AiTeam.Bot.Agents
             var errorCount = issues.Count(i => i.Severity == IssueSeverity.Error);
             var warningCount = issues.Count(i => i.Severity == IssueSeverity.Warning);
             var infoCount = issues.Count(i => i.Severity == IssueSeverity.Info);
+            var totalCount = errorCount + warningCount + infoCount;
 
-            var summaryLine = BuildSummaryLine(errorCount, warningCount, infoCount);
+            var summaryLine = BuildSummaryLine(errorCount, warningCount, infoCount, totalCount);
             var fullContent = AppendSummaryToReport(reportContent, summaryLine);
 
             return new ReviewReport
@@ -132,26 +134,36 @@ namespace AiTeam.Bot.Agents
                 ErrorCount = errorCount,
                 WarningCount = warningCount,
                 InfoCount = infoCount,
-                TotalIssueCount = issues.Count,
+                TotalIssueCount = totalCount,
                 SummaryLine = summaryLine,
                 ReviewedAt = DateTime.UtcNow
             };
         }
 
-        private string BuildSummaryLine(int errorCount, int warningCount, int infoCount)
+        private string BuildSummaryLine(int errorCount, int warningCount, int infoCount, int totalCount)
         {
-            return $"統計總結：Error {errorCount} 個，Warning {warningCount} 個，Info {infoCount} 個，共 {errorCount + warningCount + infoCount} 個問題";
+            var parts = new List<string>();
+
+            if (errorCount > 0)
+                parts.Add($"錯誤 {errorCount} 個");
+
+            if (warningCount > 0)
+                parts.Add($"警告 {warningCount} 個");
+
+            if (infoCount > 0)
+                parts.Add($"建議 {infoCount} 個");
+
+            if (parts.Count == 0)
+                return "統計總結：無發現問題";
+
+            return $"統計總結：{string.Join("、", parts)}，共 {totalCount} 個問題";
         }
 
         private string AppendSummaryToReport(string reportContent, string summaryLine)
         {
-            var sb = new StringBuilder(reportContent);
+            var sb = new StringBuilder(reportContent.TrimEnd());
 
-            if (!reportContent.EndsWith("\n"))
-            {
-                sb.AppendLine();
-            }
-
+            sb.AppendLine();
             sb.AppendLine();
             sb.AppendLine("---");
             sb.AppendLine(summaryLine);

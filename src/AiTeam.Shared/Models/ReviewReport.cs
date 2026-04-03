@@ -1,4 +1,3 @@
-
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -30,6 +29,11 @@ namespace AiTeam.Shared.Models
         public string PullRequestId { get; set; } = string.Empty;
         
         public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+
+        public void RecalculateSummary()
+        {
+            Summary.RecalculateFromIssues(Issues);
+        }
     }
     
     public class ReviewIssue
@@ -64,7 +68,9 @@ namespace AiTeam.Shared.Models
         public int WarningCount { get; set; } = 0;
         
         public int InfoCount { get; set; } = 0;
-        
+
+        public int SuggestionCount { get; set; } = 0;
+
         public string SummaryLine => GenerateSummaryLine();
         
         public bool HasCriticalIssues => ErrorCount > 0;
@@ -77,13 +83,31 @@ namespace AiTeam.Shared.Models
         
         private string GenerateSummaryLine()
         {
-            return $"統計總結：共 {TotalIssues} 個問題 | Error: {ErrorCount} | Warning: {WarningCount} | Info: {InfoCount}";
+            var parts = new List<string>
+            {
+                $"共 {TotalIssues} 個問題"
+            };
+
+            if (ErrorCount > 0)
+                parts.Add($"錯誤: {ErrorCount}");
+
+            if (WarningCount > 0)
+                parts.Add($"警告: {WarningCount}");
+
+            if (SuggestionCount > 0)
+                parts.Add($"建議: {SuggestionCount}");
+
+            if (InfoCount > 0)
+                parts.Add($"資訊: {InfoCount}");
+
+            return "統計總結：" + string.Join(" | ", parts);
         }
         
         private string DetermineOverallStatus()
         {
             if (ErrorCount > 0) return "Failed";
             if (WarningCount > 0) return "Warning";
+            if (SuggestionCount > 0) return "Passed with Suggestions";
             if (InfoCount > 0) return "Passed with Info";
             return "Passed";
         }
@@ -96,6 +120,7 @@ namespace AiTeam.Shared.Models
                 ErrorCount = 0;
                 WarningCount = 0;
                 InfoCount = 0;
+                SuggestionCount = 0;
                 IssuesByCategory = new Dictionary<string, int>();
                 IssuesByFile = new Dictionary<string, int>();
                 return;
@@ -105,6 +130,7 @@ namespace AiTeam.Shared.Models
             ErrorCount = 0;
             WarningCount = 0;
             InfoCount = 0;
+            SuggestionCount = 0;
             IssuesByCategory = new Dictionary<string, int>();
             IssuesByFile = new Dictionary<string, int>();
             
@@ -117,6 +143,9 @@ namespace AiTeam.Shared.Models
                         break;
                     case IssueSeverity.Warning:
                         WarningCount++;
+                        break;
+                    case IssueSeverity.Suggestion:
+                        SuggestionCount++;
                         break;
                     case IssueSeverity.Info:
                         InfoCount++;
@@ -145,8 +174,9 @@ namespace AiTeam.Shared.Models
     public enum IssueSeverity
     {
         Info = 0,
-        Warning = 1,
-        Error = 2
+        Suggestion = 1,
+        Warning = 2,
+        Error = 3
     }
 }
 ```

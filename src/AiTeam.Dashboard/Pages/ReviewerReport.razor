@@ -1,5 +1,3 @@
-
-```csharp
 @page "/reviewer-report"
 @using AiTeam.Dashboard.Models
 @using AiTeam.Dashboard.Services
@@ -66,26 +64,31 @@ else
             <div class="summary-row">
                 <div class="summary-item error">
                     <span class="summary-label">Error</span>
-                    <span class="summary-count">@report.Summary.ErrorCount</span>
+                    <span class="summary-count">@ComputedErrorCount</span>
                 </div>
                 <div class="summary-item warning">
                     <span class="summary-label">Warning</span>
-                    <span class="summary-count">@report.Summary.WarningCount</span>
+                    <span class="summary-count">@ComputedWarningCount</span>
                 </div>
                 <div class="summary-item info">
                     <span class="summary-label">Info</span>
-                    <span class="summary-count">@report.Summary.InfoCount</span>
+                    <span class="summary-count">@ComputedInfoCount</span>
+                </div>
+                <div class="summary-item suggestion">
+                    <span class="summary-label">Suggestion</span>
+                    <span class="summary-count">@ComputedSuggestionCount</span>
                 </div>
                 <div class="summary-item total">
                     <span class="summary-label">總計</span>
-                    <span class="summary-count">@report.Summary.TotalCount</span>
+                    <span class="summary-count">@ComputedTotalCount</span>
                 </div>
             </div>
             <p class="summary-text">
-                共發現 <strong>@report.Summary.TotalCount</strong> 個問題：
-                <span class="error-text">@report.Summary.ErrorCount 個 Error</span>、
-                <span class="warning-text">@report.Summary.WarningCount 個 Warning</span>、
-                <span class="info-text">@report.Summary.InfoCount 個 Info</span>
+                共發現 <strong>@ComputedTotalCount</strong> 個問題：
+                <span class="error-text">@ComputedErrorCount 個 Error</span>、
+                <span class="warning-text">@ComputedWarningCount 個 Warning</span>、
+                <span class="info-text">@ComputedInfoCount 個 Info</span>、
+                <span class="suggestion-text">@ComputedSuggestionCount 個 Suggestion</span>
             </p>
         </div>
     </div>
@@ -94,6 +97,21 @@ else
 @code {
     private ReviewReport? report;
     private bool isLoading = true;
+
+    private int ComputedErrorCount =>
+        report?.Issues?.Count(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase)) ?? 0;
+
+    private int ComputedWarningCount =>
+        report?.Issues?.Count(i => string.Equals(i.Severity, "warning", StringComparison.OrdinalIgnoreCase)) ?? 0;
+
+    private int ComputedInfoCount =>
+        report?.Issues?.Count(i => string.Equals(i.Severity, "info", StringComparison.OrdinalIgnoreCase)) ?? 0;
+
+    private int ComputedSuggestionCount =>
+        report?.Issues?.Count(i => string.Equals(i.Severity, "suggestion", StringComparison.OrdinalIgnoreCase)) ?? 0;
+
+    private int ComputedTotalCount =>
+        ComputedErrorCount + ComputedWarningCount + ComputedInfoCount + ComputedSuggestionCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -114,6 +132,7 @@ else
             "error" => "severity-error",
             "warning" => "severity-warning",
             "info" => "severity-info",
+            "suggestion" => "severity-suggestion",
             _ => "severity-unknown"
         };
     }
@@ -177,6 +196,11 @@ else
         color: #0c5460;
     }
 
+    .severity-suggestion {
+        background-color: #e8d5f5;
+        color: #5a2d82;
+    }
+
     .severity-unknown {
         background-color: #e2e3e5;
         color: #383d41;
@@ -192,6 +216,10 @@ else
 
     .issue-row.severity-info {
         background-color: #f0f9ff;
+    }
+
+    .issue-row.severity-suggestion {
+        background-color: #faf0ff;
     }
 
     .summary-section {
@@ -238,6 +266,11 @@ else
         color: #0c5460;
     }
 
+    .summary-item.suggestion {
+        background-color: #e8d5f5;
+        color: #5a2d82;
+    }
+
     .summary-item.total {
         background-color: #e2e3e5;
         color: #383d41;
@@ -274,6 +307,11 @@ else
         font-weight: 600;
     }
 
+    .suggestion-text {
+        color: #5a2d82;
+        font-weight: 600;
+    }
+
     .no-issues {
         color: #28a745;
         font-size: 1.1em;
@@ -282,4 +320,3 @@ else
         border-radius: 4px;
     }
 </style>
-```
