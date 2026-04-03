@@ -40,7 +40,13 @@ public class DocAgentService(
                 .ToList();
 
             if (csFiles.Count == 0)
-                return new AgentExecutionResult(false, $"路徑 '{pathPrefix}' 下未找到 .cs 檔案");
+            {
+                // Orchestrator 觸發時路徑可能無法從描述推斷，略過文件生成（非失敗）
+                AddLog(task, $"路徑 '{pathPrefix}' 下無 .cs 檔案，略過文件生成", "done");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("idle");
+                return new AgentExecutionResult(true, $"路徑 '{pathPrefix}' 無 .cs 檔案，略過文件生成");
+            }
 
             var xmlMode = IsXmlMode(task.Title);
             localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.GitHub;
@@ -40,7 +41,26 @@ public class DevAgentService(
         ParseDescriptionMeta(task.Description,
             out var issueUrls, out var uiSpecPath, out var isFixLoop);
 
-        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop);
+        // fix loop：取得既有 PR 的 branch name，確保 LLM 不自創新 branch
+        string? fixBranch = null;
+        if (isFixLoop)
+        {
+            var prNum = ExtractPrNumberFromText(task.Description ?? "");
+            if (prNum > 0)
+            {
+                try
+                {
+                    fixBranch = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNum);
+                    logger.LogInformation("Fix loop 使用既有 branch：{Branch}", fixBranch);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "無法取得 PR #{Num} 的 branch name", prNum);
+                }
+            }
+        }
+
+        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop, fixBranch);
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
@@ -289,6 +309,9 @@ public class DevAgentService(
             ## 規則清單
             {{ruleList}}
 
+            ## 重要規則
+            - 若任務訊息中提供了 `fix_branch`，`branch_name` 欄位必須**完全照用**該值，一字不差，不得自行修改或重新命名。
+
             ## 回應格式（只回傳 JSON，不要加任何說明）
             {
               "task_type": "bug_fix | feature | refactor | code_review",
@@ -307,12 +330,14 @@ public class DevAgentService(
         string repoTree,
         string? issueUrls,
         string? uiSpecPath,
-        bool isFixLoop)
+        bool isFixLoop,
+        string? fixBranch = null)
     {
-        var issueSection    = string.IsNullOrWhiteSpace(issueUrls)  ? "（無）" : issueUrls;
-        var uiSpecSection   = string.IsNullOrWhiteSpace(uiSpecPath) ? "（無）" : uiSpecPath;
-        var fixLoopHint     = isFixLoop
-            ? "\n⚠️ 這是 Vera 審查後的修復迭代，請推送到**同一個 branch**，不要建立新 PR。"
+        var issueSection  = string.IsNullOrWhiteSpace(issueUrls)  ? "（無）" : issueUrls;
+        var uiSpecSection = string.IsNullOrWhiteSpace(uiSpecPath) ? "（無）" : uiSpecPath;
+        var fixLoopHint   = isFixLoop
+            ? $"\n⚠️ 這是 Vera 審查後的修復迭代，不要建立新 PR。\n" +
+              $"fix_branch（branch_name 必須完全照用此值）：`{fixBranch ?? "（查詢失敗，請沿用原 PR 的 branch）"}`"
             : "";
 
         return $"""
@@ -374,6 +399,15 @@ public class DevAgentService(
             else if (trimmed.StartsWith("fix_loop:"))
                 isFixLoop = trimmed.Contains("true", StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>從描述文字中提取 PR 編號（支援 /pull/123 與 PR #123 兩種格式）。</summary>
+    private static int ExtractPrNumberFromText(string text)
+    {
+        var match = Regex.Match(text, @"/pull/(\d+)", RegexOptions.IgnoreCase);
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var n1)) return n1;
+        match = Regex.Match(text, @"PR\s*#(\d+)", RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups[1].Value, out var n2) ? n2 : 0;
     }
 
     /// <inheritdoc />
