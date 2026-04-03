@@ -37,7 +37,7 @@ public class ReviewerAgentService(
     {
         AddLog(task, "Reviewer Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
-        await PushStatus("running", task.Title);
+        await PushStatus("running", task.Id, task.Title);
 
         try
         {
@@ -114,7 +114,7 @@ public class ReviewerAgentService(
 
             AddLog(task, summary, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            await PushStatus("done", task.Title);
+            await PushStatus("done", task.Id, task.Title);
 
             return new AgentExecutionResult(true, summary, reviewUrl,
                 CriticalReviewCount: criticalCount,
@@ -125,7 +125,7 @@ public class ReviewerAgentService(
             logger.LogError(ex, "Reviewer Agent 執行失敗（TaskId={Id}）", task.Id);
             AddLog(task, $"執行失敗：{ex.Message}", "failed");
             await taskRepository.SaveAsync(cancellationToken);
-            await PushStatus("failed", task.Title);
+            await PushStatus("failed", task.Id, task.Title);
             return Fail(task, ex.Message);
         }
     }
@@ -278,10 +278,10 @@ public class ReviewerAgentService(
             CreatedAt = DateTime.UtcNow
         });
 
-    private async Task PushStatus(string status, string title)
+    private async Task PushStatus(string status, Guid taskId, string title)
         => await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
-            TaskId    = Guid.Empty,
+            TaskId    = taskId,
             Title     = title,
             AgentName = AgentName,
             Status    = status

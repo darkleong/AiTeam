@@ -10,7 +10,7 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// Designer Agent（Demi）：將功能需求轉換為 MudBlazor UI 規格文件（Markdown）。
 /// 純文字輸出型 Agent，不需要 Git Clone 操作。
-/// 若任務描述包含「開 PR」或「存入 docs」，則將規格文件提交到 GitHub。
+/// Stage 10 起一律將規格文件提交到 GitHub（Orchestrator 需要永久連結）。
 /// </summary>
 public class DesignerAgentService(
     LlmProviderFactory providerFactory,
@@ -31,7 +31,7 @@ public class DesignerAgentService(
     {
         AddLog(task, "Designer Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
-        await PushStatus("running", task.Title);
+        await PushStatus("running", task.Id, task.Title);
 
         try
         {
@@ -86,7 +86,7 @@ public class DesignerAgentService(
 
             AddLog(task, summary, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            await PushStatus("done", task.Title);
+            await PushStatus("done", task.Id, task.Title);
 
             return new AgentExecutionResult(true, summary, prUrl);
         }
@@ -95,7 +95,7 @@ public class DesignerAgentService(
             logger.LogError(ex, "Designer Agent 執行失敗（TaskId={Id}）", task.Id);
             AddLog(task, $"執行失敗：{ex.Message}", "failed");
             await taskRepository.SaveAsync(cancellationToken);
-            await PushStatus("failed", task.Title);
+            await PushStatus("failed", task.Id, task.Title);
             return Fail(task, ex.Message);
         }
     }
@@ -170,12 +170,6 @@ public class DesignerAgentService(
 
     // ────────────── 輔助工具 ──────────────
 
-    private static bool ContainsPrKeyword(string text)
-    {
-        var keywords = new[] { "開 pr", "開pr", "存入 docs", "存入docs", "提交", "commit", "pr", "push" };
-        return keywords.Any(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
-    }
-
     private static string ToSlug(string title)
     {
         var sb = new StringBuilder();
@@ -198,10 +192,10 @@ public class DesignerAgentService(
             CreatedAt = DateTime.UtcNow
         });
 
-    private async Task PushStatus(string status, string title)
+    private async Task PushStatus(string status, Guid taskId, string title)
         => await dashboardPush.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
-            TaskId    = Guid.Empty,
+            TaskId    = taskId,
             Title     = title,
             AgentName = AgentName,
             Status    = status

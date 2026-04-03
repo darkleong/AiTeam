@@ -46,6 +46,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.IssueUrls).HasColumnType("jsonb");
+            e.HasIndex(x => x.Status);
         });
 
         modelBuilder.Entity<TaskItem>(e =>
