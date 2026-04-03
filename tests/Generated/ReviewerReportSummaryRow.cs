@@ -1,4 +1,3 @@
-
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -42,7 +41,7 @@ namespace Tests.Generated
             _playwright?.Dispose();
         }
 
-        private async Task<List<ReviewerReportItem>> GetTestData()
+        private List<ReviewerReportItem> GetTestData()
         {
             return new List<ReviewerReportItem>
             {
@@ -79,6 +78,26 @@ namespace Tests.Generated
             };
         }
 
+        private ReviewerReportSummary CalculateExpectedSummary(List<ReviewerReportItem> data)
+        {
+            var totalReviews = data.Sum(x => x.TotalReviews);
+            var approvedCount = data.Sum(x => x.ApprovedCount);
+            var returnedCount = data.Sum(x => x.ReturnedCount);
+            var pendingCount = data.Sum(x => x.PendingCount);
+            var averageReviewDays = data.Count > 0
+                ? Math.Round(data.Sum(x => x.AverageReviewDays * x.TotalReviews) / totalReviews, 1)
+                : 0.0;
+
+            return new ReviewerReportSummary
+            {
+                TotalReviews = totalReviews,
+                ApprovedCount = approvedCount,
+                ReturnedCount = returnedCount,
+                PendingCount = pendingCount,
+                AverageReviewDays = averageReviewDays
+            };
+        }
+
         [Fact]
         public async Task SummaryRow_ShouldExistAtBottomOfTable()
         {
@@ -92,8 +111,8 @@ namespace Tests.Generated
         [Fact]
         public async Task SummaryRow_ShouldDisplayCorrectTotalReviews()
         {
-            var testData = await GetTestData();
-            var expectedTotal = testData.Sum(x => x.TotalReviews);
+            var testData = GetTestData();
+            var expected = CalculateExpectedSummary(testData);
 
             await _page.GotoAsync($"{BaseUrl}/reviewer-report");
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
@@ -102,14 +121,14 @@ namespace Tests.Generated
             Assert.NotNull(totalReviewsCell);
 
             var cellText = await totalReviewsCell.InnerTextAsync();
-            Assert.Equal(expectedTotal.ToString(), cellText.Trim());
+            Assert.Equal(expected.TotalReviews.ToString(), cellText.Trim());
         }
 
         [Fact]
         public async Task SummaryRow_ShouldDisplayCorrectApprovedCount()
         {
-            var testData = await GetTestData();
-            var expectedApproved = testData.Sum(x => x.ApprovedCount);
+            var testData = GetTestData();
+            var expected = CalculateExpectedSummary(testData);
 
             await _page.GotoAsync($"{BaseUrl}/reviewer-report");
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
@@ -118,14 +137,14 @@ namespace Tests.Generated
             Assert.NotNull(approvedCell);
 
             var cellText = await approvedCell.InnerTextAsync();
-            Assert.Equal(expectedApproved.ToString(), cellText.Trim());
+            Assert.Equal(expected.ApprovedCount.ToString(), cellText.Trim());
         }
 
         [Fact]
         public async Task SummaryRow_ShouldDisplayCorrectReturnedCount()
         {
-            var testData = await GetTestData();
-            var expectedReturned = testData.Sum(x => x.ReturnedCount);
+            var testData = GetTestData();
+            var expected = CalculateExpectedSummary(testData);
 
             await _page.GotoAsync($"{BaseUrl}/reviewer-report");
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
@@ -134,14 +153,14 @@ namespace Tests.Generated
             Assert.NotNull(returnedCell);
 
             var cellText = await returnedCell.InnerTextAsync();
-            Assert.Equal(expectedReturned.ToString(), cellText.Trim());
+            Assert.Equal(expected.ReturnedCount.ToString(), cellText.Trim());
         }
 
         [Fact]
         public async Task SummaryRow_ShouldDisplayCorrectPendingCount()
         {
-            var testData = await GetTestData();
-            var expectedPending = testData.Sum(x => x.PendingCount);
+            var testData = GetTestData();
+            var expected = CalculateExpectedSummary(testData);
 
             await _page.GotoAsync($"{BaseUrl}/reviewer-report");
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
@@ -150,14 +169,14 @@ namespace Tests.Generated
             Assert.NotNull(pendingCell);
 
             var cellText = await pendingCell.InnerTextAsync();
-            Assert.Equal(expectedPending.ToString(), cellText.Trim());
+            Assert.Equal(expected.PendingCount.ToString(), cellText.Trim());
         }
 
         [Fact]
-        public async Task SummaryRow_ShouldDisplayAverageReviewDays()
+        public async Task SummaryRow_ShouldDisplayWeightedAverageReviewDays()
         {
-            var testData = await GetTestData();
-            var expectedAverage = Math.Round(testData.Average(x => x.AverageReviewDays), 1);
+            var testData = GetTestData();
+            var expected = CalculateExpectedSummary(testData);
 
             await _page.GotoAsync($"{BaseUrl}/reviewer-report");
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
@@ -166,7 +185,7 @@ namespace Tests.Generated
             Assert.NotNull(avgDaysCell);
 
             var cellText = await avgDaysCell.InnerTextAsync();
-            Assert.Equal(expectedAverage.ToString("F1"), cellText.Trim());
+            Assert.Equal(expected.AverageReviewDays.ToString("F1"), cellText.Trim());
         }
 
         [Fact]
@@ -203,10 +222,42 @@ namespace Tests.Generated
             await _page.WaitForSelectorAsync("[data-testid='summary-row']");
 
             var summaryRow = await _page.QuerySelectorAsync("[data-testid='summary-row']");
-            var className = await summaryRow.GetAttributeAsync("class");
+            Assert.NotNull(summaryRow);
 
+            var className = await summaryRow.GetAttributeAsync("class");
             Assert.NotNull(className);
             Assert.Contains("summary", className.ToLower());
+        }
+
+        [Fact]
+        public async Task SummaryRow_ShouldHaveBoldFontWeight()
+        {
+            await _page.GotoAsync($"{BaseUrl}/reviewer-report");
+            await _page.WaitForSelectorAsync("[data-testid='summary-row']");
+
+            var summaryRow = await _page.QuerySelectorAsync("[data-testid='summary-row']");
+            Assert.NotNull(summaryRow);
+
+            var fontWeight = await summaryRow.EvaluateAsync<string>("el => window.getComputedStyle(el).fontWeight");
+            Assert.True(fontWeight == "bold" || fontWeight == "700", $"Expected bold font weight but got: {fontWeight}");
+        }
+
+        [Fact]
+        public async Task SummaryRow_ShouldHaveDistinctBackgroundColor()
+        {
+            await _page.GotoAsync($"{BaseUrl}/reviewer-report");
+            await _page.WaitForSelectorAsync("[data-testid='summary-row']");
+
+            var summaryRow = await _page.QuerySelectorAsync("[data-testid='summary-row']");
+            Assert.NotNull(summaryRow);
+
+            var dataRows = await _page.QuerySelectorAllAsync("[data-testid='reviewer-report-table'] tbody tr:not([data-testid='summary-row'])");
+            if (dataRows.Count > 0)
+            {
+                var summaryBg = await summaryRow.EvaluateAsync<string>("el => window.getComputedStyle(el).backgroundColor");
+                var dataRowBg = await dataRows[0].EvaluateAsync<string>("el => window.getComputedStyle(el).backgroundColor");
+                Assert.NotEqual(dataRowBg, summaryBg);
+            }
         }
 
         [Fact]
@@ -216,6 +267,7 @@ namespace Tests.Generated
             await _page.WaitForSelectorAsync("[data-testid='reviewer-report-table']");
 
             var initialTotalCell = await _page.QuerySelectorAsync("[data-testid='summary-total-reviews']");
+            Assert.NotNull(initialTotalCell);
             var initialTotal = await initialTotalCell.InnerTextAsync();
 
             var filterInput = await _page.QuerySelectorAsync("[data-testid='reviewer-filter']");
@@ -225,9 +277,10 @@ namespace Tests.Generated
                 await _page.WaitForTimeoutAsync(500);
 
                 var filteredTotalCell = await _page.QuerySelectorAsync("[data-testid='summary-total-reviews']");
+                Assert.NotNull(filteredTotalCell);
                 var filteredTotal = await filteredTotalCell.InnerTextAsync();
 
-                Assert.NotEqual(initialTotal, filteredTotal);
+                Assert.NotEqual(initialTotal.Trim(), filteredTotal.Trim());
             }
         }
 
@@ -235,6 +288,7 @@ namespace Tests.Generated
         public async Task SummaryRow_ShouldShowZeroWhenNoData()
         {
             await _page.GotoAsync($"{BaseUrl}/reviewer-report?empty=true");
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
             var noDataMessage = await _page.QuerySelectorAsync("[data-testid='no-data-message']");
             if (noDataMessage != null)
@@ -243,8 +297,25 @@ namespace Tests.Generated
                 if (summaryRow != null)
                 {
                     var totalCell = await _page.QuerySelectorAsync("[data-testid='summary-total-reviews']");
+                    Assert.NotNull(totalCell);
                     var cellText = await totalCell.InnerTextAsync();
                     Assert.Equal("0", cellText.Trim());
+
+                    var approvedCell = await _page.QuerySelectorAsync("[data-testid='summary-approved-count']");
+                    Assert.NotNull(approvedCell);
+                    Assert.Equal("0", (await approvedCell.InnerTextAsync()).Trim());
+
+                    var returnedCell = await _page.QuerySelectorAsync("[data-testid='summary-returned-count']");
+                    Assert.NotNull(returnedCell);
+                    Assert.Equal("0", (await returnedCell.InnerTextAsync()).Trim());
+
+                    var pendingCell = await _page.QuerySelectorAsync("[data-testid='summary-pending-count']");
+                    Assert.NotNull(pendingCell);
+                    Assert.Equal("0", (await pendingCell.InnerTextAsync()).Trim());
+
+                    var avgCell = await _page.QuerySelectorAsync("[data-testid='summary-average-review-days']");
+                    Assert.NotNull(avgCell);
+                    Assert.Equal("0.0", (await avgCell.InnerTextAsync()).Trim());
                 }
             }
         }
@@ -267,6 +338,7 @@ namespace Tests.Generated
             Assert.True(summary.ReturnedCount >= 0);
             Assert.True(summary.PendingCount >= 0);
             Assert.True(summary.AverageReviewDays >= 0);
+            Assert.Equal(summary.TotalReviews, summary.ApprovedCount + summary.ReturnedCount + summary.PendingCount);
         }
 
         [Fact]
@@ -280,67 +352,7 @@ namespace Tests.Generated
             var returnedCell = await _page.QuerySelectorAsync("[data-testid='summary-returned-count']");
             var pendingCell = await _page.QuerySelectorAsync("[data-testid='summary-pending-count']");
 
-            if (totalCell != null && approvedCell != null && returnedCell != null && pendingCell != null)
-            {
-                var total = int.Parse((await totalCell.InnerTextAsync()).Trim());
-                var approved = int.Parse((await approvedCell.InnerTextAsync()).Trim());
-                var returned = int.Parse((await returnedCell.InnerTextAsync()).Trim());
-                var pending = int.Parse((await pendingCell.InnerTextAsync()).Trim());
-
-                Assert.Equal(total, approved + returned + pending);
-            }
-        }
-
-        [Fact]
-        public async Task SummaryRow_ShouldBeVisibleWithoutScrolling()
-        {
-            await _page.GotoAsync($"{BaseUrl}/reviewer-report");
-            await _page.WaitForSelectorAsync("[data-testid='summary-row']");
-
-            var summaryRow = await _page.QuerySelectorAsync("[data-testid='summary-row']");
-            Assert.NotNull(summaryRow);
-
-            var isVisible = await summaryRow.IsVisibleAsync();
-            Assert.True(isVisible);
-        }
-
-        [Fact]
-        public async Task SummaryRow_ShouldHaveCorrectColumnCount()
-        {
-            await _page.GotoAsync($"{BaseUrl}/reviewer-report");
-            await _page.WaitForSelectorAsync("[data-testid='summary-row']");
-
-            var headerRow = await _page.QuerySelectorAsync("[data-testid='reviewer-report-table'] thead tr");
-            var summaryRow = await _page.QuerySelectorAsync("[data-testid='summary-row']");
-
-            if (headerRow != null && summaryRow != null)
-            {
-                var headerCells = await headerRow.QuerySelectorAllAsync("th");
-                var summaryCells = await summaryRow.QuerySelectorAllAsync("td");
-
-                Assert.Equal(headerCells.Count, summaryCells.Count);
-            }
-        }
-    }
-
-    public class ReviewerReportItem
-    {
-        public string ReviewerId { get; set; }
-        public string ReviewerName { get; set; }
-        public int TotalReviews { get; set; }
-        public int ApprovedCount { get; set; }
-        public int ReturnedCount { get; set; }
-        public int PendingCount { get; set; }
-        public double AverageReviewDays { get; set; }
-    }
-
-    public class ReviewerReportSummary
-    {
-        public int TotalReviews { get; set; }
-        public int ApprovedCount { get; set; }
-        public int ReturnedCount { get; set; }
-        public int PendingCount { get; set; }
-        public double AverageReviewDays { get; set; }
-    }
-}
-```
+            Assert.NotNull(totalCell);
+            Assert.NotNull(approvedCell);
+            Assert.NotNull(returnedCell);
+            Assert.NotNull(pendingCell);

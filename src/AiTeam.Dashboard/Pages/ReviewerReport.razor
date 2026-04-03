@@ -1,5 +1,3 @@
-
-```csharp
 @page "/reviewer-report"
 @using AiTeam.Dashboard.Models
 @using AiTeam.Dashboard.Services
@@ -43,8 +41,8 @@ else
                 </tr>
             }
         </tbody>
-        <tfoot class="table-secondary fw-bold">
-            <tr>
+        <tfoot>
+            <tr class="table-secondary fw-bold">
                 <td>總計</td>
                 <td>@summaryRow.TotalReviews</td>
                 <td>@summaryRow.ApprovedCount</td>
@@ -93,4 +91,3 @@ else
         };
     }
 }
-```

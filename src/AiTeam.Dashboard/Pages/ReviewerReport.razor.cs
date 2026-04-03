@@ -1,4 +1,3 @@
-
 ```csharp
 using Microsoft.AspNetCore.Components;
 
@@ -17,7 +16,6 @@ namespace AiTeam.Dashboard.Pages
 
         private async Task LoadReportDataAsync()
         {
-            // Simulate loading data from a service
             await Task.Delay(100);
 
             reportRows = new List<ReviewerReportRow>
@@ -78,21 +76,30 @@ namespace AiTeam.Dashboard.Pages
                 return;
             }
 
+            int totalReviews = reportRows.Sum(r => r.TotalReviews);
+            int totalPassedReviews = reportRows.Sum(r => r.PassedReviews);
+            int totalReturnedReviews = reportRows.Sum(r => r.ReturnedReviews);
+            int totalPendingReviews = reportRows.Sum(r => r.PendingReviews);
+
+            // 加權平均：各審查者的平均審查時間以其 TotalReviews 加權
+            double weightedAverageReviewTime = totalReviews > 0
+                ? reportRows.Sum(r => r.AverageReviewTime * r.TotalReviews) / totalReviews
+                : 0;
+
+            double overallPassRate = totalReviews > 0
+                ? (double)totalPassedReviews / totalReviews * 100
+                : 0;
+
             summary = new ReviewerReportSummary
             {
                 TotalReviewers = reportRows.Count,
-                TotalReviews = reportRows.Sum(r => r.TotalReviews),
-                TotalPassedReviews = reportRows.Sum(r => r.PassedReviews),
-                TotalReturnedReviews = reportRows.Sum(r => r.ReturnedReviews),
-                AverageReviewTime = reportRows.Average(r => r.AverageReviewTime),
-                TotalPendingReviews = reportRows.Sum(r => r.PendingReviews)
+                TotalReviews = totalReviews,
+                TotalPassedReviews = totalPassedReviews,
+                TotalReturnedReviews = totalReturnedReviews,
+                AverageReviewTime = weightedAverageReviewTime,
+                TotalPendingReviews = totalPendingReviews,
+                OverallPassRate = overallPassRate
             };
-
-            // Calculate pass rate
-            if (summary.TotalReviews > 0)
-            {
-                summary.OverallPassRate = (double)summary.TotalPassedReviews / summary.TotalReviews * 100;
-            }
         }
     }
 
