@@ -797,9 +797,9 @@ public class CommandHandler(
             var uiSpec      = uiSpecTask.Result;
 
             // Stage 10：提案模式一律提交 UI 規格文件到 GitHub，讓 Embed 可附上完整連結
+            // 固定用 DefaultRepo，project 是邏輯名稱不是 GitHub repo 名稱
             var owner       = _gitHubSettings.Owner;
-            var repo        = string.IsNullOrWhiteSpace(project)
-                ? _gitHubSettings.DefaultRepo : project;
+            var repo        = _gitHubSettings.DefaultRepo;
             var slug        = ToProposalSlug(task.Title);
             var uiSpecPath  = $"docs/ui-specs/{slug}.md";
             string? uiSpecGitHubUrl = null;
