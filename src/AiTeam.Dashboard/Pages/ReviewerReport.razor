@@ -1,0 +1,96 @@
+
+```csharp
+@page "/reviewer-report"
+@using AiTeam.Dashboard.Models
+@using AiTeam.Dashboard.Services
+@inject IReviewerReportService ReviewerReportService
+
+<PageTitle>Reviewer 報告</PageTitle>
+
+<h1>Reviewer 報告</h1>
+
+@if (isLoading)
+{
+    <p>載入中...</p>
+}
+else if (reportData == null || !reportData.Any())
+{
+    <p>目前沒有審查資料。</p>
+}
+else
+{
+    <table class="table table-striped table-bordered">
+        <thead class="table-dark">
+            <tr>
+                <th>Reviewer</th>
+                <th>總審查數</th>
+                <th>通過數</th>
+                <th>退回數</th>
+                <th>待審數</th>
+                <th>通過率 (%)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in reportData)
+            {
+                <tr>
+                    <td>@row.ReviewerName</td>
+                    <td>@row.TotalReviews</td>
+                    <td>@row.ApprovedCount</td>
+                    <td>@row.RejectedCount</td>
+                    <td>@row.PendingCount</td>
+                    <td>@row.ApprovalRate.ToString("F1")</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot class="table-secondary fw-bold">
+            <tr>
+                <td>總計</td>
+                <td>@summaryRow.TotalReviews</td>
+                <td>@summaryRow.ApprovedCount</td>
+                <td>@summaryRow.RejectedCount</td>
+                <td>@summaryRow.PendingCount</td>
+                <td>@summaryRow.ApprovalRate.ToString("F1")</td>
+            </tr>
+        </tfoot>
+    </table>
+}
+
+@code {
+    private List<ReviewerReportRow>? reportData;
+    private ReviewerReportRow summaryRow = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        reportData = await ReviewerReportService.GetReportDataAsync();
+        CalculateSummary();
+        isLoading = false;
+    }
+
+    private void CalculateSummary()
+    {
+        if (reportData == null || !reportData.Any())
+        {
+            summaryRow = new ReviewerReportRow();
+            return;
+        }
+
+        int totalReviews = reportData.Sum(r => r.TotalReviews);
+        int approvedCount = reportData.Sum(r => r.ApprovedCount);
+        int rejectedCount = reportData.Sum(r => r.RejectedCount);
+        int pendingCount = reportData.Sum(r => r.PendingCount);
+        double approvalRate = totalReviews > 0 ? (double)approvedCount / totalReviews * 100.0 : 0.0;
+
+        summaryRow = new ReviewerReportRow
+        {
+            ReviewerName = "總計",
+            TotalReviews = totalReviews,
+            ApprovedCount = approvedCount,
+            RejectedCount = rejectedCount,
+            PendingCount = pendingCount,
+            ApprovalRate = approvalRate
+        };
+    }
+}
+```
