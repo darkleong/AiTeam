@@ -52,20 +52,20 @@
                                 <td colspan="2"><strong>問題總結統計</strong></td>
                                 <td colspan="3">
                                     <span class="me-3">
-                                        <span class="badge bg-danger me-1">@Summary.ErrorCount</span>
                                         <i class="bi bi-x-circle-fill text-danger me-1"></i>錯誤
+                                        <span class="badge bg-danger ms-1">@Summary.ErrorCount</span>
                                     </span>
                                     <span class="me-3">
-                                        <span class="badge bg-warning text-dark me-1">@Summary.WarningCount</span>
                                         <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>警告
+                                        <span class="badge bg-warning text-dark ms-1">@Summary.WarningCount</span>
                                     </span>
                                     <span class="me-3">
-                                        <span class="badge bg-info me-1">@Summary.SuggestionCount</span>
                                         <i class="bi bi-lightbulb-fill text-info me-1"></i>建議
+                                        <span class="badge bg-info ms-1">@Summary.SuggestionCount</span>
                                     </span>
                                     <span>
-                                        <span class="badge bg-secondary me-1">@Summary.TotalCount</span>
                                         總計
+                                        <span class="badge bg-secondary ms-1">@Summary.TotalCount</span>
                                     </span>
                                 </td>
                             </tr>
@@ -74,7 +74,6 @@
                 </table>
             </div>
 
-            <!-- 問題總結統計行 -->
             @if (Summary != null)
             {
                 <div class="card mt-4">
@@ -126,7 +125,6 @@
                             </div>
                         </div>
                         
-                        <!-- 統計摘要列 -->
                         <div class="mt-3 p-3 bg-light rounded">
                             <div class="row align-items-center">
                                 <div class="col-md-6">
