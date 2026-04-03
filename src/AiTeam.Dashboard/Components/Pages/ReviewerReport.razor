@@ -1,0 +1,77 @@
+@page "/reviewer-report"
+@using AiTeam.Dashboard.Models
+@using AiTeam.Dashboard.Services
+@inject ReviewerReportService ReportService
+
+<h3>Reviewer 報告</h3>
+
+@if (reportItems == null)
+{
+    <p>載入中...</p>
+}
+else
+{
+    <table class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>Reviewer</th>
+                <th>審查次數</th>
+                <th>核准次數</th>
+                <th>拒絕次數</th>
+                <th>留言數</th>
+                <th>核准率 (%)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in reportItems)
+            {
+                <tr>
+                    <td>@item.ReviewerName</td>
+                    <td>@item.ReviewCount</td>
+                    <td>@item.ApproveCount</td>
+                    <td>@item.RejectCount</td>
+                    <td>@item.CommentCount</td>
+                    <td>@item.ApproveRate.ToString("F1")</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr class="table-dark fw-bold">
+                <td>總計 / 平均</td>
+                <td>@totalReviewCount</td>
+                <td>@totalApproveCount</td>
+                <td>@totalRejectCount</td>
+                <td>@totalCommentCount</td>
+                <td>@averageApproveRate.ToString("F1")</td>
+            </tr>
+        </tfoot>
+    </table>
+}
+
+@code {
+    private List<ReviewerReportItem>? reportItems;
+
+    private int totalReviewCount;
+    private int totalApproveCount;
+    private int totalRejectCount;
+    private int totalCommentCount;
+    private double averageApproveRate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        reportItems = await ReportService.GetReportItemsAsync();
+        CalculateSummary();
+    }
+
+    private void CalculateSummary()
+    {
+        if (reportItems == null || reportItems.Count == 0)
+            return;
+
+        totalReviewCount = reportItems.Sum(x => x.ReviewCount);
+        totalApproveCount = reportItems.Sum(x => x.ApproveCount);
+        totalRejectCount = reportItems.Sum(x => x.RejectCount);
+        totalCommentCount = reportItems.Sum(x => x.CommentCount);
+        averageApproveRate = reportItems.Average(x => x.ApproveRate);
+    }
+}
