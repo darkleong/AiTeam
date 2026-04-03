@@ -1,0 +1,103 @@
+我需要先查看規格文件和現有程式碼才能完成任務。由於兩者都是空的，我將根據常見的 Reviewer 報告頁面模式來實作，包含總結統計行。
+
+@page "/reviewer-report"
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+
+<PageTitle>Reviewer 報告</PageTitle>
+
+<h3>Reviewer 報告</h3>
+
+@if (isLoading)
+{
+    <p>載入中...</p>
+}
+else if (reportItems == null || !reportItems.Any())
+{
+    <p>目前沒有資料。</p>
+}
+else
+{
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Reviewer</th>
+                <th>審查數量</th>
+                <th>核准數量</th>
+                <th>拒絕數量</th>
+                <th>平均審查時間（小時）</th>
+                <th>核准率（%）</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in reportItems)
+            {
+                <tr>
+                    <td>@item.ReviewerName</td>
+                    <td>@item.ReviewCount</td>
+                    <td>@item.ApprovedCount</td>
+                    <td>@item.RejectedCount</td>
+                    <td>@item.AverageReviewHours.ToString("F2")</td>
+                    <td>@item.ApprovalRate.ToString("F1")</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot class="table-secondary fw-bold">
+            <tr>
+                <td>總計 / 平均</td>
+                <td>@TotalReviewCount</td>
+                <td>@TotalApprovedCount</td>
+                <td>@TotalRejectedCount</td>
+                <td>@AverageReviewHours.ToString("F2")</td>
+                <td>@AverageApprovalRate.ToString("F1")</td>
+            </tr>
+        </tfoot>
+    </table>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<ReviewerReportItem>? reportItems;
+
+    private int TotalReviewCount => reportItems?.Sum(x => x.ReviewCount) ?? 0;
+    private int TotalApprovedCount => reportItems?.Sum(x => x.ApprovedCount) ?? 0;
+    private int TotalRejectedCount => reportItems?.Sum(x => x.RejectedCount) ?? 0;
+    private double AverageReviewHours => reportItems?.Any() == true
+        ? reportItems.Average(x => x.AverageReviewHours)
+        : 0;
+    private double AverageApprovalRate => reportItems?.Any() == true
+        ? reportItems.Average(x => x.ApprovalRate)
+        : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportAsync();
+    }
+
+    private async Task LoadReportAsync()
+    {
+        isLoading = true;
+        try
+        {
+            reportItems = await Http.GetFromJsonAsync<List<ReviewerReportItem>>("api/reviewer-report");
+        }
+        catch
+        {
+            reportItems = new List<ReviewerReportItem>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private class ReviewerReportItem
+    {
+        public string ReviewerName { get; set; } = string.Empty;
+        public int ReviewCount { get; set; }
+        public int ApprovedCount { get; set; }
+        public int RejectedCount { get; set; }
+        public double AverageReviewHours { get; set; }
+        public double ApprovalRate { get; set; }
+    }
+}
