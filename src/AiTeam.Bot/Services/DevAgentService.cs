@@ -1,5 +1,3 @@
-
-```csharp
 using System.Reflection;
 
 namespace AiTeam.Bot.Services
@@ -19,4 +17,3 @@ namespace AiTeam.Bot.Services
         }
     }
 }
-```

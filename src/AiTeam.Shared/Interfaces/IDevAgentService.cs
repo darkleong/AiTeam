@@ -1,5 +1,3 @@
-
-```csharp
 using System.Reflection;
 
 namespace AiTeam.Shared.Interfaces
@@ -9,4 +7,3 @@ namespace AiTeam.Shared.Interfaces
         string GetVersion();
     }
 }
-```

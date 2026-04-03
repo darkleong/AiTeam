@@ -1,5 +1,3 @@
-
-```csharp
 using Xunit;
 using DevAgent.Services;
 
@@ -64,6 +62,39 @@ namespace DevAgent.Tests.Generated
             // Assert
             Assert.IsType<string>(version);
         }
+
+        [Fact]
+        public void GetVersion_ImplementsIDevAgentServiceInterface()
+        {
+            // Assert
+            Assert.IsAssignableFrom<IDevAgentService>(_service);
+        }
+
+        [Fact]
+        public void GetVersion_InterfaceMethodExists()
+        {
+            // Arrange
+            IDevAgentService serviceAsInterface = _service;
+
+            // Act
+            var version = serviceAsInterface.GetVersion();
+
+            // Assert
+            Assert.NotNull(version);
+        }
+
+        [Fact]
+        public void GetVersion_InterfaceAndConcreteReturnSameValue()
+        {
+            // Arrange
+            IDevAgentService serviceAsInterface = _service;
+
+            // Act
+            var versionFromInterface = serviceAsInterface.GetVersion();
+            var versionFromConcrete = _service.GetVersion();
+
+            // Assert
+            Assert.Equal(versionFromInterface, versionFromConcrete);
+        }
     }
 }
-```
