@@ -37,12 +37,13 @@ public class CeoAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null,
-        IReadOnlyList<ConversationTurn>? history = null)
+        IReadOnlyList<ConversationTurn>? history = null,
+        IReadOnlyList<string>? availableProjects = null)
     {
         var provider = providerFactory.Create("CEO");
 
         var systemPrompt = BuildSystemPrompt(agentList, rules);
-        var userMessage  = await BuildUserMessageAsync(userInput, projectName, history, cancellationToken);
+        var userMessage  = await BuildUserMessageAsync(userInput, projectName, history, cancellationToken, availableProjects);
 
         // 最多重試一次（回應格式錯誤時）
         for (var attempt = 1; attempt <= 2; attempt++)
@@ -118,6 +119,9 @@ public class CeoAgentService(
             - 每次只問一個最關鍵的問題，不可以一次問多個問題
             - 提供目前可用的選項供老闆快速回答（例如列出現有專案名稱）
             - 禁止猜測老闆的意圖，寧可反問也不要猜錯
+            - **專案確認規則**：若「當前專案」為未指定，且「可用專案清單」有兩個以上，
+              必須先用 action = "reply" 詢問老闆這個需求屬於哪個專案，列出清單供選擇，
+              確認專案後才繼續分類與處理
 
             ## 回應格式
             你必須只回傳以下 JSON 格式，不得包含任何其他文字：
@@ -140,7 +144,8 @@ public class CeoAgentService(
         string userInput,
         string projectName,
         IReadOnlyList<ConversationTurn>? history,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? availableProjects = null)
     {
         var recentTasks = await taskRepository.GetRecentByProjectAsync(projectName, limit: 5, cancellationToken);
         var taskHistory = recentTasks.Count > 0
@@ -165,9 +170,14 @@ public class CeoAgentService(
                 """;
         }
 
+        var projectListBlock = availableProjects is { Count: > 1 }
+            ? $"可用專案清單：{string.Join("、", availableProjects)}"
+            : "";
+
         return $"""
             ## 當前專案
-            {projectName}
+            {(string.IsNullOrWhiteSpace(projectName) ? "（未指定）" : projectName)}
+            {projectListBlock}
 
             ## 近期相關任務紀錄
             {taskHistory}

@@ -178,12 +178,15 @@ public class CommandHandler(
         var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
 
         // 從歷史對話嘗試提取專案名稱（取最後一次明確提到的專案）
-        var projectName = ExtractProjectFromHistory(history, msg.CleanContent);
+        var projectName      = ExtractProjectFromHistory(history, msg.CleanContent);
+        var taskRepo         = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
 
         var ceoResponse = await ceoService.ProcessAsync(
             msg.CleanContent, projectName, agentList, rules,
             images: images.Count > 0 ? images : null,
-            history: history);
+            history: history,
+            availableProjects: availableProjects);
 
         // 防護修正（同 /task 指令邏輯）
         if (!string.IsNullOrWhiteSpace(ceoResponse.TargetAgent) && ceoResponse.Action == "reply")

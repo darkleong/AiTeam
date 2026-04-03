@@ -19,6 +19,14 @@ public class TaskRepository(AppDbContext db)
             .Include(t => t.Logs.OrderByDescending(l => l.CreatedAt).Take(20))
             .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
+    /// <summary>查詢所有啟用中的專案名稱（CEO 反問用）。</summary>
+    public async Task<List<string>> GetActiveProjectNamesAsync(CancellationToken cancellationToken = default)
+        => await db.Projects
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Name)
+            .Select(p => p.Name)
+            .ToListAsync(cancellationToken);
+
     /// <summary>查詢指定專案的最近 N 筆任務（CEO 組 Prompt 用）。</summary>
     public async Task<List<TaskItem>> GetRecentByProjectAsync(
         string projectName,
