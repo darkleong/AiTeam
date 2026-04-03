@@ -102,6 +102,6 @@ public class TaskRepository(AppDbContext db)
             .Where(t => t.AssignedAgent == "Reviewer"
                      && (t.Status == "pending" || t.Status == "running")
                      && t.Description != null
-                     && t.Description.Contains($"#{prNumber}"))
+                     && t.Description.Contains($"/pull/{prNumber}"))  // 完整 PR URL 比對，避免誤配 Issue #
             .ToListAsync(cancellationToken);
 }

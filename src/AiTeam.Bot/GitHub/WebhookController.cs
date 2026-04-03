@@ -207,9 +207,17 @@ public class WebhookController(
     /// </summary>
     private async Task HandlePrSynchronizedAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        var prNumber = root.GetProperty("pull_request").GetProperty("number").GetInt32();
-        var prUrl    = root.GetProperty("pull_request").GetProperty("html_url").GetString() ?? "";
-        var repoName = root.GetProperty("repository").GetProperty("name").GetString() ?? "";
+        var prNumber  = root.GetProperty("pull_request").GetProperty("number").GetInt32();
+        var prUrl     = root.GetProperty("pull_request").GetProperty("html_url").GetString() ?? "";
+        var repoName  = root.GetProperty("repository").GetProperty("name").GetString() ?? "";
+        var headBranch = root.GetProperty("pull_request").GetProperty("head").GetProperty("ref").GetString() ?? "";
+
+        // QA / Doc 的 branch（test/* / docs/*）不需要 Vera 重審，直接略過
+        if (headBranch.StartsWith("test/") || headBranch.StartsWith("docs/"))
+        {
+            logger.LogDebug("PR #{Pr} 為 QA/Doc branch（{Branch}），略過自動重審", prNumber, headBranch);
+            return;
+        }
 
         logger.LogInformation("PR #{Pr} 有新 push（synchronize）：{Repo}", prNumber, repoName);
 
