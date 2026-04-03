@@ -442,6 +442,29 @@ public class GitHubService(
         }
     }
 
+    /// <summary>
+    /// 刪除 GitHub 上的檔案（取消提案時清理孤立的 UI 規格文件用）。
+    /// 若檔案不存在則靜默略過。
+    /// </summary>
+    public async Task DeleteFileAsync(string owner, string repo, string path, string commitMessage)
+    {
+        var client = CreateClient();
+        try
+        {
+            var existing = await client.Repository.Content.GetAllContents(owner, repo, path);
+            var sha = existing.FirstOrDefault()?.Sha;
+            if (sha is null) return;
+
+            await client.Repository.Content.DeleteFile(owner, repo, path,
+                new DeleteFileRequest(commitMessage, sha));
+            logger.LogInformation("檔案已刪除：{Path}", path);
+        }
+        catch (Octokit.NotFoundException)
+        {
+            // 檔案不存在，不需刪除
+        }
+    }
+
     // ────────────── Stage 10：Repo Tree API ──────────────
 
     /// <summary>

@@ -630,6 +630,30 @@ public class CommandHandler(
         else // confirm_no、exec_no、req_no、propose_no
         {
             await interaction.RespondAsync("❌ 已取消。");
+
+            // propose_no：清理 Demi 已 commit 的孤立 UI 規格文件
+            if (interaction.Data.CustomId == "propose_no" &&
+                !string.IsNullOrWhiteSpace(pending.UiSpecPath))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await using var scope = serviceProvider.CreateAsyncScope();
+                        var gh = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
+                        await gh.DeleteFileAsync(
+                            _gitHubSettings.Owner,
+                            _gitHubSettings.DefaultRepo,
+                            pending.UiSpecPath,
+                            $"docs: remove cancelled proposal spec - {pending.CeoResponse.Task?.Title}");
+                        logger.LogInformation("已清理取消提案的 UI 規格文件：{Path}", pending.UiSpecPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "清理 UI 規格文件失敗：{Path}", pending.UiSpecPath);
+                    }
+                });
+            }
         }
     }
 
