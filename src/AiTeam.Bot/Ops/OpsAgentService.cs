@@ -24,6 +24,7 @@ public class OpsAgentService(
     DiscordSocketClient discordClient,
     IServiceProvider serviceProvider,
     DashboardPushService dashboardPush,
+    GitHubService gitHubService,
     ILogger<OpsAgentService> logger) : IAgentExecutor
 {
     private readonly DiscordSettings _discord = discordSettings.Value;
@@ -283,31 +284,77 @@ public class OpsAgentService(
         }
     }
 
+    /// <summary>
+    /// Stage 10：部署失敗時，透過 GitHub Actions workflow_dispatch 觸發 rollback.yml，
+    /// 自動回滾到上一個穩定 tag，不再只是通知老闆手動處理。
+    /// </summary>
     private async Task ExecuteRollbackAsync(
         string repoName,
         TaskItem task,
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
-        logger.LogWarning("部署失敗，通知老闆手動處理：{Repo}", repoName);
+        logger.LogWarning("部署失敗，嘗試自動回滾：{Repo}", repoName);
 
         taskRepo.AddLog(new TaskLog
         {
             TaskId = task.Id,
             Agent  = "Ops",
-            Step   = "部署異常，待人工介入",
-            Status = "failed"
+            Step   = "部署失敗，嘗試觸發回滾",
+            Status = "running"
         });
         await taskRepo.SaveAsync(cancellationToken);
 
-        // Bot 容器內無法執行 docker-compose，改為通知老闆手動回滾
-        await AlertAsync(
-            $"🚨 **部署異常，請手動處理！**\n" +
-            $"Repo：{repoName}\n" +
-            $"請至 Docker Desktop 或主機執行回滾操作。");
+        // 取得最近的穩定 tag 作為回滾目標
+        var targetTag = await gitHubService.GetLatestTagAsync(_github.Owner, repoName)
+                        ?? "latest";
 
-        taskRepo.UpdateStatus(task, "failed");
-        await taskRepo.SaveAsync(cancellationToken);
+        try
+        {
+            await gitHubService.TriggerWorkflowDispatchAsync(
+                _github.Owner, repoName,
+                "rollback.yml",
+                "main",
+                new Dictionary<string, string> { ["target_tag"] = targetTag });
+
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = task.Id,
+                Agent  = "Ops",
+                Step   = $"回滾 workflow 已觸發（目標：{targetTag}）",
+                Status = "done"
+            });
+            await taskRepo.SaveAsync(cancellationToken);
+
+            taskRepo.UpdateStatus(task, "done");
+            await taskRepo.SaveAsync(cancellationToken);
+
+            await AlertAsync(
+                $"⚠️ **部署失敗，Maya 已自動觸發回滾！**\n" +
+                $"Repo：{repoName}\n" +
+                $"回滾目標：{targetTag}\n" +
+                $"請確認服務恢復正常後告知。");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "自動回滾失敗，改為通知老闆手動處理");
+
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = task.Id,
+                Agent  = "Ops",
+                Step   = $"自動回滾觸發失敗：{ex.Message}",
+                Status = "failed"
+            });
+            taskRepo.UpdateStatus(task, "failed");
+            await taskRepo.SaveAsync(cancellationToken);
+
+            await AlertAsync(
+                $"🚨 **部署異常且自動回滾失敗，請手動處理！**\n" +
+                $"Repo：{repoName}\n" +
+                $"錯誤：{ex.Message}\n" +
+                $"請至 GitHub Actions 手動觸發 rollback.yml。");
+        }
     }
 
     private async Task NotifySuccessAsync(string repoName, string runUrl)

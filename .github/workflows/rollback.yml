@@ -1,0 +1,69 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: '回滾目標 Tag（例如 v1.2.3）'
+        required: true
+        type: string
+
+env:
+  REGISTRY:        ghcr.io
+  IMAGE_BOT:       ghcr.io/${{ github.repository_owner }}/aiteam-bot
+  IMAGE_DASHBOARD: ghcr.io/${{ github.repository_owner }}/aiteam-dashboard
+
+jobs:
+  rollback:
+    name: Rollback to ${{ inputs.target_tag }}
+    runs-on: self-hosted
+
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull target tag images
+        shell: pwsh
+        run: |
+          docker pull "${{ env.IMAGE_BOT }}:${{ inputs.target_tag }}"
+          docker pull "${{ env.IMAGE_DASHBOARD }}:${{ inputs.target_tag }}"
+
+      - name: Checkout repo（取得 docker-compose.prod.yml）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_tag }}
+
+      - name: Deploy rollback version
+        shell: pwsh
+        env:
+          IMAGE_TAG: ${{ inputs.target_tag }}
+        run: |
+          # 使用指定 tag 啟動容器（IMAGE_TAG env var 覆蓋 compose 中的 tag）
+          docker compose -f docker-compose.prod.yml up -d --force-recreate
+
+      - name: Record rollback to Bot API
+        shell: pwsh
+        run: |
+          $body = @{
+            project     = "${{ github.repository }}"
+            ref         = "${{ inputs.target_tag }}"
+            sha         = "${{ inputs.target_tag }}"
+            status      = "rollback"
+            triggeredBy = "github-actions-rollback"
+          } | ConvertTo-Json
+
+          try {
+            Invoke-RestMethod `
+              -Uri "http://localhost:5052/internal/deployment" `
+              -Method POST `
+              -Headers @{ "X-Api-Key" = "${{ secrets.BOT_INTERNAL_API_KEY }}" } `
+              -ContentType "application/json" `
+              -Body $body
+            Write-Host "Rollback 已記錄到 Bot API"
+          } catch {
+            Write-Warning "記錄回滾到 Bot API 失敗（不影響回滾本身）：$_"
+          }

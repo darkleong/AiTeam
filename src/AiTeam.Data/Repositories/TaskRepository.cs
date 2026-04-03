@@ -43,13 +43,13 @@ public class TaskRepository(AppDbContext db)
         => await db.SaveChangesAsync(cancellationToken);
 
     /// <summary>
-    /// Bot 重啟時，將所有殘留「執行中」任務標記為「失敗」。
+    /// Bot 重啟時，將所有殘留「執行中」與「等待輸入」任務標記為「失敗」。
     /// 回傳清理的任務數量。
     /// </summary>
     public async Task<int> MarkStaleRunningTasksAsync(CancellationToken cancellationToken = default)
     {
         var staleTasks = await db.Tasks
-            .Where(t => t.Status == "running")
+            .Where(t => t.Status == "running" || t.Status == "waiting_input")
             .ToListAsync(cancellationToken);
 
         foreach (var task in staleTasks)
@@ -63,4 +63,30 @@ public class TaskRepository(AppDbContext db)
 
         return staleTasks.Count;
     }
+
+    // ---- TaskGroup 相關 ----
+
+    /// <summary>新增任務群組（呼叫方負責 SaveChangesAsync）。</summary>
+    public void AddGroup(TaskGroup group) => db.TaskGroups.Add(group);
+
+    /// <summary>依 ID 查詢任務群組（含所有子任務）。</summary>
+    public async Task<TaskGroup?> GetGroupByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        => await db.TaskGroups
+            .Include(g => g.Tasks)
+            .FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
+
+    /// <summary>更新任務群組狀態（呼叫方負責 SaveChangesAsync）。</summary>
+    public void UpdateGroupStatus(TaskGroup group, string status)
+        => group.Status = status;
+
+    /// <summary>查詢指定 PR 且仍在執行中的 Reviewer 任務（Review 閉環用）。</summary>
+    public async Task<List<TaskItem>> GetActiveReviewerTasksByPrAsync(
+        int prNumber,
+        CancellationToken cancellationToken = default)
+        => await db.Tasks
+            .Where(t => t.AssignedAgent == "Reviewer"
+                     && (t.Status == "pending" || t.Status == "running")
+                     && t.Description != null
+                     && t.Description.Contains($"#{prNumber}"))
+            .ToListAsync(cancellationToken);
 }

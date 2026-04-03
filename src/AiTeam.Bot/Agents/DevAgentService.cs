@@ -21,6 +21,7 @@ public class DevAgentService(
 
     /// <summary>
     /// 處理 CEO 分派的任務，回傳執行計畫（給老闆第二層確認用）。
+    /// Stage 10：制定計畫前先取得 repo 結構（2 層），並解析 task.Description 中的 metadata block。
     /// </summary>
     public async Task<DevPlan> BuildPlanAsync(
         TaskItem task,
@@ -31,7 +32,15 @@ public class DevAgentService(
     {
         var provider = providerFactory.Create("Dev");
         var systemPrompt = BuildSystemPrompt(rules);
-        var userMessage = BuildPlanUserMessage(task, owner, repo);
+
+        // 取得 repo 目錄結構（最多 200 筆，兩層）
+        var repoTree = await gitHubService.GetRepoTreeSummaryAsync(owner, repo);
+
+        // 解析 task.Description 中的 Orchestrator metadata block
+        ParseDescriptionMeta(task.Description,
+            out var issueUrls, out var uiSpecPath, out var isFixLoop);
+
+        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop);
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
@@ -291,15 +300,81 @@ public class DevAgentService(
             """;
     }
 
-    private static string BuildPlanUserMessage(TaskItem task, string owner, string repo)
-        => $"""
+    private static string BuildPlanUserMessage(
+        TaskItem task,
+        string owner,
+        string repo,
+        string repoTree,
+        string? issueUrls,
+        string? uiSpecPath,
+        bool isFixLoop)
+    {
+        var issueSection    = string.IsNullOrWhiteSpace(issueUrls)  ? "（無）" : issueUrls;
+        var uiSpecSection   = string.IsNullOrWhiteSpace(uiSpecPath) ? "（無）" : uiSpecPath;
+        var fixLoopHint     = isFixLoop
+            ? "\n⚠️ 這是 Vera 審查後的修復迭代，請推送到**同一個 branch**，不要建立新 PR。"
+            : "";
+
+        return $"""
             ## 任務
             標題：{task.Title}
             Repo：{owner}/{repo}
-            觸發來源：{task.TriggeredBy}
+            觸發來源：{task.TriggeredBy}{fixLoopHint}
 
-            請產出執行計畫 JSON。
+            ## 任務描述
+            {task.Description ?? task.Title}
+
+            ## Repo 結構（2 層，供選擇修改檔案參考）
+            {repoTree}
+
+            ## 相關 GitHub Issues
+            {issueSection}
+
+            ## UI 規格文件路徑
+            {uiSpecSection}
+
+            請根據以上資訊產出執行計畫 JSON。
+            files_to_modify 中的路徑必須是上方 Repo 結構中**確實存在**的路徑。
             """;
+    }
+
+    /// <summary>
+    /// 解析 task.Description 中由 Orchestrator 附加的 metadata block。
+    /// 格式：
+    /// ---
+    /// issue_urls: ...
+    /// ui_spec_path: ...
+    /// fix_loop: true
+    /// ---
+    /// </summary>
+    private static void ParseDescriptionMeta(
+        string? description,
+        out string? issueUrls,
+        out string? uiSpecPath,
+        out bool isFixLoop)
+    {
+        issueUrls  = null;
+        uiSpecPath = null;
+        isFixLoop  = false;
+
+        if (string.IsNullOrWhiteSpace(description)) return;
+
+        var lines = description.Split('\n');
+        var inMeta = false;
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed == "---") { inMeta = !inMeta; continue; }
+            if (!inMeta) continue;
+
+            if (trimmed.StartsWith("issue_urls:"))
+                issueUrls = trimmed["issue_urls:".Length..].Trim();
+            else if (trimmed.StartsWith("ui_spec_path:"))
+                uiSpecPath = trimmed["ui_spec_path:".Length..].Trim();
+            else if (trimmed.StartsWith("fix_loop:"))
+                isFixLoop = trimmed.Contains("true", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     /// <inheritdoc />
     public async Task<AgentExecutionResult> ExecuteTaskAsync(

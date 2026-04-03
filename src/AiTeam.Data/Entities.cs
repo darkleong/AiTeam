@@ -41,21 +41,39 @@ public class AgentConfig
     public Team Team { get; set; } = null!;
 }
 
+public class TaskGroup
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Project { get; set; } = "";
+    public string Status { get; set; } = "pending"; // pending / running / done / failed
+    public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
+    public string? IssueUrls { get; set; }   // JSONB string[]
+    public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md
+    public string? DevPrUrl { get; set; }
+    public int FixIteration { get; set; } = 0; // 防止無限 Review loop，超過 3 次升級給老闆
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<TaskItem> Tasks { get; set; } = [];
+}
+
 public class TaskItem
 {
     public Guid Id { get; set; }
     public Guid? TeamId { get; set; }
     public Guid? ProjectId { get; set; }
+    public Guid? GroupId { get; set; } // Stage 10：任務群組（Orchestrator 用）
     public string Title { get; set; } = "";
     public string? Description { get; set; } // CEO 任務描述（供 Agent 使用）
     public string TriggeredBy { get; set; } = ""; // Discord / GitHub / Schedule
     public string AssignedAgent { get; set; } = "";
-    public string Status { get; set; } = "pending"; // pending / running / done / failed
+    public string Status { get; set; } = "pending"; // pending / running / waiting_input / done / failed
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 
     public Team? Team { get; set; }
     public Project? Project { get; set; }
+    public TaskGroup? Group { get; set; }
     public ICollection<TaskLog> Logs { get; set; } = [];
 }
 

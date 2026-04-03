@@ -22,11 +22,30 @@ public interface IAgentExecutor
 
 /// <summary>
 /// Agent 執行結果。
+/// Stage 10 新增：IsWaitingInput（暫停等待輸入）、QuestionType、Question（回報問題內容）、
+/// CriticalReviewCount（Vera 回傳，用於 Review 閉環判斷）。
 /// </summary>
 /// <param name="Success">是否成功。</param>
 /// <param name="Summary">Discord embed 用的一行摘要。</param>
 /// <param name="OutputUrl">PR URL / Issue URL 等輸出連結（可為 null）。</param>
-public record AgentExecutionResult(bool Success, string Summary, string? OutputUrl = null);
+/// <param name="IsWaitingInput">Agent 是否暫停等待老闆或上游補充資訊。</param>
+/// <param name="QuestionType">問題類型：requirement / ui_spec / business_decision。</param>
+/// <param name="Question">暫停時要問的問題內容。</param>
+/// <param name="CriticalReviewCount">Vera 審查出的 critical 問題數量，0 表示通過。</param>
+public record AgentExecutionResult(
+    bool Success,
+    string Summary,
+    string? OutputUrl = null,
+    bool IsWaitingInput = false,
+    string? QuestionType = null,
+    string? Question = null,
+    int CriticalReviewCount = 0)
+{
+    /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
+    public static AgentExecutionResult PauseAndAsk(string questionType, string question)
+        => new(false, question, IsWaitingInput: true,
+               QuestionType: questionType, Question: question);
+}
 
 /// <summary>
 /// Agent 描述子，用於 CEO 系統提示與動態分派。

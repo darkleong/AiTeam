@@ -1,5 +1,6 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -23,6 +24,7 @@ public class CommandHandler(
     RulesService rulesService,
     AppSettingsService appSettings,
     ConversationContextStore contextStore,
+    TaskGroupService taskGroupService,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
@@ -30,6 +32,9 @@ public class CommandHandler(
 
     // 等待確認的 CEO 決策暫存（messageId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingConfirmations = [];
+
+    // Stage 10：等待「✏️ 需調整」的修改說明輸入（userId → PendingConfirmation）
+    private readonly Dictionary<ulong, PendingConfirmation> _pendingAdjustments = [];
 
     /// <summary>
     /// 向 Guild 註冊所有斜線指令，並訂閱互動事件。
@@ -123,6 +128,26 @@ public class CommandHandler(
     /// </summary>
     private async Task HandleCeoChannelMessageAsync(SocketUserMessage msg)
     {
+        // Stage 10：若使用者剛按了 ✏️「需調整」按鈕，將本訊息視為調整指示
+        if (_pendingAdjustments.TryGetValue(msg.Author.Id, out var adjustPending))
+        {
+            _pendingAdjustments.Remove(msg.Author.Id);
+            var adjustmentText = msg.CleanContent;
+            logger.LogInformation("收到提案調整指示（UserId={UserId}）：{Text}", msg.Author.Id, adjustmentText);
+
+            await msg.Channel.SendMessageAsync(
+                $"✏️ 收到調整意見，CEO 正在重新協調 Demi 修改規格，請稍候...");
+
+            // 重新進入提案流程（帶入原有資訊 + 調整意見）
+            var augmentedDescription = $"{adjustPending.Description}\n\n【老闆調整意見】{adjustmentText}";
+            await ShowProposalAsync(
+                async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
+                adjustPending.CeoResponse,
+                adjustPending.Project,
+                augmentedDescription);
+            return;
+        }
+
         var history = contextStore.GetHistory(msg.Channel.Id);
 
         // 下載圖片附件（若有）
@@ -589,7 +614,17 @@ public class CommandHandler(
                 }
             }, CancellationToken.None);
         }
-        else // confirm_no、exec_no、req_no
+        else if (interaction.Data.CustomId == "propose_adjust")
+        {
+            // 老闆要求調整提案：等待老闆在 CEO 頻道說明調整方向
+            await interaction.RespondAsync(
+                "✏️ 請在此頻道說明您希望如何調整提案方向（一則訊息即可）：\n" +
+                "例如：「UI 規格的表格欄位要加日期範圍篩選，其他沒問題」", ephemeral: true);
+
+            _pendingAdjustments[interaction.User.Id] = pending;
+            logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
+        }
+        else // confirm_no、exec_no、req_no、propose_no
         {
             await interaction.RespondAsync("❌ 已取消。");
         }
@@ -728,6 +763,7 @@ public class CommandHandler(
         var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
         var designerService     = scope.ServiceProvider.GetRequiredService<DesignerAgentService>();
+        var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
 
         // 建立提案任務（狀態 pending，後續核准再執行）
         var task = new TaskItem
@@ -760,16 +796,37 @@ public class CommandHandler(
             var issues      = issuesTask.Result;
             var uiSpec      = uiSpecTask.Result;
 
-            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec);
+            // Stage 10：提案模式一律提交 UI 規格文件到 GitHub，讓 Embed 可附上完整連結
+            var owner       = _gitHubSettings.Owner;
+            var repo        = string.IsNullOrWhiteSpace(project)
+                ? _gitHubSettings.DefaultRepo : project;
+            var slug        = ToProposalSlug(task.Title);
+            var uiSpecPath  = $"docs/ui-specs/{slug}.md";
+            string? uiSpecGitHubUrl = null;
+
+            try
+            {
+                await gitHubService.CreateOrUpdateFileAsync(
+                    owner, repo, uiSpecPath, uiSpec,
+                    $"docs: add UI spec for proposal - {task.Title}");
+                uiSpecGitHubUrl = $"https://github.com/{owner}/{repo}/blob/main/{uiSpecPath}";
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "提案書 UI 規格提交 GitHub 失敗，仍繼續顯示 Embed");
+            }
+
+            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec, uiSpecGitHubUrl);
             var confirmMsg    = await sendAsync(
                 proposalEmbed,
-                BuildConfirmButtons("propose_yes", "propose_no"));
+                BuildProposalConfirmButtons());
 
             _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
                 ceoResponse, project, description,
                 TaskId: task.Id,
                 PreviewIssues: issues,
                 UiSpecMarkdown: uiSpec,
+                UiSpecPath: uiSpecPath,
                 IsProposal: true);
         }
         catch (Exception ex)
@@ -780,8 +837,20 @@ public class CommandHandler(
         }
     }
 
+    private static string ToProposalSlug(string title)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var c in title.ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c))   sb.Append(c);
+            else if (c == ' ' || c == '-') sb.Append('-');
+        }
+        var s = sb.ToString().Trim('-');
+        return s.Length > 60 ? s[..60] : s;
+    }
+
     /// <summary>
-    /// 提案核准後：實際建立 GitHub Issues。
+    /// 提案核准後：建立 GitHub Issues，然後建立 TaskGroup 並透過 Orchestrator 自動派工 Dev。
     /// </summary>
     private async Task ExecuteProposalApprovedAsync(PendingConfirmation pending)
     {
@@ -835,29 +904,68 @@ public class CommandHandler(
 
         if (notifyChannel is not null)
             await notifyChannel.SendMessageAsync(embed: embed.Build());
+
+        // Stage 10：提案核准後建立 TaskGroup，透過 Orchestrator 自動派工 Dev
+        if (result.Success)
+        {
+            try
+            {
+                // 將 Issue URLs 序列化為 JSON（存入 TaskGroup.IssueUrls）
+                var issueUrlsList = pending.PreviewIssues
+                    .Select((_, i) => result.OutputUrl ?? "")  // 第一個 Issue URL
+                    .Where(u => !string.IsNullOrEmpty(u))
+                    .ToList();
+                var issueUrlsJson = System.Text.Json.JsonSerializer.Serialize(issueUrlsList);
+
+                var group = await taskGroupService.CreateGroupAsync(
+                    task.Title,
+                    pending.Project,
+                    Orchestration.WorkflowType.NewFeature,
+                    issueUrlsJson,
+                    pending.UiSpecPath);
+
+                // 觸發 Dev（流程表：proposal_approved → Dev）
+                var steps = new[] { new Orchestration.WorkflowStep(AgentNames.Dev) };
+                await taskGroupService.FireStepsAsync(group, steps);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Orchestrator 派工 Dev 失敗（TaskId={Id}）", task.Id);
+                var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
+                if (ceoChannel is not null)
+                    await ceoChannel.SendMessageAsync("⚠️ Issues 已建立，但 CEO Orchestrator 派工 Dev 失敗，請手動下指令。");
+            }
+        }
     }
 
     private static Embed BuildProposalEmbed(
         string title,
         IReadOnlyList<RequirementIssuePreview> issues,
-        string uiSpec)
+        string uiSpec,
+        string? uiSpecGitHubUrl = null)
     {
         var issueLines = issues.Count > 0
             ? string.Join("\n", issues.Take(10).Select((i, idx) => $"{idx + 1}. **{i.Title}**"))
             : "（無需求分析結果）";
 
-        // UI Spec 截斷避免超過 Discord embed 上限
-        var specPreview = uiSpec.Length > 800 ? uiSpec[..800] + "\n…（已截斷，完整版見 Demi 頻道）" : uiSpec;
+        // UI Spec 截斷避免超過 Discord embed 上限（完整版見 GitHub 連結）
+        var specPreview = uiSpec.Length > 600 ? uiSpec[..600] + "\n…（已截斷，完整版見下方連結）" : uiSpec;
 
-        return new EmbedBuilder()
+        var embed = new EmbedBuilder()
             .WithTitle("📋 CEO 提案書 — 請確認")
             .WithColor(Color.Purple)
             .AddField("功能名稱", title)
             .AddField($"需求清單（共 {issues.Count} 項）", issueLines)
-            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview)
-            .WithFooter("確認後 Rosa 將建立 GitHub Issues；取消則中止。")
-            .WithTimestamp(DateTimeOffset.UtcNow)
-            .Build();
+            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview);
+
+        // Stage 10：附上 UI 規格完整文件連結
+        if (!string.IsNullOrWhiteSpace(uiSpecGitHubUrl))
+            embed.AddField("🎨 UI 規格完整文件", uiSpecGitHubUrl);
+
+        embed.WithFooter("✅ 核准開始開發 ｜ ✏️ 需調整 ｜ ❌ 取消")
+             .WithTimestamp(DateTimeOffset.UtcNow);
+
+        return embed.Build();
     }
 
     #endregion
@@ -980,6 +1088,26 @@ public class CommandHandler(
                     }
                 }
             }
+
+            // Stage 10：Agent 完成後，若任務屬於某個 TaskGroup，觸發 Orchestrator 決定下一步
+            if (pending.GroupId != Guid.Empty && result.Success)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await taskGroupService.HandleAgentCompletedAsync(
+                            pending.GroupId,
+                            task.AssignedAgent,
+                            result,
+                            result.OutputUrl ?? "");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Orchestrator HandleAgentCompleted 失敗（Group={Id}）", pending.GroupId);
+                    }
+                }, CancellationToken.None);
+            }
         }
         catch (Exception ex)
         {
@@ -1097,6 +1225,14 @@ public class CommandHandler(
             .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
             .Build();
 
+    /// <summary>Stage 10：提案書確認按鈕（三個：核准 / 需調整 / 取消）。</summary>
+    private static MessageComponent BuildProposalConfirmButtons()
+        => new ComponentBuilder()
+            .WithButton("✅ 核准，開始開發", "propose_yes",    ButtonStyle.Success)
+            .WithButton("✏️ 需要調整",       "propose_adjust", ButtonStyle.Primary)
+            .WithButton("❌ 取消",           "propose_no",     ButtonStyle.Danger)
+            .Build();
+
     #endregion
 
     // ────────────── Helpers ──────────────
@@ -1139,6 +1275,8 @@ internal record PendingConfirmation(
     string Project,
     string Description,
     Guid TaskId = default,
+    Guid GroupId = default,
     IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null,
     string? UiSpecMarkdown = null,
+    string? UiSpecPath = null,
     bool IsProposal = false);

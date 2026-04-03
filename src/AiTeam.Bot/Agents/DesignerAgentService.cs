@@ -61,30 +61,26 @@ public class DesignerAgentService(
             });
             await taskRepository.SaveAsync(cancellationToken);
 
-            // 3. 若任務要求開 PR，提交到 GitHub
-            var shouldOpenPr = ContainsPrKeyword(task.Title + " " + task.Description);
-            string? prUrl    = null;
+            // 3. 一律提交規格文件到 GitHub（Stage 10：Orchestrator 需要規格文件連結）
+            var slug  = ToSlug(task.Title);
+            var path  = $"docs/ui-specs/{slug}.md";
+            string? prUrl = null;
 
-            if (shouldOpenPr)
+            try
             {
-                var slug = ToSlug(task.Title);
-                var path = $"docs/ui-specs/{slug}.md";
-                try
-                {
-                    await gitHubService.CreateOrUpdateFileAsync(
-                        owner, repo, path, markdown,
-                        $"docs: add UI spec - {task.Title}");
-                    prUrl = $"https://github.com/{owner}/{repo}/blob/main/{path}";
-                    AddLog(task, $"UI 規格文件已提交：{path}", "done");
-                    await taskRepository.SaveAsync(cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "提交 UI 規格文件至 GitHub 失敗，仍回傳規格內容");
-                }
+                await gitHubService.CreateOrUpdateFileAsync(
+                    owner, repo, path, markdown,
+                    $"docs: add UI spec - {task.Title}");
+                prUrl = $"https://github.com/{owner}/{repo}/blob/main/{path}";
+                AddLog(task, $"UI 規格文件已提交：{path}", "done");
+                await taskRepository.SaveAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "提交 UI 規格文件至 GitHub 失敗，仍回傳規格內容");
             }
 
-            var summary = shouldOpenPr && prUrl is not null
+            var summary = prUrl is not null
                 ? $"UI 規格文件已完成並提交至 GitHub（{task.Title}）"
                 : $"UI 規格文件已完成（{task.Title}）";
 

@@ -443,4 +443,110 @@ public class GitHubService(
             logger.LogInformation("檔案已更新：{Path}", path);
         }
     }
+
+    // ────────────── Stage 10：Repo Tree API ──────────────
+
+    /// <summary>
+    /// 使用 GitHub Git Trees API 取得 repo 根目錄 + 一層子目錄結構（共兩層），
+    /// 不需要 Clone，速度快、不消耗磁碟。
+    /// 回傳格式：每行一個路徑，目錄以 / 結尾，最多 200 筆。
+    /// </summary>
+    public async Task<string> GetRepoTreeSummaryAsync(
+        string owner, string repo, string? gitRef = null)
+    {
+        var client  = CreateClient();
+        var treeRef = gitRef ?? "HEAD";
+
+        try
+        {
+            // 第一層（根目錄）
+            var root    = await client.Git.Tree.Get(owner, repo, treeRef);
+            var lines   = new List<string>();
+            var dirShas = new List<(string Path, string Sha)>();
+
+            foreach (var item in root.Tree)
+            {
+                if (item.Type.Value == Octokit.TreeType.Blob)
+                {
+                    lines.Add(item.Path);
+                }
+                else if (item.Type.Value == Octokit.TreeType.Tree)
+                {
+                    lines.Add(item.Path + "/");
+                    dirShas.Add((item.Path, item.Sha));
+                }
+
+                if (lines.Count >= 200) break;
+            }
+
+            // 第二層（每個子目錄的直接子項目）
+            foreach (var (dirPath, sha) in dirShas)
+            {
+                if (lines.Count >= 200) break;
+
+                try
+                {
+                    var sub = await client.Git.Tree.Get(owner, repo, sha);
+                    foreach (var item in sub.Tree)
+                    {
+                        if (lines.Count >= 200) break;
+                        var suffix = item.Type.Value == Octokit.TreeType.Tree ? "/" : "";
+                        lines.Add($"{dirPath}/{item.Path}{suffix}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "取得子目錄 {Dir} 的 tree 失敗，略過", dirPath);
+                }
+            }
+
+            return string.Join("\n", lines);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "GetRepoTreeSummaryAsync 失敗（{Owner}/{Repo}）", owner, repo);
+            return "（無法取得 repo 結構）";
+        }
+    }
+
+    // ────────────── Stage 10：GitHub Actions workflow_dispatch ──────────────
+
+    /// <summary>
+    /// 透過 GitHub REST API 觸發 workflow_dispatch 事件。
+    /// 用於 Maya 自動觸發 rollback.yml。
+    /// </summary>
+    public async Task TriggerWorkflowDispatchAsync(
+        string owner,
+        string repo,
+        string workflowFileName,
+        string branch,
+        Dictionary<string, string> inputs)
+    {
+        var client = CreateClient();
+
+        // CreateWorkflowDispatch.Inputs 型別為 IDictionary<string, object>
+        var inputsAsObject = inputs.ToDictionary(
+            kv => kv.Key,
+            kv => (object)kv.Value);
+
+        try
+        {
+            // Octokit.net 3.x+ 支援 CreateDispatch
+            await client.Actions.Workflows.CreateDispatch(
+                owner, repo, workflowFileName,
+                new CreateWorkflowDispatch(branch) { Inputs = inputsAsObject });
+
+            logger.LogInformation(
+                "workflow_dispatch 已觸發：{File}（branch={Branch}，inputs={Inputs}）",
+                workflowFileName, branch,
+                string.Join(", ", inputs.Select(kv => $"{kv.Key}={kv.Value}")));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "TriggerWorkflowDispatchAsync 失敗：{File}（{Owner}/{Repo}）",
+                workflowFileName, owner, repo);
+            throw;
+        }
+    }
 }

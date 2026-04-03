@@ -116,7 +116,8 @@ public class ReviewerAgentService(
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("done", task.Title);
 
-            return new AgentExecutionResult(true, summary, reviewUrl);
+            return new AgentExecutionResult(true, summary, reviewUrl,
+                CriticalReviewCount: criticalCount);
         }
         catch (Exception ex)
         {

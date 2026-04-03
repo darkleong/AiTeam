@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -25,6 +26,7 @@ public class WebhookController(
     IOptions<DiscordSettings> discordSettings,
     DiscordSocketClient discordClient,
     RulesService rulesService,
+    TaskGroupService taskGroupService,
     IServiceProvider serviceProvider,
     ILogger<WebhookController> logger) : ControllerBase
 {
@@ -80,6 +82,11 @@ public class WebhookController(
 
             case "pull_request" when root.GetProperty("action").GetString() == "opened":
                 await HandlePrOpenedAsync(root, cancellationToken);
+                break;
+
+            // Stage 10：PR 有新 commit push（Dev 修復後）→ 自動重派 Vera
+            case "pull_request" when root.GetProperty("action").GetString() == "synchronize":
+                await HandlePrSynchronizedAsync(root, cancellationToken);
                 break;
 
             case "push":
@@ -192,6 +199,59 @@ public class WebhookController(
             .Build();
 
         await channel.SendMessageAsync(embed: embed);
+    }
+
+    /// <summary>
+    /// Stage 10：PR 有新 commit（synchronize 事件）→ 查是否有對應的 in-flight Reviewer 任務
+    /// 屬於某個 TaskGroup → 自動重派 Vera 重新審查。
+    /// </summary>
+    private async Task HandlePrSynchronizedAsync(JsonElement root, CancellationToken cancellationToken)
+    {
+        var prNumber = root.GetProperty("pull_request").GetProperty("number").GetInt32();
+        var prUrl    = root.GetProperty("pull_request").GetProperty("html_url").GetString() ?? "";
+        var repoName = root.GetProperty("repository").GetProperty("name").GetString() ?? "";
+
+        logger.LogInformation("PR #{Pr} 有新 push（synchronize）：{Repo}", prNumber, repoName);
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+
+        // 查找屬於某個 TaskGroup 且仍在執行中的 Reviewer 任務
+        var reviewerTasks = await taskRepo.GetActiveReviewerTasksByPrAsync(prNumber, cancellationToken);
+        if (reviewerTasks.Count == 0)
+        {
+            logger.LogDebug("PR #{Pr} 沒有對應的 active Reviewer 任務，略過", prNumber);
+            return;
+        }
+
+        // 取第一個（正常情況下只有一個）
+        var existingTask = reviewerTasks[0];
+        if (existingTask.GroupId is null)
+        {
+            logger.LogDebug("PR #{Pr} 的 Reviewer 任務沒有 GroupId，略過自動重審", prNumber);
+            return;
+        }
+
+        var group = await taskRepo.GetGroupByIdAsync(existingTask.GroupId.Value, cancellationToken);
+        if (group is null || group.Status == "done" || group.Status == "failed")
+        {
+            logger.LogDebug("TaskGroup {Id} 已結束，略過自動重審", existingTask.GroupId);
+            return;
+        }
+
+        logger.LogInformation(
+            "PR #{Pr} 有新 push，TaskGroup {Id} 自動重派 Vera 重審",
+            prNumber, group.Id);
+
+        // 通知頻道
+        var channel = await FindChannelAsync(_discord.Channels.ReviewerChannel);
+        if (channel is not null)
+            await channel.SendMessageAsync(
+                $"🔄 PR #{prNumber} 有新 commit，CEO Orchestrator 自動重派 Vera 審查...");
+
+        // 觸發重審
+        var steps = new[] { new WorkflowStep(AgentNames.Reviewer, IsFixLoop: true) };
+        await taskGroupService.FireStepsAsync(group, steps, cancellationToken);
     }
 
     // ────────────── Helper ──────────────

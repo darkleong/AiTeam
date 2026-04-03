@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<AgentConfig> AgentConfigs => Set<AgentConfig>();
+    public DbSet<TaskGroup> TaskGroups => Set<TaskGroup>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskLog> TaskLogs => Set<TaskLog>();
     public DbSet<TokenLog> TokenLogs => Set<TokenLog>();
@@ -39,6 +40,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Team).WithMany(t => t.Agents).HasForeignKey(x => x.TeamId);
         });
 
+        modelBuilder.Entity<TaskGroup>(e =>
+        {
+            e.ToTable("task_groups");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.IssueUrls).HasColumnType("jsonb");
+        });
+
         modelBuilder.Entity<TaskItem>(e =>
         {
             e.ToTable("tasks");
@@ -46,6 +55,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasOne(x => x.Team).WithMany(t => t.Tasks).HasForeignKey(x => x.TeamId).IsRequired(false);
             e.HasOne(x => x.Project).WithMany(p => p.Tasks).HasForeignKey(x => x.ProjectId).IsRequired(false);
+            e.HasOne(x => x.Group).WithMany(g => g.Tasks).HasForeignKey(x => x.GroupId).IsRequired(false);
         });
 
         modelBuilder.Entity<TaskLog>(e =>

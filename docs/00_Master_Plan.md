@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v2.0
+> 版本：v2.3
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -21,6 +21,7 @@
 | [Stage_7_Roadmap.md](./Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | ✅ 已完成（2026-04-02） |
 | [Stage_8_Roadmap.md](./Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | ✅ 已完成（2026-04-02） |
 | [Stage_9_Roadmap.md](./Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | ✅ 已完成（2026-04-03） |
+| [Stage_10_Roadmap.md](./Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | ✅ 已完成（2026-04-03） |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -42,6 +43,8 @@
 | v1.9 | 2026-04-02 | Stage 8 全部 8 項完成：動態 AppSettings、per-agent Rules、Dark Mode CSS 覆寫、Notion 完全移除、OpsAgent 移除 docker CLI 依賴 |
 | v2.0 | 2026-04-03 | 新增 Stage_9_Roadmap.md（CEO 智慧分類 + 提案模式、Token 監控 Dashboard、QA Playwright）；Future_Feature.md 清理已完成項目 |
 | v2.1 | 2026-04-03 | Stage 9 全部完成並驗收：Token 監控即時 SignalR 更新、CEO 四類分類 + 提案模式、QA Playwright CI |
+| v2.2 | 2026-04-03 | 新增 Stage_10_Roadmap.md（CEO Orchestrator、提案書增強、開發上下文、Review 閉環、Ops Rollback）；修復 CHANGELOG.md base64 問題並補上 v1.1.0 / v1.2.0 |
+| v2.3 | 2026-04-03 | Stage 10 實作完成：WorkflowEngine、TaskGroupService、✏️ 提案調整按鈕、Dev repo tree 上下文、Review 閉環 webhook、Ops Rollback GitHub Actions |
 
 ---
 

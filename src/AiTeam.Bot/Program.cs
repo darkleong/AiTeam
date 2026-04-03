@@ -6,6 +6,7 @@ using AiTeam.Data.Extensions;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Ops;
+using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
@@ -74,6 +75,11 @@ builder.Services.AddSingleton<DashboardPushService>();
 // GitHub
 builder.Services.AddSingleton<GitHubService>();
 builder.Services.AddControllers();
+
+// Stage 10：CEO Orchestrator（WorkflowEngine 無狀態，TaskGroupService 管理群組流程）
+// TaskGroupService 所有建構子依賴均為 Singleton，可安全設為 Singleton（供 CommandHandler 直接注入）
+builder.Services.AddSingleton<WorkflowEngine>();
+builder.Services.AddSingleton<TaskGroupService>();
 
 // Discord（Stage 7：加入 GuildMessages + MessageContent 以接收自然語言訊息）
 // 注意：MessageContent 是 Privileged Intent，需在 Discord Developer Portal 手動開啟
