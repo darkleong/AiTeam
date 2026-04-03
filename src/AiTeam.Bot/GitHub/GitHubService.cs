@@ -413,8 +413,7 @@ public class GitHubService(
         string owner, string repo,
         string path, string content, string commitMessage)
     {
-        var client     = CreateClient();
-        var rawContent = System.Text.Encoding.UTF8.GetBytes(content);
+        var client = CreateClient();
 
         // 嘗試取得現有檔案 SHA
         string? existingSha = null;
@@ -428,18 +427,17 @@ public class GitHubService(
             // 檔案不存在，建立新檔案
         }
 
-        var base64Content = System.Convert.ToBase64String(rawContent);
-
+        // 直接傳入原始字串，由 Octokit 負責 base64 編碼（convertContentToBase64 預設 true）
         if (existingSha is null)
         {
             await client.Repository.Content.CreateFile(owner, repo, path,
-                new CreateFileRequest(commitMessage, base64Content, true));
+                new CreateFileRequest(commitMessage, content));
             logger.LogInformation("檔案已建立：{Path}", path);
         }
         else
         {
             await client.Repository.Content.UpdateFile(owner, repo, path,
-                new UpdateFileRequest(commitMessage, base64Content, existingSha, true));
+                new UpdateFileRequest(commitMessage, content, existingSha));
             logger.LogInformation("檔案已更新：{Path}", path);
         }
     }
