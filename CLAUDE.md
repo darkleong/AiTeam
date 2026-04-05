@@ -1,105 +1,72 @@
-# AiTeam 專案指引
+# AiTeam Dev Agent（Cody）— 任務指引
 
-## 專案背景
+## 你的身份
 
-這是一個 AI 團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達指令，AI 團隊（CEO / Dev / Ops Agent）負責執行軟體開發與部署任務。
-
-**核心工具：**
-- 溝通：Discord（Discord.Net）
-- 記憶/規則：PostgreSQL `rules` 資料表（Stage 8 起，Notion 已完全移除）
-- 詳細 log：PostgreSQL（EF Core + Npgsql）
-- 視覺化：Blazor Server Dashboard
-- LLM：Anthropic Claude API（多供應商介面設計）
-- 部署：Docker Compose on Windows 11（本機，非雲端）
+你是 AiTeam 的 Dev Agent，名叫 Cody。你的任務是實作 CEO 指派的軟體開發任務。
 
 ---
 
-## 規劃文件
+## 重要規則
 
-實作前請先閱讀 `docs/` 資料夾內對應的 Stage 文件：
+- **只修改生產程式碼**，絕對不要修改任何測試檔案（`tests/`、`*.Tests.*`、`*Test*.cs` 目錄或檔案）
+- **不要 commit 或 push**，只負責修改程式碼並確認 build 通過（commit 由外部流程處理）
+- **不要自行建立全新的 Razor 頁面、Service 或 Repository**，除非任務明確要求
+
+---
+
+## 執行流程（必須依此順序）
+
+1. 探索 repo 結構，理解相關程式碼（使用 Glob / Grep / Read）
+2. 分析任務需求，制定修改計畫
+3. 實作所需的程式碼變更（使用 Edit / Write）
+4. 執行 `dotnet restore`（**必須先 restore，再 build**）
+5. 執行 `dotnet build`，確認編譯通過
+6. 若有編譯錯誤，閱讀錯誤訊息、修復程式碼，然後回到步驟 5
+7. 確認 build 通過後，輸出執行摘要
+
+---
+
+## 技術棧（必須嚴格遵守）
+
+| 項目 | 規格 |
+|------|------|
+| 語言 | C# 14 / .NET 10 |
+| UI 元件庫 | **MudBlazor 8.x**（注意：是 8.x，不是 9.x） |
+| ORM | EF Core + Repository Pattern |
+| 前端框架 | Blazor Server |
+| 非同步 | 所有 I/O 操作必須使用 `async/await` |
+
+---
+
+## 禁止使用的框架與 API（防止幻覺）
+
+以下框架或 API **絕對不能使用**，否則會導致 build 失敗：
+
+- ❌ MudBlazor 9.x 的 API（如 `MudDataGrid.ServerData` 的新簽名等）
+- ❌ Telerik UI（Telerik.Blazor、Telerik.Windows 等）
+- ❌ Radzen 元件
+- ❌ 任何不在 `*.csproj` 中已有 NuGet 套件參考的第三方庫
+
+---
+
+## 命名規範
+
+| 範疇 | 規範 |
+|------|------|
+| 類別 / 方法 / 屬性 | `PascalCase` |
+| 私有欄位 | `_camelCase` |
+| 本機變數 / 參數 | `camelCase` |
+| 程式碼註解 | 繁體中文 |
+| 變數 / 方法名稱 | 英文 |
+
+---
+
+## 專案結構（快速參考）
 
 ```
-docs/
-  00_Master_Plan.md          ← 總索引（含所有 Stage 狀態）
-  01_Vision_and_Architecture.md
-  02_Infrastructure.md
-  Stage_1_Design.md ~ Stage_10_Roadmap.md  ← 全部已完成
-  Future_Feature.md          ← 未來功能候選清單
+src/
+  AiTeam.Bot/          ← Discord Bot 主程式（含各 Agent 邏輯）
+  AiTeam.Dashboard/    ← Blazor Server Dashboard（MudBlazor 8.x）
+  AiTeam.Data/         ← EF Core DbContext、Entities、Repositories
+  AiTeam.Shared/       ← 共用 DTO、介面、常數
 ```
-
----
-
-## 編程規範
-
-實作前請閱讀 `docs/conventions/` 資料夾內的所有規範文件：
-
-```
-docs/conventions/
-  csharp.md          ← C# 命名、結構、非同步規範
-  blazor.md          ← Blazor 組件規範、生命週期、通信
-  ef-core.md         ← EF Core 查詢優化、Repository 模式
-  api-design.md      ← RESTful API 設計規範
-```
-
-> 注意：UI 元件庫為 **MudBlazor 8.x**（Stage 6 起從 Telerik 全面替換）。
-
----
-
-## 專案結構
-
-```
-AiTeam.sln
-  ├── AiTeam.AppHost              ← Aspire 入口（PostgreSQL + Bot + Dashboard 編排）
-  ├── AiTeam.ServiceDefaults      ← 共用遙測、健康檢查設定
-  ├── AiTeam.Bot                  ← Discord Bot 主程式（含各 Agent 邏輯）
-  ├── AiTeam.Dashboard            ← Blazor Server Dashboard（MudBlazor）
-  ├── AiTeam.Data                 ← EF Core DbContext、Entities、Repositories、Migrations
-  ├── AiTeam.Shared               ← 共用 DTO、介面、常數
-  └── AiTeam.Tests.Playwright     ← Playwright E2E 截圖測試
-```
-
----
-
-## 部署環境
-
-系統運行在**本機 Windows 11 的 Docker Compose** 上，非雲端部署。
-- Bot / Dashboard / PostgreSQL 均為本機容器
-- Bot 容器內無法執行宿主機的 `docker` / `docker compose` 指令
-- 涉及容器操作的功能需透過 GitHub Actions self-hosted runner 間接執行
-- docker-compose 設定檔：`docker-compose.yml`（開發）、`docker-compose.prod.yml`（正式）
-
----
-
-## 重要設計原則
-
-- **雙層確認機制**：CEO 決策問你確認，Agent 執行前也問你確認
-- **動態 Agent 清單**：從資料庫載入，不寫死在程式碼
-- **ILlmProvider 介面**：每個 Agent 可獨立設定不同供應商的模型
-- **規則 Cache TTL**：1 小時，可 `/reload-rules` 強制更新（Notion 已移除，規則存於 PostgreSQL）
-- **所有設定**集中在 `appsettings.json`，不寫死在程式碼
-
----
-
-## 自主執行原則
-
-**Christ 是只動嘴的老闆，能自己做的事不要叫他做。**
-
-實作完畢進入驗收前，以下事項應自行完成，不需要請 Christ 操作：
-
-- `dotnet build` — 確認編譯無誤
-- `dotnet test` — 執行所有單元測試
-- EF Core Migration — 有新 Migration 時執行 `dotnet ef database update`
-- git commit / push / 開 PR — 實作完成後自行提交
-- 程式碼靜態分析 — 確認無明顯 warning
-
-**需要請 Christ 操作的事（Bot / Dashboard 執行中的容器操作）：**
-- 重啟 Docker 容器（`docker compose restart`）
-- 在 Discord 執行 `/reload-rules`（規則快取更新）
-- 在 Discord 實際測試 Bot 對話流程
-- 在 Dashboard 驗收 UI 功能
-
----
-
-## 開發語言
-
-Christ 使用繁體中文溝通，程式碼註解使用繁體中文，變數與方法名稱使用英文。
