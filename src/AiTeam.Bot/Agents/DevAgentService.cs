@@ -9,13 +9,17 @@ using AiTeam.Shared.ViewModels;
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Dev Agent：接收 CEO 分派的任務，分析後操作 GitHub repo（修改程式碼、開 PR）。
+/// Dev Agent：接收 CEO 分派的任務，驅動 Claude Code CLI 自主探索 repo、實作變更、
+/// 確認 build 通過後，由 GitHubService 負責 commit / push / 開 PR。
+/// Stage 11：核心執行層從「Claude API 一次性產出」升級為「Claude Code CLI 自主開發」。
 /// </summary>
 public class DevAgentService(
     LlmProviderFactory providerFactory,
+    ClaudeCodeService claudeCodeService,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
+    IConfiguration configuration,
     ILogger<DevAgentService> logger) : IAgentExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -85,8 +89,9 @@ public class DevAgentService(
     }
 
     /// <summary>
-    /// 執行任務：依計畫 Clone repo、修改檔案、Commit、Push、開 PR。
-    /// 回傳 PR URL。
+    /// 執行任務：Clone repo、建立 branch、驅動 Claude Code 自主實作並確認 build 通過、
+    /// 然後 Commit、Push、開 PR。
+    /// Stage 11：核心程式碼產出改由 Claude Code CLI 負責，取代原本的 LLM 一次性輸出。
     /// </summary>
     public async Task<string> ExecuteAsync(
         TaskItem task,
@@ -128,9 +133,9 @@ public class DevAgentService(
             gitHubService.CreateAndCheckoutBranch(localPath, plan.BranchName);
             AddLog(task, $"Branch {plan.BranchName} 已建立", "done");
 
-            // 讓 LLM 產出修改後的程式碼並寫入檔案
-            await ApplyCodeChangesAsync(task, plan, localPath, owner, repo, cancellationToken);
-            AddLog(task, "程式碼修改完成", "done");
+            // 驅動 Claude Code 自主實作（探索 repo → 寫碼 → dotnet restore → dotnet build → 修錯）
+            await RunClaudeCodeAsync(task, plan, localPath, cancellationToken);
+            AddLog(task, "Claude Code 程式碼實作完成（build 通過）", "done");
 
             // Commit + Push
             gitHubService.CommitAll(localPath, plan.CommitMessage);
@@ -145,11 +150,8 @@ public class DevAgentService(
                 ## 變更摘要
                 {plan.Summary}
 
-                ## 修改檔案
-                {string.Join("\n", plan.FilesToModify.Select(f => $"- {f}"))}
-
                 ---
-                🤖 由 AiTeam Dev Agent 自動產出
+                🤖 由 AiTeam Dev Agent（Claude Code）自動產出
                 """;
 
             var prUrl = await gitHubService.OpenPullRequestAsync(
@@ -209,6 +211,98 @@ public class DevAgentService(
 
     // ────────────── Private ──────────────
 
+    /// <summary>
+    /// 驅動 Claude Code CLI 自主完成程式碼實作，並確認 dotnet build 通過。
+    /// Stage 11 核心：取代原本的 ApplyCodeChangesAsync（LLM 一次性輸出）。
+    /// </summary>
+    private async Task RunClaudeCodeAsync(
+        TaskItem task,
+        DevPlan plan,
+        string localPath,
+        CancellationToken cancellationToken)
+    {
+        // 將 Cody 專用 CLAUDE.md 模板寫入 repo 根目錄
+        var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_CODY.md");
+        if (File.Exists(templatePath))
+        {
+            var claudeMdContent = await File.ReadAllTextAsync(templatePath, cancellationToken);
+            await File.WriteAllTextAsync(
+                Path.Combine(localPath, "CLAUDE.md"), claudeMdContent, cancellationToken);
+            logger.LogInformation("CLAUDE.md 已寫入 repo 根目錄");
+        }
+        else
+        {
+            logger.LogWarning("CLAUDE_CODY.md 模板不存在於 {Path}，略過寫入", templatePath);
+        }
+
+        // 解析 Vera 報告（fix loop 時提供）
+        ParseDescriptionMeta(task.Description,
+            out _, out _, out var isFixLoop, out var veraReview);
+
+        // 組建給 Claude Code 的任務 prompt
+        var prompt = BuildClaudeCodePrompt(task, plan, isFixLoop, veraReview);
+
+        // 從設定讀取模型名稱（與其他 Agent 一致，不寫死）
+        var model = configuration["Agents:Dev:Model"]
+                 ?? configuration["Anthropic:DefaultModel"]
+                 ?? "claude-opus-4-6";
+        var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+        AddLog(task, $"啟動 Claude Code（model={model}）", "running");
+
+        var result = await claudeCodeService.RunAsync(localPath, prompt, model, apiKey, cancellationToken);
+
+        if (!result.Success)
+        {
+            var msg = string.IsNullOrWhiteSpace(result.Output)
+                ? $"Claude Code 執行失敗（exit code={result.ExitCode}）"
+                : $"Claude Code 執行失敗：{result.Output}";
+            throw new InvalidOperationException(msg);
+        }
+
+        logger.LogInformation("Claude Code 執行完成：{Summary}", result.Output);
+        AddLog(task, $"Claude Code 完成：{result.Output[..Math.Min(200, result.Output.Length)]}", "done");
+    }
+
+    private static string BuildClaudeCodePrompt(
+        TaskItem task,
+        DevPlan plan,
+        bool isFixLoop,
+        string? veraReview)
+    {
+        var veraSection = isFixLoop && !string.IsNullOrWhiteSpace(veraReview)
+            ? $"""
+
+              ## ⚠️ Vera 審查報告（你必須修改以下 🔴 必須修改的項目）
+              {veraReview}
+
+              **重點：只修改報告中 🔴 必須修改的項目，不要重寫整個檔案，不要修改其他檔案。**
+              """
+            : "";
+
+        var fixLoopHint = isFixLoop
+            ? "\n⚠️ 這是 Vera 審查後的修復迭代，不要修改已通過的部分，只修正 Vera 指出的問題。\n"
+            : "";
+
+        return $"""
+            ## 任務
+            標題：{task.Title}
+            計畫摘要：{plan.Summary}
+            {fixLoopHint}
+            ## 任務描述
+            {task.Description ?? task.Title}
+            {veraSection}
+            ## 執行要求
+            1. 先探索 repo 結構，理解相關程式碼
+            2. 實作上述任務所需的程式碼變更
+            3. 執行 `dotnet restore`（必須先 restore 再 build，避免找不到套件的假錯誤）
+            4. 執行 `dotnet build` 確認編譯通過
+            5. 若有編譯錯誤，修復後再次執行 build
+            6. 確認 build 通過後結束任務
+            7. **不要 commit 或 push**（外部流程會處理）
+            """;
+    }
+
     private async Task<string> ExecuteCodeReviewAsync(
         TaskItem task, DevPlan plan,
         string owner, string repo,
@@ -243,71 +337,6 @@ public class DevAgentService(
         await taskRepository.SaveAsync(cancellationToken);
 
         return response.Content;
-    }
-
-    private async Task ApplyCodeChangesAsync(
-        TaskItem task, DevPlan plan,
-        string localPath, string owner, string repo,
-        CancellationToken cancellationToken)
-    {
-        var provider = providerFactory.Create("Dev");
-
-        // 解析 Vera 報告（fix loop 時可用）
-        ParseDescriptionMeta(task.Description,
-            out _, out _, out var isFixLoop, out var veraReview);
-
-        foreach (var filePath in plan.FilesToModify)
-        {
-            var fullPath = Path.Combine(localPath, filePath.Replace('/', Path.DirectorySeparatorChar));
-
-            // 讀取現有內容（若存在）
-            var existingContent = File.Exists(fullPath) ? await File.ReadAllTextAsync(fullPath, cancellationToken) : "";
-
-            // Vera 報告區段（fix loop 時提供，讓 Dev 知道要修什麼）
-            var veraSection = isFixLoop && !string.IsNullOrWhiteSpace(veraReview)
-                ? $"""
-
-                ## Vera 審查報告（請依此修改 🔴 必須修改的項目）
-                {veraReview}
-                """
-                : "";
-
-            var prompt = $"""
-                任務：{task.Title}
-                描述：{task.Description ?? plan.Summary}
-                計畫摘要：{plan.Summary}
-                檔案：{filePath}
-                {veraSection}
-                ## 現有程式碼
-                ```
-                {existingContent}
-                ```
-
-                請直接回傳修改後的完整 C# 程式碼。
-                - 不要加任何說明文字
-                - 不要用 ```csharp 或 ``` 包裝
-                - 只回傳純粹的程式碼內容
-                """;
-
-            var response = await provider.CompleteAsync(
-                "你是資深 C# 工程師。回傳修改後的完整程式碼，不加任何說明、不加 markdown 標記。只回傳純程式碼。",
-                prompt, cancellationToken);
-
-            // 去除 LLM 可能加上的 markdown 程式碼區塊標記（```csharp / ```）
-            var content = StripCodeBlockMarkers(response.Content);
-
-            // 防護：若 LLM 回傳的是對話文字而非程式碼，拋出例外避免污染檔案
-            if (IsConversationalResponse(content))
-                throw new InvalidOperationException(
-                    $"LLM 回傳了說明文字而非程式碼（{filePath}）：{content[..Math.Min(120, content.Length)]}");
-
-            // 確保目錄存在
-            var dir = Path.GetDirectoryName(fullPath);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-
-            await File.WriteAllTextAsync(fullPath, content, cancellationToken);
-            logger.LogInformation("已寫入 {File}", filePath);
-        }
     }
 
     private void AddLog(TaskItem task, string step, string status)
@@ -475,57 +504,6 @@ public class DevAgentService(
 
         if (reviewLines.Count > 0)
             veraReview = string.Join("\n", reviewLines).Trim();
-    }
-
-    /// <summary>
-    /// 去除 LLM 回傳內容中的 markdown 程式碼區塊標記（```csharp 或 ```）。
-    /// </summary>
-    private static string StripCodeBlockMarkers(string content)
-    {
-        content = content.Trim();
-        if (!content.StartsWith("```")) return content;
-
-        // 移除第一行（```csharp 或 ```）
-        var firstNewline = content.IndexOf('\n');
-        if (firstNewline >= 0)
-            content = content[(firstNewline + 1)..].TrimStart('\r', '\n');
-
-        // 移除結尾的 ```
-        var trimmed = content.TrimEnd();
-        if (trimmed.EndsWith("```"))
-            content = trimmed[..trimmed.LastIndexOf("```")].TrimEnd();
-
-        return content;
-    }
-
-    /// <summary>
-    /// 偵測 LLM 是否回傳了對話文字而非程式碼。
-    /// 若是，應拒絕寫入檔案。
-    /// </summary>
-    private static bool IsConversationalResponse(string content)
-    {
-        if (string.IsNullOrWhiteSpace(content)) return true;
-
-        var lower = content.TrimStart().ToLowerInvariant();
-
-        // 常見的 LLM 詢問句開頭
-        var conversationalPrefixes = new[]
-        {
-            "i need", "i would", "could you", "please provide", "based on",
-            "to implement", "you need", "i don't have", "i cannot", "i can't",
-            "unfortunately", "it seems", "the provided", "before i can",
-            "in order to"
-        };
-        if (conversationalPrefixes.Any(p => lower.StartsWith(p))) return true;
-
-        // 若完全沒有任何 C# 程式碼跡象
-        var codeIndicators = new[]
-        {
-            "namespace ", "using ", "class ", "public ", "private ", "protected ",
-            "internal ", "void ", "async ", "return ", "//", "/*", "@page", "@using",
-            "<", "{", "}"
-        };
-        return !codeIndicators.Any(indicator => content.Contains(indicator));
     }
 
     /// <summary>從描述文字中提取 PR 編號（支援 /pull/123 與 PR #123 兩種格式）。</summary>

@@ -2,7 +2,7 @@
 
 > 版本：v1.0
 > 建立日期：2026-04-05
-> 狀態：📋 規劃中
+> 狀態：🚧 實作中
 
 ---
 
@@ -60,41 +60,51 @@ Cody 升級後，多項 Future Feature 問題自然減輕或消失：
 
 ---
 
-## 待研究事項
-
-以下問題需要在實作前先釐清：
+## 研究結論
 
 ### 1. Claude Code 的呼叫方式
 
-Claude Code SDK 支援程式化呼叫。需確認：
-- C# 如何呼叫（CLI subprocess vs SDK API）
-- 輸入格式（任務描述、CLAUDE.md、repo 路徑）
-- 輸出格式（commit hash、PR URL、執行結果）
+採用 **CLI subprocess** 方式（Claude Code 無 C# SDK）：
+
+```
+claude -p "<prompt>" \
+  --dangerously-skip-permissions \
+  --output-format json \
+  --max-turns 20 \
+  --no-session-persistence \
+  --model <model-from-config>
+```
+
+- `-p`：非互動模式，完成後退出
+- `--output-format json`：stdout 為逐行 JSON，最後一行 `type="result"` 包含執行摘要
+- `--dangerously-skip-permissions`：跳過所有確認提示（容器內隔離環境可接受）
+- `--max-turns 20`：防止無限迭代
+- `--no-session-persistence`：不寫入磁碟 session 紀錄
+- `--model`：從 `appsettings.json` 讀取，不寫死
 
 ### 2. Docker 容器環境
 
-Bot 運行在 Docker 容器內，Claude Code 需要：
-- Node.js runtime（Claude Code 本體）
-- dotnet CLI（build / test 用）
-- 檔案系統存取（repo 讀寫）
-- 網路存取（GitHub API、Anthropic API）
+決策：**在 Bot 容器內安裝 Claude Code**（不另起容器）。
 
-需評估是否在 Bot 容器內安裝 Claude Code，或另起獨立容器。
+- Runtime base image 從 `dotnet/aspnet:10.0` 改為 `dotnet/sdk:10.0`（Claude Code 需要 `dotnet build`）
+- Node.js 22 透過 nodesource 安裝（`apt-get nodejs` 版本過舊，無法執行 Claude Code）
+- 代價：image 約增加 400MB，為 Dev Agent 功能必要代價
 
 ### 3. Session 管理
 
-- timeout 設定（開發任務可能跑數分鐘）
-- 資源限制（記憶體、CPU）
-- 異常處理（Claude Code crash、API 超時）
-- 並行控制（多個 Dev 任務同時跑）
+- Timeout：30 分鐘（`CancellationTokenSource.CancelAfter`），超時拋出 `TimeoutException`
+- API Key：透過 `ProcessStartInfo.Environment["ANTHROPIC_API_KEY"]` 注入，不暴露在 log
+- 並行控制：目前依賴 Orchestrator 的 TaskGroup 機制，不另加鎖
+- Git config：`ClaudeCodeService` 啟動前先執行 `git config user.name/email`（容器內可能缺少設定）
 
 ### 4. CLAUDE.md 客製化
 
-需要為 Cody 的 Claude Code session 準備專用的 CLAUDE.md，內容包含：
-- 專案結構與慣例
-- 禁用框架清單
-- commit 格式規範
-- 測試要求（build 必須通過才能 commit）
+已實作 `Resources/CLAUDE_CODY.md`，寫入 repo 根目錄作為 `CLAUDE.md`，包含：
+- 身份定義、執行規則（不 commit/push）
+- 技術棧：C# 14 / .NET 10、MudBlazor **8.x**
+- 框架禁止清單（MudBlazor 9.x、Telerik、Radzen）
+- 執行順序：先 `dotnet restore`，再 `dotnet build`
+- 命名規範與專案結構說明
 
 ---
 
@@ -102,11 +112,11 @@ Bot 運行在 Docker 容器內，Claude Code 需要：
 
 ### 要做的
 
-- [ ] 研究 Claude Code SDK 呼叫方式，確認技術可行性
-- [ ] 設計 `ClaudeCodeDevService`（取代目前的 `DevAgentService` 核心邏輯）
-- [ ] Docker 環境配置（Claude Code 安裝與依賴）
-- [ ] Cody 專用 CLAUDE.md 撰寫
-- [ ] 與 Orchestrator 整合（TaskGroup 流程不變，只換 Dev 執行層）
+- [x] 研究 Claude Code SDK 呼叫方式，確認技術可行性
+- [x] 設計 `ClaudeCodeService`（subprocess 封裝）+ 修改 `DevAgentService`（移除 `ApplyCodeChangesAsync`）
+- [x] Docker 環境配置（Dockerfile 改 sdk:10.0 + Node.js 22 + claude CLI）
+- [x] Cody 專用 CLAUDE.md 撰寫（`Resources/CLAUDE_CODY.md`）
+- [x] 與 Orchestrator 整合（TaskGroup 流程不變，只換 Dev 執行層）
 - [ ] 驗收測試：用真實任務測試 Cody 的開發品質
 
 ### 不做的
@@ -132,3 +142,4 @@ Bot 運行在 Docker 容器內，Claude Code 需要：
 | 日期 | 內容 |
 |------|------|
 | 2026-04-05 | 初版建立，從 Future Feature 一 獨立為 Stage 11 規劃文件 |
+| 2026-04-05 | 實作完成：ClaudeCodeService、DevAgentService 改寫、CLAUDE_CODY.md、Dockerfile、Program.cs 更新；待驗收測試 |

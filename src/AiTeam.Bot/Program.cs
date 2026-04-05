@@ -74,6 +74,9 @@ builder.Services.AddSingleton<DashboardPushService>();
 
 // GitHub
 builder.Services.AddSingleton<GitHubService>();
+
+// Stage 11：Claude Code subprocess 封裝（供 DevAgentService 使用）
+builder.Services.AddSingleton<ClaudeCodeService>();
 builder.Services.AddControllers();
 
 // Stage 10：CEO Orchestrator（WorkflowEngine 無狀態，TaskGroupService 管理群組流程）

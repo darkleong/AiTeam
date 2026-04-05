@@ -21,4 +21,11 @@
     <ProjectReference Include="..\AiTeam.Data\AiTeam.Data.csproj" />
     <ProjectReference Include="..\AiTeam.Shared\AiTeam.Shared.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Cody 專用 CLAUDE.md 模板，複製到輸出目錄供 DevAgentService 寫入 clone 的 repo -->
+    <Content Include="Resources\CLAUDE_CODY.md">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

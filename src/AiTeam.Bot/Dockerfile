@@ -11,14 +11,19 @@ RUN dotnet publish src/AiTeam.Bot/AiTeam.Bot.csproj \
     -o /app/publish \
     --no-self-contained
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
 
-# Npgsql GSSAPI 支援（可選，避免 libgssapi_krb5.so.2 警告）
+# 安裝：Npgsql GSSAPI 支援 + Node.js 22（Claude Code CLI 需要）+ git（Claude Code 操作 repo 需要）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgssapi-krb5-2 \
+    curl \
+    git \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @anthropic-ai/claude-code \
     && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["dotnet", "AiTeam.Bot.dll"]
