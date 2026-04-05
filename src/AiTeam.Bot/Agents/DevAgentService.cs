@@ -221,13 +221,18 @@ public class DevAgentService(
         string localPath,
         CancellationToken cancellationToken)
     {
-        // 將 Cody 專用 CLAUDE.md 模板寫入 repo 根目錄
-        var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_CODY.md");
+        // 將 Cody 專用 CLAUDE.md 模板寫入 repo 根目錄，執行完後還原
+        // （避免 CLAUDE.md 的替換被 GitHubService 一起 commit 進 PR）
+        var claudeMdPath  = Path.Combine(localPath, "CLAUDE.md");
+        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_CODY.md");
+        var originalClaudeMd = File.Exists(claudeMdPath)
+            ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
+            : null;
+
         if (File.Exists(templatePath))
         {
             var claudeMdContent = await File.ReadAllTextAsync(templatePath, cancellationToken);
-            await File.WriteAllTextAsync(
-                Path.Combine(localPath, "CLAUDE.md"), claudeMdContent, cancellationToken);
+            await File.WriteAllTextAsync(claudeMdPath, claudeMdContent, cancellationToken);
             logger.LogInformation("CLAUDE.md 已寫入 repo 根目錄");
         }
         else
@@ -250,7 +255,19 @@ public class DevAgentService(
 
         AddLog(task, $"啟動 Claude Code（model={model}）", "running");
 
-        var result = await claudeCodeService.RunAsync(localPath, prompt, model, apiKey, cancellationToken);
+        ClaudeCodeResult result;
+        try
+        {
+            result = await claudeCodeService.RunAsync(localPath, prompt, model, apiKey, cancellationToken);
+        }
+        finally
+        {
+            // 不論成功或失敗，還原 CLAUDE.md 至原始內容（或刪除若原本不存在）
+            if (originalClaudeMd is not null)
+                await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
+            else if (File.Exists(claudeMdPath))
+                File.Delete(claudeMdPath);
+        }
 
         if (!result.Success)
         {
