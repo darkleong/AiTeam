@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。
 
 ---
 
@@ -10,7 +10,7 @@
 你（老闆）
     ↓ Discord 自然語言（在 #victoria-ceo 說話）
 CEO Agent（Victoria）—— 從 DB 動態載入 Agent 清單
-    ├── Dev Agent（Cody）        （程式開發、Bug 修復、開 PR）
+    ├── Dev Agent（Cody）        （Claude Code CLI 自主開發、Bug 修復、開 PR）
     ├── Ops Agent（Maya）        （部署監控、健康檢查告警）
     ├── QA Agent（Quinn）        （自動產生測試、開測試 PR）
     ├── Doc Agent（Sage）        （自動產出技術文件、開文件 PR）
@@ -73,6 +73,7 @@ docs/
 ├── Stage_8_Roadmap.md           ← ✅ 完成
 ├── Stage_9_Roadmap.md           ← ✅ 完成
 ├── Stage_10_Roadmap.md          ← ✅ 完成（含詳細實作紀錄）
+├── Stage_11_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -279,6 +280,7 @@ docker compose --env-file .env up -d
 | Stage 8 | 系統可靠性補完、Notion 遷移、動態設定、規則管理、部署紀錄自動化 | ✅ 完成 |
 | Stage 9 | Token 監控 Dashboard（即時 SignalR）、CEO 智慧分類 + 提案模式、QA Playwright CI | ✅ 完成 |
 | Stage 10 | CEO Orchestrator 全自動流程、提案書 ✏️ 調整按鈕、Dev repo 結構上下文、Review 閉環、Ops Rollback | ✅ 完成 |
+| Stage 11 | Dev Agent（Cody）升級為 Claude Code CLI 驅動：自主探索、寫碼、build 驗證、自動修錯 | ✅ 完成 |
 
 ---
 

@@ -22,7 +22,7 @@
 | [Stage_8_Roadmap.md](./Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | ✅ 已完成（2026-04-02） |
 | [Stage_9_Roadmap.md](./Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | ✅ 已完成（2026-04-03） |
 | [Stage_10_Roadmap.md](./Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | ✅ 已完成（2026-04-03） |
-| [Stage_11_Roadmap.md](./Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | 📋 規劃中 |
+| [Stage_11_Roadmap.md](./Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | ✅ 已完成（2026-04-05） |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -48,6 +48,7 @@
 | v2.3 | 2026-04-03 | Stage 10 實作完成：WorkflowEngine、TaskGroupService、✏️ 提案調整按鈕、Dev repo tree 上下文、Review 閉環 webhook、Ops Rollback GitHub Actions |
 | v2.4 | 2026-04-04 | Stage 10 驗收完成；Stage_10_Roadmap.md 補充詳細實作紀錄（架構設計、踩坑、Race Condition、Ops 路徑說明、Migration 指令）；v1.3.1 修正 7 項驗收後 bug |
 | v2.5 | 2026-04-05 | 新增 Stage_11_Roadmap.md（Dev Agent 驅動 Claude Code，單一目標）；Future_Feature.md 新增十二～十七共 6 項 |
+| v2.6 | 2026-04-05 | Stage 11 驗收完成：ClaudeCodeService subprocess 封裝、Dockerfile 改 sdk:10.0 + Node.js 22 + claude CLI、workspace 改 Linux 路徑；三項踩坑修復後 PR #65 通過 |
 
 ---
 

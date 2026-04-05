@@ -2,7 +2,7 @@
 
 > 版本：v1.0
 > 建立日期：2026-04-05
-> 狀態：🚧 實作中
+> 狀態：✅ 已完成（2026-04-05）
 
 ---
 
@@ -117,7 +117,7 @@ claude -p "<prompt>" \
 - [x] Docker 環境配置（Dockerfile 改 sdk:10.0 + Node.js 22 + claude CLI）
 - [x] Cody 專用 CLAUDE.md 撰寫（`Resources/CLAUDE_CODY.md`）
 - [x] 與 Orchestrator 整合（TaskGroup 流程不變，只換 Dev 執行層）
-- [ ] 驗收測試：用真實任務測試 Cody 的開發品質
+- [x] 驗收測試：用真實任務測試 Cody 的開發品質（PR #65 通過）
 
 ### 不做的
 
@@ -137,9 +137,29 @@ claude -p "<prompt>" \
 
 ---
 
+## 踩坑紀錄（驗收過程）
+
+| 問題 | 原因 | 修復 |
+|------|------|------|
+| `--dangerously-skip-permissions cannot be used with root` | 容器預設以 root 執行，Claude Code 拒絕在 root 下使用此 flag | Dockerfile 加入 `appuser` 非 root 使用者，`USER appuser` 切換 |
+| `CLAUDE.md` 出現在 PR diff | `DevAgentService` 寫入模板後未還原，`GitHubService` commit 時一併帶入 | `try/finally` 確保執行完後還原原始 `CLAUDE.md`（或刪除） |
+| Claude Code 拒絕寫入檔案（`No changes; nothing to commit`） | `C:\AiTeam-Workspace` Windows 路徑在 Linux 容器內觸發 Claude Code 安全檢查 | `GitHub__WorkspacePath` 改為 `/tmp/aiteam-workspace` Linux 原生路徑 |
+
+---
+
+## 驗收結果
+
+- **PR #65**：任務「在 Dashboard 中任務中心頁面移除重新整理按鈕」
+- Claude Code 正確找到 `TaskCenter.razor`，刪除 1 行按鈕程式碼
+- PR diff 乾淨：只有實際程式碼變更，無 `CLAUDE.md` 污染
+- `dotnet build` 通過
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
 |------|------|
 | 2026-04-05 | 初版建立，從 Future Feature 一 獨立為 Stage 11 規劃文件 |
 | 2026-04-05 | 實作完成：ClaudeCodeService、DevAgentService 改寫、CLAUDE_CODY.md、Dockerfile、Program.cs 更新；待驗收測試 |
+| 2026-04-05 | 驗收完成：修復三個踩坑（root 限制、CLAUDE.md 污染、Windows 路徑）；PR #65 通過，Stage 11 結案 |
