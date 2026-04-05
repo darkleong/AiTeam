@@ -49,7 +49,8 @@ public class TaskGroup
     public string Status { get; set; } = "pending"; // pending / running / done / failed
     public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
     public string? IssueUrls { get; set; }   // JSONB string[]
-    public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md
+    public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md（舊欄位，保留相容，新資料不再使用）
+    public string? UiSpecContent { get; set; }  // UI 規格全文（Stage 12 起改存 DB）
     public string? DevPrUrl { get; set; }
     public string? LastReviewBody { get; set; } // Vera 最新一次的完整審查報告（fix loop 傳給 Dev 用）
     public int FixIteration { get; set; } = 0; // 防止無限 Review loop，超過 3 次升級給老闆

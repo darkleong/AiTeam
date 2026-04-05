@@ -33,6 +33,7 @@ public interface IAgentExecutor
 /// <param name="Question">暫停時要問的問題內容。</param>
 /// <param name="CriticalReviewCount">Vera 審查出的 critical 問題數量，0 表示通過。</param>
 /// <param name="ReviewBody">Vera 的完整審查報告 markdown（fix loop 傳給 Dev 用）。</param>
+/// <param name="OutputContent">Demi 產出的 UI 規格 markdown 全文（Stage 12：存入 TaskGroup.UiSpecContent）。</param>
 public record AgentExecutionResult(
     bool Success,
     string Summary,
@@ -42,7 +43,8 @@ public record AgentExecutionResult(
     string? Question = null,
     int CriticalReviewCount = 0,
     string? ReviewBody = null,
-    IReadOnlyList<string>? OutputUrls = null)
+    IReadOnlyList<string>? OutputUrls = null,
+    string? OutputContent = null)
 {
     /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
     public static AgentExecutionResult PauseAndAsk(string questionType, string question)

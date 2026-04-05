@@ -774,6 +774,91 @@ CEO 發提案書 Embed
 
 ---
 
+## 二十、Victoria 升級為技術顧問（Discord 版 Claude Code）
+
+### 願景
+
+目前老闆的工作模式是「雙窗口」：
+
+```
+深度討論（設計決策、流程分析、規劃） → Claude Code（顧問角色）
+日常指令（任務派發、狀態查詢）       → Discord Victoria（CEO 角色）
+```
+
+老闆需要在兩邊手動當橋樑——把 Claude Code 的分析結果帶去 Discord，把 Discord 的執行結果帶回 Claude Code。每次規劃一個 Stage，老闆至少來回跑四趟。
+
+**終極目標：Victoria 能承擔顧問角色，老闆只在 Discord 說話就完成一切。**
+
+### 目前 Victoria vs 顧問（Claude Code）的差距
+
+| 能力 | 顧問（Claude Code） | Victoria（目前） |
+|------|-------------------|-----------------|
+| 對話模式 | 長時間多輪，上下文持續累積 | 每則訊息獨立處理，無跨輪記憶 |
+| 思考深度 | 探索 10 個檔案再回答一個問題 | 一次 API call → 回覆 |
+| 回溯能力 | 記得 30 分鐘前討論的結論 | 不記得 5 分鐘前的對話 |
+| 讀寫檔案 | Glob / Grep / Read / Edit / Write | 無 |
+| 執行指令 | dotnet build / git / 任意 bash | 無 |
+| 設計決策 | 分析多個方案的 trade-off，給出建議 | 只能分類和路由 |
+
+### 實現路徑（階段性靠近）
+
+| 階段 | Victoria 能做到 | 對應項目 |
+|------|---------------|---------|
+| 現在 | 分類 + 路由，完全不理解 codebase | — |
+| Stage 12 後 | 透過 Rosa / Demi 間接「看」codebase | 十八 |
+| 十六做完後 | 幫老闆記錄想法到文件 | 十六 |
+| 本項目 | Session-based 深度對話 + 自主探索 + 讀寫文件 | 二十 |
+
+### 需要突破的三道門檻
+
+**1. Session-based 持續對話**
+
+目前 Victoria 是「一問一答」——每則訊息都是獨立的 LLM 呼叫，沒有對話歷史。要支援深度討論，需要：
+- Discord 頻道內維護 conversation history（存 DB 或 memory）
+- 支援多輪推理：「你剛剛說的十四和十八的關係...」
+- session timeout 機制（閒置 30 分鐘後結束 session）
+
+**2. Victoria 自己也用 Claude Code**
+
+不只是路由給其他 Agent 用，Victoria 自己需要能探索 codebase 來回答技術問題。等於 Victoria 從「純 LLM API call」升級為「Claude Code 驅動」。
+
+**3. 長期記憶**
+
+目前只有 rules 表（規則快取）。顧問角色需要：
+- 記住設計決策的背景和理由
+- 記住 Future Feature 項目之間的關聯
+- 記住老闆的偏好和溝通風格
+- 類似 Claude Code 的 memory 系統，但存在 PostgreSQL
+
+### 最終願景的工作流程
+
+```
+老闆在 Discord 說：「規劃管理頁面不好用」
+    ↓
+Victoria（Session 模式）：「我看了一下 PlanManagement.razor，
+  目前用 MudDataGrid 但沒有篩選功能。你是覺得哪裡不好用？」
+    ↓
+老闆：「資料太多了，我想要能按狀態篩選」
+    ↓
+Victoria：「了解。我分析了一下，改動涉及 Dashboard 的 razor 元件和
+  Bot 的 TaskGroupRepository 查詢。我讓 Rosa 拆 Issue、Demi 設計 UI，
+  等一下給你提案書。」
+    ↓
+Victoria 自動呼叫 Rosa → Demi → 發提案書
+    ↓
+老闆：✅
+    ↓
+Victoria 自動派 Cody → Vera → QA → 通知 merge
+```
+
+**老闆只說了兩句話。中間的一切全自動。**
+
+### 優先級
+
+🔵 低優先級 — 這是系統的長期方向，不是短期可實現的。需要先把 Stage 12（唯讀探索）、十五（分類補強）、十六（文件記錄）等基礎做好，才有條件實現本項目。但值得記錄下來作為系統演進的北極星。
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
@@ -798,3 +883,4 @@ CEO 發提案書 Embed
 | 2026-04-05 | 新增十八：Agent 唯讀探索能力（Rosa/Demi/Vera/Sage 透過 Claude Code Read-Only 探索 repo） |
 | 2026-04-05 | 新增十九：提案流程重新設計（圖片傳遞、Rosa 先 Demi 後串行、✏️ 調整帶第一版產出） |
 | 2026-04-05 | 第一條標記 ✅ 已完成（Stage 11）；十七/十八/十九 標記已移入 Stage 12 |
+| 2026-04-06 | 新增二十：Victoria 升級為技術顧問 — Discord 版 Claude Code（長期願景，session 持續對話 + 自主探索 + 長期記憶） |

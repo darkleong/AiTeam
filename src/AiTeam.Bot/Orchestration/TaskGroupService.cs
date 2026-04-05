@@ -39,8 +39,8 @@ public class TaskGroupService(
         string title,
         string project,
         WorkflowType workflowType,
-        string? issueUrlsJson = null,
-        string? uiSpecPath    = null,
+        string? issueUrlsJson  = null,
+        string? uiSpecContent  = null,
         CancellationToken cancellationToken = default)
     {
         await using var scope   = serviceProvider.CreateAsyncScope();
@@ -48,12 +48,12 @@ public class TaskGroupService(
 
         var group = new TaskGroup
         {
-            Title        = title,
-            Project      = project,
-            Status       = "running",
-            WorkflowType = workflowType == WorkflowType.NewFeature ? "new_feature" : "bug_fix",
-            IssueUrls    = issueUrlsJson,
-            UiSpecPath   = uiSpecPath,
+            Title          = title,
+            Project        = project,
+            Status         = "running",
+            WorkflowType   = workflowType == WorkflowType.NewFeature ? "new_feature" : "bug_fix",
+            IssueUrls      = issueUrlsJson,
+            UiSpecContent  = uiSpecContent,
         };
 
         taskRepo.AddGroup(group);
@@ -360,8 +360,8 @@ public class TaskGroupService(
             var meta = new List<string>();
             if (!string.IsNullOrWhiteSpace(group.IssueUrls))
                 meta.Add($"issue_urls: {group.IssueUrls}");
-            if (!string.IsNullOrWhiteSpace(group.UiSpecPath))
-                meta.Add($"ui_spec_path: {group.UiSpecPath}");
+            if (!string.IsNullOrWhiteSpace(group.UiSpecContent))
+                meta.Add($"ui_spec_content:\n{group.UiSpecContent}");
             if (step.IsFixLoop)
             {
                 meta.Add("fix_loop: true");

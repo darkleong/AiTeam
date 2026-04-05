@@ -5,12 +5,13 @@ using System.Text.Json;
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// 封裝 Claude Code CLI subprocess 呼叫，供 Dev Agent 使用。
-/// 透過 `claude -p` 非互動模式在指定 repo 目錄內自主探索、寫碼、build 驗證。
+/// 封裝 Claude Code CLI subprocess 呼叫，供 Dev Agent 與唯讀探索使用。
+/// 透過 `claude -p` 非互動模式在指定 repo 目錄內執行任務。
 /// </summary>
 public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan DefaultTimeout     = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ReadOnlyTimeout    = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// 在指定的 repo 工作目錄內執行 Claude Code 完成開發任務。
@@ -30,18 +31,51 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         string anthropicApiKey,
         CancellationToken ct = default)
     {
-        // 1. 確保 git config 已設定（容器內可能缺少 user.name/email）
+        // 確保 git config 已設定（容器內可能缺少 user.name/email）
         await ConfigureGitAsync(workingDir, ct);
+        return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
+            DefaultTimeout, allowedTools: null, maxTurns: 20, ct);
+    }
 
-        // 2. 組建 claude CLI 參數
-        var args = BuildArgs(prompt, model);
+    /// <summary>
+    /// 以唯讀模式執行 Claude Code，僅開放 Glob / Grep / Read 工具。
+    /// 供 Rosa / Demi / Vera / Sage 等 Agent 探索 codebase 使用，不寫入任何檔案。
+    /// </summary>
+    /// <param name="workingDir">repo 本地路徑</param>
+    /// <param name="prompt">探索任務描述（含輸出格式要求）</param>
+    /// <param name="model">Claude 模型 ID</param>
+    /// <param name="anthropicApiKey">Anthropic API Key</param>
+    /// <param name="ct">CancellationToken</param>
+    /// <returns>執行結果（Output 即為 Agent 的結構化輸出）</returns>
+    public Task<ClaudeCodeResult> RunReadOnlyAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        CancellationToken ct = default)
+        => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
+            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: 10, ct);
+
+    // ────────────── Private ──────────────
+
+    private async Task<ClaudeCodeResult> RunCoreAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        TimeSpan timeout,
+        string[]? allowedTools,
+        int maxTurns,
+        CancellationToken ct)
+    {
+        var args = BuildArgs(prompt, model, allowedTools, maxTurns);
 
         logger.LogInformation(
-            "ClaudeCodeService 啟動 Claude Code subprocess（dir={Dir}，model={Model}）",
-            workingDir, model);
+            "ClaudeCodeService 啟動 subprocess（dir={Dir}，model={Model}，readOnly={ReadOnly}）",
+            workingDir, model, allowedTools is not null);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(DefaultTimeout);
+        cts.CancelAfter(timeout);
 
         var psi = new ProcessStartInfo
         {
@@ -60,7 +94,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         using var process = new Process { StartInfo = psi };
 
         var stdoutBuilder = new StringBuilder();
-        var stderrBuilder  = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
 
         process.OutputDataReceived += (_, e) =>
         {
@@ -84,10 +118,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
             // 逾時（而非外部 cancel）
             try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
             throw new TimeoutException(
-                $"Claude Code subprocess 超過 {DefaultTimeout.TotalMinutes} 分鐘逾時");
+                $"Claude Code subprocess 超過 {timeout.TotalMinutes} 分鐘逾時");
         }
 
-        var stdout = stdoutBuilder.ToString();
+        var stdout  = stdoutBuilder.ToString();
         var stderr  = stderrBuilder.ToString();
 
         if (!string.IsNullOrWhiteSpace(stderr))
@@ -103,19 +137,18 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         return new ClaudeCodeResult(success, output, exitCode, stdout);
     }
 
-    // ────────────── Private ──────────────
-
-    private static string BuildArgs(string prompt, string model)
+    private static string BuildArgs(string prompt, string model, string[]? allowedTools, int maxTurns)
     {
-        // prompt 中可能含有引號，使用 stdin 更安全；但 -p 模式也接受 argument
-        // 使用 --input-format text 讓 prompt 透過 argument 傳遞
-        // prompt 不含換行，以雙引號包覆（subprocess 中 argument 已由 OS 負責 escaping）
         var escapedPrompt = prompt.Replace("\"", "\\\"");
+        var toolsArg = allowedTools?.Length > 0
+            ? $"--allowedTools \"{string.Join(",", allowedTools)}\" "
+            : "";
 
         return $"-p \"{escapedPrompt}\" " +
                $"--dangerously-skip-permissions " +
+               $"{toolsArg}" +
                $"--output-format json " +
-               $"--max-turns 20 " +
+               $"--max-turns {maxTurns} " +
                $"--no-session-persistence " +
                $"--model {model}";
     }

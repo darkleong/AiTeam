@@ -1,19 +1,25 @@
+using System.Text;
+using System.Text.RegularExpressions;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Documentation Agent：讀取原始碼，產生 Markdown 文件或補充 XML 註解，開 PR 提交文件。
+/// Documentation Agent（Sage）：讀取 PR 變更檔案，產生 Markdown 文件，開 PR 提交文件。
+/// Stage 12：改用 Claude Code 唯讀模式直接讀取 PR changed files，刪除 ExtractPathPrefix 猜路徑邏輯。
 /// </summary>
 public class DocAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
+    ClaudeCodeService claudeCodeService,
+    IConfiguration configuration,
     ILogger<DocAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Doc";
@@ -30,62 +36,78 @@ public class DocAgentService(
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Title);
 
-        var localPath = "";
+        var readPath = "";
+        var writePath = "";
+
         try
         {
-            var pathPrefix = ExtractPathPrefix(task.Description ?? task.Title);
-            var allFiles = await gitHubService.ListFilesAsync(owner, repo, pathPrefix);
-            var csFiles = allFiles
-                .Where(f => f.Name.EndsWith(".cs") && f.Type == "file")
+            // 從任務描述解析 PR 編號
+            var prNumber = ExtractPrNumber($"{task.Title} {task.Description}");
+            if (prNumber <= 0)
+                prNumber = await gitHubService.GetLatestOpenPullRequestNumberAsync(owner, repo);
+
+            if (prNumber <= 0)
+                return new AgentExecutionResult(true, "找不到 PR 編號，略過文件生成");
+
+            var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
+            var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
+            var csFiles = prFiles
+                .Where(f => f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+                .Select(f => f.FileName)
                 .ToList();
 
             if (csFiles.Count == 0)
             {
-                // Orchestrator 觸發時路徑可能無法從描述推斷，略過文件生成（非失敗）
-                AddLog(task, $"路徑 '{pathPrefix}' 下無 .cs 檔案，略過文件生成", "done");
+                AddLog(task, $"PR #{prNumber} 無 .cs 檔案，略過文件生成", "done");
                 await taskRepository.SaveAsync(cancellationToken);
                 await PushStatus("idle");
-                return new AgentExecutionResult(true, $"路徑 '{pathPrefix}' 無 .cs 檔案，略過文件生成");
+                return new AgentExecutionResult(true, $"PR #{prNumber} 無 .cs 檔案，略過文件生成");
             }
 
-            var xmlMode = IsXmlMode(task.Title);
-            localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
-            AddLog(task, "Git Clone/Pull 完成", "done");
+            // 1. Clone PR branch 供 Claude Code 唯讀探索
+            readPath = gitHubService.CloneOrPull(owner, repo, $"sager-{task.Id:N}"[..8]);
+            gitHubService.CreateAndCheckoutBranch(readPath, headRef);
+            AddLog(task, $"PR #{prNumber} branch checkout 完成（{csFiles.Count} 個 .cs 檔）", "done");
 
-            var branchName = $"docs/auto-{task.Id.ToString()[..8]}";
-            gitHubService.CreateAndCheckoutBranch(localPath, branchName);
+            var docContent = await RunClaudeCodeDocAsync(
+                task, readPath, csFiles, prNumber, headRef, cancellationToken);
 
-            var generatedCount = 0;
-            foreach (var file in csFiles)
-            {
-                var written = await GenerateDocAsync(task, owner, repo, file.Path, localPath, xmlMode, cancellationToken);
-                if (written) generatedCount++;
-            }
+            gitHubService.CleanupLocalRepo(readPath);
+            readPath = "";
 
-            AddLog(task, $"文件生成完成（{generatedCount} 個檔案）", "done");
+            if (string.IsNullOrWhiteSpace(docContent))
+                return new AgentExecutionResult(true, $"PR #{prNumber} 文件生成無輸出，略過提交");
 
-            var mode = xmlMode ? "XML 註解補充" : "Markdown 文件";
-            var commitMessage = $"docs: Doc Agent 自動產生 {mode}（{generatedCount} 個檔案）";
-            gitHubService.CommitAll(localPath, commitMessage);
-            gitHubService.Push(localPath, branchName);
+            // 2. Clone main branch，建立 doc PR
+            var docBranch = $"docs/pr{prNumber}-{task.Id.ToString("N")[..6]}";
+            writePath = gitHubService.CloneOrPull(owner, repo, $"saged-{task.Id:N}"[..8]);
+            gitHubService.CreateAndCheckoutBranch(writePath, docBranch);
+
+            var outputPath = Path.Combine(writePath, "docs", "generated", $"pr{prNumber}-doc.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            await File.WriteAllTextAsync(outputPath, docContent, cancellationToken);
+            AddLog(task, "文件檔案已寫入", "done");
+
+            gitHubService.CommitAll(writePath, $"docs: Sage 自動產生 PR #{prNumber} 技術文件");
+            gitHubService.Push(writePath, docBranch);
 
             var prBody = $"""
-                ## Doc Agent 自動文件
+                ## Sage 自動技術文件
 
-                模式：{mode}
-                路徑範圍：`{pathPrefix}`
-                處理檔案數：{generatedCount}
+                來源 PR：#{prNumber}
+                文件涵蓋 .cs 檔案：{csFiles.Count} 個
 
                 ---
                 🤖 由 AiTeam Doc Agent 自動產出
                 """;
 
-            var prUrl = await gitHubService.OpenPullRequestAsync(owner, repo, $"docs: {mode} 自動產出", prBody, branchName);
+            var prUrl = await gitHubService.OpenPullRequestAsync(
+                owner, repo, $"docs: PR #{prNumber} 技術文件", prBody, docBranch);
             AddLog(task, $"PR 已開啟：{prUrl}", "done");
             await taskRepository.SaveAsync(cancellationToken);
-
             await PushStatus("idle");
-            return new AgentExecutionResult(true, $"文件 PR 已開啟（{generatedCount} 個{mode}）", prUrl);
+
+            return new AgentExecutionResult(true, $"文件 PR 已開啟（PR #{prNumber}，{csFiles.Count} 個檔案）", prUrl);
         }
         catch (Exception ex)
         {
@@ -97,67 +119,106 @@ public class DocAgentService(
         }
         finally
         {
-            if (!string.IsNullOrEmpty(localPath))
-                gitHubService.CleanupLocalRepo(localPath);
+            if (!string.IsNullOrEmpty(readPath))  gitHubService.CleanupLocalRepo(readPath);
+            if (!string.IsNullOrEmpty(writePath)) gitHubService.CleanupLocalRepo(writePath);
         }
     }
 
-    // ────────────── Private ──────────────
+    // ────────────── Claude Code 唯讀文件生成 ──────────────
 
-    private async Task<bool> GenerateDocAsync(
+    private async Task<string> RunClaudeCodeDocAsync(
         TaskItem task,
-        string owner,
-        string repo,
-        string filePath,
-        string localPath,
-        bool xmlMode,
+        string repoLocalPath,
+        IReadOnlyList<string> csFiles,
+        int prNumber,
+        string headRef,
         CancellationToken cancellationToken)
     {
-        var sourceContent = await gitHubService.GetFileContentAsync(owner, repo, filePath);
-        if (string.IsNullOrWhiteSpace(sourceContent)) return false;
+        var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
+        var templatePath     = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Sage.md");
+        var originalClaudeMd = File.Exists(claudeMdPath)
+            ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
+            : null;
 
-        var provider = providerFactory.Create(AgentName);
-
-        string systemPrompt, userMessage, outputPath;
-        if (xmlMode)
+        try
         {
-            systemPrompt = BuildXmlSystemPrompt();
-            userMessage = $"## 原始碼路徑\n{filePath}\n\n## 原始碼\n```csharp\n{sourceContent}\n```\n\n請補充 XML 文件註解後回傳完整 .cs 檔案。";
-            outputPath = Path.Combine(localPath, filePath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(templatePath))
+                await File.WriteAllTextAsync(claudeMdPath,
+                    await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"## PR #{prNumber}（branch: {headRef}）變更的 .cs 檔案");
+            foreach (var f in csFiles)
+                sb.AppendLine($"- {f}");
+            sb.AppendLine();
+            sb.AppendLine("## 你的任務");
+            sb.AppendLine("讀取上述每個 .cs 檔案的完整內容，然後輸出一份完整的 Markdown 技術文件（涵蓋所有檔案）。直接輸出 Markdown，不加額外說明。");
+
+            var model  = configuration["Agents:Doc:Model"]
+                      ?? configuration["Anthropic:DefaultModel"]
+                      ?? "claude-sonnet-4-6";
+            var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+            var result = await claudeCodeService.RunReadOnlyAsync(
+                repoLocalPath, sb.ToString(), model, apiKey, cancellationToken);
+
+            if (!result.Success)
+            {
+                logger.LogWarning("Sage Claude Code 執行未成功，fallback LLM（exitCode={Code}）", result.ExitCode);
+                return await GenerateDocWithLlmFallbackAsync(task, csFiles, repoLocalPath, prNumber, cancellationToken);
+            }
+
+            return result.Output.Trim();
         }
-        else
+        finally
         {
-            systemPrompt = BuildMarkdownSystemPrompt();
-            userMessage = $"## 原始碼路徑\n{filePath}\n\n## 原始碼\n```csharp\n{sourceContent}\n```\n\n請產生 Markdown 文件。";
-            var mdName = Path.GetFileNameWithoutExtension(filePath) + ".md";
-            outputPath = Path.Combine(localPath, "docs", "generated", mdName);
+            if (originalClaudeMd is not null)
+                await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
+            else if (File.Exists(claudeMdPath))
+                File.Delete(claudeMdPath);
         }
-
-        var response = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        await File.WriteAllTextAsync(outputPath, response.Content, cancellationToken);
-
-        logger.LogInformation("已產生文件：{Path}", outputPath);
-        AddLog(task, $"已產生 {Path.GetFileName(outputPath)}", "done");
-        return true;
     }
 
-    private static string ExtractPathPrefix(string text)
+    // ────────────── LLM Fallback ──────────────
+
+    private async Task<string> GenerateDocWithLlmFallbackAsync(
+        TaskItem task,
+        IReadOnlyList<string> csFiles,
+        string localPath,
+        int prNumber,
+        CancellationToken cancellationToken)
     {
-        // 嘗試從文字中找到路徑前綴（如 "src/AiTeam.Bot/Agents"）
-        // 分割所有空白與換行，過濾 URL（含 ://）與過長字串（URL 通常很長）
-        var segments = text.Split([' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries);
-        var pathLike = segments.FirstOrDefault(s =>
-            s.Contains('/') &&
-            !s.Contains("://") &&   // 排除 http:// https:// 等 URL
-            s.Length < 80);         // 排除超長字串
-        return (pathLike ?? "src").TrimEnd('/');
-    }
+        var provider = providerFactory.Create(AgentName);
+        var sb = new StringBuilder();
 
-    private static bool IsXmlMode(string title)
-        => title.Contains("XML", StringComparison.OrdinalIgnoreCase) ||
-           title.Contains("xml 註解", StringComparison.OrdinalIgnoreCase);
+        foreach (var filePath in csFiles.Take(5)) // fallback 最多 5 個檔案
+        {
+            try
+            {
+                var fullPath = Path.Combine(localPath, filePath.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(fullPath)) continue;
+                var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
+                if (string.IsNullOrWhiteSpace(content)) continue;
+
+                sb.AppendLine($"## {filePath}");
+                sb.AppendLine("```csharp");
+                sb.AppendLine(content.Length > 3000 ? content[..3000] + "\n...(截斷)" : content);
+                sb.AppendLine("```");
+                sb.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "讀取檔案失敗：{File}", filePath);
+            }
+        }
+
+        if (sb.Length == 0) return "";
+
+        var systemPrompt = BuildMarkdownSystemPrompt();
+        var userMessage  = $"PR #{prNumber} 的變更檔案如下，請產生 Markdown 技術文件：\n\n{sb}";
+        var response     = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
+        return response.Content.Trim();
+    }
 
     private static string BuildMarkdownSystemPrompt() => """
         你是技術文件撰寫專家，使用繁體中文撰寫。
@@ -169,13 +230,13 @@ public class DocAgentService(
         直接回傳 Markdown 內容，不加任何前言或說明。
         """;
 
-    private static string BuildXmlSystemPrompt() => """
-        你是 C# 資深工程師，負責補充 XML 文件註解。
-        請為所有 public 類別、方法、屬性加上 /// <summary>...</summary> 及 <param>、<returns> 等標籤。
-        使用繁體中文撰寫說明。
-
-        直接回傳完整 .cs 檔案（含原有程式碼與新增的 XML 註解），不加任何說明文字。
-        """;
+    private static int ExtractPrNumber(string text)
+    {
+        var match = Regex.Match(text, @"PR\s*#(\d+)|/pull/(\d+)", RegexOptions.IgnoreCase);
+        if (!match.Success) return 0;
+        var val = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+        return int.TryParse(val, out var n) ? n : 0;
+    }
 
     private void AddLog(TaskItem task, string step, string status)
         => taskRepository.AddLog(new TaskLog

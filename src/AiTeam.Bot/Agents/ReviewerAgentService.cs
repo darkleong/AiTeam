@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -6,18 +7,22 @@ using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// Reviewer Agent（Vera）：讀取 PR 差異，呼叫 LLM 產出分級審查報告，
 /// 並透過 GitHub Review API 在 PR 上留下整體審查意見。
+/// Stage 12：新增 Claude Code 唯讀補強探索（影響範圍分析）。
 /// </summary>
 public class ReviewerAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
+    ClaudeCodeService claudeCodeService,
+    IConfiguration configuration,
     ILogger<ReviewerAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Reviewer";
@@ -100,6 +105,12 @@ public class ReviewerAgentService(
 
             // 4. 組建整體 Review Body
             var reviewBody = BuildReviewBody(allIssues, fileSummaries, prNumber);
+
+            // 4b. Claude Code 唯讀補強：探索影響範圍（非阻塞，失敗不影響主流程）
+            var impactAnalysis = await RunImpactAnalysisAsync(
+                owner, repo, headRef, prFiles.Select(f => f.FileName).ToList(), task, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(impactAnalysis))
+                reviewBody += $"\n\n---\n\n## 🔭 影響範圍分析（Claude Code 探索）\n\n{impactAnalysis}";
 
             // 5. 在 GitHub PR 上提交 Review
             AddLog(task, "提交 GitHub Review 中...", "running");
@@ -289,6 +300,83 @@ public class ReviewerAgentService(
 
     private static AgentExecutionResult Fail(TaskItem task, string message)
         => new(false, message);
+
+    // ────────────── Claude Code 影響範圍分析 ──────────────
+
+    /// <summary>
+    /// 使用 Claude Code 唯讀模式 checkout 到 PR branch，探索影響範圍。
+    /// 失敗時靜默忽略，不影響主要審查流程。
+    /// </summary>
+    private async Task<string> RunImpactAnalysisAsync(
+        string owner,
+        string repo,
+        string headRef,
+        IReadOnlyList<string> changedFiles,
+        TaskItem task,
+        CancellationToken cancellationToken)
+    {
+        var localPath = "";
+        try
+        {
+            localPath = gitHubService.CloneOrPull(owner, repo, $"vera-{task.Id:N}"[..8]);
+            // Checkout 到 PR branch，才能看到 PR 的最新變更
+            gitHubService.CreateAndCheckoutBranch(localPath, headRef);
+
+            var claudeMdPath     = Path.Combine(localPath, "CLAUDE.md");
+            var templatePath     = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Vera.md");
+            var originalClaudeMd = File.Exists(claudeMdPath)
+                ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
+                : null;
+
+            try
+            {
+                if (File.Exists(templatePath))
+                    await File.WriteAllTextAsync(claudeMdPath,
+                        await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
+
+                var prompt = BuildImpactPrompt(changedFiles);
+                var model  = configuration["Agents:Reviewer:Model"]
+                          ?? configuration["Anthropic:DefaultModel"]
+                          ?? "claude-sonnet-4-6";
+                var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+                var result = await claudeCodeService.RunReadOnlyAsync(
+                    localPath, prompt, model, apiKey, cancellationToken);
+
+                return result.Success ? result.Output.Trim() : "";
+            }
+            finally
+            {
+                if (originalClaudeMd is not null)
+                    await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
+                else if (File.Exists(claudeMdPath))
+                    File.Delete(claudeMdPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Vera 影響範圍分析失敗（略過），PR branch={Branch}", headRef);
+            return "";
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(localPath))
+                gitHubService.CleanupLocalRepo(localPath);
+        }
+    }
+
+    private static string BuildImpactPrompt(IReadOnlyList<string> changedFiles)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## PR 變更檔案");
+        foreach (var f in changedFiles)
+            sb.AppendLine($"- {f}");
+        sb.AppendLine();
+        sb.AppendLine("## 你的任務");
+        sb.AppendLine("探索 codebase，找出上述變更檔案的相依關係與影響範圍，輸出影響範圍分析報告（Markdown 格式）。");
+
+        return sb.ToString();
+    }
 }
 
 // ────────────── 資料模型 ──────────────

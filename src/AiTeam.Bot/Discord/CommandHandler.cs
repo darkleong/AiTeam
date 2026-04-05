@@ -138,13 +138,16 @@ public class CommandHandler(
             await msg.Channel.SendMessageAsync(
                 $"✏️ 收到調整意見，CEO 正在重新協調 Demi 修改規格，請稍候...");
 
-            // 重新進入提案流程（帶入原有資訊 + 調整意見）
+            // 重新進入提案流程（帶入原有資訊 + 調整意見 + 第一版產出）
             var augmentedDescription = $"{adjustPending.Description}\n\n【老闆調整意見】{adjustmentText}";
             await ShowProposalAsync(
                 async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
                 adjustPending.CeoResponse,
                 adjustPending.Project,
-                augmentedDescription);
+                augmentedDescription,
+                images: adjustPending.Images,
+                previousIssues: adjustPending.PreviewIssues,
+                previousUiSpec: adjustPending.UiSpecMarkdown);
             return;
         }
 
@@ -206,13 +209,14 @@ public class CommandHandler(
         }
         else if (ceoResponse.Action == "propose")
         {
-            // CEO 判定為新功能，進入提案模式（Rosa + Demi 並行產出，然後給老闆確認）
+            // CEO 判定為新功能，進入提案模式（Rosa 先、Demi 後串行產出，然後給老闆確認）
             contextStore.Clear(msg.Channel.Id);
             var finalProject = ceoResponse.Task?.Project ?? projectName;
             await msg.Channel.SendMessageAsync(ceoResponse.Reply);
             await ShowProposalAsync(
                 async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
-                ceoResponse, finalProject, msg.CleanContent);
+                ceoResponse, finalProject, msg.CleanContent,
+                images: images.Count > 0 ? images : null);
         }
         else
         {
@@ -413,11 +417,12 @@ public class CommandHandler(
         // 雙層確認 — 第一層：CEO 回報決策給老闆審核
         if (ceoResponse.Action == "propose")
         {
-            // 新功能提案模式：Rosa + Demi 並行產出提案書
+            // 新功能提案模式：Rosa 先、Demi 後串行產出提案書
             await command.FollowupAsync(ceoResponse.Reply);
             await ShowProposalAsync(
                 async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
-                ceoResponse, project, description);
+                ceoResponse, project, description,
+                images: images.Count > 0 ? images : null);
         }
         else if (ceoResponse.Action != "reply")
         {
@@ -787,15 +792,19 @@ public class CommandHandler(
     #region CEO 提案模式（Stage 9）
 
     /// <summary>
-    /// CEO 判定為新功能時，並行呼叫 Rosa（需求分析）+ Demi（UI 規格），產出提案書讓老闆確認。
+    /// CEO 判定為新功能時，先呼叫 Rosa（需求分析），再呼叫 Demi（UI 規格），產出提案書讓老闆確認。
+    /// Stage 12：串行化（Rosa 先 → Demi 後）、圖片傳遞、UI 規格改存 DB（不 commit 到 GitHub）。
     /// </summary>
     private async Task ShowProposalAsync(
         Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
         CeoResponse ceoResponse,
         string project,
-        string description)
+        string description,
+        IReadOnlyList<ImageAttachment>? images = null,
+        IReadOnlyList<RequirementIssuePreview>? previousIssues = null,
+        string? previousUiSpec = null)
     {
-        var notifyMessage = $"🔍 CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...";
+        var notifyMessage = "🔍 CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...";
 
         await using var scope   = serviceProvider.CreateAsyncScope();
         var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -824,72 +833,67 @@ public class CommandHandler(
         if (ceoChannel is not null)
             await ceoChannel.SendMessageAsync(notifyMessage);
 
+        var readonlyWorkspace = "";
         try
         {
-            var reqRules      = await rulesService.GetRulesAsync(AgentNames.Requirements);
+            var owner         = _gitHubSettings.Owner;
+            var defaultRepo   = _gitHubSettings.DefaultRepo;
             var designerRules = await rulesService.GetRulesAsync(AgentNames.Designer);
 
-            // 並行呼叫 Rosa + Demi
-            var issuesTask   = reqService.AnalyzeOnlyAsync(task);
-            var uiSpecTask   = designerService.GenerateDraftAsync(
-                task.Title, task.Description ?? task.Title, designerRules);
+            // 統一 clone 一次唯讀 workspace，Rosa / Demi 共用，減少 clone 次數
+            readonlyWorkspace = gitHubService.CloneOrPull(owner, defaultRepo,
+                $"ro-{task.Id:N}"[..10]);
 
-            await Task.WhenAll(issuesTask, uiSpecTask);
+            // Stage 12：Rosa 先 → Demi 後（串行），Demi 能看到 Rosa 的 Issues
+            var issues = await reqService.AnalyzeOnlyAsync(
+                task,
+                repoLocalPath: readonlyWorkspace,
+                images: images,
+                previousIssues: previousIssues);
 
-            var issues      = issuesTask.Result;
-            var uiSpec      = uiSpecTask.Result;
+            var uiSpec = await designerService.GenerateDraftAsync(
+                task.Title,
+                task.Description ?? task.Title,
+                designerRules,
+                repoLocalPath: readonlyWorkspace,
+                rosaIssues: issues,
+                images: images,
+                previousUiSpec: previousUiSpec);
 
-            // Stage 10：提案模式一律提交 UI 規格文件到 GitHub，讓 Embed 可附上完整連結
-            // 固定用 DefaultRepo，project 是邏輯名稱不是 GitHub repo 名稱
-            var owner       = _gitHubSettings.Owner;
-            var repo        = _gitHubSettings.DefaultRepo;
-            var slug        = ToProposalSlug(task.Title);
-            var uiSpecPath  = $"docs/ui-specs/{slug}.md";
-            string? uiSpecGitHubUrl = null;
+            // 全部成功，清理 workspace
+            gitHubService.CleanupLocalRepo(readonlyWorkspace);
+            readonlyWorkspace = "";
 
-            try
-            {
-                await gitHubService.CreateOrUpdateFileAsync(
-                    owner, repo, uiSpecPath, uiSpec,
-                    $"docs: add UI spec for proposal - {task.Title}");
-                uiSpecGitHubUrl = $"https://github.com/{owner}/{repo}/blob/main/{uiSpecPath}";
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "提案書 UI 規格提交 GitHub 失敗，仍繼續顯示 Embed");
-            }
-
-            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec, uiSpecGitHubUrl);
-            var confirmMsg    = await sendAsync(
-                proposalEmbed,
-                BuildProposalConfirmButtons());
+            // Stage 12：UI 規格不再 commit 到 GitHub，改以 Discord 附件傳送
+            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec);
+            var confirmMsg    = await sendAsync(proposalEmbed, BuildProposalConfirmButtons());
 
             _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
                 ceoResponse, project, description,
                 TaskId: task.Id,
                 PreviewIssues: issues,
                 UiSpecMarkdown: uiSpec,
-                UiSpecPath: uiSpecPath,
-                IsProposal: true);
+                IsProposal: true,
+                Images: images);
+
+            // 另發一則訊息帶 UI 規格附件（若有內容）
+            if (!string.IsNullOrWhiteSpace(uiSpec) && ceoChannel is not null)
+            {
+                var uiSpecBytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
+                using var stream = new System.IO.MemoryStream(uiSpecBytes);
+                await ceoChannel.SendFileAsync(stream, "ui-spec.md", "📄 UI 規格文件（提案附件）");
+            }
         }
         catch (Exception ex)
         {
+            // 失敗時保留 workspace 供 debug，僅 log
+            if (!string.IsNullOrEmpty(readonlyWorkspace))
+                logger.LogWarning("唯讀 workspace 保留供 debug：{Path}", readonlyWorkspace);
+
             logger.LogError(ex, "CEO 提案模式失敗");
             if (ceoChannel is not null)
                 await ceoChannel.SendMessageAsync("❌ 提案書產出失敗，請查看 log 或重新下指令。");
         }
-    }
-
-    private static string ToProposalSlug(string title)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var c in title.ToLowerInvariant())
-        {
-            if (char.IsLetterOrDigit(c))   sb.Append(c);
-            else if (c == ' ' || c == '-') sb.Append('-');
-        }
-        var s = sb.ToString().Trim('-');
-        return s.Length > 60 ? s[..60] : s;
     }
 
     /// <summary>
@@ -962,12 +966,13 @@ public class CommandHandler(
                     .ToList();
                 var issueUrlsJson = System.Text.Json.JsonSerializer.Serialize(issueUrlsList);
 
+                // Stage 12：UI 規格改存 DB（UiSpecContent），不再用 UiSpecPath
                 var group = await taskGroupService.CreateGroupAsync(
                     task.Title,
                     pending.Project,
                     Orchestration.WorkflowType.NewFeature,
                     issueUrlsJson,
-                    pending.UiSpecPath);
+                    uiSpecContent: pending.UiSpecMarkdown);
 
                 // 觸發 Dev（流程表：proposal_approved → Dev）
                 var steps = new[] { new Orchestration.WorkflowStep(AgentNames.Dev) };
@@ -986,31 +991,24 @@ public class CommandHandler(
     private static Embed BuildProposalEmbed(
         string title,
         IReadOnlyList<RequirementIssuePreview> issues,
-        string uiSpec,
-        string? uiSpecGitHubUrl = null)
+        string uiSpec)
     {
         var issueLines = issues.Count > 0
             ? string.Join("\n", issues.Take(10).Select((i, idx) => $"{idx + 1}. **{i.Title}**"))
             : "（無需求分析結果）";
 
-        // UI Spec 截斷避免超過 Discord embed 上限（完整版見 GitHub 連結）
-        var specPreview = uiSpec.Length > 600 ? uiSpec[..600] + "\n…（已截斷，完整版見下方連結）" : uiSpec;
+        // UI Spec 截斷避免超過 Discord embed 上限（完整版見附件 ui-spec.md）
+        var specPreview = uiSpec.Length > 500 ? uiSpec[..500] + "\n…（已截斷，完整版見附件 ui-spec.md）" : uiSpec;
 
-        var embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .WithTitle("📋 CEO 提案書 — 請確認")
             .WithColor(Color.Purple)
             .AddField("功能名稱", title)
             .AddField($"需求清單（共 {issues.Count} 項）", issueLines)
-            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview);
-
-        // Stage 10：附上 UI 規格完整文件連結
-        if (!string.IsNullOrWhiteSpace(uiSpecGitHubUrl))
-            embed.AddField("🎨 UI 規格完整文件", uiSpecGitHubUrl);
-
-        embed.WithFooter("✅ 核准開始開發 ｜ ✏️ 需調整 ｜ ❌ 取消")
-             .WithTimestamp(DateTimeOffset.UtcNow);
-
-        return embed.Build();
+            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview)
+            .WithFooter("✅ 核准開始開發 ｜ ✏️ 需調整 ｜ ❌ 取消")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
     }
 
     #endregion
@@ -1324,4 +1322,5 @@ internal record PendingConfirmation(
     IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null,
     string? UiSpecMarkdown = null,
     string? UiSpecPath = null,
-    bool IsProposal = false);
+    bool IsProposal = false,
+    IReadOnlyList<ImageAttachment>? Images = null);

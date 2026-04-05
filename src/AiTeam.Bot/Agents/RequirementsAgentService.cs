@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiTeam.Bot.GitHub;
@@ -5,17 +6,21 @@ using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Requirements Analyst Agent：將原始需求拆解為 GitHub Issues，逐一建立後回報清單。
+/// Requirements Analyst Agent（Rosa）：將原始需求拆解為 GitHub Issues。
+/// Stage 12：改用 Claude Code 唯讀模式探索 codebase，產出更精確的 Issues。
 /// </summary>
 public class RequirementsAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
+    ClaudeCodeService claudeCodeService,
+    IConfiguration configuration,
     ILogger<RequirementsAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Requirements";
@@ -37,14 +42,18 @@ public class RequirementsAgentService(
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Title);
 
+        var localPath = "";
         try
         {
-            var issues = await AnalyzeOnlyAsync(task, cancellationToken);
+            // Clone repo 供 Claude Code 唯讀探索使用
+            localPath = gitHubService.CloneOrPull(owner, repo, $"req-{task.Id:N}"[..8]);
+            AddLog(task, "Git Clone/Pull 完成", "running");
+
+            var issues = await AnalyzeOnlyAsync(task, localPath, cancellationToken: cancellationToken);
             if (issues.Count == 0)
                 return new AgentExecutionResult(false, "LLM 未能解析出有效的 Issue 清單");
 
             AddLog(task, $"需求分析完成，共 {issues.Count} 個 Issue", "done");
-
             return await CreateIssuesFromPreviewAsync(task, owner, repo, issues, cancellationToken);
         }
         catch (Exception ex)
@@ -55,23 +64,45 @@ public class RequirementsAgentService(
             await PushStatus("error");
             return new AgentExecutionResult(false, $"Requirements Agent 執行失敗：{ex.Message}");
         }
+        finally
+        {
+            if (!string.IsNullOrEmpty(localPath))
+                gitHubService.CleanupLocalRepo(localPath);
+        }
     }
 
     /// <summary>
-    /// 僅執行 LLM 需求分析，回傳 Issue 預覽清單（不建立 GitHub Issues）。
-    /// 供 CommandHandler 在第三層確認前使用。
+    /// 僅執行需求分析，回傳 Issue 預覽清單（不建立 GitHub Issues）。
+    /// Stage 12：使用 Claude Code 唯讀模式探索 codebase。
     /// </summary>
+    /// <param name="task">任務資訊</param>
+    /// <param name="repoLocalPath">已 clone 的 repo 本地路徑（由 ShowProposalAsync 統一管理）</param>
+    /// <param name="images">老闆附的圖片（若有，會先透過 LLM 轉為文字描述再傳入 Claude Code）</param>
+    /// <param name="previousIssues">✏️ 調整時帶入第一版 Issues（提示 Claude Code 修改而非重做）</param>
+    /// <param name="cancellationToken">CancellationToken</param>
     internal async Task<List<RequirementIssuePreview>> AnalyzeOnlyAsync(
         TaskItem task,
+        string? repoLocalPath = null,
+        IReadOnlyList<ImageAttachment>? images = null,
+        IReadOnlyList<RequirementIssuePreview>? previousIssues = null,
         CancellationToken cancellationToken = default)
     {
-        var raw = await AnalyzeRequirementsAsync(task, cancellationToken);
+        if (!string.IsNullOrEmpty(repoLocalPath))
+        {
+            var issues = await RunClaudeCodeAnalysisAsync(
+                task, repoLocalPath, images, previousIssues, cancellationToken);
+            if (issues.Count > 0) return issues;
+
+            // Claude Code 失敗時 fallback 到 LLM 直呼叫
+            logger.LogWarning("Claude Code 唯讀分析失敗，改用 LLM 直接呼叫");
+        }
+
+        var raw = await AnalyzeRequirementsAsync(task, images, previousIssues, cancellationToken);
         return raw.Select(i => new RequirementIssuePreview(i.Title, i.Body, i.Labels)).ToList();
     }
 
     /// <summary>
     /// 根據已確認的預覽清單，實際建立 GitHub Issues。
-    /// 供 CommandHandler 在第三層 req_yes 後使用。
     /// </summary>
     internal async Task<AgentExecutionResult> CreateIssuesFromPreviewAsync(
         TaskItem task,
@@ -113,25 +144,134 @@ public class RequirementsAgentService(
         }
     }
 
-    // ────────────── Private ──────────────
+    // ────────────── Claude Code 唯讀分析 ──────────────
+
+    /// <summary>
+    /// 使用 Claude Code 唯讀模式探索 codebase，產出 Issues。
+    /// </summary>
+    private async Task<List<RequirementIssuePreview>> RunClaudeCodeAnalysisAsync(
+        TaskItem task,
+        string repoLocalPath,
+        IReadOnlyList<ImageAttachment>? images,
+        IReadOnlyList<RequirementIssuePreview>? previousIssues,
+        CancellationToken cancellationToken)
+    {
+        var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
+        var templatePath     = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Rosa.md");
+        var originalClaudeMd = File.Exists(claudeMdPath)
+            ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
+            : null;
+
+        try
+        {
+            // 寫入 Rosa 專用 CLAUDE.md
+            if (File.Exists(templatePath))
+                await File.WriteAllTextAsync(claudeMdPath,
+                    await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
+
+            var prompt = await BuildClaudeCodePromptAsync(task, images, previousIssues, cancellationToken);
+            var model  = configuration["Agents:Requirements:Model"]
+                      ?? configuration["Anthropic:DefaultModel"]
+                      ?? "claude-sonnet-4-6";
+            var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+            var result = await claudeCodeService.RunReadOnlyAsync(
+                repoLocalPath, prompt, model, apiKey, cancellationToken);
+
+            if (!result.Success)
+            {
+                logger.LogWarning("Rosa Claude Code 執行未成功（exitCode={Code}）", result.ExitCode);
+                return [];
+            }
+
+            var issues = TryParseIssues(result.Output);
+            return issues?.Select(i => new RequirementIssuePreview(i.Title, i.Body, i.Labels)).ToList()
+                   ?? [];
+        }
+        finally
+        {
+            // 還原 CLAUDE.md
+            if (originalClaudeMd is not null)
+                await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
+            else if (File.Exists(claudeMdPath))
+                File.Delete(claudeMdPath);
+        }
+    }
+
+    private async Task<string> BuildClaudeCodePromptAsync(
+        TaskItem task,
+        IReadOnlyList<ImageAttachment>? images,
+        IReadOnlyList<RequirementIssuePreview>? previousIssues,
+        CancellationToken cancellationToken)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## 任務標題");
+        sb.AppendLine(task.Title);
+        sb.AppendLine();
+        sb.AppendLine("## 功能需求描述");
+        sb.AppendLine(task.Description ?? task.Title);
+        sb.AppendLine();
+
+        // 圖片描述：Claude Code CLI 不支援 Base64 圖片，先透過 LLM 轉為文字
+        if (images?.Count > 0)
+        {
+            var imageDesc = await DescribeImagesAsync(images, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(imageDesc))
+            {
+                sb.AppendLine("## 老闆附圖說明");
+                sb.AppendLine(imageDesc);
+                sb.AppendLine();
+            }
+        }
+
+        // ✏️ 調整模式：帶入第一版，指示修改而非重做
+        if (previousIssues?.Count > 0)
+        {
+            sb.AppendLine("## 第一版 Issues（請依老闆意見修改，不要重做）");
+            for (var i = 0; i < previousIssues.Count; i++)
+                sb.AppendLine($"{i + 1}. {previousIssues[i].Title}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## 你的任務");
+        if (previousIssues?.Count > 0)
+            sb.AppendLine("基於第一版 Issues 和老闆意見進行修改，探索 codebase 後輸出修改後的 JSON Issue 陣列。");
+        else
+            sb.AppendLine("探索 codebase，理解現有架構，然後輸出 JSON Issue 陣列。只輸出 JSON，不加說明。");
+
+        return sb.ToString();
+    }
+
+    // ────────────── LLM 直呼叫（Fallback） ──────────────
 
     private async Task<List<RequirementIssue>> AnalyzeRequirementsAsync(
         TaskItem task,
+        IReadOnlyList<ImageAttachment>? images,
+        IReadOnlyList<RequirementIssuePreview>? previousIssues,
         CancellationToken cancellationToken)
     {
         var provider = providerFactory.Create(AgentName);
-        var userMessage = $"""
-            ## 原始需求
-            {task.Title}
+        var sb = new StringBuilder();
+        sb.AppendLine("## 原始需求");
+        sb.AppendLine(task.Title);
+        sb.AppendLine();
+        sb.AppendLine(task.Description ?? "");
 
-            {task.Description ?? ""}
+        if (previousIssues?.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## 第一版 Issues（請依老闆意見修改，不要重做）");
+            for (var i = 0; i < previousIssues.Count; i++)
+                sb.AppendLine($"{i + 1}. {previousIssues[i].Title}");
+        }
 
-            請依照格式產出 JSON 陣列，每個 Issue 代表一個可獨立執行的功能或任務。
-            """;
+        sb.AppendLine();
+        sb.AppendLine("請依照格式產出 JSON 陣列，每個 Issue 代表一個可獨立執行的功能或任務。");
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
-            var response = await provider.CompleteAsync(BuildSystemPrompt(), userMessage, cancellationToken);
+            var response = await provider.CompleteAsync(
+                BuildSystemPrompt(), sb.ToString(), cancellationToken, images);
             var issues = TryParseIssues(response.Content);
             if (issues is not null)
             {
@@ -142,6 +282,30 @@ public class RequirementsAgentService(
         }
 
         return [];
+    }
+
+    /// <summary>
+    /// 透過 LLM 將圖片轉為文字描述，供 Claude Code prompt 使用。
+    /// </summary>
+    private async Task<string> DescribeImagesAsync(
+        IReadOnlyList<ImageAttachment> images,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var provider = providerFactory.Create(AgentName);
+            var response = await provider.CompleteAsync(
+                "你是一位技術文件撰寫員，請簡潔描述圖片中的 UI 結構、功能需求或問題點（100-200 字）。",
+                "請描述圖片內容，重點放在功能需求相關的資訊。",
+                cancellationToken,
+                images);
+            return response.Content.Trim();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "圖片描述轉換失敗，略過");
+            return "";
+        }
     }
 
     private static List<RequirementIssue>? TryParseIssues(string content)

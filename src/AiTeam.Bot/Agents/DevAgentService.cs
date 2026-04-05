@@ -43,7 +43,7 @@ public class DevAgentService(
 
         // 解析 task.Description 中的 Orchestrator metadata block
         ParseDescriptionMeta(task.Description,
-            out var issueUrls, out var uiSpecPath, out var isFixLoop, out var veraReview);
+            out var issueUrls, out var uiSpecPath, out var uiSpecContent, out var isFixLoop, out var veraReview);
 
         // fix loop：取得既有 PR 的 branch name，確保 LLM 不自創新 branch
         string? fixBranch = null;
@@ -64,7 +64,7 @@ public class DevAgentService(
             }
         }
 
-        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, isFixLoop, fixBranch, veraReview);
+        var userMessage = BuildPlanUserMessage(task, owner, repo, repoTree, issueUrls, uiSpecPath, uiSpecContent, isFixLoop, fixBranch, veraReview);
 
         for (var attempt = 1; attempt <= 2; attempt++)
         {
@@ -240,12 +240,12 @@ public class DevAgentService(
             logger.LogWarning("CLAUDE_CODY.md 模板不存在於 {Path}，略過寫入", templatePath);
         }
 
-        // 解析 Vera 報告（fix loop 時提供）
+        // 解析 Vera 報告與 UI 規格（fix loop 時提供）
         ParseDescriptionMeta(task.Description,
-            out _, out _, out var isFixLoop, out var veraReview);
+            out _, out _, out var uiSpecContentForPrompt, out var isFixLoop, out var veraReview);
 
         // 組建給 Claude Code 的任務 prompt
-        var prompt = BuildClaudeCodePrompt(task, plan, isFixLoop, veraReview);
+        var prompt = BuildClaudeCodePrompt(task, plan, isFixLoop, veraReview, uiSpecContentForPrompt);
 
         // 從設定讀取模型名稱（與其他 Agent 一致，不寫死）
         var model = configuration["Agents:Dev:Model"]
@@ -285,7 +285,8 @@ public class DevAgentService(
         TaskItem task,
         DevPlan plan,
         bool isFixLoop,
-        string? veraReview)
+        string? veraReview,
+        string? uiSpecContent = null)
     {
         var veraSection = isFixLoop && !string.IsNullOrWhiteSpace(veraReview)
             ? $"""
@@ -299,6 +300,20 @@ public class DevAgentService(
 
         var fixLoopHint = isFixLoop
             ? "\n⚠️ 這是 Vera 審查後的修復迭代，不要修改已通過的部分，只修正 Vera 指出的問題。\n"
+            : "";
+
+        // Stage 12：若有 UI 規格全文，指示 Cody 將規格存入 docs/ui-specs/
+        var slug = Regex.Replace(task.Title.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        var uiSpecInstruction = !string.IsNullOrWhiteSpace(uiSpecContent)
+            ? $"\n8. 新增檔案 `docs/ui-specs/{slug}.md`，內容為下方 UI 規格全文（不要更動內容）\n"
+            : "";
+        var uiSpecAppendix = !string.IsNullOrWhiteSpace(uiSpecContent)
+            ? $"""
+
+
+              ## UI 規格全文（請存入 docs/ui-specs/{slug}.md）
+              {uiSpecContent}
+              """
             : "";
 
         return $"""
@@ -316,7 +331,7 @@ public class DevAgentService(
             4. 執行 `dotnet build` 確認編譯通過
             5. 若有編譯錯誤，修復後再次執行 build
             6. 確認 build 通過後結束任務
-            7. **不要 commit 或 push**（外部流程會處理）
+            7. **不要 commit 或 push**（外部流程會處理）{uiSpecInstruction}{uiSpecAppendix}
             """;
     }
 
@@ -404,12 +419,17 @@ public class DevAgentService(
         string repoTree,
         string? issueUrls,
         string? uiSpecPath,
+        string? uiSpecContent,
         bool isFixLoop,
         string? fixBranch = null,
         string? veraReview = null)
     {
-        var issueSection  = string.IsNullOrWhiteSpace(issueUrls)  ? "（無）" : issueUrls;
-        var uiSpecSection = string.IsNullOrWhiteSpace(uiSpecPath) ? "（無）" : uiSpecPath;
+        var issueSection = string.IsNullOrWhiteSpace(issueUrls) ? "（無）" : issueUrls;
+
+        // Stage 12：優先用 UiSpecContent（全文），否則退回顯示 UiSpecPath（舊格式）
+        var uiSpecSection = !string.IsNullOrWhiteSpace(uiSpecContent)
+            ? uiSpecContent
+            : (!string.IsNullOrWhiteSpace(uiSpecPath) ? $"路徑：{uiSpecPath}" : "（無）");
         var fixLoopHint   = isFixLoop
             ? $"\n⚠️ 這是 Vera 審查後的修復迭代，不要建立新 PR。\n" +
               $"fix_branch（branch_name 必須完全照用此值）：`{fixBranch ?? "（查詢失敗，請沿用原 PR 的 branch）"}`"
@@ -440,7 +460,7 @@ public class DevAgentService(
             ## 相關 GitHub Issues
             {issueSection}
 
-            ## UI 規格文件路徑
+            ## UI 規格文件
             {uiSpecSection}
 
             請根據以上資訊產出執行計畫 JSON。
@@ -453,53 +473,74 @@ public class DevAgentService(
     /// 格式：
     /// ---
     /// issue_urls: ...
-    /// ui_spec_path: ...
+    /// ui_spec_content:\n{content}
     /// fix_loop: true
+    /// vera_review:\n{review}
     /// ---
     /// </summary>
     private static void ParseDescriptionMeta(
         string? description,
         out string? issueUrls,
         out string? uiSpecPath,
+        out string? uiSpecContent,
         out bool isFixLoop,
         out string? veraReview)
     {
-        issueUrls  = null;
-        uiSpecPath = null;
-        isFixLoop  = false;
-        veraReview = null;
+        issueUrls    = null;
+        uiSpecPath   = null;
+        uiSpecContent = null;
+        isFixLoop    = false;
+        veraReview   = null;
 
         if (string.IsNullOrWhiteSpace(description)) return;
 
         var lines = description.Split('\n');
         var inMeta = false;
         var inVeraReview = false;
+        var inUiSpec = false;
         var reviewLines = new List<string>();
+        var specLines   = new List<string>();
 
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
             if (trimmed == "---")
             {
-                if (inVeraReview) inVeraReview = false; // 結束 vera_review 區段
+                if (inVeraReview) inVeraReview = false;
+                if (inUiSpec)     inUiSpec     = false;
                 inMeta = !inMeta;
                 continue;
             }
             if (!inMeta) continue;
 
-            // vera_review 是多行區段，從 "vera_review:" 開始到下一個 key 或 ---
+            // vera_review 多行區段：遇到已知 key 時結束
             if (inVeraReview)
             {
-                // 遇到其他 key 時結束 vera_review 收集
                 if (trimmed.StartsWith("issue_urls:") || trimmed.StartsWith("ui_spec_path:")
-                    || trimmed.StartsWith("fix_loop:"))
+                    || trimmed.StartsWith("ui_spec_content:") || trimmed.StartsWith("fix_loop:"))
                 {
                     inVeraReview = false;
-                    // 繼續往下判斷這行本身是哪個 key
+                    // 繼續往下判斷這行本身
                 }
                 else
                 {
                     reviewLines.Add(line);
+                    continue;
+                }
+            }
+
+            // ui_spec_content 多行區段：遇到已知 key 時結束
+            if (inUiSpec)
+            {
+                if (trimmed.StartsWith("issue_urls:") || trimmed.StartsWith("fix_loop:")
+                    || trimmed.StartsWith("vera_review:"))
+                {
+                    inUiSpec = false;
+                    // 繼續往下判斷這行本身
+                }
+                else
+                {
+                    specLines.Add(line);
                     continue;
                 }
             }
@@ -511,6 +552,13 @@ public class DevAgentService(
                 if (!string.IsNullOrEmpty(remainder))
                     reviewLines.Add(remainder);
             }
+            else if (trimmed.StartsWith("ui_spec_content:"))
+            {
+                inUiSpec = true;
+                var remainder = trimmed["ui_spec_content:".Length..].Trim();
+                if (!string.IsNullOrEmpty(remainder))
+                    specLines.Add(remainder);
+            }
             else if (trimmed.StartsWith("issue_urls:"))
                 issueUrls = trimmed["issue_urls:".Length..].Trim();
             else if (trimmed.StartsWith("ui_spec_path:"))
@@ -521,6 +569,8 @@ public class DevAgentService(
 
         if (reviewLines.Count > 0)
             veraReview = string.Join("\n", reviewLines).Trim();
+        if (specLines.Count > 0)
+            uiSpecContent = string.Join("\n", specLines).Trim();
     }
 
     /// <summary>從描述文字中提取 PR 編號（支援 /pull/123 與 PR #123 兩種格式）。</summary>
