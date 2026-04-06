@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。
 
 ---
 
@@ -48,7 +48,7 @@ src/
 ├── AiTeam.Shared/               ← 共用 DTO、介面、常數（AgentNames 等）
 ├── AiTeam.Data/                 ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                  ← Discord Bot 主程式
-│   ├── Agents/                  ← IAgentExecutor、各 AgentService、TokenTrackingProvider
+│   ├── Agents/                  ← IAgentExecutor、各 AgentService、TokenTrackingProvider、ClaudeCodeService
 │   ├── Api/                     ← InternalController（/internal/tokens、/internal/deployment 等）
 │   ├── Configuration/           ← DiscordSettings、AgentSettings、GitHubSettings
 │   ├── Discord/                 ← DiscordBotService、CommandHandler
@@ -74,6 +74,7 @@ docs/
 ├── Stage_9_Roadmap.md           ← ✅ 完成
 ├── Stage_10_Roadmap.md          ← ✅ 完成（含詳細實作紀錄）
 ├── Stage_11_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
+├── Stage_12_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -101,24 +102,29 @@ docs/
 
 ---
 
-## CEO Orchestrator（Stage 10）
+## ## CEO Orchestrator（Stage 10）
 
 Stage 10 起，CEO 從「任務路由器」升級為「任務生命週期全程指揮官」。
 
 **新功能完整流程（無需手動推進）：**
 ```
-老闆說需求
+老闆說需求（可附截圖）
     ↓
-CEO 進入提案模式：Rosa（需求） + Demi（UI 規格）並行產出
+CEO 進入提案模式
+Rosa（需求拆解，Claude Code 唯讀探索 codebase）
     ↓
-提案書 Embed（含 GitHub Issue 連結 + UI 規格連結）
+Demi（UI 規格設計，Claude Code 唯讀探索 .razor 頁面，涵蓋 Rosa Issues）
+    ↓
+提案書 Embed（UI 規格以 Discord 附件 ui-spec.md 傳送）
   [✅ 核准] [✏️ 需調整] [❌ 取消]
     ↓ 老闆核准
-CEO 自動派 Dev（附帶 Issues + UI 規格 + repo 結構）
+CEO 自動派 Dev（附帶 Issues + UI 規格全文 + repo 結構）
     ↓
-Dev 開發 → PR 開出
+Dev 開發 → PR 開出（含 docs/ui-specs/*.md）
     ↓ CEO 自動觸發
 QA + Doc + Vera 並行執行
+  Doc（Sage）：Claude Code 直讀 PR changed files → 技術文件
+  Vera：LLM 審查 + Claude Code 影響範圍分析
     ↓
 Vera 發現 🔴 → Dev 自動修正 → Vera 自動重審（最多 3 次）
 Vera 無 🔴 → CEO 通知老闆：「PR 可以 merge 了」
@@ -131,7 +137,8 @@ Vera 無 🔴 → CEO 通知老闆：「PR 可以 merge 了」
 核心組件：
 - `WorkflowEngine`：純靜態流程表，無 LLM，毫秒級路由
 - `TaskGroupService`：群組管理 + 並行觸發 + 遞迴 Orchestration
-- `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecPath、DevPrUrl、LastReviewBody、FixIteration）
+- `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecContent、DevPrUrl、LastReviewBody、FixIteration）
+- `ClaudeCodeService`：封裝 Claude Code CLI subprocess（完整模式 / 唯讀模式）
 
 ---
 
@@ -281,6 +288,7 @@ docker compose --env-file .env up -d
 | Stage 9 | Token 監控 Dashboard（即時 SignalR）、CEO 智慧分類 + 提案模式、QA Playwright CI | ✅ 完成 |
 | Stage 10 | CEO Orchestrator 全自動流程、提案書 ✏️ 調整按鈕、Dev repo 結構上下文、Review 閉環、Ops Rollback | ✅ 完成 |
 | Stage 11 | Dev Agent（Cody）升級為 Claude Code CLI 驅動：自主探索、寫碼、build 驗證、自動修錯 | ✅ 完成 |
+| Stage 12 | 提案流程全面升級：Rosa/Demi/Vera/Sage 唯讀探索 codebase、附圖支援、UI 規格存 DB、Discord 附件 | ✅ 完成 |
 
 ---
 

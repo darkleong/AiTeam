@@ -1,8 +1,8 @@
 # Stage 12：提案流程全面升級
 
-> 版本：v1.0
+> 版本：v1.1
 > 建立日期：2026-04-05
-> 狀態：📋 規劃中
+> 狀態：✅ 已完成（2026-04-06）
 
 ---
 
@@ -141,8 +141,33 @@ Demi 產出 UI 規格後立即 commit 到 GitHub，但提案尚未核准。否�
 
 ---
 
+## 實作紀錄
+
+### 完成項目
+
+- ✅ `ClaudeCodeService.RunReadOnlyAsync`（`--allowedTools Glob,Grep,Read`，max-turns 10）
+- ✅ `RequirementsAgentService`（Rosa）：Claude Code 唯讀探索 + 圖片描述轉文字 + 調整模式
+- ✅ `DesignerAgentService`（Demi）：Claude Code 唯讀探索 + Rosa Issues 串行傳入 + 移除 GitHub commit
+- ✅ `ReviewerAgentService`（Vera）：Claude Code 影響範圍分析（非阻塞補強）
+- ✅ `DocAgentService`（Sage）：Claude Code 直讀 PR changed files，刪除 ExtractPathPrefix
+- ✅ `CommandHandler`：提案串行化 + 共用唯讀 workspace + 圖片傳遞 + Discord 附件 + 調整帶第一版
+- ✅ `TaskGroup.UiSpecContent` DB 欄位 + EF Migration
+- ✅ `DevAgentService`：解析 ui_spec_content + 指示 Cody 建立 `docs/ui-specs/{slug}.md`
+- ✅ CLAUDE_Rosa / Demi / Vera / Sage.md 模板
+
+### 踩坑紀錄
+
+| 問題 | 解法 |
+|------|------|
+| Discord 附圖時 CEO 重複回應 3 次 | Message ID 去重快取（`ConcurrentDictionary` + 60s TTL）|
+| 中文標題 Slug 產生空字串 | Fallback 使用 `TaskId.ToString("N")[..8]` |
+| Demi ✏️ 調整時忽略老闆視覺需求 | 從 description 提取 `【老闆調整意見】`，獨立為 `⚠️` 區塊並在任務指令中明確強調 |
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
 |------|------|
 | 2026-04-05 | 初版建立，整合 Future Feature 十七、十八、十九 |
+| 2026-04-06 | 實作完成、驗收通過（六項驗收）、三項 bug 修正、結案 |
