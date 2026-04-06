@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v3.2
+> 版本：v3.3
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -26,6 +26,7 @@
 | [Stage_12_Roadmap.md](./Stage_12_Roadmap.md) | Stage 12：提案流程全面升級 | ✅ 已完成（2026-04-06） |
 | [Stage_13_Roadmap.md](./Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | ✅ 已完成（2026-04-06） |
 | [Stage_14_Roadmap.md](./Stage_14_Roadmap.md) | Stage 14：CEO 分類與流程完整性補強 | ✅ 已完成（2026-04-06） |
+| [Stage_15_Roadmap.md](./Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 | 📋 規劃中 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -58,6 +59,7 @@
 | v3.0 | 2026-04-06 | Stage 13 驗收完成：串行流程 Dev → Reviewer → QA → Doc、單一 PR（含 Closes #XX 自動關 Issues）、QA code fence 修正、Playwright 改 self-hosted runner；Future_Feature.md 新增二十一（Dashboard Agent 狀態卡即時更新）|
 | v3.1 | 2026-04-06 | 新增 Stage_14_Roadmap.md（CEO 分類補強：技術改善分類、Release/Ops/Doc 路由、任務取消）；Future_Feature.md 第九項移入 Stage 14 |
 | v3.2 | 2026-04-06 | Stage 14 驗收完成（CEO 六類分類全通過）；順帶修正 Bug fix Orchestrator 未啟動問題；ClaudeCodeService 外部 cancel kill subprocess 補齊；Stage_14_Roadmap.md 補充實作紀錄 |
+| v3.3 | 2026-04-06 | 新增 Stage_15_Roadmap.md（Victoria 接上 Claude Code + Session 對話）；吸收 Future Feature 十（CEO 文件記錄）和十一（Victoria 技術顧問 Phase 1~2）|
 
 ---
 

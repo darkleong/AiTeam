@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v2.2
+> 版本：v2.3
 > 建立日期：2026-04-01
 > 最後更新：2026-04-06
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -249,7 +249,7 @@ DocAgentService 自動產出技術文件並開 PR，目前沒有人工審查以�
 
 ---
 
-## 十、CEO Discord 文件記錄能力
+## 十、CEO Discord 文件記錄能力 ⇒ 已被 Stage 15 吸收
 
 ### 背景
 
@@ -293,11 +293,11 @@ CEO 整理老闆的說法，格式化成對應的 markdown 段落
 
 ### 優先級
 
-🟡 中優先級 — 對「老闆只動嘴」原則有直接價值，但需要 CEO 對文件結構有足夠理解，實作複雜度中等
+⇒ 已被 Stage 15 吸收 — Victoria 接上 Claude Code 後，自己能 Read/Edit/commit docs/ 文件，不需要另外寫 MarkdownDocumentService
 
 ---
 
-## 十一、Victoria 升級為技術顧問（Discord 版 Claude Code）
+## 十一、Victoria 升級為技術顧問（Discord 版 Claude Code） ⇒ Phase 1~2 已移入 Stage 15
 
 ### 願景
 
@@ -378,7 +378,7 @@ Victoria 自動派 Cody → Vera → QA → 通知 merge
 
 ### 優先級
 
-🔵 低優先級 — 這是系統的長期方向，不是短期可實現的。需要先把九（分類補強）、十（文件記錄）等基礎做好，才有條件實現本項目。但值得記錄下來作為系統演進的北極星。
+⇒ Phase 1（Claude Code 接入）+ Phase 2（Session 對話）已移入 Stage 15。Phase 3（長期記憶）留待後續。
 
 ---
 
@@ -437,3 +437,4 @@ Victoria 自動派 Cody → Vera → QA → 通知 merge
 | 2026-04-06 | v2.0 大整理：移除 9 個已完成項目（一、十～十四、十七～十九），重新編號為一～十二 |
 | 2026-04-06 | v2.1：第九項（CEO 分類補強）移入 Stage 14 |
 | 2026-04-06 | v2.2：第九項標記 ✅ 已完成（Stage 14 驗收通過） |
+| 2026-04-06 | v2.3：第十項標記被 Stage 15 吸收；第十一項 Phase 1~2 移入 Stage 15 |
