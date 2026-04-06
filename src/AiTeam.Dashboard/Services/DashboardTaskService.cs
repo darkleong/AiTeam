@@ -39,7 +39,8 @@ public class DashboardTaskService(AppDbContext db)
                 CreatedAt     = t.CreatedAt,
                 CompletedAt   = t.CompletedAt,
                 ProjectName   = t.Project != null ? t.Project.Name : null,
-                TeamName      = t.Team    != null ? t.Team.Name    : null
+                TeamName      = t.Team    != null ? t.Team.Name    : null,
+                Duration      = t.CompletedAt.HasValue ? t.CompletedAt.Value - t.CreatedAt : null
             })
             .ToListAsync(cancellationToken);
 
@@ -66,7 +67,8 @@ public class DashboardTaskService(AppDbContext db)
                 CreatedAt     = t.CreatedAt,
                 CompletedAt   = t.CompletedAt,
                 ProjectName   = t.Project != null ? t.Project.Name : null,
-                TeamName      = t.Team    != null ? t.Team.Name    : null
+                TeamName      = t.Team    != null ? t.Team.Name    : null,
+                Duration      = t.CompletedAt.HasValue ? t.CompletedAt.Value - t.CreatedAt : null
             })
             .ToListAsync(cancellationToken);
 

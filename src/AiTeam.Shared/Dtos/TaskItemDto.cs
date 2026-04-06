@@ -12,4 +12,6 @@ public class TaskItemDto
     public DateTime? CompletedAt { get; set; }
     public string? ProjectName { get; set; }
     public string? TeamName { get; set; }
+    /// <summary>任務執行時間（CompletedAt - CreatedAt）；尚未完成時為 null。</summary>
+    public TimeSpan? Duration { get; set; }
 }

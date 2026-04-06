@@ -33,6 +33,7 @@
         <MudTh>觸發來源</MudTh>
         <MudTh>建立時間</MudTh>
         <MudTh>完成時間</MudTh>
+        <MudTh>執行時間</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd><StatusBadge Status="@context.Status" /></MudTd>
@@ -42,6 +43,22 @@
         <MudTd>@context.TriggeredBy</MudTd>
         <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
+        <MudTd>
+            @if (context.Status == "running")
+            {
+                <span style="color: var(--mud-palette-warning);">
+                    ▶ @FormatElapsed(DateTime.UtcNow - context.CreatedAt)
+                </span>
+            }
+            else if (context.Duration.HasValue)
+            {
+                @FormatDuration(context.Duration.Value)
+            }
+            else
+            {
+                <span style="color: var(--mud-palette-text-secondary);">—</span>
+            }
+        </MudTd>
     </RowTemplate>
     <PagerContent>
         <MudTablePager />

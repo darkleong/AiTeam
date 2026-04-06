@@ -27,6 +27,7 @@ public partial class TaskCenter : IAsyncDisposable
     private bool                  _isDrawerOpen;
     private string?               _statusFilter;
     private HubConnection?        _hubConnection;
+    private PeriodicTimer?        _elapsedTimer;
 
     #endregion
 
@@ -35,6 +36,7 @@ public partial class TaskCenter : IAsyncDisposable
     protected override async Task OnInitializedAsync()
     {
         await ConnectSignalRAsync();
+        _ = StartElapsedTimerAsync();
     }
 
     #endregion
@@ -91,12 +93,32 @@ public partial class TaskCenter : IAsyncDisposable
         _isDrawerOpen = true;
     }
 
+    private async Task StartElapsedTimerAsync()
+    {
+        _elapsedTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        while (await _elapsedTimer.WaitForNextTickAsync())
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string FormatDuration(TimeSpan ts) => ts switch
+    {
+        { TotalSeconds: < 60 } => $"{(int)ts.TotalSeconds}秒",
+        { TotalMinutes: < 60 } => $"{ts.Minutes}分{ts.Seconds:D2}秒",
+        _                      => $"{(int)ts.TotalHours}小時{ts.Minutes:D2}分"
+    };
+
+    private string FormatElapsed(TimeSpan ts) =>
+        FormatDuration(ts < TimeSpan.Zero ? TimeSpan.Zero : ts);
+
     #endregion
 
     #region IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _elapsedTimer?.Dispose();
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
     }
