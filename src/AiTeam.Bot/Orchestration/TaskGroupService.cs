@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
@@ -32,6 +33,9 @@ public class TaskGroupService(
     private readonly DiscordSettings _discord    = discordSettings.Value;
     private readonly GitHubSettings  _gitHub     = gitHubSettings.Value;
 
+    // Stage 14：記錄每個執行中 TaskItem 的 CTS，供取消時 kill subprocess
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _runningCts = new();
+
     // ---- 任務群組建立 ----
 
     /// <summary>
@@ -53,7 +57,12 @@ public class TaskGroupService(
             Title          = title,
             Project        = project,
             Status         = "running",
-            WorkflowType   = workflowType == WorkflowType.NewFeature ? "new_feature" : "bug_fix",
+            WorkflowType   = workflowType switch
+            {
+                WorkflowType.NewFeature      => "new_feature",
+                WorkflowType.TechImprovement => "tech_improvement",
+                _                            => "bug_fix"
+            },
             IssueUrls      = issueUrlsJson,
             UiSpecContent  = uiSpecContent,
         };
@@ -119,9 +128,12 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
-        var workflowType = group.WorkflowType == "new_feature"
-            ? WorkflowType.NewFeature
-            : WorkflowType.BugFix;
+        var workflowType = group.WorkflowType switch
+        {
+            "new_feature"      => WorkflowType.NewFeature,
+            "tech_improvement" => WorkflowType.TechImprovement,
+            _                  => WorkflowType.BugFix
+        };
 
         var decision = workflowEngine.GetDecision(
             workflowType, completedAgent, result, group.FixIteration);
@@ -247,10 +259,14 @@ public class TaskGroupService(
             return;
         }
 
+        // Stage 14：建立 linked CTS，供外部取消時 kill subprocess
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _runningCts[taskItem.Id] = linkedCts;
+
         try
         {
             var rules  = await rulesService.GetRulesAsync(step.AgentName);
-            var result = await executor.ExecuteTaskAsync(taskItem, owner, repo, rules, cancellationToken);
+            var result = await executor.ExecuteTaskAsync(taskItem, owner, repo, rules, linkedCts.Token);
 
             var finalStatus = result.Success ? "done" : "failed";
             taskRepo.UpdateStatus(taskItem, finalStatus);
@@ -307,6 +323,20 @@ public class TaskGroupService(
                 }
             }, appLifetime.ApplicationStopping);
         }
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // Stage 14：外部取消（CancelAsync 呼叫），標記為 cancelled
+            logger.LogInformation("TaskGroupService：Agent {Agent}（Task={Id}）被外部取消", step.AgentName, taskItem.Id);
+            taskRepo.UpdateStatus(taskItem, "cancelled");
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = taskItem.Id,
+                Title     = taskItem.Title,
+                AgentName = taskItem.AssignedAgent,
+                Status    = "cancelled"
+            });
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "TaskGroupService：Agent {Agent} 執行失敗（Task={Id}）",
@@ -330,6 +360,47 @@ public class TaskGroupService(
                 Status    = "failed"
             });
         }
+        finally
+        {
+            _runningCts.TryRemove(taskItem.Id, out _);
+        }
+    }
+
+    // ---- 取消任務（Stage 14）----
+
+    /// <summary>
+    /// 取消指定 TaskGroup 的所有進行中任務。
+    /// 1. 呼叫 CTS.Cancel() 中斷正在執行的 subprocess
+    /// 2. 將 TaskGroup / 未完成 TaskItem 狀態改為 cancelled
+    /// </summary>
+    public async Task CancelAsync(Guid groupId, CancellationToken cancellationToken = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+
+        var group = await taskRepo.GetGroupByIdAsync(groupId, cancellationToken);
+        if (group is null)
+        {
+            logger.LogWarning("CancelAsync：找不到 TaskGroup（Id={Id}）", groupId);
+            return;
+        }
+
+        // Kill 正在執行的 subprocess（best effort）
+        foreach (var task in group.Tasks)
+        {
+            if (_runningCts.TryRemove(task.Id, out var cts))
+            {
+                try { cts.Cancel(); }
+                catch (Exception ex) { logger.LogWarning(ex, "CancelAsync：Cancel CTS 失敗（TaskId={Id}）", task.Id); }
+            }
+        }
+
+        // 更新 DB 狀態
+        taskRepo.CancelGroupItems(group);
+        taskRepo.UpdateGroupStatus(group, "cancelled");
+        await taskRepo.SaveAsync(cancellationToken);
+
+        logger.LogInformation("TaskGroup {Id}（{Title}）已取消", groupId, group.Title);
     }
 
     // ---- 通知老闆 ----

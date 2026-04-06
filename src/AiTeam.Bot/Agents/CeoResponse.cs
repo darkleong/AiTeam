@@ -11,9 +11,16 @@ public class CeoResponse
     [JsonPropertyName("reply")]
     public string Reply { get; set; } = "";
 
-    /// <summary>reply / delegate / propose</summary>
+    /// <summary>reply / delegate / propose / cancel</summary>
     [JsonPropertyName("action")]
     public string Action { get; set; } = "reply";
+
+    /// <summary>
+    /// 僅 delegate 時使用：null = 不指定；"bug_fix" | "tech_improvement"。
+    /// 決定是否建立 TaskGroup 及使用哪個 WorkflowType。
+    /// </summary>
+    [JsonPropertyName("workflow_type")]
+    public string? WorkflowType { get; set; }
 
     [JsonPropertyName("target_agent")]
     public string? TargetAgent { get; set; }

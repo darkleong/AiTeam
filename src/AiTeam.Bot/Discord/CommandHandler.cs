@@ -40,6 +40,9 @@ public class CommandHandler(
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
     private const int ProcessedMessageTtlSeconds = 60;
 
+    // Stage 14：等待老闆選擇要取消哪個任務（userId → running TaskGroups 清單）
+    private readonly Dictionary<ulong, List<AiTeam.Data.TaskGroup>> _pendingCancelSelections = [];
+
     /// <summary>
     /// 向 Guild 註冊所有斜線指令，並訂閱互動事件。
     /// </summary>
@@ -146,6 +149,14 @@ public class CommandHandler(
     /// </summary>
     private async Task HandleCeoChannelMessageAsync(SocketUserMessage msg)
     {
+        // Stage 14：若使用者正在選擇取消哪個任務，攔截本訊息為取消選擇
+        if (_pendingCancelSelections.TryGetValue(msg.Author.Id, out var cancelGroups))
+        {
+            _pendingCancelSelections.Remove(msg.Author.Id);
+            await HandleCancelSelectionAsync(msg, cancelGroups);
+            return;
+        }
+
         // Stage 10：若使用者剛按了 ✏️「需調整」按鈕，將本訊息視為調整指示
         if (_pendingAdjustments.TryGetValue(msg.Author.Id, out var adjustPending))
         {
@@ -235,6 +246,12 @@ public class CommandHandler(
                 async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
                 ceoResponse, finalProject, msg.CleanContent,
                 images: images.Count > 0 ? images : null);
+        }
+        else if (ceoResponse.Action == "cancel")
+        {
+            // Stage 14：取消任務流程
+            contextStore.Clear(msg.Channel.Id);
+            await HandleCancelRequestAsync(msg);
         }
         else
         {
@@ -622,6 +639,17 @@ public class CommandHandler(
             }
             else
             {
+                // Stage 14：若為 BugFix / TechImprovement，建立 TaskGroup 讓 Orchestrator 接管後續流程
+                var wfType = ResolveWorkflowType(pending.CeoResponse);
+                if (wfType.HasValue && pending.GroupId == Guid.Empty)
+                {
+                    var group = await taskGroupService.CreateGroupAsync(
+                        pending.CeoResponse.Task?.Title ?? pending.Description,
+                        pending.Project,
+                        wfType.Value);
+                    pending = pending with { GroupId = group.Id };
+                }
+
                 await interaction.FollowupAsync(
                     $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
 
@@ -633,6 +661,20 @@ public class CommandHandler(
                         logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
                     }
                 }, CancellationToken.None);
+            }
+        }
+        else if (interaction.Data.CustomId == "cancel_yes")
+        {
+            // Stage 14：確認取消任務
+            await interaction.DeferAsync();
+            if (pending.GroupId != Guid.Empty)
+            {
+                await taskGroupService.CancelAsync(pending.GroupId);
+                await interaction.FollowupAsync($"✅ 已取消任務：**{pending.Description}**");
+            }
+            else
+            {
+                await interaction.FollowupAsync("❌ 找不到要取消的任務。");
             }
         }
         else if (interaction.Data.CustomId == "req_yes")
@@ -1210,6 +1252,118 @@ public class CommandHandler(
         return client.GetGuild(guildId)
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
+
+    #endregion
+
+    #region Stage 14：取消任務
+
+    /// <summary>
+    /// 判斷 delegate 任務應使用哪個 WorkflowType（是否需要 Orchestrator Pipeline）。
+    /// Release / Ops / Doc 為單次任務，回傳 null（不建 TaskGroup）。
+    /// </summary>
+    private static WorkflowType? ResolveWorkflowType(CeoResponse ceoResponse)
+    {
+        // 單次任務：不走 Orchestrator pipeline
+        if (ceoResponse.TargetAgent is AgentNames.Release or AgentNames.Ops or AgentNames.Doc)
+            return null;
+
+        return ceoResponse.WorkflowType switch
+        {
+            "tech_improvement" => WorkflowType.TechImprovement,
+            _                  => WorkflowType.BugFix
+        };
+    }
+
+    /// <summary>
+    /// 處理 CEO 判定為「取消任務」的請求。
+    /// 查詢 running TaskGroup，若一個直接確認，若多個等老闆選擇，若無則回覆。
+    /// </summary>
+    private async Task HandleCancelRequestAsync(SocketUserMessage msg)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+
+        var runningGroups = await taskRepo.GetRunningGroupsAsync();
+
+        if (runningGroups.Count == 0)
+        {
+            await msg.Channel.SendMessageAsync("目前沒有進行中的任務。");
+            return;
+        }
+
+        if (runningGroups.Count == 1)
+        {
+            var group = runningGroups[0];
+            var confirmMsg = await msg.Channel.SendMessageAsync(
+                embed: BuildCancelConfirmEmbed(group),
+                components: BuildConfirmButtons("cancel_yes", "cancel_no"));
+            _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
+                CeoResponse: new CeoResponse { Action = "cancel" },
+                Project: group.Project,
+                Description: group.Title,
+                GroupId: group.Id);
+        }
+        else
+        {
+            // 多個任務：列出清單，等老闆回覆序號後攔截
+            var lines = runningGroups
+                .Select((g, i) => $"{i + 1}. **{g.Title}**（{g.Project}，{g.CreatedAt:MM/dd HH:mm}）")
+                .ToList();
+            await msg.Channel.SendMessageAsync(
+                $"目前有 {runningGroups.Count} 個進行中的任務，請回覆序號選擇要取消哪一個：\n" +
+                string.Join("\n", lines));
+            _pendingCancelSelections[msg.Author.Id] = runningGroups;
+        }
+    }
+
+    /// <summary>
+    /// 老闆選擇要取消哪個任務（輸入序號或任務名稱）。
+    /// </summary>
+    private async Task HandleCancelSelectionAsync(
+        SocketUserMessage msg,
+        List<AiTeam.Data.TaskGroup> runningGroups)
+    {
+        var input = msg.CleanContent.Trim();
+
+        AiTeam.Data.TaskGroup? selected = null;
+
+        // 嘗試解析序號
+        if (int.TryParse(input, out var index) && index >= 1 && index <= runningGroups.Count)
+            selected = runningGroups[index - 1];
+
+        // 嘗試名稱比對（包含比對）
+        if (selected is null)
+            selected = runningGroups.FirstOrDefault(g =>
+                g.Title.Contains(input, StringComparison.OrdinalIgnoreCase));
+
+        if (selected is null)
+        {
+            await msg.Channel.SendMessageAsync(
+                $"❌ 找不到符合「{Truncate(input, 100)}」的任務，請重新輸入序號或任務名稱。");
+            // 重新等待老闆輸入
+            _pendingCancelSelections[msg.Author.Id] = runningGroups;
+            return;
+        }
+
+        var confirmMsg = await msg.Channel.SendMessageAsync(
+            embed: BuildCancelConfirmEmbed(selected),
+            components: BuildConfirmButtons("cancel_yes", "cancel_no"));
+        _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
+            CeoResponse: new CeoResponse { Action = "cancel" },
+            Project: selected.Project,
+            Description: selected.Title,
+            GroupId: selected.Id);
+    }
+
+    private static Embed BuildCancelConfirmEmbed(AiTeam.Data.TaskGroup group)
+        => new EmbedBuilder()
+            .WithTitle("⚠️ 確認取消任務")
+            .WithColor(Color.Orange)
+            .AddField("任務", group.Title)
+            .AddField("專案", string.IsNullOrWhiteSpace(group.Project) ? "—" : group.Project, inline: true)
+            .AddField("建立時間", group.CreatedAt.ToString("MM/dd HH:mm"), inline: true)
+            .WithFooter("確認後立即停止執行中的 Agent，已 push 的 commit 不會回滾。")
+            .Build();
 
     #endregion
 

@@ -120,6 +120,12 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
             throw new TimeoutException(
                 $"Claude Code subprocess 超過 {timeout.TotalMinutes} 分鐘逾時");
         }
+        catch (OperationCanceledException)
+        {
+            // Stage 14：外部取消（CancelAsync 呼叫），確保 subprocess 被 kill
+            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            throw;
+        }
 
         var stdout  = stdoutBuilder.ToString();
         var stderr  = stderrBuilder.ToString();

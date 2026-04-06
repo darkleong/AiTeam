@@ -94,6 +94,28 @@ public class TaskRepository(AppDbContext db)
     public void UpdateGroupStatus(TaskGroup group, string status)
         => group.Status = status;
 
+    /// <summary>查詢所有 running 狀態的 TaskGroup（含子任務）。Stage 14 取消功能用。</summary>
+    public async Task<List<TaskGroup>> GetRunningGroupsAsync(
+        CancellationToken cancellationToken = default)
+        => await db.TaskGroups
+            .Include(g => g.Tasks)
+            .Where(g => g.Status == "running")
+            .OrderByDescending(g => g.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    /// <summary>批量將 TaskGroup 下所有未完成 TaskItem 標記為 cancelled。Stage 14 取消功能用。</summary>
+    public void CancelGroupItems(TaskGroup group)
+    {
+        foreach (var task in group.Tasks)
+        {
+            if (task.Status is not ("done" or "failed" or "cancelled"))
+            {
+                task.Status = "cancelled";
+                task.CompletedAt = DateTime.UtcNow;
+            }
+        }
+    }
+
     /// <summary>查詢指定 PR 且仍在執行中的 Reviewer 任務（Review 閉環用）。</summary>
     public async Task<List<TaskItem>> GetActiveReviewerTasksByPrAsync(
         int prNumber,

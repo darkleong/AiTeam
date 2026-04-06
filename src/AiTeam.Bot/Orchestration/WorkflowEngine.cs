@@ -6,7 +6,9 @@ namespace AiTeam.Bot.Orchestration;
 public enum WorkflowType
 {
     NewFeature,
-    BugFix
+    BugFix,
+    /// <summary>重構、效能優化、技術債清理，流程同 BugFix（Dev→Reviewer→QA），不需要 Rosa/Demi。</summary>
+    TechImprovement
 }
 
 /// <summary>
@@ -91,6 +93,14 @@ public class WorkflowEngine
         // Reviewer 節點由 GetDecision 方法動態決定
     };
 
+    // ---- 技術改善流程表（Stage 14）：重構/效能優化/技術債，流程同 BugFix ----
+    private static readonly Dictionary<string, WorkflowStep[]> TechImprovementTable = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Dev"]     = [new WorkflowStep("Reviewer")],
+        ["QA"]      = [],
+        ["Dev_fix"] = [new WorkflowStep("Reviewer", IsFixLoop: true)],
+    };
+
     /// <summary>
     /// 根據完成的 Agent 與其結果，決定 Orchestrator 下一步要做什麼。
     /// </summary>
@@ -104,7 +114,12 @@ public class WorkflowEngine
         Agents.AgentExecutionResult result,
         int fixIteration = 0)
     {
-        var table = workflowType == WorkflowType.NewFeature ? NewFeatureTable : BugFixTable;
+        var table = workflowType switch
+        {
+            WorkflowType.NewFeature      => NewFeatureTable,
+            WorkflowType.TechImprovement => TechImprovementTable,
+            _                            => BugFixTable
+        };
 
         // ---- Reviewer 節點：依 CriticalReviewCount 動態決定 ----
         if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
@@ -128,9 +143,9 @@ public class WorkflowEngine
         if (completedAgent.Equals("Doc", StringComparison.OrdinalIgnoreCase))
             return new WorkflowDecision(NextAction.NotifyBossMerge, []);
 
-        // ---- Stage 13：QA 完成 + Bug 修復 → 通知老闆 merge（不需要 Doc）----
+        // ---- Stage 13/14：QA 完成 + Bug 修復 / 技術改善 → 通知老闆 merge（不需要 Doc）----
         if (completedAgent.Equals("QA", StringComparison.OrdinalIgnoreCase)
-            && workflowType == WorkflowType.BugFix)
+            && workflowType is WorkflowType.BugFix or WorkflowType.TechImprovement)
             return new WorkflowDecision(NextAction.NotifyBossMerge, []);
 
         if (!table.TryGetValue(completedAgent, out var steps) || steps.Length == 0)
