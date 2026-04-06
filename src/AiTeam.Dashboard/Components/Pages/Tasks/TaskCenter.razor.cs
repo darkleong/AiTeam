@@ -93,6 +93,26 @@ public partial class TaskCenter : IAsyncDisposable
 
     #endregion
 
+    /// <summary>將 TimeSpan 格式化為人類易讀字串，如「3 分 42 秒」、「1 時 5 分」。</summary>
+    private static string FormatDuration(TimeSpan? duration)
+    {
+        if (duration is null) return "—";
+
+        var ts = duration.Value;
+
+        if (ts.TotalSeconds < 60)
+            return $"{(int)ts.TotalSeconds} 秒";
+
+        if (ts.TotalMinutes < 60)
+            return ts.Seconds > 0
+                ? $"{(int)ts.TotalMinutes} 分 {ts.Seconds} 秒"
+                : $"{(int)ts.TotalMinutes} 分";
+
+        return ts.Minutes > 0
+            ? $"{(int)ts.TotalHours} 時 {ts.Minutes} 分"
+            : $"{(int)ts.TotalHours} 時";
+    }
+
     #region IAsyncDisposable
 
     public async ValueTask DisposeAsync()
