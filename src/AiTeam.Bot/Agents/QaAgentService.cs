@@ -146,7 +146,7 @@ public class QaAgentService(
         var testPath  = BuildTestFilePath(filePath);
         var fullPath  = Path.Combine(localPath, testPath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        await File.WriteAllTextAsync(fullPath, response.Content, cancellationToken);
+        await File.WriteAllTextAsync(fullPath, StripCodeFence(response.Content), cancellationToken);
 
         logger.LogInformation("已產生 xUnit 測試：{Path}", testPath);
         AddLog(task, $"已產生 {testPath}", "done");
@@ -173,11 +173,20 @@ public class QaAgentService(
         var testPath = $"src/AiTeam.Tests.Playwright/Generated/PR{prNumber}/VisualTests.cs";
         var fullPath = Path.Combine(localPath, testPath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        await File.WriteAllTextAsync(fullPath, response.Content, cancellationToken);
+        await File.WriteAllTextAsync(fullPath, StripCodeFence(response.Content), cancellationToken);
 
         logger.LogInformation("已產生 Playwright 測試：{Path}", testPath);
         AddLog(task, $"已產生 Playwright 測試：{testPath}", "done");
         return testPath;
+    }
+
+    /// <summary>移除 LLM 回傳內容的 Markdown code fence（```csharp ... ```），確保寫入檔案的是純程式碼。</summary>
+    private static string StripCodeFence(string content)
+    {
+        var trimmed = content.Trim();
+        var match = System.Text.RegularExpressions.Regex.Match(
+            trimmed, @"^```[a-zA-Z]*\r?\n([\s\S]*?)\r?\n```$");
+        return match.Success ? match.Groups[1].Value : trimmed;
     }
 
     private static int ExtractPrNumber(string text)

@@ -2,7 +2,7 @@
 
 > 版本：v1.2
 > 建立日期：2026-04-01
-> 最後更新：2026-04-05
+> 最後更新：2026-04-06
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。從 Stage_7_Roadmap.md 改版而來。
 
 ---
@@ -859,6 +859,28 @@ Victoria 自動派 Cody → Vera → QA → 通知 merge
 
 ---
 
+## 二十一、Dashboard Agent 狀態卡即時更新
+
+### 背景
+
+目前 Dashboard 總覽頁的 Agent 狀態卡（「閒置」/「執行中」）在 Agent 開始或完成任務時**不會即時更新**，需手動 F5 刷新才能看到正確狀態。任務清單（最近任務）已透過 SignalR 即時推送正確，但 Agent 狀態卡使用獨立的渲染路徑，`DashboardPushService.PushTaskUpdateAsync` 並未廣播 Agent 狀態變更事件。
+
+### 期望行為
+
+當 `FireOneStepAsync` 啟動 Agent 或任務完成時，Dashboard 總覽頁的對應 Agent 卡片應即時切換「閒置」↔「執行中」，無需頁面刷新。
+
+### 實作方向
+
+1. `DashboardPushService` 新增 `PushAgentStatusAsync(string agentName, string status)` 方法
+2. `TaskGroupService.FireOneStepAsync` 在 Agent 開始執行前 Push `"running"`，完成後 Push `"idle"`
+3. Dashboard 總覽頁訂閱對應 SignalR 事件，收到後更新對應 Agent 卡片狀態
+
+### 優先級
+
+🟡 中優先級 — 不影響流程正確性，但可觀測性有明顯缺口。與 Stage 13 同期發現。
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
@@ -885,3 +907,4 @@ Victoria 自動派 Cody → Vera → QA → 通知 merge
 | 2026-04-05 | 第一條標記 ✅ 已完成（Stage 11）；十七/十八/十九 標記已移入 Stage 12 |
 | 2026-04-06 | 新增二十：Victoria 升級為技術顧問 — Discord 版 Claude Code（長期願景，session 持續對話 + 自主探索 + 長期記憶） |
 | 2026-04-06 | 清理：十標記已不需要（Stage 12 解決）；十二標記已不需要（Stage 11+12 解決）；十一/十三/十四移入 Stage 13 |
+| 2026-04-06 | 新增二十一：Dashboard Agent 狀態卡即時更新（Stage 13 驗收時發現） |
