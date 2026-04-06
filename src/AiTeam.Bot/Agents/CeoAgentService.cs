@@ -104,6 +104,7 @@ public class CeoAgentService(
         // 容器內無法存取 Windows host 路徑，必須透過 CloneOrPull 取得本地副本。
         var repoName = !string.IsNullOrWhiteSpace(projectName) ? projectName : _github.DefaultRepo;
         string? repoPath = null;
+        string? fallbackReason = null;   // 降級原因，會附在 Discord 回應供診斷
 
         if (!string.IsNullOrWhiteSpace(repoName) && !string.IsNullOrWhiteSpace(_github.Owner))
         {
@@ -114,11 +115,13 @@ public class CeoAgentService(
             }
             catch (Exception ex)
             {
+                fallbackReason = $"CloneOrPull 失敗：{ex.Message}";
                 logger.LogWarning(ex, "Victoria CloneOrPull 失敗，降級使用直接 LLM 模式");
             }
         }
         else
         {
+            fallbackReason = $"無法確定 repo（projectName='{projectName}', DefaultRepo='{_github.DefaultRepo}', Owner='{_github.Owner}'）";
             logger.LogWarning("Victoria 無法確定 repo（projectName={P}, DefaultRepo={D}），降級使用直接 LLM 模式",
                 projectName, _github.DefaultRepo);
         }
@@ -218,6 +221,7 @@ public class CeoAgentService(
 
             if (ceoResponse is null)
             {
+                fallbackReason = $"Claude Code 回應解析失敗（Success={claudeResult?.Success}）";
                 logger.LogWarning(
                     "Claude Code 回應解析失敗（Success={S}），降級使用直接 LLM",
                     claudeResult?.Success);
@@ -225,9 +229,18 @@ public class CeoAgentService(
         }
 
         // ── 7. LLM 降級（repoPath 為 null 或 Claude Code 回應解析失敗） ─
-        ceoResponse ??= await ProcessAsync(
-            userInput, projectName, agentList, rules,
-            cancellationToken, images, null, availableProjects);
+        if (ceoResponse is null)
+        {
+            var llmResponse = await ProcessAsync(
+                userInput, projectName, agentList, rules,
+                cancellationToken, images, null, availableProjects);
+
+            // 附加診斷訊息，讓 Discord 可見降級原因（無需翻 Docker log）
+            if (fallbackReason is not null)
+                llmResponse.Reply = $"⚠️ *（LLM 降級模式：{fallbackReason}）*\n\n{llmResponse.Reply}";
+
+            ceoResponse = llmResponse;
+        }
 
         // ── 8. 持久化對話 turn ────────────────────────────────────────────
         await conversationRepository.AddTurnAsync(
