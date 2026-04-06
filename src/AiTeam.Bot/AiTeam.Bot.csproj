@@ -27,5 +27,9 @@
     <Content Include="Resources\CLAUDE_CODY.md">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <!-- Victoria CEO 專用 CLAUDE.md 模板，複製到輸出目錄供 CeoAgentService 寫入 clone 的 repo -->
+    <Content Include="Resources\CLAUDE_Victoria.md">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>
