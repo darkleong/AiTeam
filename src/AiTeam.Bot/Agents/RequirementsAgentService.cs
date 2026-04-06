@@ -79,18 +79,20 @@ public class RequirementsAgentService(
     /// <param name="repoLocalPath">已 clone 的 repo 本地路徑（由 ShowProposalAsync 統一管理）</param>
     /// <param name="images">老闆附的圖片（若有，會先透過 LLM 轉為文字描述再傳入 Claude Code）</param>
     /// <param name="previousIssues">✏️ 調整時帶入第一版 Issues（提示 Claude Code 修改而非重做）</param>
+    /// <param name="revisionContext">Stage 16：Petra 打回修正時的具體修改指示，prepend 到 prompt</param>
     /// <param name="cancellationToken">CancellationToken</param>
     internal async Task<List<RequirementIssuePreview>> AnalyzeOnlyAsync(
         TaskItem task,
         string? repoLocalPath = null,
         IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<RequirementIssuePreview>? previousIssues = null,
+        string? revisionContext = null,
         CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrEmpty(repoLocalPath))
         {
             var issues = await RunClaudeCodeAnalysisAsync(
-                task, repoLocalPath, images, previousIssues, cancellationToken);
+                task, repoLocalPath, images, previousIssues, revisionContext, cancellationToken);
             if (issues.Count > 0) return issues;
 
             // Claude Code 失敗時 fallback 到 LLM 直呼叫
@@ -154,6 +156,7 @@ public class RequirementsAgentService(
         string repoLocalPath,
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<RequirementIssuePreview>? previousIssues,
+        string? revisionContext,
         CancellationToken cancellationToken)
     {
         var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
@@ -169,7 +172,7 @@ public class RequirementsAgentService(
                 await File.WriteAllTextAsync(claudeMdPath,
                     await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
 
-            var prompt = await BuildClaudeCodePromptAsync(task, images, previousIssues, cancellationToken);
+            var prompt = await BuildClaudeCodePromptAsync(task, images, previousIssues, revisionContext, cancellationToken);
             var model  = configuration["Agents:Requirements:Model"]
                       ?? configuration["Anthropic:DefaultModel"]
                       ?? "claude-sonnet-4-6";
@@ -202,6 +205,7 @@ public class RequirementsAgentService(
         TaskItem task,
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<RequirementIssuePreview>? previousIssues,
+        string? revisionContext,
         CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
@@ -227,15 +231,23 @@ public class RequirementsAgentService(
         // ✏️ 調整模式：帶入第一版，指示修改而非重做
         if (previousIssues?.Count > 0)
         {
-            sb.AppendLine("## 第一版 Issues（請依老闆意見修改，不要重做）");
+            sb.AppendLine("## 第一版 Issues（請依老闆意見或 Petra 修正指示修改，不要重做）");
             for (var i = 0; i < previousIssues.Count; i++)
                 sb.AppendLine($"{i + 1}. {previousIssues[i].Title}");
             sb.AppendLine();
         }
 
+        // Stage 16：Petra 打回修正指示
+        if (!string.IsNullOrWhiteSpace(revisionContext))
+        {
+            sb.AppendLine("## Petra 修正指示（必須遵照執行）");
+            sb.AppendLine(revisionContext);
+            sb.AppendLine();
+        }
+
         sb.AppendLine("## 你的任務");
         if (previousIssues?.Count > 0)
-            sb.AppendLine("基於第一版 Issues 和老闆意見進行修改，探索 codebase 後輸出修改後的 JSON Issue 陣列。");
+            sb.AppendLine("基於第一版 Issues 和修正指示進行修改，探索 codebase 後輸出修改後的 JSON Issue 陣列。");
         else
             sb.AppendLine("探索 codebase，理解現有架構，然後輸出 JSON Issue 陣列。只輸出 JSON，不加說明。");
 
@@ -373,9 +385,9 @@ public class RequirementsAgentService(
 }
 
 /// <summary>
-/// Requirements Agent 分析出的 Issue 預覽，供 CommandHandler 雙層確認使用。
+/// Requirements Agent 分析出的 Issue 預覽，供 CommandHandler 雙層確認與 PmAgentService 審核使用。
 /// </summary>
-internal sealed record RequirementIssuePreview(
+public sealed record RequirementIssuePreview(
     string Title,
     string Body,
     IReadOnlyList<string> Labels);

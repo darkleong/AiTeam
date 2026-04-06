@@ -663,26 +663,49 @@ public class CommandHandler(
             {
                 // Stage 14：若為 BugFix / TechImprovement，建立 TaskGroup 讓 Orchestrator 接管後續流程
                 var wfType = ResolveWorkflowType(pending.CeoResponse);
+                TaskGroup? createdGroup = null;
                 if (wfType.HasValue && pending.GroupId == Guid.Empty)
                 {
-                    var group = await taskGroupService.CreateGroupAsync(
+                    createdGroup = await taskGroupService.CreateGroupAsync(
                         pending.CeoResponse.Task?.Title ?? pending.Description,
                         pending.Project,
                         wfType.Value);
-                    pending = pending with { GroupId = group.Id };
+                    pending = pending with { GroupId = createdGroup.Id };
                 }
 
-                await interaction.FollowupAsync(
-                    $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
-
-                _ = Task.Run(async () =>
+                // Stage 16：TechImprovement 先產 Dev_plan 計畫書，由 TaskGroupService 全程接管
+                if (wfType == Orchestration.WorkflowType.TechImprovement && createdGroup is not null)
                 {
-                    try { await ExecuteAgentTaskAsync(pending); }
-                    catch (Exception ex)
+                    await interaction.FollowupAsync(
+                        "⏳ CEO Orchestrator 啟動：Cody 開始制定實作計畫書，Petra 審核後自動進入 coding...");
+                    var groupForPipeline = createdGroup;
+                    _ = Task.Run(async () =>
                     {
-                        logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
-                    }
-                }, CancellationToken.None);
+                        try
+                        {
+                            await taskGroupService.FireStepsAsync(groupForPipeline,
+                                [new Orchestration.WorkflowStep("Dev_plan")]);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "TechImprovement Dev_plan 觸發失敗（Group={Id}）", groupForPipeline.Id);
+                        }
+                    }, CancellationToken.None);
+                }
+                else
+                {
+                    await interaction.FollowupAsync(
+                        $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
+
+                    _ = Task.Run(async () =>
+                    {
+                        try { await ExecuteAgentTaskAsync(pending); }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
+                        }
+                    }, CancellationToken.None);
+                }
             }
         }
         else if (interaction.Data.CustomId == "cancel_yes")
@@ -893,6 +916,8 @@ public class CommandHandler(
         var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
         var designerService     = scope.ServiceProvider.GetRequiredService<DesignerAgentService>();
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
+        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
 
         // 建立提案任務（狀態 pending，後續核准再執行）
         var projectId = string.IsNullOrWhiteSpace(project)
@@ -926,21 +951,221 @@ public class CommandHandler(
             readonlyWorkspace = gitHubService.CloneOrPull(owner, defaultRepo,
                 $"ro-{task.Id:N}"[..10]);
 
-            // Stage 12：Rosa 先 → Demi 後（串行），Demi 能看到 Rosa 的 Issues
-            var issues = await reqService.AnalyzeOnlyAsync(
-                task,
-                repoLocalPath: readonlyWorkspace,
-                images: images,
-                previousIssues: previousIssues);
+            var petraChannel = FindChannel(_settings.Channels.PmChannel);
 
-            var uiSpec = await designerService.GenerateDraftAsync(
-                task.Title,
-                task.Description ?? task.Title,
-                designerRules,
-                repoLocalPath: readonlyWorkspace,
-                rosaIssues: issues,
-                images: images,
-                previousUiSpec: previousUiSpec);
+            // ── Stage 16：Rosa 迴圈（首次 + 最多 2 次 revise）──
+            List<RequirementIssuePreview> issues        = [];
+            var rosaRevCount                            = 0;
+            string? rosaRevisionContext                 = null;
+            IReadOnlyList<RequirementIssuePreview>? rosaPreviousIssues = previousIssues;
+
+            for (var rosaRound = 0; rosaRound <= 2; rosaRound++)
+            {
+                // 建立 Rosa TaskItem
+                var rosaTask = new TaskItem
+                {
+                    Title         = $"[Rosa] {task.Title}",
+                    Description   = task.Description,
+                    TriggeredBy   = "Proposal",
+                    AssignedAgent = AgentNames.Requirements,
+                    Status        = "running",
+                    ProjectId     = task.ProjectId,
+                };
+                taskRepo.Add(rosaTask);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = rosaTask.Id,
+                    Title     = rosaTask.Title,
+                    AgentName = rosaTask.AssignedAgent,
+                    Status    = rosaTask.Status
+                });
+
+                issues = await reqService.AnalyzeOnlyAsync(
+                    task,
+                    repoLocalPath: readonlyWorkspace,
+                    images: images,
+                    previousIssues: rosaPreviousIssues,
+                    revisionContext: rosaRevisionContext);
+
+                var rosaStatus = issues.Count > 0 ? "done" : "failed";
+                taskRepo.UpdateStatus(rosaTask, rosaStatus);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = rosaTask.Id,
+                    Title     = rosaTask.Title,
+                    AgentName = rosaTask.AssignedAgent,
+                    Status    = rosaStatus
+                });
+
+                if (issues.Count == 0) break; // 分析失敗，直接離開迴圈
+
+                // 建立 Petra TaskItem（審核 Rosa）
+                var petraRosaTask = new TaskItem
+                {
+                    Title         = $"[Petra→Rosa] {task.Title}（第 {rosaRound + 1} 輪）",
+                    Description   = "審核 Rosa Issues 規格",
+                    TriggeredBy   = "Proposal",
+                    AssignedAgent = AgentNames.Pm,
+                    Status        = "running",
+                    ProjectId     = task.ProjectId,
+                };
+                taskRepo.Add(petraRosaTask);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = petraRosaTask.Id,
+                    Title     = petraRosaTask.Title,
+                    AgentName = petraRosaTask.AssignedAgent,
+                    Status    = petraRosaTask.Status
+                });
+
+                if (petraChannel is not null)
+                    await petraChannel.SendMessageAsync(
+                        $"🔍 **Petra 審核 Rosa Issues**（第 {rosaRound + 1} 輪）\n任務：{task.Title}");
+
+                var rosaReview = await pmService.ReviewRosaAsync(task, issues, readonlyWorkspace);
+
+                var petraRosaStatus = rosaReview.Decision == "revise" ? "revision" : rosaReview.Decision == "escalate" ? "failed" : "done";
+                taskRepo.UpdateStatus(petraRosaTask, petraRosaStatus);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = petraRosaTask.Id,
+                    Title     = petraRosaTask.Title,
+                    AgentName = petraRosaTask.AssignedAgent,
+                    Status    = petraRosaStatus
+                });
+
+                if (petraChannel is not null)
+                    await petraChannel.SendMessageAsync(
+                        $"📋 **Petra 審核結果**（Rosa，第 {rosaRound + 1} 輪）：**{rosaReview.Decision.ToUpper()}**\n{rosaReview.Summary}");
+
+                if (rosaReview.Decision == "approve") break;
+
+                if (rosaReview.Decision == "escalate" || rosaRevCount >= 2)
+                {
+                    taskRepo.UpdateStatus(task, "failed");
+                    await taskRepo.SaveAsync();
+                    if (ceoChannel is not null)
+                        await ceoChannel.SendMessageAsync(
+                            $"⚠️ **Petra 升級（Rosa）**：Rosa Issues 規格 {rosaRevCount + 1} 次審核未通過，需要老闆介入。\n任務：{task.Title}");
+                    return;
+                }
+
+                // revise：更新下一輪參數
+                rosaRevCount++;
+                rosaRevisionContext  = rosaReview.RevisionInstructions;
+                rosaPreviousIssues   = issues; // 讓 Rosa 對照上版修改
+            }
+
+            // ── Stage 16：Demi 迴圈（首次 + 最多 2 次 revise）──
+            var uiSpec               = "";
+            var demiRevCount         = 0;
+            string? demiRevisionContext = null;
+            string? demiPreviousUiSpec  = previousUiSpec;
+
+            for (var demiRound = 0; demiRound <= 2; demiRound++)
+            {
+                // 建立 Demi TaskItem
+                var demiTask = new TaskItem
+                {
+                    Title         = $"[Demi] {task.Title}",
+                    Description   = task.Description,
+                    TriggeredBy   = "Proposal",
+                    AssignedAgent = AgentNames.Designer,
+                    Status        = "running",
+                    ProjectId     = task.ProjectId,
+                };
+                taskRepo.Add(demiTask);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = demiTask.Id,
+                    Title     = demiTask.Title,
+                    AgentName = demiTask.AssignedAgent,
+                    Status    = demiTask.Status
+                });
+
+                uiSpec = await designerService.GenerateDraftAsync(
+                    task.Title,
+                    task.Description ?? task.Title,
+                    designerRules,
+                    repoLocalPath: readonlyWorkspace,
+                    rosaIssues: issues,
+                    images: images,
+                    previousUiSpec: demiPreviousUiSpec,
+                    revisionContext: demiRevisionContext);
+
+                taskRepo.UpdateStatus(demiTask, "done");
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = demiTask.Id,
+                    Title     = demiTask.Title,
+                    AgentName = demiTask.AssignedAgent,
+                    Status    = "done"
+                });
+
+                // 建立 Petra TaskItem（審核 Demi）
+                var petraDemiTask = new TaskItem
+                {
+                    Title         = $"[Petra→Demi] {task.Title}（第 {demiRound + 1} 輪）",
+                    Description   = "審核 Demi UI 規格",
+                    TriggeredBy   = "Proposal",
+                    AssignedAgent = AgentNames.Pm,
+                    Status        = "running",
+                    ProjectId     = task.ProjectId,
+                };
+                taskRepo.Add(petraDemiTask);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = petraDemiTask.Id,
+                    Title     = petraDemiTask.Title,
+                    AgentName = petraDemiTask.AssignedAgent,
+                    Status    = petraDemiTask.Status
+                });
+
+                if (petraChannel is not null)
+                    await petraChannel.SendMessageAsync(
+                        $"🔍 **Petra 審核 Demi UI 規格**（第 {demiRound + 1} 輪）\n任務：{task.Title}");
+
+                var demiReview = await pmService.ReviewDemiAsync(task, issues, uiSpec, readonlyWorkspace);
+
+                var petraDemiStatus = demiReview.Decision == "revise" ? "revision" : demiReview.Decision == "escalate" ? "failed" : "done";
+                taskRepo.UpdateStatus(petraDemiTask, petraDemiStatus);
+                await taskRepo.SaveAsync();
+                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+                {
+                    TaskId    = petraDemiTask.Id,
+                    Title     = petraDemiTask.Title,
+                    AgentName = petraDemiTask.AssignedAgent,
+                    Status    = petraDemiStatus
+                });
+
+                if (petraChannel is not null)
+                    await petraChannel.SendMessageAsync(
+                        $"📋 **Petra 審核結果**（Demi，第 {demiRound + 1} 輪）：**{demiReview.Decision.ToUpper()}**\n{demiReview.Summary}");
+
+                if (demiReview.Decision == "approve") break;
+
+                if (demiReview.Decision == "escalate" || demiRevCount >= 2)
+                {
+                    taskRepo.UpdateStatus(task, "failed");
+                    await taskRepo.SaveAsync();
+                    if (ceoChannel is not null)
+                        await ceoChannel.SendMessageAsync(
+                            $"⚠️ **Petra 升級（Demi）**：Demi UI 規格 {demiRevCount + 1} 次審核未通過，需要老闆介入。\n任務：{task.Title}");
+                    return;
+                }
+
+                // revise：更新下一輪參數
+                demiRevCount++;
+                demiRevisionContext = demiReview.RevisionInstructions;
+                demiPreviousUiSpec  = uiSpec; // 讓 Demi 對照上版修改
+            }
 
             // 全部成功，清理 workspace
             gitHubService.CleanupLocalRepo(readonlyWorkspace);
@@ -1056,8 +1281,8 @@ public class CommandHandler(
                     issueUrlsJson,
                     uiSpecContent: pending.UiSpecMarkdown);
 
-                // 觸發 Dev（流程表：proposal_approved → Dev）
-                var steps = new[] { new Orchestration.WorkflowStep(AgentNames.Dev) };
+                // Stage 16：proposal_approved → Dev_plan（計畫書），Petra 審核通過後才 coding
+                var steps = new[] { new Orchestration.WorkflowStep("Dev_plan") };
                 await taskGroupService.FireStepsAsync(group, steps);
             }
             catch (Exception ex)

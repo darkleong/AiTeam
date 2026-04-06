@@ -48,42 +48,52 @@ public record WorkflowDecision(
 /// Stage 10：開發流程自動閉環的流程表引擎。
 /// 純邏輯，不走 LLM，不存 DB，毫秒級決策。
 ///
-/// Stage 13 修正後流程：
+/// Stage 13 修正後流程（保留）：
+/// Stage 16 新流程（Dev_plan 計畫書 + Petra 審核閘門）：
 ///
 /// 新功能流程：
-///   proposal_approved  → Dev
-///   Dev                → Reviewer
-///   Reviewer ✅（無 🔴）→ QA
-///   QA                 → Doc（串行）
-///   Doc                → 通知老闆 merge
-///   Reviewer 🔴（有問題）→ Dev(fix)
-///   Dev(fix)           → Reviewer（重審，最多 3 輪）
+///   proposal_approved → Dev_plan（計畫書，Petra 審核後才 coding）
+///   Dev_plan          → Dev（Petra 在 TaskGroupService 攔截審核）
+///   Dev               → Reviewer
+///   Reviewer ✅       → Petra 審核 → QA（TaskGroupService 攔截）
+///   QA                → Doc（串行）
+///   Doc               → 通知老闆 merge
+///   Reviewer 🔴       → Petra 審核 → Dev(fix)（TaskGroupService 攔截）
+///   Dev(fix)          → Reviewer（重審，最多 3 輪）
 ///
-/// Bug 修復流程：
-///   Dev                → Reviewer
-///   Reviewer ✅        → QA（回歸測試）
-///   QA                 → 通知老闆 merge
-///   Reviewer 🔴        → Dev(fix)
-///   Dev(fix)           → Reviewer（重審，最多 3 輪）
+/// Bug 修復流程（不走 Dev_plan，規模小直接 coding）：
+///   Dev               → Reviewer
+///   Reviewer ✅       → Petra 審核 → QA（TaskGroupService 攔截）
+///   QA                → 通知老闆 merge
+///   Reviewer 🔴       → Petra 審核 → Dev(fix)
+///   Dev(fix)          → Reviewer（重審，最多 3 輪）
+///
+/// 技術改善流程：
+///   Dev_plan          → Dev（Petra 在 TaskGroupService 攔截審核）
+///   Dev               → Reviewer
+///   Reviewer ✅       → Petra 審核 → QA
+///   QA                → 通知老闆 merge
+///   Reviewer 🔴       → Petra 審核 → Dev(fix)
 /// </summary>
 public class WorkflowEngine
 {
     private const int MaxFixIterations = 3;
 
-    // ---- 新功能流程表 ----
+    // ---- 新功能流程表（Stage 16：加入 Dev_plan 步驟）----
     private static readonly Dictionary<string, WorkflowStep[]> NewFeatureTable = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["proposal_approved"] = [new WorkflowStep("Dev")],
-        // Stage 13：Dev 後只觸發 Reviewer（移除並行 QA/Doc，改為 Vera ✅ 後再觸發）
+        // Stage 16：proposal_approved 後先產出計畫書，Petra 審核通過後才 coding
+        ["proposal_approved"] = [new WorkflowStep("Dev_plan")],
+        ["Dev_plan"]          = [new WorkflowStep("Dev")],     // Petra 審核在 TaskGroupService 攔截（HandleAgentCompletedAsync）
+        // Stage 13：Dev 後只觸發 Reviewer（Vera ✅ 後 Petra 攔截再觸發 QA）
         ["Dev"]               = [new WorkflowStep("Reviewer")],
-        // Reviewer ✅ 後觸發 QA，QA 完成後觸發 Doc（由 GetDecision 動態決定）
         ["QA"]                = [new WorkflowStep("Doc")],     // QA → Doc（串行）
         ["Doc"]               = [],                             // Doc → NotifyBossMerge（由 GetDecision 動態決定）
         // fix loop：Dev 修完後重派 Reviewer
         ["Dev_fix"]           = [new WorkflowStep("Reviewer", IsFixLoop: true)],
     };
 
-    // ---- Bug 修復流程表 ----
+    // ---- Bug 修復流程表（不走 Dev_plan）----
     private static readonly Dictionary<string, WorkflowStep[]> BugFixTable = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Dev"]     = [new WorkflowStep("Reviewer")],
@@ -93,12 +103,14 @@ public class WorkflowEngine
         // Reviewer 節點由 GetDecision 方法動態決定
     };
 
-    // ---- 技術改善流程表（Stage 14）：重構/效能優化/技術債，流程同 BugFix ----
+    // ---- 技術改善流程表（Stage 14 + Stage 16：加入 Dev_plan）----
     private static readonly Dictionary<string, WorkflowStep[]> TechImprovementTable = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Dev"]     = [new WorkflowStep("Reviewer")],
-        ["QA"]      = [],
-        ["Dev_fix"] = [new WorkflowStep("Reviewer", IsFixLoop: true)],
+        // Stage 16：TechImprovement 也先產計畫書
+        ["Dev_plan"] = [new WorkflowStep("Dev")],
+        ["Dev"]      = [new WorkflowStep("Reviewer")],
+        ["QA"]       = [],
+        ["Dev_fix"]  = [new WorkflowStep("Reviewer", IsFixLoop: true)],
     };
 
     /// <summary>

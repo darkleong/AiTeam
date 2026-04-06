@@ -128,6 +128,67 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
+        // ── Stage 16：Dev_plan 完成 → Petra 審核實作計畫 ──
+        if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
+        {
+            // 儲存計畫書（優先用 OutputContent，fallback 到 Summary）
+            group.DevPlan = result.OutputContent ?? result.Summary;
+            await taskRepo.SaveAsync(cancellationToken);
+
+            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, taskRepo, cancellationToken);
+            switch (petraDevPlanReview.Decision)
+            {
+                case "approve":
+                    // 計畫通過，繼續往下走 GetDecision → 觸發 Dev
+                    break;
+
+                case "revise":
+                    if (group.DevPlanRevision >= 2) goto default; // 超過上限 → escalate
+                    group.DevPlanRevision++;
+                    // 將修正指示附加到 DevPlan，讓下一輪帶入 meta block
+                    if (!string.IsNullOrWhiteSpace(petraDevPlanReview.RevisionInstructions))
+                        group.DevPlan += "\n\n【Petra 修正指示】" + petraDevPlanReview.RevisionInstructions;
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                    return; // 不走 GetDecision
+
+                default: // escalate 或超過上限
+                    taskRepo.UpdateGroupStatus(group, "failed");
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await NotifyBossInterventionAsync(group, cancellationToken);
+                    return;
+            }
+        }
+
+        // ── Stage 16：Vera 完成 → Petra 審核 Review 嚴重度 ──
+        if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
+        {
+            var petraVeraReview = await RunPetraVeraReviewAsync(group, result, taskRepo, cancellationToken);
+            switch (petraVeraReview.Decision)
+            {
+                case "approve":
+                    result = result with { CriticalReviewCount = 0 };
+                    break;
+
+                case "revise":
+                    result = result with { CriticalReviewCount = 1 };
+                    if (!string.IsNullOrWhiteSpace(petraVeraReview.RevisionInstructions))
+                    {
+                        group.LastReviewBody =
+                            (group.LastReviewBody ?? "") +
+                            "\n\n【Petra 修正指示】" + petraVeraReview.RevisionInstructions;
+                        await taskRepo.SaveAsync(cancellationToken);
+                    }
+                    break;
+
+                default: // escalate
+                    taskRepo.UpdateGroupStatus(group, "failed");
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await NotifyBossInterventionAsync(group, cancellationToken);
+                    return;
+            }
+        }
+
         var workflowType = group.WorkflowType switch
         {
             "new_feature"      => WorkflowType.NewFeature,
@@ -249,8 +310,11 @@ public class TaskGroupService(
             await agentChannel.SendMessageAsync(
                 $"🚀 CEO Orchestrator 自動觸發：**{step.AgentName}** 開始執行任務《{group.Title}》");
 
-        // 執行 Agent
-        var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(step.AgentName);
+        // 執行 Agent（Stage 16：Dev_plan 映射到 Dev executor，用不同 prompt 驅動）
+        var executorKey = step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase)
+            ? AgentNames.Dev
+            : step.AgentName;
+        var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(executorKey);
         if (executor is null)
         {
             logger.LogError("TaskGroupService：找不到 Agent 實作：{Agent}", step.AgentName);
@@ -438,10 +502,32 @@ public class TaskGroupService(
 
     /// <summary>
     /// 組建 TaskItem.Description，附帶 CEO 傳遞給 Dev 的上下文 metadata。
+    /// Stage 16：Dev_plan 模式加 dev_plan_mode 標記；Dev 模式加已審核計畫書。
     /// </summary>
     private static string BuildTaskDescription(TaskGroup group, WorkflowStep step)
     {
         var desc = group.Title;
+
+        // Stage 16：Dev_plan 模式（產出計畫書，不寫程式碼）
+        if (step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = new List<string> { desc };
+            var meta  = new List<string> { "dev_plan_mode: true" };
+
+            if (!string.IsNullOrWhiteSpace(group.IssueUrls))
+                meta.Add($"issue_urls: {group.IssueUrls}");
+            if (!string.IsNullOrWhiteSpace(group.UiSpecContent))
+                meta.Add($"ui_spec_content:\n{group.UiSpecContent}");
+
+            // revision 時：帶入上一版計畫書（含 Petra 修正指示）
+            if (!string.IsNullOrWhiteSpace(group.DevPlan))
+                meta.Add($"prev_dev_plan:\n{group.DevPlan}");
+
+            parts.Add("---");
+            parts.AddRange(meta);
+            parts.Add("---");
+            return string.Join("\n", parts);
+        }
 
         if (step.AgentName is AgentNames.Dev or AgentNames.Reviewer or AgentNames.Qa or AgentNames.Doc)
         {
@@ -456,6 +542,11 @@ public class TaskGroupService(
                 meta.Add($"issue_urls: {group.IssueUrls}");
             if (!string.IsNullOrWhiteSpace(group.UiSpecContent))
                 meta.Add($"ui_spec_content:\n{group.UiSpecContent}");
+
+            // Stage 16：Dev 模式時帶入已審核的實作計畫書
+            if (step.AgentName == AgentNames.Dev && !string.IsNullOrWhiteSpace(group.DevPlan))
+                meta.Add($"dev_plan:\n{group.DevPlan}");
+
             if (step.IsFixLoop)
             {
                 meta.Add("fix_loop: true");
@@ -477,9 +568,177 @@ public class TaskGroupService(
         return desc;
     }
 
+    // ---- Stage 16：Petra 審核輔助方法 ----
+
+    /// <summary>
+    /// 建立 Petra TaskItem、呼叫 ReviewDevPlanAsync、推送狀態、通知 #petra-pm 頻道。
+    /// </summary>
+    private async Task<Agents.PetraReview> RunPetraDevPlanReviewAsync(
+        TaskGroup group,
+        AgentExecutionResult devPlanResult,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+        var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
+
+        // 建立 Petra TaskItem
+        var petraTask = new TaskItem
+        {
+            Title         = $"[Petra→Dev_plan] {group.Title}",
+            Description   = "審核 Cody 實作計畫書",
+            TriggeredBy   = "Orchestrator",
+            AssignedAgent = AgentNames.Pm,
+            Status        = "running",
+            GroupId       = group.Id,
+        };
+        taskRepo.Add(petraTask);
+        await taskRepo.SaveAsync(cancellationToken);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = petraTask.Id,
+            Title     = petraTask.Title,
+            AgentName = petraTask.AssignedAgent,
+            Status    = "running"
+        });
+
+        var petraChannel = FindChannel(_discord.Channels.PmChannel);
+        if (petraChannel is not null)
+            await petraChannel.SendMessageAsync(
+                $"🔍 **Petra 審核 Cody 實作計畫書**\n任務：{group.Title}（第 {group.DevPlanRevision + 1} 輪）");
+
+        // 準備 workspace（唯讀）
+        var owner       = _gitHub.Owner;
+        var repo        = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+        var localPath   = "";
+        Agents.PetraReview petraReview;
+
+        try
+        {
+            localPath = gitHubService.CloneOrPull(owner, repo, $"petra-{group.Id:N}"[..12]);
+            petraReview = await pmService.ReviewDevPlanAsync(
+                group.Title,
+                devPlanResult.OutputContent ?? devPlanResult.Summary,
+                group.IssueUrls,
+                group.UiSpecContent,
+                localPath,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "RunPetraDevPlanReviewAsync workspace 失敗，fallback approve");
+            petraReview = new Agents.PetraReview("approve", "Petra workspace 失敗，自動放行", [], null);
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(localPath))
+                gitHubService.CleanupLocalRepo(localPath);
+        }
+
+        var petraStatus = petraReview.Decision == "revise" ? "revision"
+                        : petraReview.Decision == "escalate" ? "failed"
+                        : "done";
+        taskRepo.UpdateStatus(petraTask, petraStatus);
+        await taskRepo.SaveAsync(cancellationToken);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = petraTask.Id,
+            Title     = petraTask.Title,
+            AgentName = petraTask.AssignedAgent,
+            Status    = petraStatus
+        });
+
+        if (petraChannel is not null)
+            await petraChannel.SendMessageAsync(
+                $"📋 **Petra 審核結果**（Dev_plan 第 {group.DevPlanRevision + 1} 輪）：**{petraReview.Decision.ToUpper()}**\n{petraReview.Summary}");
+
+        logger.LogInformation("Petra Dev_plan 審核：Group={Id}，decision={Decision}", group.Id, petraReview.Decision);
+        return petraReview;
+    }
+
+    /// <summary>
+    /// 建立 Petra TaskItem、呼叫 ReviewVeraAsync、推送狀態、通知 #petra-pm 頻道。
+    /// </summary>
+    private async Task<Agents.PetraReview> RunPetraVeraReviewAsync(
+        TaskGroup group,
+        AgentExecutionResult veraResult,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+
+        // 建立 Petra TaskItem
+        var petraTask = new TaskItem
+        {
+            Title         = $"[Petra→Vera] {group.Title}",
+            Description   = "審核 Vera Code Review 嚴重度",
+            TriggeredBy   = "Orchestrator",
+            AssignedAgent = AgentNames.Pm,
+            Status        = "running",
+            GroupId       = group.Id,
+        };
+        taskRepo.Add(petraTask);
+        await taskRepo.SaveAsync(cancellationToken);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = petraTask.Id,
+            Title     = petraTask.Title,
+            AgentName = petraTask.AssignedAgent,
+            Status    = "running"
+        });
+
+        var petraChannel = FindChannel(_discord.Channels.PmChannel);
+        if (petraChannel is not null)
+            await petraChannel.SendMessageAsync(
+                $"🔍 **Petra 審核 Vera Code Review**\n任務：{group.Title}");
+
+        Agents.PetraReview petraReview;
+        try
+        {
+            petraReview = await pmService.ReviewVeraAsync(
+                group.Title,
+                group.LastReviewBody ?? veraResult.ReviewBody ?? veraResult.Summary,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "RunPetraVeraReviewAsync LLM 失敗，fallback approve");
+            petraReview = new Agents.PetraReview("approve", "Petra LLM 失敗，自動放行", [], null);
+        }
+
+        var petraStatus = petraReview.Decision == "revise" ? "revision"
+                        : petraReview.Decision == "escalate" ? "failed"
+                        : "done";
+        taskRepo.UpdateStatus(petraTask, petraStatus);
+        await taskRepo.SaveAsync(cancellationToken);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = petraTask.Id,
+            Title     = petraTask.Title,
+            AgentName = petraTask.AssignedAgent,
+            Status    = petraStatus
+        });
+
+        if (petraChannel is not null)
+            await petraChannel.SendMessageAsync(
+                $"📋 **Petra 審核結果**（Vera Code Review）：**{petraReview.Decision.ToUpper()}**\n{petraReview.Summary}");
+
+        logger.LogInformation("Petra Vera 審核：Group={Id}，decision={Decision}", group.Id, petraReview.Decision);
+        return petraReview;
+    }
+
     private string GetAgentChannelName(string agentName) => agentName switch
     {
         AgentNames.Dev          => _discord.Channels.DevChannel,
+        "Dev_plan"              => _discord.Channels.DevChannel,  // Stage 16：Dev_plan 用 Dev 頻道
         AgentNames.Ops          => _discord.Channels.OpsChannel,
         AgentNames.Qa           => _discord.Channels.QaChannel,
         AgentNames.Doc          => _discord.Channels.DocChannel,

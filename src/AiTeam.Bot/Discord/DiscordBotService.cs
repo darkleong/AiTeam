@@ -75,6 +75,8 @@ public class DiscordBotService(
             _settings.Channels.ReviewerChannel,
             _settings.Channels.ReleaseChannel,
             _settings.Channels.DesignerChannel,
+            // Stage 16：Petra PM Agent 審核頻道
+            _settings.Channels.PmChannel,
         };
 
         foreach (var name in required)

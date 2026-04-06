@@ -102,6 +102,7 @@ public class DesignerAgentService(
     /// <param name="rosaIssues">Rosa 產出的 Issues（讓 Demi 確保規格涵蓋所有功能點）</param>
     /// <param name="images">老闆附的圖片（若有，透過 LLM 轉為文字描述）</param>
     /// <param name="previousUiSpec">✏️ 調整時帶入第一版規格（提示修改而非重做）</param>
+    /// <param name="revisionContext">Stage 16：Petra 打回修正時的具體修改指示，prepend 到 prompt</param>
     /// <param name="cancellationToken">CancellationToken</param>
     internal async Task<string> GenerateDraftAsync(
         string title,
@@ -111,12 +112,13 @@ public class DesignerAgentService(
         IReadOnlyList<RequirementIssuePreview>? rosaIssues = null,
         IReadOnlyList<ImageAttachment>? images = null,
         string? previousUiSpec = null,
+        string? revisionContext = null,
         CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrEmpty(repoLocalPath))
         {
             var markdown = await RunClaudeCodeDesignAsync(
-                title, description, rules, repoLocalPath, rosaIssues, images, previousUiSpec, cancellationToken);
+                title, description, rules, repoLocalPath, rosaIssues, images, previousUiSpec, revisionContext, cancellationToken);
             if (!string.IsNullOrWhiteSpace(markdown)) return markdown;
 
             logger.LogWarning("Claude Code 唯讀設計失敗，改用 LLM 直接呼叫");
@@ -136,6 +138,7 @@ public class DesignerAgentService(
         IReadOnlyList<RequirementIssuePreview>? rosaIssues,
         IReadOnlyList<ImageAttachment>? images,
         string? previousUiSpec,
+        string? revisionContext,
         CancellationToken cancellationToken)
     {
         var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
@@ -151,7 +154,7 @@ public class DesignerAgentService(
                     await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
 
             var prompt = await BuildClaudeCodePromptAsync(
-                title, description, rules, rosaIssues, images, previousUiSpec, cancellationToken);
+                title, description, rules, rosaIssues, images, previousUiSpec, revisionContext, cancellationToken);
             var model  = configuration["Agents:Designer:Model"]
                       ?? configuration["Anthropic:DefaultModel"]
                       ?? "claude-sonnet-4-6";
@@ -184,6 +187,7 @@ public class DesignerAgentService(
         IReadOnlyList<RequirementIssuePreview>? rosaIssues,
         IReadOnlyList<ImageAttachment>? images,
         string? previousUiSpec,
+        string? revisionContext,
         CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
@@ -243,6 +247,14 @@ public class DesignerAgentService(
 
             sb.AppendLine("## 第一版 UI 規格（以下為基礎，只修改老闆指定的部分，其他保留）");
             sb.AppendLine(previousUiSpec);
+            sb.AppendLine();
+        }
+
+        // Stage 16：Petra 打回修正指示（獨立於老闆調整，優先度最高）
+        if (!string.IsNullOrWhiteSpace(revisionContext))
+        {
+            sb.AppendLine("## Petra 修正指示（必須遵照執行，優先於其他指示）");
+            sb.AppendLine(revisionContext);
             sb.AppendLine();
         }
 

@@ -24,4 +24,5 @@ public class DiscordChannelSettings
     public string ReviewerChannel    { get; set; } = "vera-reviewer";
     public string ReleaseChannel     { get; set; } = "rena-release";
     public string DesignerChannel    { get; set; } = "demi-designer";
+    public string PmChannel          { get; set; } = "petra-pm";
 }

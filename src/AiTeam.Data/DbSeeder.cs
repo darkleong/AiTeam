@@ -19,6 +19,7 @@ public static class DbSeeder
         (AgentNames.Reviewer,     "負責 Code Review，讀取 PR 差異產出分級審查報告，並在 PR 上留下 Review Comments", false),
         (AgentNames.Release,      "負責版本發佈，彙整 Commits 與 merged PRs，建立 Release tag 並產出 Changelog",   false),
         (AgentNames.Designer,     "負責 UI 規格設計，將功能需求轉換為 MudBlazor 元件規格文件（Markdown）",          false),
+        (AgentNames.Pm,           "負責審核 Rosa/Demi/Cody/Vera 的產出品質，決定 approve/revise/escalate",          false),
     ];
 
     /// <summary>

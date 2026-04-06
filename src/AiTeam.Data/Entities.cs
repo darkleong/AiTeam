@@ -57,6 +57,10 @@ public class TaskGroup
     public string? DevPrUrl { get; set; }
     public string? LastReviewBody { get; set; } // Vera 最新一次的完整審查報告（fix loop 傳給 Dev 用）
     public int FixIteration { get; set; } = 0; // 防止無限 Review loop，超過 3 次升級給老闆
+    /// <summary>Stage 16：Cody 產出的實作計畫書全文（Petra 審核通過後帶給 Dev coding 用）。</summary>
+    public string? DevPlan { get; set; }
+    /// <summary>Stage 16：Dev_plan 修正次數（獨立於 FixIteration，避免與 Vera fix loop 互相干擾）。</summary>
+    public int DevPlanRevision { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];
@@ -72,7 +76,7 @@ public class TaskItem
     public string? Description { get; set; } // CEO 任務描述（供 Agent 使用）
     public string TriggeredBy { get; set; } = ""; // Discord / GitHub / Schedule
     public string AssignedAgent { get; set; } = "";
-    public string Status { get; set; } = "pending"; // pending / running / waiting_input / done / failed
+    public string Status { get; set; } = "pending"; // pending / running / waiting_input / reviewing / revision / done / failed / cancelled
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 

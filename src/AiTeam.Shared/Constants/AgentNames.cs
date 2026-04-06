@@ -12,4 +12,5 @@ public static class AgentNames
     public const string Reviewer     = "Reviewer";
     public const string Release      = "Release";
     public const string Designer     = "Designer";
+    public const string Pm           = "PM";
 }

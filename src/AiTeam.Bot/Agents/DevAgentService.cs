@@ -601,6 +601,10 @@ public class DevAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
+        // Stage 16：Dev_plan 模式：唯讀探索 codebase，產出實作計畫書，不寫程式碼
+        if (IsDevPlanMode(task.Description))
+            return await ExecutePlanModeAsync(task, owner, repo, cancellationToken);
+
         try
         {
             var plan = await BuildPlanAsync(task, owner, repo, rules, cancellationToken);
@@ -612,6 +616,173 @@ public class DevAgentService(
             return new AgentExecutionResult(false, $"Dev Agent 執行失敗：{ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Stage 16：Dev_plan 模式。
+    /// 唯讀探索 codebase，產出實作計畫書（要改哪些檔案、用什麼方式、架構決策），不寫程式碼。
+    /// </summary>
+    private async Task<AgentExecutionResult> ExecutePlanModeAsync(
+        TaskItem task,
+        string owner,
+        string repo,
+        CancellationToken cancellationToken)
+    {
+        var localPath = "";
+        try
+        {
+            AddLog(task, "Dev_plan 模式：開始探索 codebase 產出計畫書", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            localPath = gitHubService.CloneOrPull(owner, repo, $"plan-{task.Id:N}"[..10]);
+            AddLog(task, "Git Clone/Pull 完成", "running");
+
+            // 解析 task.Description 中的 metadata（issue_urls、ui_spec_content、dev_plan）
+            ParseDescriptionMeta(task.Description,
+                out var issueUrls, out _, out var uiSpecContent, out _, out _);
+            ParseDevPlanMeta(task.Description, out var previousDevPlan, out var petraInstructions);
+
+            var prompt = BuildDevPlanPrompt(task, issueUrls, uiSpecContent, previousDevPlan, petraInstructions);
+
+            var model  = configuration["Agents:Dev:Model"]
+                      ?? configuration["Anthropic:DefaultModel"]
+                      ?? "claude-opus-4-6";
+            var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+            var result = await claudeCodeService.RunReadOnlyAsync(
+                localPath, prompt, model, apiKey, cancellationToken);
+
+            var planContent = result.Success && !string.IsNullOrWhiteSpace(result.Output)
+                ? result.Output
+                : "（計畫書產出失敗，請查看 log）";
+
+            AddLog(task, "實作計畫書產出完成", "done");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            return new AgentExecutionResult(true, $"實作計畫書已產出（{planContent.Length} 字）",
+                OutputContent: planContent);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Dev Agent plan mode 失敗：{Title}", task.Title);
+            AddLog(task, $"Dev_plan 失敗：{ex.Message}", "failed");
+            await taskRepository.SaveAsync(cancellationToken);
+            return new AgentExecutionResult(false, $"Dev_plan 執行失敗：{ex.Message}");
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(localPath))
+                gitHubService.CleanupLocalRepo(localPath);
+        }
+    }
+
+    private static string BuildDevPlanPrompt(
+        TaskItem task,
+        string? issueUrls,
+        string? uiSpecContent,
+        string? previousDevPlan,
+        string? petraInstructions)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("## 任務");
+        sb.AppendLine(task.Title);
+        sb.AppendLine();
+        sb.AppendLine("## 需求描述");
+        sb.AppendLine(task.Description ?? task.Title);
+        sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(issueUrls))
+        {
+            sb.AppendLine("## GitHub Issues");
+            sb.AppendLine(issueUrls);
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(uiSpecContent))
+        {
+            sb.AppendLine("## UI 規格（Demi 產出）");
+            sb.AppendLine(uiSpecContent);
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousDevPlan))
+        {
+            sb.AppendLine("## 上一版實作計畫（Petra 要求修正）");
+            sb.AppendLine(previousDevPlan);
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(petraInstructions))
+        {
+            sb.AppendLine("## Petra 修正指示（必須遵照執行）");
+            sb.AppendLine(petraInstructions);
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## 你的任務");
+        sb.AppendLine("探索 codebase，理解現有架構，產出詳細的實作計畫書。");
+        sb.AppendLine("計畫書需包含：要新增或修改的檔案清單、每個檔案的具體變更方向、架構決策說明。");
+        sb.AppendLine("只輸出計畫書文字，不要寫程式碼，不要修改任何檔案。");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 從 task.Description 中解析 Dev_plan 相關 metadata（prev_dev_plan、petra_instructions）。
+    /// </summary>
+    private static void ParseDevPlanMeta(
+        string? description,
+        out string? previousDevPlan,
+        out string? petraInstructions)
+    {
+        previousDevPlan   = null;
+        petraInstructions = null;
+
+        if (string.IsNullOrWhiteSpace(description)) return;
+
+        var lines         = description.Split('\n');
+        var inMeta        = false;
+        var inPrevPlan    = false;
+        var inPetra       = false;
+        var prevPlanLines = new List<string>();
+        var petraLines    = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed == "---") { inMeta = !inMeta; continue; }
+            if (!inMeta) continue;
+
+            if (inPrevPlan)
+            {
+                if (trimmed.StartsWith("petra_instructions:")) { inPrevPlan = false; }
+                else { prevPlanLines.Add(line); continue; }
+            }
+            if (inPetra)
+            {
+                petraLines.Add(line);
+                continue;
+            }
+
+            if (trimmed.StartsWith("prev_dev_plan:"))
+            {
+                inPrevPlan = true;
+                var rem = trimmed["prev_dev_plan:".Length..].Trim();
+                if (!string.IsNullOrEmpty(rem)) prevPlanLines.Add(rem);
+            }
+            else if (trimmed.StartsWith("petra_instructions:"))
+            {
+                inPetra = true;
+                var rem = trimmed["petra_instructions:".Length..].Trim();
+                if (!string.IsNullOrEmpty(rem)) petraLines.Add(rem);
+            }
+        }
+
+        if (prevPlanLines.Count > 0) previousDevPlan   = string.Join("\n", prevPlanLines).Trim();
+        if (petraLines.Count > 0)    petraInstructions = string.Join("\n", petraLines).Trim();
+    }
+
+    private static bool IsDevPlanMode(string? description)
+        => description?.Contains("dev_plan_mode: true", StringComparison.OrdinalIgnoreCase) == true;
 
     private static DevPlan? TryParsePlan(string content)
     {
