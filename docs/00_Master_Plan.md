@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v3.6
+> 版本：v3.7
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -27,6 +27,7 @@
 | [Stage_13_Roadmap.md](./Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | ✅ 已完成（2026-04-06） |
 | [Stage_14_Roadmap.md](./Stage_14_Roadmap.md) | Stage 14：CEO 分類與流程完整性補強 | ✅ 已完成（2026-04-06） |
 | [Stage_15_Roadmap.md](./Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 + 長期記憶 | ✅ 已完成（2026-04-06） |
+| [Stage_16_Roadmap.md](./Stage_16_Roadmap.md) | Stage 16：PM Agent（Petra）品質審核閘門 | 📋 規劃中 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -63,6 +64,7 @@
 | v3.4 | 2026-04-06 | Stage 15 實作完成：Victoria 升級 Claude Code 模式、Session DB 持久化、長期記憶、/new-session 指令、CLAUDE_Victoria.md 模板、EF Migration |
 | v3.5 | 2026-04-06 | Stage 15 後續 bugfix：CloneOrPull 取得 repo 副本（修正容器路徑）、appsettings 補 DefaultRepo=AiTeam、LLM 降級原因顯示於 Discord、CLAUDE_Victoria.md 納入 csproj 修正容器內找不到模板問題 |
 | v3.6 | 2026-04-07 | Stage 15 驗收完成（8/8 全通過）；Stage_15_Roadmap.md 補充踩坑三件組、診斷工具設計、驗收結果；README.md 新增 Victoria CEO 升級章節、/new-session 指令說明、Stage 15 進度列 |
+| v3.7 | 2026-04-07 | 新增 Stage_16_Roadmap.md（PM Agent Iris 品質審核閘門）；Rosa/Demi/Sage 模型改為 Haiku；全面更新 Agent 文件（CEO/Dev 大改、Capability Gaps v2.0）；PM 命名為 Petra、Grand CEO 維持 Iris；Future_Feature.md v3.0 清理 |
 
 ---
 

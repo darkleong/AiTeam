@@ -1,52 +1,71 @@
 # CEO Agent — 總指揮
 
-> 文件用途：定義 CEO Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已實作（Stage 2）
+> 文件用途：定義 CEO Agent 的角色、能力與整合方式
+> 建立日期：2026-03-31
+> 最後更新：2026-04-07
+> 狀態：✅ 已實作（Stage 2 建立，Stage 10 Orchestrator，Stage 14 分類補強，Stage 15 Claude Code + Session + 記憶）
 
 ---
 
 ## 角色定義
 
-CEO Agent 是 AI Team 的總指揮，負責接收老闆指令、分析任務、分派給對應的 Agent，並追蹤執行結果。所有 Agent 的協調都透過 CEO 進行。
+CEO Agent 是 AI Team 的總指揮兼技術顧問，負責接收老闆指令、分析任務、分派給對應的 Agent，並追蹤執行結果。Stage 15 後具備 Claude Code 自主探索能力、Session 對話持續性、長期記憶。
 
 ```
 你（老闆）
     ↓
-CEO Agent ← 你的唯一窗口，統籌所有任務
+CEO Agent（Victoria）← 你的唯一窗口，統籌所有任務
     │
-    ├── Dev Agent
-    ├── Ops Agent
-    ├── QA Agent
-    ├── Doc Agent
-    └── Requirements Agent（...持續擴充）
+    ├── PM Agent（Petra）← 品質審核閘門（Stage 16 規劃中）
+    ├── Requirements Agent（Rosa）
+    ├── Designer Agent（Demi）
+    ├── Dev Agent（Cody）
+    ├── Reviewer Agent（Vera）
+    ├── QA Agent（Quinn）
+    ├── Doc Agent（Sage）
+    ├── Ops Agent（Maya）
+    └── Release Agent（Rena）
 ```
 
 ---
 
 ## 核心能力
 
-### 1. 任務分析與分派
-- 理解老闆的自然語言指令
-- 判斷任務類型，分派給最適合的 Agent
-- 動態從資料庫載入可用 Agent 清單，不寫死
+### 1. 六類指令分類（Stage 14）
+| 分類 | 動作 | 觸發 Agent |
+|------|------|-----------|
+| 新功能（propose） | 啟動提案流程 | Rosa → Demi → 提案書 |
+| Bug 修復（delegate + bug_fix） | 直接派工 | Cody → Vera → Quinn |
+| 技術改善（delegate + tech_improvement） | 直接派工 | Cody → Vera → Quinn |
+| 操作指派（delegate） | 單一任務派工 | Rena / Maya / Sage |
+| 取消任務（cancel） | 停止執行中任務 | TaskGroupService.CancelAsync |
+| 正常回覆（reply） | 直接對話回答 | 無 |
 
-### 2. 雙層確認機制
-- 決策層：分析完成後，回報老闆確認再執行
-- 執行層：Agent 執行前，再次確認操作內容
-- 初期所有決策都需老闆確認，隨信任等級逐步放開
+### 2. Claude Code 自主探索（Stage 15）
+- 透過 `ClaudeCodeService.RunVictoriaAsync` 使用 Claude Code
+- 唯讀探索：Glob / Grep / Read（整個 repo）
+- 讀寫：Edit / Write（僅 docs/ 資料夾）
+- Git：add docs/ + commit + push
+- SemaphoreSlim(1,1) 保護 CLAUDE.md 不被併發覆寫
 
-### 3. 多專案管理
-- 從 Webhook 的 repo 資訊自動判斷所屬專案
-- 支援跨專案任務協調
-- 新增專案時自動建立 Discord 頻道與 Notion 頁面
+### 3. Session 對話（Stage 15）
+- 多輪對話歷史存入 PostgreSQL（CeoConversation）
+- Session timeout：30 分鐘
+- 每 Session 最多 20 輪
+- `/new-session` 指令手動開新 Session
 
-### 4. 記憶與學習
-- 每次任務結束後，摘要寫入 Notion
-- 下次遇到類似任務，撈取歷史紀錄參考
-- 你的修正會寫進規則庫，永久生效
+### 4. 長期記憶（Stage 15）
+- 記憶存入 PostgreSQL（CeoMemory）
+- Victoria 自主判斷何時儲存記���
+- 分類：decision / preference / context
+- 每次 Session 載入最多 100 筆記憶
 
-### 5. 每日摘要產出
+### 5. WorkflowEngine 串行流程（Stage 10/13）
+- NewFeature：Rosa → Demi → [確認] → Cody → Vera → Quinn → Sage
+- BugFix / TechImprovement：Cody → Vera → Quinn
+- 單一任務：直接派給 Rena / Maya / Sage
+
+### 6. 每日摘要產出
 - 每天 09:00 / 21:00 自動產出 Token 用量報告
 - 定期整理任務完成狀況發送至 Discord
 
@@ -77,8 +96,7 @@ CEO Agent ← 你的唯一窗口，統籌所有任務
 
 ## 觸發情境
 
-- 你在 Discord `#指令中心` 輸入任何指令
-- GitHub Issue 建立事件
+- 老闆在 Discord `#victoria-ceo` 頻道發送訊息
 - 排程觸發（每日摘要）
 - 任何需要協調多個 Agent 的任務
 
@@ -88,9 +106,9 @@ CEO Agent ← 你的唯一窗口，統籌所有任務
 
 | 指令 | 說明 |
 |------|------|
-| `/task project:ProjectA [描述]` | 指定專案下達任務 |
-| `/reload-rules` | 強制重新拉取 Notion 規則 |
+| `/reload-rules` | 強制重新拉取規則快取 |
 | `/status` | 查詢目前各 Agent 狀態 |
+| `/new-session` | 清除對話 Session，開始新對話 |
 
 ---
 
@@ -99,9 +117,9 @@ CEO Agent ← 你的唯一窗口，統籌所有任務
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Sonnet（需要強推理與分派判斷）|
-| 溫度 | 低（0.2-0.4）|
-| 記憶來源 | Notion 規則庫（Cache TTL 1小時）+ PostgreSQL 近期任務 |
-| System Prompt 重點 | 角色定義、可用 Agent 清單（動態注入）、規則清單、回傳固定 JSON 格式 |
+| Claude Code | RunVictoriaAsync（10 分鐘 timeout、15 turns、全工具） |
+| 記憶來源 | PostgreSQL 規則庫（Cache TTL 1小時）+ Session 對話歷史 + 長期記憶 |
+| System Prompt | CLAUDE_Victoria.md 模板（Claude Code 模式）或 BuildSystemPrompt（LLM fallback 模式） |
 
 ---
 

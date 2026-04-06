@@ -1,54 +1,56 @@
-# Dev Agent — 開發助手
+# Dev Agent — 全端開發工程師
 
-> 文件用途：定義 Dev Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已實作（Stage 3）
+> 文件用途：定義 Dev Agent 的角色、能力與整合方式
+> 建立日期：2026-03-31
+> 最後更新：2026-04-07
+> 狀態：✅ 已實作（Stage 3 建立，Stage 11 升級 Claude Code CLI 自主開發）
 
 ---
 
 ## 角色定義
 
-Dev Agent 是 AI Team 的全端開發工程師，負責寫程式、修復 Bug、重構程式碼，以及操作 Git repo。支援 C# / Blazor / EF Core / Aspire / MudBlazor 技術棧。
+Dev Agent 是 AI Team 的全端開發工程師，透過 Claude Code CLI 自主寫程式、修復 Bug、重構程式碼。Stage 11 後從「LLM 逐檔改寫」升級為「Claude Code 自主探索 + 自主開發」模式。
 
 ```
-CEO Agent
+CEO Agent（Victoria）
+    ↓ 派任務 + 附帶 Issues / UI 規格
+Dev Agent（Cody）← Claude Code 自主開發
     ↓
-Dev Agent ← 接收開發任務，產出程式碼並開 PR
+Clone repo → feature branch → 自主探索、修改、build → 開 PR
     ↓
-GitHub repo（feature branch → PR → 你審查 → Merge）
+Reviewer Agent（Vera）→ QA Agent（Quinn）→ 通知老闆
 ```
 
 ---
 
 ## 核心能力
 
-### 1. 程式碼操作（混合模式）
-根據任務類型自動選擇操作方式，老闆不需要介入：
-
-| 任務 | 方式 |
-|------|------|
-| Code Review | GitHub API（只讀，不 clone）|
-| 修復 Bug / 新增功能 / 重構 | Clone repo 到本地，直接操作檔案 |
+### 1. Claude Code 自主開發（Stage 11）
+- 透過 `ClaudeCodeService.RunAsync` 啟動 Claude Code CLI
+- 自主探索 codebase（Glob / Grep / Read）
+- 自主修改程式碼（Edit / Write）
+- 自主執行 `dotnet restore`、`dotnet build` 驗證
+- CLAUDE_CODY.md 模板注入開發規範
+- 30 分鐘 timeout、最多 20 turns
 
 ### 2. 支援的任務類型
-- **修復 Bug**：分析問題、修改程式碼、開 PR
-- **新增功能**：實作新需求、開 PR
-- **重構**：改善程式碼結構、降低技術債
-- **Code Review**：審查現有程式碼，回報問題與建議
+- **新功能**（NewFeature workflow）：接收 Issues + UI 規格 → 自主實作 → 開 PR
+- **Bug 修復**（BugFix workflow）：分析問題 → 修復 → 開 PR
+- **技術改善**（TechImprovement workflow）：重構 / 效能優化 → 開 PR
+- **Vera 修正迴圈**：收到 Vera review 意見後自動修正 → 重新 push
 
 ### 3. GitHub 整合
-- 支援個人帳號 repo（初期）
-- 預留公司組織 repo 擴充
+- Clone repo → checkout feature branch
 - 自動建立 feature branch、commit、開 PR
-- PR 建立後通知老闆審查
+- PR 標題包含 `Closes #XX`（自動關聯 Issues）
+- 完成後通知 WorkflowEngine 進入下一步
 
 ### 4. 技術棧支援
 - C# / .NET（主要）
-- Blazor Server / WASM
-- EF Core + PostgreSQL / SQL Server
+- Blazor Server + MudBlazor 8.x
+- EF Core + PostgreSQL
 - ASP.NET Core + Aspire
-- MudBlazor UI 元件
-- Discord.Net / Notion API
+- Discord.Net
 
 ---
 
@@ -98,9 +100,9 @@ GitHub repo（feature branch → PR → 你審查 → Merge）
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Sonnet（需要強程式碼能力）|
-| 溫度 | 低（0.1-0.3，確保程式碼一致性）|
-| 記憶來源 | 任務 context + 專案技術棧設定 + Notion 規則庫 |
-| System Prompt 重點 | C# 編程規範、Blazor 規範、EF Core 規範、目標 repo 的技術棧說明 |
+| Claude Code | RunAsync（30 分鐘 timeout、20 turns、全工具） |
+| 記憶來源 | 任務 context + Issues 內容 + UI 規格 + CLAUDE_CODY.md |
+| System Prompt | CLAUDE_CODY.md 模板（含 C# / Blazor / EF Core 編程規範） |
 
 ---
 

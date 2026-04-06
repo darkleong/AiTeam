@@ -96,7 +96,7 @@ Dev Agent 按照 Issue 逐一實作
 
 | 項目 | 建議 |
 |------|------|
-| 模型 | Claude Sonnet（需要理解業務需求）|
+| 模型 | Claude Haiku（Stage 12 起接入 Claude Code 唯讀探索，成本優先）|
 | 溫度 | 中（0.3-0.5）|
 | 記憶來源 | 任務 context + 專案背景說明 |
 | System Prompt 重點 | 需求分析師角色、Issue 格式規範、回傳純 JSON |

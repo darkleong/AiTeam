@@ -2,7 +2,7 @@
 
 > 文件用途：定義 Designer Agent 的角色、能力與整合方式  
 > 建立日期：2026-03-31  
-> 狀態：⏳ 第一階段（Stage 5 完成後新增）
+> 狀態：✅ 已實作（Stage 7，Stage 12 強化 Claude Code 唯讀探索）
 
 ---
 
@@ -108,7 +108,7 @@ Dev 開始寫程式
 
 | 項目 | 建議 |
 |------|------|
-| 模型 | Claude Sonnet（需要理解需求並產出結構化規格）|
+| 模型 | Claude Haiku（Stage 12 起接入 Claude Code 唯讀探索，成本優先）|
 | 溫度 | 中（0.4-0.6，需要一點創意思考）|
 | 記憶來源 | 任務 context + 現有頁面結構 + MudBlazor 元件清單 |
 | System Prompt 重點 | UI 規格師角色、MudBlazor 元件熟悉度、Blazor Server 特性、以可實作為前提 |

@@ -99,7 +99,7 @@ Ops Agent 監控部署結果
 
 | 項目 | 建議 |
 |------|------|
-| 模型 | Gemini Flash（任務邏輯較簡單，用便宜模型）|
+| 模型 | Claude Sonnet（目前所有 Agent 統一使用 Anthropic）|
 | 溫度 | 極低（0.1）|
 | 記憶來源 | 任務 context + 部署歷史紀錄 |
 | System Prompt 重點 | 監控規則、回滾策略、通知格式 |
