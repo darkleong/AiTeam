@@ -1,6 +1,6 @@
 # Stage 16 — PM Agent（Petra）品質審核閘門
 
-> 版本：v1.1
+> 版本：v1.2
 > 建立日期：2026-04-07
 > 狀態：📋 規劃中
 
@@ -50,6 +50,7 @@
 |---------|-------------|-------------|
 | Rosa 完成後 | Rosa（Requirements） | Issues 規格完整性、是否遺漏情境 |
 | Demi 完成後 | Demi（Designer） | UI 規格與 Issues 的一致性 |
+| Cody 計畫書完成後 | Cody（Dev_plan） | 實作計畫是否對齊規格與設計、檔案清單正確性、架構合理性 |
 | Vera 完成後 | Vera（Reviewer） | Review 結果的嚴重度判斷 |
 
 ### 2.2 審核流程
@@ -84,13 +85,27 @@ pending → running → reviewing → [approved → 下一步]
 
 ---
 
+### 2.5 Cody 實作計畫書（Dev_plan）
+
+在 NewFeature 和 TechImprovement 流程中，老闆確認提案後 Cody 先產出實作計畫書（不寫程式碼），經 Petra 審核通過才進入實際開發。BugFix 流程跳過此步驟。
+
+**WorkflowEngine 變更**：
+- NewFeature：`proposal_approved → Dev_plan → Dev → Reviewer → ...`
+- TechImprovement：`Dev_plan → Dev → Reviewer → ...`
+- BugFix：不變（`Dev → Reviewer → QA`）
+
+**計畫書儲存**：TaskGroup 新增 `DevPlan` 欄位，Petra 審核通過的計畫書存入此欄位，Cody 實際開發時讀取。
+
+---
+
 ## 三、不審核的環節（不經過 Petra）
 
 | 環節 | 原因 |
 |------|------|
-| Cody 開發後 | Vera 已專門審查程式碼，職責不重疊 |
+| Cody 實際開發後 | Vera 已專門審查程式碼，職責不重疊 |
 | Quinn QA 後 | pass/fail 是客觀結果，不需主觀判斷 |
 | Sage 文件後 | 風險低，有 PR 流程保底 |
+| BugFix 的 Cody 開發前 | 規模小，不需要計畫書 |
 
 ---
 
@@ -122,12 +137,17 @@ pending → running → reviewing → [approved → 下一步]
 - [ ] Petra PM Agent 正常運作（RunReadOnlyAsync + CLAUDE_Petra.md）
 - [ ] Rosa 產出後 Petra 自動審核，approve 時自動進入 Demi
 - [ ] Demi 產出後 Petra 自動審核，approve 時交給老闆確認
+- [ ] 老闆確認後 Cody 產出實作計畫書（非程式碼）
+- [ ] 計畫書產出後 Petra 自動審核，approve 時 Cody 開始 coding
 - [ ] Vera 審查後 Petra 自動判斷，blocking 打回 Cody / minor 放行
-- [ ] 打回修正機制正常（最多 2 次，超過 escalate）
-- [ ] #petra-pm 頻道顯示審核過程
-- [ ] 現有 BugFix / TechImprovement 流程不受影響（Vera 審查後才觸發 Petra）
+- [ ] 打回修正機制正常（四個審核點皆適用，最多 2 次，超過 escalate）
+- [ ] #petra-pm 頻道自動建立並顯示審核過程
+- [ ] BugFix 流程不受影響（無 Dev_plan、無額外 Petra 審核）
+- [ ] TechImprovement 流程包含 Dev_plan 計畫階段
 - [ ] Rosa / Demi 任務在 Dashboard 任務中心可見
 - [ ] Petra 審核任務在 Dashboard 任務中心可見
+- [ ] DevPlan 正確儲存並傳給 Cody coding 階段
+- [ ] EF Migration 正常執行
 - [ ] `dotnet build` 通過
 
 ---
@@ -149,3 +169,4 @@ pending → running → reviewing → [approved → 下一步]
 |------|------|
 | 2026-04-07 | v1.0 初版建立 |
 | 2026-04-07 | v1.1 新增第四章：全 Agent 任務可見性（Rosa/Demi/Petra TaskItem 補建） |
+| 2026-04-07 | v1.2 新增 Cody 實作計畫書審核（Dev_plan → Petra → Dev）；WorkflowEngine 變更；TaskGroup.DevPlan 欄位 |
