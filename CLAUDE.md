@@ -68,6 +68,8 @@ AiTeam.sln
 - 涉及容器操作的功能需透過 GitHub Actions self-hosted runner 間接執行
 - docker-compose 設定檔：`docker-compose.yml`（開發）、`docker-compose.prod.yml`（正式）
 
+**自動部署：push to main 後，GitHub Actions self-hosted runner 會自動執行 `docker compose build + up`，不需要手動操作。** 因此驗收步驟中不應包含「手動部署到 Docker」或「手動重啟容器」等指示——只需 commit & push，等待自動部署完成即可。
+
 ---
 
 ## 重要設計原則
