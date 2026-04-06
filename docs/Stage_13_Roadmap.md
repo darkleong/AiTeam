@@ -1,8 +1,8 @@
 # Stage 13：系統穩定性與流程修正
 
-> 版本：v1.1
+> 版本：v2.0
 > 建立日期：2026-04-06
-> 狀態：📋 規劃中
+> 狀態：✅ 已完成（2026-04-06）
 
 ---
 
@@ -62,12 +62,12 @@ CEO、Dev 都用 `IndexOf('{')` / `LastIndexOf('}')` 抓 JSON。
 
 ### 需要實作的
 
-- [ ] 修正 `TaskGroupService.HandleAgentCompletedAsync` 的 SaveAsync 合併
-- [ ] `Task.Run` 改用 `ApplicationStopping` token 或 Channel 背景佇列
-- [ ] `WebhookController` PR handler 加 try-catch + `TryGetProperty`
-- [ ] `TaskGroup` 新增 `ProjectId` FK + Migration
-- [ ] `ExtractPrNumberFromText` 返回 0 時中斷 fix loop
-- [ ] JSON 解析改用 code fence 提取
+- [x] 修正 `TaskGroupService.HandleAgentCompletedAsync` 的 SaveAsync 合併
+- [x] `Task.Run` 改用 `ApplicationStopping` token 或 Channel 背景佇列
+- [x] `WebhookController` PR handler 加 try-catch + `TryGetProperty`
+- [x] `TaskGroup` 新增 `ProjectId` FK + Migration
+- [x] `ExtractPrNumberFromText` 返回 0 時中斷 fix loop
+- [x] JSON 解析改用 code fence 提取
 
 ---
 
@@ -119,11 +119,11 @@ Dev → Vera 審查
 
 ### 需要實作的
 
-- [ ] `WorkflowEngine.NewFeatureTable`：Dev 後只觸發 Reviewer（不再並行 QA/Doc）
-- [ ] `WorkflowEngine.NewFeatureTable`：Reviewer ✅ 後觸發 QA → QA ✅ 後觸發 Doc
-- [ ] `WorkflowEngine.BugFixTable`：Reviewer ✅ 後觸發 QA
-- [ ] `WorkflowEngine.GetDecision` 調整 Reviewer ✅ 的路由邏輯
-- [ ] Doc 完成後（新功能）或 QA 完成後（Bug 修復）通知 merge
+- [x] `WorkflowEngine.NewFeatureTable`：Dev 後只觸發 Reviewer（不再並行 QA/Doc）
+- [x] `WorkflowEngine.NewFeatureTable`：Reviewer ✅ 後觸發 QA → QA ✅ 後觸發 Doc
+- [x] `WorkflowEngine.BugFixTable`：Reviewer ✅ 後觸發 QA
+- [x] `WorkflowEngine.GetDecision` 調整 Reviewer ✅ 的路由邏輯
+- [x] Doc 完成後（新功能）或 QA 完成後（Bug 修復）通知 merge
 
 ---
 
@@ -178,10 +178,10 @@ Vera 審查
 
 ### 需要實作的
 
-- [ ] QA Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
-- [ ] Doc Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
-- [ ] `TaskGroupService` 傳遞 Dev 的 branch name 給 QA / Doc
-- [ ] WorkflowEngine 流程表：Vera ✅ → QA → Doc → 通知 merge（串行）
+- [x] QA Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
+- [x] Doc Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
+- [x] `TaskGroupService` 傳遞 Dev 的 branch name 給 QA / Doc
+- [x] WorkflowEngine 流程表：Vera ✅ → QA → Doc → 通知 merge（串行）
 
 ---
 
@@ -205,9 +205,9 @@ Vera 審查
 
 ### 需要實作的
 
-- [ ] 找到 TaskItem 狀態寫入 `failed` 的地方，同步新增一筆 TaskLog
-- [ ] 找到 TaskItem 狀態寫入 `done` 的地方，同步新增一筆 TaskLog
-- [ ] Dashboard 確認 TaskLog 列表正確顯示新步驟
+- [x] 找到 TaskItem 狀態寫入 `failed` 的地方，同步新增一筆 TaskLog
+- [x] 找到 TaskItem 狀態寫入 `done` 的地方，同步新增一筆 TaskLog
+- [x] Dashboard 確認 TaskLog 列表正確顯示新步驟
 
 ---
 
@@ -233,9 +233,65 @@ Vera 審查
 
 ---
 
+---
+
+## 實作紀錄（2026-04-06）
+
+### 受影響檔案
+
+| 檔案 | 修改內容 |
+|------|---------|
+| `WorkflowEngine.cs` | 替換整個 NewFeatureTable（Dev → Reviewer 串行；QA → Doc 串行）；BugFixTable 新增 QA；GetDecision 調整路由 |
+| `TaskGroupService.cs` | 合併兩次 SaveAsync（needsSave flag）；注入 IHostApplicationLifetime；Task.Run 改用 ApplicationStopping token；補全 TaskLog（done/failed）；NotifyBossMerge 訊息更新 |
+| `WebhookController.cs` | HandlePrSynchronizedAsync 改用 TryGetProperty，欄位缺失時記 warning 並 return |
+| `DevAgentService.cs` | fix loop prNum ≤ 0 時拋 InvalidOperationException；TryParsePlan 優先解析 code fence；BuildClosesSection() 從 issue_urls 產生 `Closes #XX` |
+| `CeoAgentService.cs` | TryParseResponse 優先解析 code fence，IndexOf 作為 fallback |
+| `QaAgentService.cs` | 推 commit 到 Dev 的 headRef（不另開 branch/PR）；新增 StripCodeFence() 剝除 LLM 產生的 Markdown fence |
+| `DocAgentService.cs` | 推 commit 到 Dev 的 headRef（不另開 branch/PR）|
+| `Entities.cs` | TaskGroup 新增 `Guid? ProjectId`、`Project? ProjectRef` |
+| `AppDbContext.cs` | TaskGroup HasOne ProjectRef FK 設定 |
+| Migration | `AddTaskGroupProjectId`（uuid nullable FK） |
+| `playwright.yml` | runs-on 改為 self-hosted（雲端無法連本機 Dashboard）|
+
+### 踩坑紀錄
+
+**1. WorkflowEngine NewFeatureTable 替換陷阱**
+
+計畫只說「新增 `["QA"]` entry」，實作時差點只 add 新 entry 而保留舊的 `["Dev"] = [QA, Doc, Reviewer]`（並行）。正確做法是**替換整個 dictionary literal**，確保舊的並行行被完全移除。
+
+**2. QA Agent code fence 污染 .cs 檔**
+
+Quinn 產出的 Playwright 測試內容含 ` ```csharp ``` ` fence，直接寫入 `.cs` 導致 CI CS1056 build 失敗。修正：新增 `StripCodeFence()` helper，在 `WriteAllTextAsync` 前統一剝除。
+
+**3. Playwright CI 截圖無法上傳（runs-on: ubuntu-latest）**
+
+`playwright.yml` 原本跑在雲端 ubuntu，無法連到本機 `localhost:5051`，截圖資料夾為空，Artifacts 顯示「–」。改為 `self-hosted` 後，runner 在同一台機器上，能正常連到 Dashboard。
+
+**4. dotnet ef migrations add 路徑問題**
+
+從 `AiTeam.Bot` 目錄跑 `--startup-project` 失敗（Bot 專案缺 EF Design 工具）。改為進入 `AiTeam.Data` 目錄直接執行，不帶 `--startup-project`。
+
+### 驗收結果
+
+| 驗收項目 | 結果 |
+|---------|------|
+| dotnet build 通過 | ✅ |
+| 並行 Agent SaveAsync 不互相覆蓋 | ✅ |
+| Bot graceful shutdown 時背景工作可被取消 | ✅ |
+| GitHub webhook 缺欄位時不 crash | ✅ |
+| 新功能串行流程：Dev → Reviewer → QA → Doc → 通知 merge | ✅ |
+| Bug 修復流程：Dev → Reviewer → QA → 通知 merge | ✅ |
+| 單一 PR（code + tests + docs 三個 commit）| ✅ |
+| PR description 含 Closes #XX，merge 後 Issues 自動關閉 | ✅ |
+| Dashboard 失敗任務能看到失敗原因 | ✅ |
+| Dashboard 完成任務最後一筆 log 為 done | ✅ |
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
 |------|------|
 | 2026-04-06 | 初版建立，整合 Future Feature 十一、十三、十四（剩餘問題） |
 | 2026-04-06 | v1.1：新增第三項「單一 PR 整合」；QA/Doc 從並行改串行，全部推到 Dev 同一個 branch |
+| 2026-04-06 | v2.0：Stage 13 全部實作完成並驗收通過；補充踩坑紀錄與受影響檔案清單 |

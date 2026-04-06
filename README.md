@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。
 
 ---
 
@@ -75,6 +75,7 @@ docs/
 ├── Stage_10_Roadmap.md          ← ✅ 完成（含詳細實作紀錄）
 ├── Stage_11_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_12_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
+├── Stage_13_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -111,25 +112,26 @@ Stage 10 起，CEO 從「任務路由器」升級為「任務生命週期全程�
 老闆說需求（可附截圖）
     ↓
 CEO 進入提案模式
-Rosa（需求拆解，Claude Code 唯讀探索 codebase）
+Rosa（需求拆解，Claude Code 唯讀探索 codebase）→ 建立 GitHub Issues
     ↓
-Demi（UI 規格設計，Claude Code 唯讀探索 .razor 頁面，涵蓋 Rosa Issues）
+Demi（UI 規格設計，Claude Code 唯讀探索 .razor 頁面）
     ↓
 提案書 Embed（UI 規格以 Discord 附件 ui-spec.md 傳送）
   [✅ 核准] [✏️ 需調整] [❌ 取消]
     ↓ 老闆核准
-CEO 自動派 Dev（附帶 Issues + UI 規格全文 + repo 結構）
+CEO 自動派 Dev（附帶 Issues + UI 規格全文）
     ↓
-Dev 開發 → PR 開出（含 docs/ui-specs/*.md）
-    ↓ CEO 自動觸發
-QA + Doc + Vera 並行執行
-  Doc（Sage）：Claude Code 直讀 PR changed files → 技術文件
-  Vera：LLM 審查 + Claude Code 影響範圍分析
+Dev 開發 → 開 PR（含 Closes #XX 自動關聯 Issues）
+    ↓ CEO 自動觸發（串行）
+Vera 審查
+  🔴 → Dev 修正推同一 branch → Vera 重審（最多 3 輪）
+  ✅ → QA 測試（推到同一 branch）
+         ↓
+       Doc 文件（推到同一 branch）
+         ↓
+       CEO 通知老闆：「PR 可以 merge 了（含 code + tests + docs）」
     ↓
-Vera 發現 🔴 → Dev 自動修正 → Vera 自動重審（最多 3 次）
-Vera 無 🔴 → CEO 通知老闆：「PR 可以 merge 了」
-    ↓
-老闆 merge
+老闆 merge（一個 PR，Issues 自動關閉）
 ```
 
 老闆只需要做兩件事：**核准提案書** + **最後 merge PR**。
@@ -289,6 +291,7 @@ docker compose --env-file .env up -d
 | Stage 10 | CEO Orchestrator 全自動流程、提案書 ✏️ 調整按鈕、Dev repo 結構上下文、Review 閉環、Ops Rollback | ✅ 完成 |
 | Stage 11 | Dev Agent（Cody）升級為 Claude Code CLI 驅動：自主探索、寫碼、build 驗證、自動修錯 | ✅ 完成 |
 | Stage 12 | 提案流程全面升級：Rosa/Demi/Vera/Sage 唯讀探索 codebase、附圖支援、UI 規格存 DB、Discord 附件 | ✅ 完成 |
+| Stage 13 | 系統穩定性與流程修正：串行流程（Dev→Reviewer→QA→Doc）、單一 PR（含 Closes #XX）、技術債清償、Dashboard 可觀測性 | ✅ 完成 |
 
 ---
 
