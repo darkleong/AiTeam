@@ -1,4 +1,3 @@
-```csharp
 using Microsoft.Playwright;
 using Microsoft.Playwright.MSTest;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -334,4 +333,3 @@ namespace AiTeam.Tests.Playwright.Generated
         }
     }
 }
-```
