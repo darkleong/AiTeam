@@ -349,49 +349,6 @@ public class TaskGroupService(
             $"請確認後即可合併 👆");
 
         logger.LogInformation("TaskGroup {Id} 通知老闆可以 merge PR", group.Id);
-
-        // Stage 13：自動關閉 Rosa 開立的所有 Issues
-        await CloseRelatedIssuesAsync(group, cancellationToken);
-    }
-
-    /// <summary>
-    /// 解析 TaskGroup.IssueUrls（JSON string[]），批次關閉對應的 GitHub Issues。
-    /// </summary>
-    private async Task CloseRelatedIssuesAsync(TaskGroup group, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(group.IssueUrls)) return;
-
-        List<string>? urls;
-        try
-        {
-            urls = System.Text.Json.JsonSerializer.Deserialize<List<string>>(group.IssueUrls);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "TaskGroup {Id} 解析 IssueUrls 失敗，略過自動關閉", group.Id);
-            return;
-        }
-
-        if (urls is null || urls.Count == 0) return;
-
-        await using var scope     = serviceProvider.CreateAsyncScope();
-        var gitHubService         = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
-
-        foreach (var url in urls)
-        {
-            // 從 URL 解析 owner/repo/issueNumber，格式：https://github.com/{owner}/{repo}/issues/{number}
-            var match = System.Text.RegularExpressions.Regex.Match(
-                url, @"github\.com/([^/]+)/([^/]+)/issues/(\d+)");
-            if (!match.Success) continue;
-
-            var owner  = match.Groups[1].Value;
-            var repo   = match.Groups[2].Value;
-            var number = int.Parse(match.Groups[3].Value);
-
-            await gitHubService.CloseIssueAsync(owner, repo, number);
-        }
-
-        logger.LogInformation("TaskGroup {Id} 自動關閉 {Count} 個 Issues 完成", group.Id, urls.Count);
     }
 
     private async Task NotifyBossInterventionAsync(TaskGroup group, CancellationToken cancellationToken)

@@ -147,14 +147,18 @@ public class DevAgentService(
             gitHubService.Push(localPath, plan.BranchName);
             AddLog(task, "Commit & Push 完成", "done");
 
-            // 開 PR
+            // 開 PR：從 task.Description 解析 issue_urls，加入 "Closes #XX"（GitHub merge 時自動關閉）
+            ParseDescriptionMeta(task.Description,
+                out var issueUrls, out _, out _, out _, out _);
+            var closesSection = BuildClosesSection(issueUrls);
+
             var prBody = $"""
                 ## 任務說明
                 {task.Title}
 
                 ## 變更摘要
                 {plan.Summary}
-
+                {closesSection}
                 ---
                 🤖 由 AiTeam Dev Agent（Claude Code）自動產出
                 """;
@@ -629,6 +633,32 @@ public class DevAgentService(
         var start = content.IndexOf('{');
         var end   = content.LastIndexOf('}');
         return (start >= 0 && end > start) ? content[start..(end + 1)] : null;
+    }
+
+    /// <summary>
+    /// 從 issue_urls JSON 字串（["url1","url2",...]）解析 Issue 編號，
+    /// 產生 "Closes #XX" 行，讓 GitHub PR merge 時自動關閉對應 Issues。
+    /// </summary>
+    private static string BuildClosesSection(string? issueUrlsJson)
+    {
+        if (string.IsNullOrWhiteSpace(issueUrlsJson)) return "";
+
+        List<string>? urls;
+        try { urls = JsonSerializer.Deserialize<List<string>>(issueUrlsJson); }
+        catch { return ""; }
+
+        if (urls is null || urls.Count == 0) return "";
+
+        var closes = urls
+            .Select(url =>
+            {
+                var m = Regex.Match(url, @"/issues/(\d+)");
+                return m.Success ? $"Closes #{m.Groups[1].Value}" : null;
+            })
+            .Where(s => s is not null)
+            .ToList();
+
+        return closes.Count == 0 ? "" : "\n" + string.Join("\n", closes) + "\n";
     }
 }
 
