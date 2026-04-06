@@ -46,18 +46,23 @@ public record WorkflowDecision(
 /// Stage 10：開發流程自動閉環的流程表引擎。
 /// 純邏輯，不走 LLM，不存 DB，毫秒級決策。
 ///
+/// Stage 13 修正後流程：
+///
 /// 新功能流程：
 ///   proposal_approved  → Dev
-///   Dev                → QA（並行）+ Doc（並行）+ Reviewer（並行）
-///   Reviewer ✅（無 🔴）→ 通知老闆 merge
+///   Dev                → Reviewer
+///   Reviewer ✅（無 🔴）→ QA
+///   QA                 → Doc（串行）
+///   Doc                → 通知老闆 merge
 ///   Reviewer 🔴（有問題）→ Dev(fix)
-///   Dev(fix)           → Reviewer（重審）
+///   Dev(fix)           → Reviewer（重審，最多 3 輪）
 ///
 /// Bug 修復流程：
 ///   Dev                → Reviewer
-///   Reviewer ✅        → 通知老闆 merge
+///   Reviewer ✅        → QA（回歸測試）
+///   QA                 → 通知老闆 merge
 ///   Reviewer 🔴        → Dev(fix)
-///   Dev(fix)           → Reviewer（重審）
+///   Dev(fix)           → Reviewer（重審，最多 3 輪）
 /// </summary>
 public class WorkflowEngine
 {
@@ -67,12 +72,11 @@ public class WorkflowEngine
     private static readonly Dictionary<string, WorkflowStep[]> NewFeatureTable = new(StringComparer.OrdinalIgnoreCase)
     {
         ["proposal_approved"] = [new WorkflowStep("Dev")],
-        ["Dev"]               = [new WorkflowStep("QA",       RunInParallel: true),
-                                  new WorkflowStep("Doc",      RunInParallel: true),
-                                  new WorkflowStep("Reviewer", RunInParallel: true)],
-        // Reviewer 節點由 GetDecision 方法依 CriticalReviewCount 動態決定
-        ["QA"]                = [],
-        ["Doc"]               = [],
+        // Stage 13：Dev 後只觸發 Reviewer（移除並行 QA/Doc，改為 Vera ✅ 後再觸發）
+        ["Dev"]               = [new WorkflowStep("Reviewer")],
+        // Reviewer ✅ 後觸發 QA，QA 完成後觸發 Doc（由 GetDecision 動態決定）
+        ["QA"]                = [new WorkflowStep("Doc")],     // QA → Doc（串行）
+        ["Doc"]               = [],                             // Doc → NotifyBossMerge（由 GetDecision 動態決定）
         // fix loop：Dev 修完後重派 Reviewer
         ["Dev_fix"]           = [new WorkflowStep("Reviewer", IsFixLoop: true)],
     };
@@ -81,6 +85,8 @@ public class WorkflowEngine
     private static readonly Dictionary<string, WorkflowStep[]> BugFixTable = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Dev"]     = [new WorkflowStep("Reviewer")],
+        // Stage 13：QA 完成後 → NotifyBossMerge（由 GetDecision 動態決定）
+        ["QA"]      = [],
         ["Dev_fix"] = [new WorkflowStep("Reviewer", IsFixLoop: true)],
         // Reviewer 節點由 GetDecision 方法動態決定
     };
@@ -104,7 +110,11 @@ public class WorkflowEngine
         if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
         {
             if (result.CriticalReviewCount == 0)
-                return new WorkflowDecision(NextAction.NotifyBossMerge, []);
+            {
+                // Stage 13：Reviewer ✅ 後觸發 QA（新功能和 Bug 修復都需要 QA 驗證）
+                return new WorkflowDecision(NextAction.FireAgents,
+                    [new WorkflowStep("QA")]);
+            }
 
             // 有 🔴 問題
             if (fixIteration >= MaxFixIterations)
@@ -113,6 +123,15 @@ public class WorkflowEngine
             return new WorkflowDecision(NextAction.FireAgents,
                 [new WorkflowStep("Dev", IsFixLoop: true)]);
         }
+
+        // ---- Stage 13：Doc 完成（新功能最後一步）→ 通知老闆 merge ----
+        if (completedAgent.Equals("Doc", StringComparison.OrdinalIgnoreCase))
+            return new WorkflowDecision(NextAction.NotifyBossMerge, []);
+
+        // ---- Stage 13：QA 完成 + Bug 修復 → 通知老闆 merge（不需要 Doc）----
+        if (completedAgent.Equals("QA", StringComparison.OrdinalIgnoreCase)
+            && workflowType == WorkflowType.BugFix)
+            return new WorkflowDecision(NextAction.NotifyBossMerge, []);
 
         if (!table.TryGetValue(completedAgent, out var steps) || steps.Length == 0)
             return new WorkflowDecision(NextAction.Nothing, []);

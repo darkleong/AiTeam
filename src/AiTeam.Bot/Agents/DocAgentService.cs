@@ -78,10 +78,9 @@ public class DocAgentService(
             if (string.IsNullOrWhiteSpace(docContent))
                 return new AgentExecutionResult(true, $"PR #{prNumber} 文件生成無輸出，略過提交");
 
-            // 2. Clone main branch，建立 doc PR
-            var docBranch = $"docs/pr{prNumber}-{task.Id.ToString("N")[..6]}";
+            // Stage 13：Clone，checkout Dev 的 branch，直接推送文件（不建新 branch，不開 PR）
             writePath = gitHubService.CloneOrPull(owner, repo, $"saged-{task.Id:N}"[..8]);
-            gitHubService.CreateAndCheckoutBranch(writePath, docBranch);
+            gitHubService.CreateAndCheckoutBranch(writePath, headRef);
 
             var outputPath = Path.Combine(writePath, "docs", "generated", $"pr{prNumber}-doc.md");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -89,25 +88,15 @@ public class DocAgentService(
             AddLog(task, "文件檔案已寫入", "done");
 
             gitHubService.CommitAll(writePath, $"docs: Sage 自動產生 PR #{prNumber} 技術文件");
-            gitHubService.Push(writePath, docBranch);
+            // Stage 13：推到 Dev 的 branch（單一 PR 整合）
+            gitHubService.Push(writePath, headRef);
 
-            var prBody = $"""
-                ## Sage 自動技術文件
-
-                來源 PR：#{prNumber}
-                文件涵蓋 .cs 檔案：{csFiles.Count} 個
-
-                ---
-                🤖 由 AiTeam Doc Agent 自動產出
-                """;
-
-            var prUrl = await gitHubService.OpenPullRequestAsync(
-                owner, repo, $"docs: PR #{prNumber} 技術文件", prBody, docBranch);
-            AddLog(task, $"PR 已開啟：{prUrl}", "done");
+            AddLog(task, $"文件已推送到 branch {headRef}（{csFiles.Count} 個檔案）", "done");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("idle");
 
-            return new AgentExecutionResult(true, $"文件 PR 已開啟（PR #{prNumber}，{csFiles.Count} 個檔案）", prUrl);
+            return new AgentExecutionResult(true,
+                $"文件已推送到 Dev branch（PR #{prNumber}，{csFiles.Count} 個檔案）");
         }
         catch (Exception ex)
         {

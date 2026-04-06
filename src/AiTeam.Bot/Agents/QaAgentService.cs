@@ -62,8 +62,8 @@ public class QaAgentService(
             localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
             AddLog(task, "Git Clone/Pull 完成", "done");
 
-            var branchName = $"test/qa-{task.Id.ToString()[..8]}";
-            gitHubService.CreateAndCheckoutBranch(localPath, branchName);
+            // Stage 13：改為在 Dev 的 branch 上推送（不建新 branch，不開 PR）
+            gitHubService.CreateAndCheckoutBranch(localPath, headRef);
 
             var generatedFiles = new List<string>();
 
@@ -93,35 +93,19 @@ public class QaAgentService(
 
             var commitMessage = $"test: QA Agent 自動產生測試（來自 PR #{prNumber}）";
             gitHubService.CommitAll(localPath, commitMessage);
-            gitHubService.Push(localPath, branchName);
+            // Stage 13：推到 Dev 的 branch（單一 PR 整合）
+            gitHubService.Push(localPath, headRef);
 
             var strategyDesc = hasUiChanges
                 ? $"xUnit {csFiles.Count} 個 + Playwright 1 個"
                 : $"xUnit {csFiles.Count} 個";
 
-            var prBody = $"""
-                ## QA Agent 自動測試
-
-                針對 PR #{prNumber} 的變更，自動產生以下測試：
-                {string.Join("\n", generatedFiles.Select(f => $"- `{f}`"))}
-
-                ## 測試框架
-                {(csFiles.Count > 0 ? "- xUnit + NSubstitute + FluentAssertions（邏輯測試）\n" : "")}{(hasUiChanges ? "- Playwright（UI 視覺截圖測試，PR 合併前 CI 自動執行並附上截圖）" : "")}
-
-                ---
-                🤖 由 AiTeam QA Agent 自動產出
-                """;
-
-            var prUrl = await gitHubService.OpenPullRequestAsync(
-                owner, repo,
-                $"test: QA 自動測試（PR #{prNumber}）",
-                prBody, branchName);
-
-            AddLog(task, $"PR 已開啟：{prUrl}", "done");
+            AddLog(task, $"測試已推送到 branch {headRef}（{strategyDesc}）", "done");
             await taskRepository.SaveAsync(cancellationToken);
 
             await PushStatus("idle");
-            return new AgentExecutionResult(true, $"QA 測試 PR 已開啟（{strategyDesc}）", prUrl);
+            return new AgentExecutionResult(true,
+                $"QA 測試已推送到 Dev branch（{strategyDesc}，PR #{prNumber}）");
         }
         catch (Exception ex)
         {

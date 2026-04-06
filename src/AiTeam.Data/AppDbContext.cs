@@ -47,6 +47,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.IssueUrls).HasColumnType("jsonb");
             e.HasIndex(x => x.Status);
+            // Stage 13：新增 ProjectId FK
+            e.HasOne(x => x.ProjectRef)
+             .WithMany()
+             .HasForeignKey(x => x.ProjectId)
+             .IsRequired(false);
         });
 
         modelBuilder.Entity<TaskItem>(e =>

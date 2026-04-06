@@ -50,17 +50,22 @@ public class DevAgentService(
         if (isFixLoop)
         {
             var prNum = ExtractPrNumberFromText(task.Description ?? "");
-            if (prNum > 0)
+            if (prNum <= 0)
             {
-                try
-                {
-                    fixBranch = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNum);
-                    logger.LogInformation("Fix loop 使用既有 branch：{Branch}", fixBranch);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "無法取得 PR #{Num} 的 branch name", prNum);
-                }
+                // Stage 13：取不到 PR 編號時中斷，避免 LLM 猜測 branch 名稱導致錯誤
+                throw new InvalidOperationException(
+                    $"Dev Agent fix loop：無法從任務描述中取得 PR 編號（TaskId={task.Id}），中斷執行。");
+            }
+
+            try
+            {
+                fixBranch = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNum);
+                logger.LogInformation("Fix loop 使用既有 branch：{Branch}", fixBranch);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "無法取得 PR #{Num} 的 branch name，中斷 fix loop", prNum);
+                throw;
             }
         }
 
@@ -608,13 +613,22 @@ public class DevAgentService(
     {
         try
         {
-            var start = content.IndexOf('{');
-            var end = content.LastIndexOf('}');
-            if (start < 0 || end < 0) return null;
-            var json = content[start..(end + 1)];
+            // Stage 13：優先從 code fence 提取，fallback 至 IndexOf('{')
+            var fenceMatch = Regex.Match(content, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```");
+            var json = fenceMatch.Success
+                ? fenceMatch.Groups[1].Value
+                : ExtractJsonBraces(content);
+            if (json is null) return null;
             return JsonSerializer.Deserialize<DevPlan>(json, JsonOptions);
         }
         catch { return null; }
+    }
+
+    private static string? ExtractJsonBraces(string content)
+    {
+        var start = content.IndexOf('{');
+        var end   = content.LastIndexOf('}');
+        return (start >= 0 && end > start) ? content[start..(end + 1)] : null;
     }
 }
 

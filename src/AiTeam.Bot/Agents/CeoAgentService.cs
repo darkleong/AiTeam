@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
@@ -231,12 +232,20 @@ public class CeoAgentService(
     {
         try
         {
-            // 嘗試從回應中萃取 JSON（有時 LLM 會在 JSON 前後附加說明文字）
-            var start = content.IndexOf('{');
-            var end = content.LastIndexOf('}');
-            if (start < 0 || end < 0) return null;
-
-            var json = content[start..(end + 1)];
+            // Stage 13：優先從 code fence 提取，fallback 至 IndexOf('{')
+            var fenceMatch = Regex.Match(content, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```");
+            string json;
+            if (fenceMatch.Success)
+            {
+                json = fenceMatch.Groups[1].Value;
+            }
+            else
+            {
+                var start = content.IndexOf('{');
+                var end   = content.LastIndexOf('}');
+                if (start < 0 || end < 0) return null;
+                json = content[start..(end + 1)];
+            }
             return JsonSerializer.Deserialize<CeoResponse>(json, JsonOptions);
         }
         catch

@@ -46,6 +46,9 @@ public class TaskGroup
     public Guid Id { get; set; }
     public string Title { get; set; } = "";
     public string Project { get; set; } = "";
+    /// <summary>Stage 13：專案 FK（對應 projects.id），舊資料為 null。</summary>
+    public Guid? ProjectId { get; set; }
+    public Project? ProjectRef { get; set; }
     public string Status { get; set; } = "pending"; // pending / running / done / failed
     public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
     public string? IssueUrls { get; set; }   // JSONB string[]

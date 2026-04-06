@@ -8,6 +8,7 @@ using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Orchestration;
@@ -25,6 +26,7 @@ public class TaskGroupService(
     IOptions<GitHubSettings> gitHubSettings,
     RulesService rulesService,
     WorkflowEngine workflowEngine,
+    IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
     private readonly DiscordSettings _discord    = discordSettings.Value;
@@ -97,21 +99,25 @@ public class TaskGroupService(
             return;
         }
 
-        // 更新 DevPrUrl（若本次有 PR 產出）
+        // Stage 13：合併更新 DevPrUrl 與 LastReviewBody，只呼叫一次 SaveAsync（避免並行 Agent 競態覆蓋）
+        var needsSave = false;
+
         if (!string.IsNullOrWhiteSpace(devPrUrl) && string.IsNullOrWhiteSpace(group.DevPrUrl))
         {
             group.DevPrUrl = devPrUrl;
-            await taskRepo.SaveAsync(cancellationToken);
+            needsSave = true;
         }
 
-        // 更新 LastReviewBody（Vera 完成審查時，存下完整報告供 Dev fix loop 使用）
         if (!string.IsNullOrWhiteSpace(result.ReviewBody))
         {
             group.LastReviewBody = result.ReviewBody;
-            await taskRepo.SaveAsync(cancellationToken);
+            needsSave = true;
             logger.LogInformation("TaskGroup {Id} 已儲存 Vera 審查報告（{Len} 字）",
                 groupId, result.ReviewBody.Length);
         }
+
+        if (needsSave)
+            await taskRepo.SaveAsync(cancellationToken);
 
         var workflowType = group.WorkflowType == "new_feature"
             ? WorkflowType.NewFeature
@@ -248,6 +254,14 @@ public class TaskGroupService(
 
             var finalStatus = result.Success ? "done" : "failed";
             taskRepo.UpdateStatus(taskItem, finalStatus);
+            // Stage 13：補全最終 TaskLog，讓 Dashboard 能顯示完成原因或失敗原因
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = taskItem.Id,
+                Agent  = step.AgentName,
+                Step   = result.Summary,
+                Status = finalStatus,
+            });
             await taskRepo.SaveAsync(cancellationToken);
 
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
@@ -274,29 +288,38 @@ public class TaskGroupService(
             if (agentChannel is not null)
                 await agentChannel.SendMessageAsync(embed: embed.Build());
 
-            // 遞迴觸發下一步（背景）
+            // Stage 13：改用 ApplicationStopping token，Bot 關閉時背景工作可被取消
             _ = Task.Run(async () =>
             {
                 try
                 {
                     var prUrl = result.OutputUrl ?? group.DevPrUrl ?? "";
-                    // 更新 completedAgent：若為修復迭代，用 "Dev" 讓 WorkflowEngine 正確查表
+                    // 更新 completedAgent：若為修復迭代，用 "Dev_fix" 讓 WorkflowEngine 正確查表
                     var agentKey = step.IsFixLoop && step.AgentName == AgentNames.Dev
                         ? "Dev_fix"
                         : step.AgentName;
-                    await HandleAgentCompletedAsync(group.Id, agentKey, result, prUrl);
+                    await HandleAgentCompletedAsync(group.Id, agentKey, result, prUrl,
+                        appLifetime.ApplicationStopping);
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "TaskGroupService：遞迴觸發下一步失敗（Group={Id}）", group.Id);
                 }
-            }, CancellationToken.None);
+            }, appLifetime.ApplicationStopping);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "TaskGroupService：Agent {Agent} 執行失敗（Task={Id}）",
                 step.AgentName, taskItem.Id);
             taskRepo.UpdateStatus(taskItem, "failed");
+            // Stage 13：補全失敗 TaskLog，讓 Dashboard 能顯示例外訊息
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = taskItem.Id,
+                Agent  = step.AgentName,
+                Step   = ex.Message,
+                Status = "failed",
+            });
             await taskRepo.SaveAsync(cancellationToken);
 
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel

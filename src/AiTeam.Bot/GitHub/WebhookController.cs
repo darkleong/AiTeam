@@ -207,10 +207,27 @@ public class WebhookController(
     /// </summary>
     private async Task HandlePrSynchronizedAsync(JsonElement root, CancellationToken cancellationToken)
     {
-        var prNumber  = root.GetProperty("pull_request").GetProperty("number").GetInt32();
-        var prUrl     = root.GetProperty("pull_request").GetProperty("html_url").GetString() ?? "";
-        var repoName  = root.GetProperty("repository").GetProperty("name").GetString() ?? "";
-        var headBranch = root.GetProperty("pull_request").GetProperty("head").GetProperty("ref").GetString() ?? "";
+        // Stage 13：改用 TryGetProperty 避免格式異常的 payload 導致 crash
+        if (!root.TryGetProperty("pull_request", out var pr))
+        {
+            logger.LogWarning("HandlePrSynchronized：payload 缺少 pull_request 欄位，略過");
+            return;
+        }
+        if (!pr.TryGetProperty("number", out var numberEl))
+        {
+            logger.LogWarning("HandlePrSynchronized：pull_request 缺少 number 欄位，略過");
+            return;
+        }
+
+        var prNumber   = numberEl.GetInt32();
+        var prUrl      = pr.TryGetProperty("html_url",    out var urlEl)
+                         ? urlEl.GetString()  ?? "" : "";
+        var repoName   = root.TryGetProperty("repository", out var repoEl)
+                         && repoEl.TryGetProperty("name", out var nameEl)
+                         ? nameEl.GetString() ?? "" : "";
+        var headBranch = pr.TryGetProperty("head", out var headEl)
+                         && headEl.TryGetProperty("ref", out var refEl)
+                         ? refEl.GetString()  ?? "" : "";
 
         // QA / Doc 的 branch（test/* / docs/*）不需要 Vera 重審，直接略過
         if (headBranch.StartsWith("test/") || headBranch.StartsWith("docs/"))
