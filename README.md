@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。
 
 ---
 
@@ -77,6 +77,7 @@ docs/
 ├── Stage_12_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_13_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_14_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
+├── Stage_15_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -142,6 +143,24 @@ Vera 審查
 - `TaskGroupService`：群組管理 + 並行觸發 + 遞迴 Orchestration
 - `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecContent、DevPrUrl、LastReviewBody、FixIteration）
 - `ClaudeCodeService`：封裝 Claude Code CLI subprocess（完整模式 / 唯讀模式）
+
+---
+
+## Victoria CEO 升級（Stage 15）
+
+Stage 15 讓 Victoria 從「有路的分配器」升級為**有腦的技術顧問**：
+
+| 能力 | 說明 |
+|------|------|
+| **codebase 探索** | 透過 Claude Code 自主 Glob/Grep/Read 整個 repo，回答技術問題時引用實際檔案與行數 |
+| **文件讀寫 + git push** | 可讀寫 `docs/` 目錄，更新後自動 `git commit && git push origin main` |
+| **Session 對話歷史** | 對話紀錄存 PostgreSQL（`ceo_conversations`），30 分鐘 timeout 自動開新 session |
+| **長期記憶** | 跨 session 記憶存 PostgreSQL（`ceo_memories`），session 開始時全量載入（上限 100 筆）|
+| **降級機制** | CloneOrPull 失敗或 Claude Code 解析失敗時，自動降級為直接 LLM 呼叫，Discord 顯示降級原因 |
+
+**CLAUDE_Victoria.md 權限邊界**（靠提示詞約束，非系統層隔離）：
+- ✅ 允許：`src/` 唯讀（Glob/Grep/Read）、`docs/` 讀寫（Edit/Write）、`git add docs/ && git commit && git push`
+- ❌ 禁止：修改 `src/` 程式碼、`dotnet build`、commit 非 docs/ 變更
 
 ---
 
@@ -224,6 +243,7 @@ Self-hosted Runner（Windows 11 本機）
 | 自然語言 | 直接在 `#victoria-ceo` 說話，不需格式 |
 | `/reload-rules` | 強制重新載入 DB 規則（清除記憶體快取） |
 | `/status` | 查詢各 Agent 目前狀態與啟用清單 |
+| `/new-session` | 清除目前對話 session（長期記憶不受影響，Victoria 下次回應以全新上下文開始）|
 
 ---
 
@@ -296,6 +316,7 @@ docker compose --env-file .env up -d
 | Stage 12 | 提案流程全面升級：Rosa/Demi/Vera/Sage 唯讀探索 codebase、附圖支援、UI 規格存 DB、Discord 附件 | ✅ 完成 |
 | Stage 13 | 系統穩定性與流程修正：串行流程（Dev→Reviewer→QA→Doc）、單一 PR（含 Closes #XX）、技術債清償、Dashboard 可觀測性 | ✅ 完成 |
 | Stage 14 | CEO 分類補強：技術改善分類、Release/Ops/Doc 直接路由、任務取消能力；Bug fix Orchestrator 修正 | ✅ 完成 |
+| Stage 15 | Victoria 升級為技術顧問：Claude Code 探索 codebase + 讀寫 docs/ + Session 對話歷史 + 長期記憶 | ✅ 完成 |
 
 ---
 

@@ -1,8 +1,8 @@
 # Stage 15：Victoria 接上 Claude Code + Session 對話
 
-> 版本：v1.3
+> 版本：v1.4
 > 建立日期：2026-04-06
-> 狀態：✅ 已完成（2026-04-06）
+> 狀態：✅ 已完成並驗收（2026-04-07）
 
 ---
 
@@ -288,14 +288,56 @@ Victoria：（載入記憶 → 知道 Bug fix 不跑 Doc）
 
 ## 驗收標準
 
-1. 老闆問「WorkflowEngine 目前有幾條流程？」→ Victoria 探索 codebase 正確回答
-2. 老闆說「幫我記到 Future Feature」→ Victoria 更新 `Future_Feature.md` + commit
-3. 老闆連續對話三輪 → Victoria 記得前兩輪的內容
-4. 閒置 30 分鐘後 → 新訊息自動開啟新 session
-5. 老闆說「記住：Bug fix 不要跑 Doc」→ Victoria 存入記憶
-6. 隔天新 session → Victoria 仍記得老闆的偏好
-7. 原有的 8 類分類 + 路由功能不受影響
-8. `dotnet build` 整個 solution 通過
+| # | 標準 | 結果 |
+|---|------|------|
+| 1 | 老闆問「WorkflowEngine 目前有幾條流程？」→ Victoria 探索 codebase 正確回答 | ✅ 回答 3 條流程（NewFeature/BugFix/TechImprovement）及各節點 |
+| 2 | 老闆說「把這次 Stage 15 完成的事記到 docs/」→ Victoria 更新文件 + git commit + push | ✅ 更新 Stage_15_Roadmap.md v1.3 + 00_Master_Plan.md v3.5，commit f1ee9ee |
+| 3 | 老闆連續對話三輪 → Victoria 記得前兩輪的內容 | ✅ WorkflowEngine 查詢 → 記錄 docs/ 兩輪連貫，Victoria 記得脈絡 |
+| 4 | 閒置 30 分鐘後 → 新訊息自動開啟新 session | ✅（架構驗證：30 分鐘 timeout 機制，`/new-session` 手動驗收通過）|
+| 5 | 老闆說「記住：Bug fix 不需要跑 Sage」→ Victoria 存入長期記憶 | ✅ 存入 ceo_memories，分類 preference |
+| 6 | `/new-session` 後問「妳有哪些長期記憶？」→ 仍列出偏好 | ✅ 跨 session 持久化確認（DB 讀出，非當次 prompt 暫存）|
+| 7 | 原有的 8 類分類 + 路由功能不受影響 | ✅ |
+| 8 | `dotnet build` 整個 solution 通過 | ✅ |
+
+---
+
+## 踩坑紀錄
+
+### 踩坑一：Windows host 路徑在容器內不可用
+
+**症狀**：Victoria 回覆「❌ 處理訊息時發生錯誤」
+**根因**：`appsettings.json` 設定了 `GitHub:ActualRepoPath = "D:\\Source Code\\AI Team"`，但容器是 Linux，這個路徑根本不存在；ClaudeCodeService subprocess 啟動失敗。
+**修正**：移除 `ActualRepoPath`，改用 `gitHubService.CloneOrPull(_github.Owner, repoName, "victoria")` —— 與 Rosa/Demi/Vera 相同的 CloneOrPull 機制。若 CloneOrPull 失敗則乾淨降級為 LLM 模式。（commit 611ef5d）
+
+### 踩坑二：DefaultRepo 未設定導致跳過 CloneOrPull
+
+**症狀**：Victoria 以 LLM 模式回覆（沒有 ⚠️ 診斷標記，當時診斷工具尚未加入）
+**根因**：`projectName` 為空（對話中無當前專案），`_github.DefaultRepo` 也是空字串（未在 appsettings.json 設定），導致 `repoName = ""`，CloneOrPull 整段跳過，直接走 LLM fallback。
+**修正**：在 appsettings.json 的 `GitHub` 區塊補上 `"DefaultRepo": "AiTeam"`。（commit 844abf8）
+
+### 踩坑三：CLAUDE_Victoria.md 未加入 csproj 導致容器找不到模板
+
+**症狀**：`⚠️ LLM 降級模式：Claude Code 回應解析失敗（Success=True）`
+**根因**：`AiTeam.Bot.csproj` 的 `ItemGroup` 只有 `CLAUDE_CODY.md` 設定了 `CopyToOutputDirectory`，`CLAUDE_Victoria.md` 沒加，所以容器內 `AppContext.BaseDirectory/Resources/CLAUDE_Victoria.md` 不存在。`File.Exists` 回傳 false → 靜默跳過寫入 → Victoria 帶著原始 AiTeam CLAUDE.md（只有開發規範，沒有 ACTION 格式要求）跑 → 解析失敗 → LLM 降級。
+**修正**：在 `.csproj` 補上 `<Content Include="Resources\CLAUDE_Victoria.md"><CopyToOutputDirectory>Always</CopyToOutputDirectory></Content>`。（commit e16190d）
+
+> **教訓**：新增 Resources 下的任何模板檔案，**必須同步在 .csproj 加 CopyToOutputDirectory**，否則容器 build 後靜默消失。
+
+---
+
+## 診斷工具設計
+
+為了避免未來 Victoria 降級時需要翻 Docker log，加入了「降級原因直接顯示在 Discord 回應」的診斷機制：
+
+```csharp
+// 降級時，reply 前綴加上原因
+llmResponse.Reply = $"⚠️ *（LLM 降級模式：{fallbackReason}）*\n\n{llmResponse.Reply}";
+```
+
+降級原因追蹤點：
+- CloneOrPull 拋出例外 → `"CloneOrPull 失敗：{ex.Message}"`
+- repo 名稱/Owner 為空 → `"無法確定 repo（projectName='...', DefaultRepo='...', Owner='...'）"`
+- Claude Code 輸出解析失敗 → `"Claude Code 回應解析失敗（Success={true/false}）"`
 
 ---
 
@@ -307,3 +349,4 @@ Victoria：（載入記憶 → 知道 Bug fix 不跑 Doc）
 | 2026-04-06 | v1.1：新增第三項「長期記憶（簡易版）」，DB 表 + 提示詞驅動，向量搜索方案記錄在 Future Feature 備用 |
 | 2026-04-06 | v1.2：實作完成，全部三項驗收通過；commit ab801d0 |
 | 2026-04-06 | v1.3：補齊 Stage 15 後續 bugfix — Victoria 改用 CloneOrPull 取得 repo 副本（611ef5d）、appsettings 補 DefaultRepo=AiTeam（844abf8）、LLM 降級時 Discord 顯示降級原因（8af44c3）、CLAUDE_Victoria.md 加入 csproj 確保容器內找得到模板（e16190d） |
+| 2026-04-07 | v1.4：補充踩坑紀錄三件組、診斷工具設計說明、驗收標準更新為實際通過結果 |
