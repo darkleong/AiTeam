@@ -1,6 +1,6 @@
 # Stage 13：系統穩定性與流程修正
 
-> 版本：v1.0
+> 版本：v1.1
 > 建立日期：2026-04-06
 > 狀態：📋 規劃中
 
@@ -12,7 +12,7 @@ Stage 11 修了地基（Cody 寫好 code），Stage 12 修了源頭（Rosa / Dem
 
 做完後，整條鏈從頭到尾都到位。
 
-**本 Stage 包含三個項目：技術債清償、Orchestrator 流程修正、Dashboard 可觀測性。**
+**本 Stage 包含四個項目：技術債清償、Orchestrator 流程修正、單一 PR 整合、Dashboard 可觀測性。**
 
 ---
 
@@ -105,7 +105,7 @@ Bug 修復不需要 Doc（沒有新功能），只加 QA。
 ```
 提案核准 → Dev → Vera 審查
   🔴 → Dev 修 → Vera 重審（最多 3 輪）
-  ✅ → QA + Doc 並行 → 通知 merge
+  ✅ → QA → Doc → 通知 merge
 ```
 
 **Bug 修復：**
@@ -115,17 +115,77 @@ Dev → Vera 審查
   ✅ → QA（回歸測試）→ 通知 merge
 ```
 
+> 注意：QA 和 Doc 改為串行（不再並行），原因見第三項「單一 PR 整合」。
+
 ### 需要實作的
 
 - [ ] `WorkflowEngine.NewFeatureTable`：Dev 後只觸發 Reviewer（不再並行 QA/Doc）
-- [ ] `WorkflowEngine.NewFeatureTable`：Reviewer ✅ 後觸發 QA + Doc 並行
+- [ ] `WorkflowEngine.NewFeatureTable`：Reviewer ✅ 後觸發 QA → QA ✅ 後觸發 Doc
 - [ ] `WorkflowEngine.BugFixTable`：Reviewer ✅ 後觸發 QA
 - [ ] `WorkflowEngine.GetDecision` 調整 Reviewer ✅ 的路由邏輯
-- [ ] QA / Doc 完成後的 `NextAction` 判斷（全部完成才通知 merge）
+- [ ] Doc 完成後（新功能）或 QA 完成後（Bug 修復）通知 merge
 
 ---
 
-## 三、Dashboard 任務詳情修正（Future Feature 十一）
+## 三、單一 PR 整合（QA / Doc 推到 Dev 同一個 branch）
+
+### 背景
+
+目前一個需求會產生三個 PR：Dev 一個、Doc 一個、QA 一個。老闆要 merge 三次，PR 之間有依賴關係，git 歷史也很碎。
+
+### 目標
+
+一個需求 = 一個 PR。所有 Agent 的產出（code + tests + docs）都推到 Dev 開的同一個 branch。
+
+### 為什麼 QA 和 Doc 要改成串行
+
+如果 QA 和 Doc 同時 push 到同一個 branch，第二個推的會被 git 拒絕（remote 已更新）。為了零風險，改成串行：
+
+```
+目前：QA + Doc 並行 → 各開自己的 PR（3 個 PR）
+修正：QA → Doc 串行 → 都推到 Dev 的 branch（1 個 PR）
+```
+
+代價是 QA + Doc 變成串行（慢一點），但換來的是：
+- 老闆只要 merge 一次
+- PR 內容完整（code + tests + docs）
+- git 歷史乾淨
+
+### 修正後的完整流程
+
+**新功能（一個 PR）：**
+```
+Dev 開 branch feature/xxx → 寫 code → 開 PR
+  ↓
+Vera 審查 PR
+  🔴 → Dev 修（推到同一個 branch）→ Vera 重審
+  ✅ → 程式碼穩定
+  ↓
+QA 推測試到同一個 feature/xxx branch
+  ↓
+Doc 推文件到同一個 feature/xxx branch
+  ↓
+通知你：「PR 可以 merge 了」（一個 PR 包含一切）
+```
+
+**Bug 修復（一個 PR）：**
+```
+Dev 開 branch → 寫修復 → 開 PR
+  ↓
+Vera 審查
+  ✅ → QA 推回歸測試到同一個 branch → 通知 merge
+```
+
+### 需要實作的
+
+- [ ] QA Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
+- [ ] Doc Agent 改為推 commit 到 Dev 的 branch（而非自己開新 branch + PR）
+- [ ] `TaskGroupService` 傳遞 Dev 的 branch name 給 QA / Doc
+- [ ] WorkflowEngine 流程表：Vera ✅ → QA → Doc → 通知 merge（串行）
+
+---
+
+## 四、Dashboard 任務詳情修正（Future Feature 十一）
 
 ### 背景
 
@@ -164,11 +224,12 @@ Dev → Vera 審查
 1. 並行 Agent 完成時，TaskGroup 欄位不互相覆蓋（Race Condition 修復）
 2. Bot graceful shutdown 時，背景 Orchestration 任務能被取消
 3. GitHub webhook 收到異常 JSON 時不 crash
-4. 新功能流程：Dev → Vera ✅ → QA + Doc 並行 → 通知 merge
+4. 新功能流程：Dev → Vera ✅ → QA → Doc → 通知 merge（串行）
 5. Bug 修復流程：Dev → Vera ✅ → QA → 通知 merge
-6. Dashboard 失敗任務能看到失敗原因
-7. Dashboard 完成任務有最終「完成」步驟
-8. `dotnet build` 整個 solution 通過
+6. 一個需求只產生一個 PR（QA / Doc 推到 Dev 的 branch，不另開 PR）
+7. Dashboard 失敗任務能看到失敗原因
+8. Dashboard 完成任務有最終「完成」步驟
+9. `dotnet build` 整個 solution 通過
 
 ---
 
@@ -177,3 +238,4 @@ Dev → Vera 審查
 | 日期 | 內容 |
 |------|------|
 | 2026-04-06 | 初版建立，整合 Future Feature 十一、十三、十四（剩餘問題） |
+| 2026-04-06 | v1.1：新增第三項「單一 PR 整合」；QA/Doc 從並行改串行，全部推到 Dev 同一個 branch |
