@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v3.4
+> 版本：v3.5
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -61,6 +61,7 @@
 | v3.2 | 2026-04-06 | Stage 14 驗收完成（CEO 六類分類全通過）；順帶修正 Bug fix Orchestrator 未啟動問題；ClaudeCodeService 外部 cancel kill subprocess 補齊；Stage_14_Roadmap.md 補充實作紀錄 |
 | v3.3 | 2026-04-06 | 新增 Stage_15_Roadmap.md（Victoria 接上 Claude Code + Session 對話）；吸收 Future Feature 十（CEO 文件記錄）和十一（Victoria 技術顧問 Phase 1~2）|
 | v3.4 | 2026-04-06 | Stage 15 實作完成：Victoria 升級 Claude Code 模式、Session DB 持久化、長期記憶、/new-session 指令、CLAUDE_Victoria.md 模板、EF Migration |
+| v3.5 | 2026-04-06 | Stage 15 後續 bugfix：CloneOrPull 取得 repo 副本（修正容器路徑）、appsettings 補 DefaultRepo=AiTeam、LLM 降級原因顯示於 Discord、CLAUDE_Victoria.md 納入 csproj 修正容器內找不到模板問題 |
 
 ---
 

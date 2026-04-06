@@ -1,6 +1,6 @@
 # Stage 15：Victoria 接上 Claude Code + Session 對話
 
-> 版本：v1.1
+> 版本：v1.3
 > 建立日期：2026-04-06
 > 狀態：✅ 已完成（2026-04-06）
 
@@ -92,11 +92,11 @@ Victoria 接上 Claude Code 後，「幫我記到 Future Feature」這種需求*
 
 ### 需要實作的
 
-- [ ] `CeoAgentService` 改為驅動 `ClaudeCodeService`（取代直接 Claude API 呼叫）
-- [ ] 建立 Victoria 專屬 CLAUDE.md 模板（包含權限限制 + 分類/路由規則）
-- [ ] Victoria 的 Claude Code prompt 整合現有 System Prompt 內容（8 類分類、confirm 規則等）
-- [ ] 確認 Victoria Claude Code session 不干擾其他 Agent 的 workspace
-- [ ] 處理 Claude Code 回傳格式 → 提取回覆文字 + action JSON
+- [x] `CeoAgentService` 改為驅動 `ClaudeCodeService`（取代直接 Claude API 呼叫）
+- [x] 建立 Victoria 專屬 CLAUDE.md 模板（包含權限限制 + 分類/路由規則）
+- [x] Victoria 的 Claude Code prompt 整合現有 System Prompt 內容（8 類分類、confirm 規則等）
+- [x] 確認 Victoria Claude Code session 不干擾其他 Agent 的 workspace
+- [x] 處理 Claude Code 回傳格式 → 提取回覆文字 + action JSON
 
 ---
 
@@ -169,11 +169,11 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 
 ### 需要實作的
 
-- [ ] 新增 `CeoConversation` Entity + EF Migration
-- [ ] `CeoConversationRepository`（CRUD + 載入 session 歷史 + timeout 清理）
-- [ ] `CeoAgentService` 整合 conversation history 到 Claude Code prompt
-- [ ] Session timeout 機制（30 分鐘閒置自動關閉）
-- [ ] 「新話題」指令或 `/new-session` 手動關閉 session
+- [x] 新增 `CeoConversation` Entity + EF Migration
+- [x] `CeoConversationRepository`（CRUD + 載入 session 歷史 + timeout 清理）
+- [x] `CeoAgentService` 整合 conversation history 到 Claude Code prompt
+- [x] Session timeout 機制（30 分鐘閒置自動關閉）
+- [x] 「新話題」指令或 `/new-session` 手動關閉 session
 - [ ] Dashboard 顯示 CEO 對話歷史（可選，非必要）
 
 ---
@@ -247,11 +247,11 @@ Victoria：（載入記憶 → 知道 Bug fix 不跑 Doc）
 
 ### 需要實作的
 
-- [ ] 新增 `CeoMemory` Entity + EF Migration
-- [ ] `CeoMemoryRepository`（CRUD + 按時間載入 + 上限 100 筆）
-- [ ] `CeoAgentService` Session 開始時載入記憶塞進 prompt
-- [ ] Victoria 的 Claude Code prompt 加入「何時存記憶」的指示
-- [ ] 提供存/讀記憶的機制（Claude Code 工具呼叫或 API endpoint）
+- [x] 新增 `CeoMemory` Entity + EF Migration
+- [x] `CeoMemoryRepository`（CRUD + 按時間載入 + 上限 100 筆）
+- [x] `CeoAgentService` Session 開始時載入記憶塞進 prompt
+- [x] Victoria 的 Claude Code prompt 加入「何時存記憶」的指示
+- [x] 提供存/讀記憶的機制（Claude Code 工具呼叫或 API endpoint）
 - [ ] Dashboard 顯示 / 管理記憶列表（可選，非必要）
 
 ---
@@ -306,3 +306,4 @@ Victoria：（載入記憶 → 知道 Bug fix 不跑 Doc）
 | 2026-04-06 | 初版建立，來源為 Future Feature 第十一項 + 第十項（被吸收）|
 | 2026-04-06 | v1.1：新增第三項「長期記憶（簡易版）」，DB 表 + 提示詞驅動，向量搜索方案記錄在 Future Feature 備用 |
 | 2026-04-06 | v1.2：實作完成，全部三項驗收通過；commit ab801d0 |
+| 2026-04-06 | v1.3：補齊 Stage 15 後續 bugfix — Victoria 改用 CloneOrPull 取得 repo 副本（611ef5d）、appsettings 補 DefaultRepo=AiTeam（844abf8）、LLM 降級時 Discord 顯示降級原因（8af44c3）、CLAUDE_Victoria.md 加入 csproj 確保容器內找得到模板（e16190d） |
