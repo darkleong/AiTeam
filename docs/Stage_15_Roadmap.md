@@ -1,6 +1,6 @@
 # Stage 15：Victoria 接上 Claude Code + Session 對話
 
-> 版本：v1.0
+> 版本：v1.1
 > 建立日期：2026-04-06
 > 狀態：📋 規劃中
 
@@ -13,6 +13,7 @@ Stage 14 給了 Victoria 8 條路（分類 + 路由），但她仍然是「瞎�
 Stage 15 讓 Victoria 從「有路」升級到「有腦」：
 1. **接上 Claude Code** — Victoria 自己能探索 codebase，回答技術問題，讀寫 docs/ 文件
 2. **Session 對話歷史** — Victoria 能進行多輪深度討論，記得 5 分鐘前說過什麼
+3. **長期記憶** — Victoria 能跨 session 記住設計決策和老闆偏好，不再每天失憶
 
 做完後，老闆在 Discord 跟 Victoria 對話的體驗，**接近在 Claude Code 跟顧問對話**。
 
@@ -28,7 +29,7 @@ Stage 15 讓 Victoria 從「有路」升級到「有腦」：
 | 理解 codebase | ❌ 完全看不到程式碼 |
 | 讀寫 docs/ 文件 | ❌ 無法幫老闆記錄 |
 | 多輪對話 | ❌ 每則訊息獨立，不記得上一句 |
-| 長期記憶 | ❌ 無跨 session 記憶 |
+| 長期記憶 | ❌ 無跨 session 記憶（Stage 15 三要做）|
 
 ---
 
@@ -177,9 +178,87 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 
 ---
 
+## 三、長期記憶（簡易版）
+
+### 背景
+
+Session 對話歷史只管 30 分鐘內的上下文。隔天開新 session，Victoria 就失憶了。老闆還是得重複前情提要，體驗打折很大。
+
+### 目標
+
+Victoria 能跨 session 記住重要資訊：設計決策、老闆偏好、專案脈絡。
+
+### 設計：DB 表 + 提示詞驅動
+
+**採用簡易版**：全部載入 prompt，讓 LLM 自己判斷哪些相關。不做向量搜索。
+
+> 未來若記憶量超過 prompt 容量（~100+ 筆），可升級為向量搜索方案，已記錄在 Future Feature。
+
+**資料表：**
+```
+ceo_memories
+  Id         : Guid (PK)
+  Content    : text         -- 記憶內容（markdown 格式）
+  Category   : string       -- "decision" / "preference" / "context"
+  CreatedAt  : DateTime
+  UpdatedAt  : DateTime
+```
+
+**存：提示詞驅動，Victoria 自己判斷什麼值得記**
+
+Claude Code prompt 加入指示：
+```
+當你在對話中遇到以下情況，請存入長期記憶：
+- 老闆做出的設計決策或偏好（例如「Bug fix 不要跑 Doc」）
+- 重要的技術方向（例如「WorkflowEngine 計畫重構」）
+- 老闆明確說「記住這個」的任何內容
+不要存：日常指令、一次性任務、程式碼片段
+```
+
+**取：Session 開始時全部載入**
+
+```
+Session 開始
+    ↓
+從 DB 撈出所有記憶（按 UpdatedAt 排序，上限 100 筆）
+    ↓
+塞進 Claude Code prompt：「## 長期記憶\n{memories}」
+    ↓
+Victoria 自動參考相關記憶回應
+```
+
+**容量預估：**
+- 一筆記憶 ~100 tokens，100 筆 = 10,000 tokens
+- 日常使用每天 2~3 筆 → 一個月 60~90 筆
+- 簡易版足夠撐 1~2 個月，之後視需求加 `is_important` 篩選或升級向量搜索
+
+### 範例
+
+```
+老闆：「以後 Bug fix 都不要跑 Doc Agent」
+Victoria：（存記憶：偏好 — Bug fix 略過 Doc）「了解，我記住了。」
+
+=== 兩週後，新 session ===
+
+老闆：「這個 Bug 修一下」
+Victoria：（載入記憶 → 知道 Bug fix 不跑 Doc）
+          → 派 Dev → Reviewer → QA → 通知 merge（略過 Doc）
+```
+
+### 需要實作的
+
+- [ ] 新增 `CeoMemory` Entity + EF Migration
+- [ ] `CeoMemoryRepository`（CRUD + 按時間載入 + 上限 100 筆）
+- [ ] `CeoAgentService` Session 開始時載入記憶塞進 prompt
+- [ ] Victoria 的 Claude Code prompt 加入「何時存記憶」的指示
+- [ ] 提供存/讀記憶的機制（Claude Code 工具呼叫或 API endpoint）
+- [ ] Dashboard 顯示 / 管理記憶列表（可選，非必要）
+
+---
+
 ## 不做的事
 
-- **長期記憶（Phase 3）** — 需要設計 memory 系統（類似 Claude Code 的 CLAUDE.md 但存 DB），複雜度高，留到後面
+- **向量搜索記憶** — 簡易版（全量載入）足夠目前規模，向量搜索已記錄在 Future Feature 備用
 - **Victoria 寫 src/ 程式碼** — CEO 不該寫 production code，這是 Cody 的工作
 - **Victoria 跑 dotnet build** — CEO 不需要驗證編譯
 
@@ -189,13 +268,13 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 
 | 檔案 | 項目 |
 |------|------|
-| `src/AiTeam.Bot/Agents/CeoAgentService.cs` | 一、二 |
+| `src/AiTeam.Bot/Agents/CeoAgentService.cs` | 一、二、三 |
 | `src/AiTeam.Bot/Discord/CommandHandler.cs` | 二（session 管理） |
-| `src/AiTeam.Data/Entities.cs` | 二（CeoConversation Entity） |
-| `src/AiTeam.Data/AppDbContext.cs` | 二（DbSet + ModelBuilder） |
-| `src/AiTeam.Data/Repositories/` | 二（CeoConversationRepository） |
-| EF Migration | 二 |
-| Victoria 專屬 CLAUDE.md 模板 | 一 |
+| `src/AiTeam.Data/Entities.cs` | 二（CeoConversation）、三（CeoMemory） |
+| `src/AiTeam.Data/AppDbContext.cs` | 二、三（DbSet + ModelBuilder） |
+| `src/AiTeam.Data/Repositories/` | 二（CeoConversationRepository）、三（CeoMemoryRepository） |
+| EF Migration | 二、三 |
+| Victoria 專屬 CLAUDE.md 模板 | 一、三（記憶存取指示） |
 
 ---
 
@@ -203,6 +282,7 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 
 1. **一（Victoria 接 Claude Code）** — 先讓 Victoria 能探索 codebase + 讀寫 docs/，這是最核心的改變
 2. **二（Session 對話歷史）** — Victoria 有了 Claude Code 後，加上對話記憶讓體驗完整
+3. **三（長期記憶）** — 有了 session 之後才知道什麼值得記住，三依賴二
 
 ---
 
@@ -212,8 +292,10 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 2. 老闆說「幫我記到 Future Feature」→ Victoria 更新 `Future_Feature.md` + commit
 3. 老闆連續對話三輪 → Victoria 記得前兩輪的內容
 4. 閒置 30 分鐘後 → 新訊息自動開啟新 session
-5. 原有的 8 類分類 + 路由功能不受影響
-6. `dotnet build` 整個 solution 通過
+5. 老闆說「記住：Bug fix 不要跑 Doc」→ Victoria 存入記憶
+6. 隔天新 session → Victoria 仍記得老闆的偏好
+7. 原有的 8 類分類 + 路由功能不受影響
+8. `dotnet build` 整個 solution 通過
 
 ---
 
@@ -222,3 +304,4 @@ Victoria：「了解。我先建一個技術改善任務處理重構，
 | 日期 | 內容 |
 |------|------|
 | 2026-04-06 | 初版建立，來源為 Future Feature 第十一項 + 第十項（被吸收）|
+| 2026-04-06 | v1.1：新增第三項「長期記憶（簡易版）」，DB 表 + 提示詞驅動，向量搜索方案記錄在 Future Feature 備用 |
