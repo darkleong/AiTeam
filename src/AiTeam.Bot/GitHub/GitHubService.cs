@@ -294,6 +294,24 @@ public class GitHubService(
     }
 
     /// <summary>
+    /// 關閉 GitHub Issue。若 Issue 不存在或已關閉，靜默略過。
+    /// </summary>
+    public async Task CloseIssueAsync(string owner, string repo, int issueNumber)
+    {
+        var client = CreateClient();
+        try
+        {
+            await client.Issue.Update(owner, repo, issueNumber,
+                new IssueUpdate { State = ItemState.Closed });
+            logger.LogInformation("Issue #{Number} 已關閉", issueNumber);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "關閉 Issue #{Number} 失敗，略過", issueNumber);
+        }
+    }
+
+    /// <summary>
     /// 建立 GitHub Issue，回傳 Issue URL。
     /// </summary>
     public async Task<string> CreateIssueAsync(
