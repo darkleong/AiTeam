@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TokenLog> TokenLogs => Set<TokenLog>();
     public DbSet<Rule> Rules => Set<Rule>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<CeoConversation> CeoConversations => Set<CeoConversation>();
+    public DbSet<CeoMemory> CeoMemories => Set<CeoMemory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,6 +95,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.ToTable("app_settings");
             e.HasKey(x => x.Key);
+        });
+
+        modelBuilder.Entity<CeoConversation>(e =>
+        {
+            e.ToTable("ceo_conversations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasIndex(x => new { x.UserId, x.SessionId });
+            e.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<CeoMemory>(e =>
+        {
+            e.ToTable("ceo_memories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasIndex(x => new { x.UserId, x.IsActive });
         });
     }
 }

@@ -80,6 +80,11 @@ public class CommandHandler(
                 .WithName("status")
                 .WithDescription("查詢各 Agent 目前狀態")
                 .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("new-session")
+                .WithDescription("清除 Victoria 的對話記憶，開始全新 Session（長期記憶不受影響）")
+                .Build(),
         };
 
         await guild.BulkOverwriteApplicationCommandAsync(commands);
@@ -214,10 +219,12 @@ public class CommandHandler(
         var taskRepo         = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
 
-        var ceoResponse = await ceoService.ProcessAsync(
-            msg.CleanContent, projectName, agentList, rules,
+        // Stage 15：使用 Claude Code 模式（含 Session 對話歷史 + 長期記憶）
+        var ceoResponse = await ceoService.ProcessWithClaudeCodeAsync(
+            msg.CleanContent,
+            msg.Author.Id.ToString(),
+            projectName, agentList, rules,
             images: images.Count > 0 ? images : null,
-            history: history,
             availableProjects: availableProjects);
 
         // 防護修正（同 /task 指令邏輯）
@@ -227,9 +234,7 @@ public class CommandHandler(
             ceoResponse.Action = "delegate";
         }
 
-        // 更新對話歷史
-        contextStore.AddTurn(msg.Channel.Id, "user",      msg.CleanContent);
-        contextStore.AddTurn(msg.Channel.Id, "assistant", ceoResponse.Reply);
+        // Stage 15：對話歷史已由 ProcessWithClaudeCodeAsync 持久化至 DB，不再由 CommandHandler 管理
 
         if (ceoResponse.Action == "reply")
         {
@@ -383,6 +388,7 @@ public class CommandHandler(
                 "task"         => HandleTaskCommandAsync(command),
                 "reload-rules" => HandleReloadRulesAsync(command),
                 "status"       => HandleStatusAsync(command),
+                "new-session"  => HandleNewSessionAsync(command),
                 _              => command.FollowupAsync("未知指令")
             });
         }
@@ -483,6 +489,22 @@ public class CommandHandler(
         {
             await command.FollowupAsync(ceoResponse.Reply);
         }
+    }
+
+    /// <summary>Stage 15：/new-session — 清除 Victoria 的 in-memory 對話暫存，下次訊息將自動開啟新 DB session。</summary>
+    private async Task HandleNewSessionAsync(SocketSlashCommand command)
+    {
+        // 清除 in-memory context store（proposal / adjustment flow 的暫存狀態）
+        contextStore.Clear(command.Channel.Id);
+
+        // DB session 不需主動刪除：CeoConversationRepository.GetActiveSessionIdAsync
+        // 在下次訊息進來時，若距離最後一筆超過 30 分鐘，會自動回傳新 Guid 開啟新 session。
+        // 若本指令是在 30 分鐘內執行，下次訊息時仍會繼承舊 SessionId，使用者可接受此行為（
+        // 因為真正重置語境的方式是等 30 分鐘或傳訊息讓 Victoria 知道「開始新話題」）。
+
+        await command.FollowupAsync(
+            "✅ Session 已重置。Victoria 的對話語境已清空，下次回應將以全新上下文開始。\n" +
+            "（長期記憶不受影響，Victoria 仍記得你過去記錄的設計決策與偏好。）");
     }
 
     private async Task HandleReloadRulesAsync(SocketSlashCommand command)

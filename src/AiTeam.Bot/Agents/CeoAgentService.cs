@@ -5,25 +5,34 @@ using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// CEO Agent 核心邏輯：組建 Prompt、呼叫 LLM、解析 JSON 回應。
+/// CEO Agent 核心邏輯：組建 Prompt、呼叫 LLM 或 Claude Code、解析 JSON 回應。
 /// Stage 9：加入智慧分類（Bug / 新功能 / 正常行為 / 疑問）、提案模式（propose action）。
+/// Stage 15：Victoria 接上 Claude Code（ProcessWithClaudeCodeAsync）、Session 對話歷史、長期記憶。
 /// </summary>
 public class CeoAgentService(
     LlmProviderFactory providerFactory,
     TaskRepository taskRepository,
     GitHubService gitHubService,
+    ClaudeCodeService claudeCodeService,
+    CeoConversationRepository conversationRepository,
+    CeoMemoryRepository memoryRepository,
     IOptions<GitHubSettings> gitHubSettings,
+    IConfiguration configuration,
     ILogger<CeoAgentService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
+
+    /// <summary>確保 CLAUDE.md swap 的序列化，避免同時觸發兩個 Victoria Claude Code session 時互相覆寫。</summary>
+    private static readonly SemaphoreSlim VictoriaLock = new(1, 1);
 
     private readonly GitHubSettings _github = gitHubSettings.Value;
 
@@ -65,6 +74,236 @@ public class CeoAgentService(
 
         // 兩次都失敗，回傳通知訊息
         return new CeoResponse { Reply = "CEO 回應格式錯誤，請查看 log 或稍後再試。" };
+    }
+
+    /// <summary>
+    /// Stage 15：Victoria CEO 的主要處理路徑（Claude Code 模式）。
+    /// 可探索 codebase、讀寫 docs/、git commit，同時維護 Session 對話歷史與長期記憶。
+    /// </summary>
+    public async Task<CeoResponse> ProcessWithClaudeCodeAsync(
+        string userInput,
+        string userId,
+        string projectName,
+        IReadOnlyList<AgentDescriptor> agentList,
+        IReadOnlyList<string> rules,
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<ImageAttachment>? images = null,
+        IReadOnlyList<string>? availableProjects = null)
+    {
+        // ── 1. Session 解析 ──────────────────────────────────────────────
+        var sessionId = await conversationRepository.GetActiveSessionIdAsync(userId, cancellationToken);
+
+        // ── 2. 載入對話歷史（最近 20 筆） ───────────────────────────────
+        var historyTurns = await conversationRepository.GetSessionHistoryAsync(sessionId, cancellationToken);
+
+        // ── 3. 載入長期記憶（最多 100 筆） ──────────────────────────────
+        var memories = await memoryRepository.GetActiveMemoriesAsync(userId, cancellationToken);
+
+        // ── 4. 準備 repo 路徑 ────────────────────────────────────────────
+        var repoPath  = configuration["GitHub:ActualRepoPath"]
+                     ?? _github.WorkspacePath;
+        var claudeMd  = Path.Combine(repoPath, "CLAUDE.md");
+        var claudeBak = Path.Combine(repoPath, "CLAUDE.md.bak");
+        var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Victoria.md");
+
+        // ── 4a. Crash 自動修復：若 CLAUDE.md 開頭是 Victoria 標記代表上次未還原 ──
+        if (File.Exists(claudeMd))
+        {
+            var firstLine = "";
+            try
+            {
+                using var reader = new StreamReader(claudeMd);
+                firstLine = await reader.ReadLineAsync(cancellationToken) ?? "";
+            }
+            catch { /* ignore */ }
+
+            if (firstLine.StartsWith("# Victoria", StringComparison.Ordinal))
+            {
+                logger.LogWarning("偵測到 Victoria CLAUDE.md 未還原（上次 crash？），嘗試從 .bak 還原");
+                try
+                {
+                    if (File.Exists(claudeBak))
+                        File.Copy(claudeBak, claudeMd, overwrite: true);
+                    else
+                        File.Delete(claudeMd);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "CLAUDE.md 還原失敗，繼續執行");
+                }
+            }
+        }
+
+        // ── 5. 組裝 Prompt ────────────────────────────────────────────────
+        var prompt = BuildVictoriaPrompt(
+            userInput, projectName, agentList, rules, historyTurns, memories, availableProjects,
+            await BuildGitHubContextAsync(
+                _github.Owner,
+                string.IsNullOrWhiteSpace(projectName) ? _github.DefaultRepo : projectName,
+                cancellationToken),
+            images);
+
+        // ── 6. 取得 Anthropic API Key ─────────────────────────────────────
+        var apiKey = configuration["AITEAM_ANTHROPIC_KEY"]
+                  ?? configuration["Anthropic:ApiKey"]
+                  ?? "";
+        var model  = configuration["Agents:CEO:Model"] ?? "claude-sonnet-4-6";
+
+        // ── 7. CLAUDE.md swap + 執行 Claude Code ─────────────────────────
+        ClaudeCodeResult? claudeResult = null;
+        string? originalMd = null;
+
+        await VictoriaLock.WaitAsync(cancellationToken);
+        try
+        {
+            // 讀取原始 CLAUDE.md（備份用）
+            if (File.Exists(claudeMd))
+                originalMd = await File.ReadAllTextAsync(claudeMd, cancellationToken);
+
+            // 備份到 .bak（防 process kill 導致未還原）
+            if (originalMd is not null)
+                await File.WriteAllTextAsync(claudeBak, originalMd, cancellationToken);
+
+            // 寫入 Victoria 模板
+            if (File.Exists(templatePath))
+                await File.WriteAllTextAsync(claudeMd,
+                    await File.ReadAllTextAsync(templatePath, cancellationToken),
+                    cancellationToken);
+
+            claudeResult = await claudeCodeService.RunVictoriaAsync(repoPath, prompt, model, apiKey, cancellationToken);
+        }
+        finally
+        {
+            // 還原 CLAUDE.md
+            try
+            {
+                if (originalMd is not null)
+                    await File.WriteAllTextAsync(claudeMd, originalMd, CancellationToken.None);
+                else if (File.Exists(claudeMd))
+                    File.Delete(claudeMd);
+
+                if (File.Exists(claudeBak))
+                    File.Delete(claudeBak);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "CLAUDE.md 還原失敗");
+            }
+            VictoriaLock.Release();
+        }
+
+        // ── 8. 解析 ACTION 區塊（帶 fallback） ──────────────────────────
+        CeoResponse? ceoResponse = null;
+        if (claudeResult is not null)
+        {
+            ceoResponse = TryParseActionBlock(claudeResult.Output)
+                       ?? TryParseResponse(claudeResult.Output);
+        }
+
+        if (ceoResponse is null)
+        {
+            logger.LogWarning("Claude Code 回應解析失敗，fallback 到原始 LLM。claudeResult.Success={S}", claudeResult?.Success);
+            ceoResponse = await ProcessAsync(userInput, projectName, agentList, rules,
+                cancellationToken, images, null, availableProjects);
+        }
+
+        // ── 9. 持久化對話 turn ────────────────────────────────────────────
+        await conversationRepository.AddTurnAsync(sessionId, userId, "user",      userInput,           cancellationToken);
+        await conversationRepository.AddTurnAsync(sessionId, userId, "assistant", ceoResponse.Reply,   cancellationToken);
+
+        // ── 10. 持久化長期記憶 ─────────────────────────────────────────────
+        if (ceoResponse.MemoriesToSave is { Count: > 0 })
+        {
+            var toSave = ceoResponse.MemoriesToSave
+                .Select(m => new AiTeam.Data.Repositories.MemoryToSave(m.Content, m.Category))
+                .ToList();
+            await memoryRepository.SaveMemoriesAsync(userId, toSave, cancellationToken);
+
+            logger.LogInformation("Victoria 儲存了 {Count} 筆長期記憶", toSave.Count);
+        }
+
+        return ceoResponse;
+    }
+
+    /// <summary>組裝 Victoria Claude Code 模式的完整 Prompt。</summary>
+    private string BuildVictoriaPrompt(
+        string userInput,
+        string projectName,
+        IReadOnlyList<AgentDescriptor> agentList,
+        IReadOnlyList<string> rules,
+        IReadOnlyList<CeoConversation> historyTurns,
+        IReadOnlyList<AiTeam.Data.CeoMemory> memories,
+        IReadOnlyList<string>? availableProjects,
+        string githubContext,
+        IReadOnlyList<ImageAttachment>? images)
+    {
+        var agents = string.Join("\n", agentList.Select(a =>
+            string.IsNullOrWhiteSpace(a.Description) ? $"- {a.Name}" : $"- {a.Name}：{a.Description}"));
+
+        var ruleList = rules.Count > 0
+            ? string.Join("\n", rules.Select(r => $"- {r}"))
+            : "（尚無規則）";
+
+        var projectListBlock = availableProjects is { Count: > 1 }
+            ? $"\n可用專案清單：{string.Join("、", availableProjects)}"
+            : "";
+
+        // 長期記憶（升冪排列供 Prompt 閱讀）
+        var memoryBlock = memories.Count > 0
+            ? string.Join("\n", memories
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => $"[{m.Category}] {m.Content}"))
+            : "（無長期記憶）";
+
+        // Session 對話歷史
+        var historyBlock = historyTurns.Count > 0
+            ? string.Join("\n", historyTurns.Select(t =>
+                t.Role == "user" ? $"[user] {t.Content}" : $"[assistant] {t.Content}"))
+            : "（新 Session，無歷史）";
+
+        // 圖片說明（若有）
+        var imageNote = images is { Count: > 0 }
+            ? $"\n\n（老闆附上了 {images.Count} 張圖片，請在分析時考慮圖片內容。）"
+            : "";
+
+        return $"""
+            ## 可用 Agent
+            {agents}
+
+            ## 規則清單
+            {ruleList}
+
+            ## 當前專案
+            {(string.IsNullOrWhiteSpace(projectName) ? "（未指定）" : projectName)}{projectListBlock}
+
+            ## 近期 GitHub 上下文
+            {githubContext}
+
+            ## 你的長期記憶
+            {memoryBlock}
+
+            ## 本 Session 對話歷史
+            {historyBlock}
+
+            ## 老闆指令
+            {userInput}{imageNote}
+            """;
+    }
+
+    /// <summary>從 Claude Code 輸出中提取 &lt;ACTION&gt;...&lt;/ACTION&gt; XML 區塊並解析為 CeoResponse。</summary>
+    private static CeoResponse? TryParseActionBlock(string rawOutput)
+    {
+        if (string.IsNullOrWhiteSpace(rawOutput)) return null;
+        try
+        {
+            var match = Regex.Match(rawOutput, @"<ACTION>\s*(\{[\s\S]*?\})\s*</ACTION>");
+            if (!match.Success) return null;
+            return JsonSerializer.Deserialize<CeoResponse>(match.Groups[1].Value, JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string BuildSystemPrompt(IReadOnlyList<AgentDescriptor> agentList, IReadOnlyList<string> rules)

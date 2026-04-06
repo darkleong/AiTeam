@@ -131,3 +131,25 @@ public class Rule
 
     public Team? Team { get; set; }
 }
+
+/// <summary>CEO 多輪對話的單一訊息記錄（DB 持久化，支援 Session 語境）。</summary>
+public class CeoConversation
+{
+    public Guid Id { get; set; }
+    public Guid SessionId { get; set; }          // 同一段對話的 GUID
+    public string UserId { get; set; } = "";     // Discord ulong.ToString()
+    public string Role { get; set; } = "";       // "user" | "assistant"
+    public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>CEO 跨 Session 長期記憶。Victoria 回應中的 memories_to_save 持久化至此表。</summary>
+public class CeoMemory
+{
+    public Guid Id { get; set; }
+    public string UserId { get; set; } = "";
+    public string Content { get; set; } = "";
+    public string Category { get; set; } = "";  // "preference" | "decision" | "context"
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

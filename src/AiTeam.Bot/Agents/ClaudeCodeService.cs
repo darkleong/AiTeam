@@ -12,6 +12,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
 {
     private static readonly TimeSpan DefaultTimeout     = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ReadOnlyTimeout    = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan VictoriaTimeout    = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// 在指定的 repo 工作目錄內執行 Claude Code 完成開發任務。
@@ -47,6 +48,28 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
     /// <param name="anthropicApiKey">Anthropic API Key</param>
     /// <param name="ct">CancellationToken</param>
     /// <returns>執行結果（Output 即為 Agent 的結構化輸出）</returns>
+    /// <summary>
+    /// Victoria CEO 模式：可讀取整個 repo（src/ docs/ 等）、寫入 docs/、執行 git commit docs 變更。
+    /// 不可 push、不可修改 src/ 程式碼（靠 CLAUDE_Victoria.md 提示詞約束）。
+    /// 使用實際 repo 路徑（非 clone），呼叫端負責在進入前設定 CLAUDE.md。
+    /// </summary>
+    /// <param name="workingDir">實際 repo 本地路徑（非 clone 的 workspace）</param>
+    /// <param name="prompt">含對話歷史、長期記憶及老闆指令的組合 Prompt</param>
+    /// <param name="model">Claude 模型 ID</param>
+    /// <param name="anthropicApiKey">Anthropic API Key</param>
+    /// <param name="ct">CancellationToken</param>
+    public async Task<ClaudeCodeResult> RunVictoriaAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        CancellationToken ct = default)
+    {
+        await ConfigureGitVictoriaAsync(workingDir, ct);
+        return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
+            VictoriaTimeout, allowedTools: null, maxTurns: 15, ct);
+    }
+
     public Task<ClaudeCodeResult> RunReadOnlyAsync(
         string workingDir,
         string prompt,
@@ -207,6 +230,13 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
     {
         await RunGitConfigAsync(workingDir, "user.name", "Cody Dev Agent", ct);
         await RunGitConfigAsync(workingDir, "user.email", "cody@aiteam.local", ct);
+    }
+
+    /// <summary>設定 Victoria CEO 的 git user identity。</summary>
+    private async Task ConfigureGitVictoriaAsync(string workingDir, CancellationToken ct)
+    {
+        await RunGitConfigAsync(workingDir, "user.name", "Victoria CEO", ct);
+        await RunGitConfigAsync(workingDir, "user.email", "victoria@aiteam.local", ct);
     }
 
     private async Task RunGitConfigAsync(

@@ -18,6 +18,8 @@ public static class DataServiceExtensions
         builder.Services.AddScoped<TaskRepository>();
         builder.Services.AddScoped<AgentRepository>();
         builder.Services.AddScoped<TokenRepository>();
+        builder.Services.AddScoped<CeoConversationRepository>();
+        builder.Services.AddScoped<CeoMemoryRepository>();
         return builder;
     }
 }
