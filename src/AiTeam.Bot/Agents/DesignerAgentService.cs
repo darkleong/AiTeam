@@ -224,17 +224,38 @@ public class DesignerAgentService(
             sb.AppendLine();
         }
 
-        // ✏️ 調整模式
+        // ✏️ 調整模式：提取老闆的調整意見並獨立強調
+        string? adjustmentInstruction = null;
         if (!string.IsNullOrWhiteSpace(previousUiSpec))
         {
-            sb.AppendLine("## 第一版 UI 規格（請依老闆意見修改，不要重做）");
+            // 從 description 中提取「【老闆調整意見】」區段
+            const string adjustmentMarker = "【老闆調整意見】";
+            var markerIdx = description.IndexOf(adjustmentMarker, StringComparison.Ordinal);
+            if (markerIdx >= 0)
+                adjustmentInstruction = description[(markerIdx + adjustmentMarker.Length)..].Trim();
+
+            if (!string.IsNullOrWhiteSpace(adjustmentInstruction))
+            {
+                sb.AppendLine("## ⚠️ 老闆的修改指令（必須套用）");
+                sb.AppendLine(adjustmentInstruction);
+                sb.AppendLine();
+            }
+
+            sb.AppendLine("## 第一版 UI 規格（以下為基礎，只修改老闆指定的部分，其他保留）");
             sb.AppendLine(previousUiSpec);
             sb.AppendLine();
         }
 
         sb.AppendLine("## 你的任務");
         if (!string.IsNullOrWhiteSpace(previousUiSpec))
-            sb.AppendLine("基於第一版 UI 規格和老闆意見進行修改，探索相關 .razor 頁面後輸出修改後的完整 Markdown 規格文件。");
+        {
+            if (!string.IsNullOrWhiteSpace(adjustmentInstruction))
+                sb.AppendLine($"**老闆要求：{adjustmentInstruction}**\n" +
+                              "你必須明確套用這個修改：更新第一版規格中相關的樣式、位置或行為描述。" +
+                              "其他區塊內容保留不變。探索相關 .razor 頁面確認實作可行性後，輸出修改後的完整 Markdown 規格文件。");
+            else
+                sb.AppendLine("基於第一版 UI 規格和老闆意見進行修改，探索相關 .razor 頁面後輸出修改後的完整 Markdown 規格文件。");
+        }
         else
             sb.AppendLine("探索 codebase 中相關的 .razor 頁面與 MudBlazor 元件使用方式，然後輸出完整的 Markdown UI 規格文件（含六個區塊）。直接輸出 Markdown，不加額外說明。");
 

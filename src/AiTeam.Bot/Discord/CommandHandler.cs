@@ -36,6 +36,10 @@ public class CommandHandler(
     // Stage 10：等待「✏️ 需調整」的修改說明輸入（userId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingAdjustments = [];
 
+    // Stage 12：已處理訊息 ID 去重快取，防止 Discord gateway 阻塞時重複派送（messageId → 處理時間）
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
+    private const int ProcessedMessageTtlSeconds = 60;
+
     /// <summary>
     /// 向 Guild 註冊所有斜線指令，並訂閱互動事件。
     /// </summary>
@@ -104,6 +108,20 @@ public class CommandHandler(
         var isAgentChannel  = channelAgentMap.TryGetValue(channelName, out var targetAgent);
 
         if (!isCeoChannel && !isAgentChannel) return;
+
+        // Stage 12：去重快取，防止 Discord gateway 阻塞時同一訊息被重複處理
+        var now = DateTime.UtcNow;
+        if (!_processedMessages.TryAdd(msg.Id, now))
+        {
+            logger.LogDebug("略過重複訊息（Id={MsgId}）", msg.Id);
+            return;
+        }
+        // 順帶清理超過 TTL 的舊記錄，避免無限增長
+        foreach (var kvp in _processedMessages)
+        {
+            if ((now - kvp.Value).TotalSeconds > ProcessedMessageTtlSeconds)
+                _processedMessages.TryRemove(kvp.Key, out _);
+        }
 
         using var typing = msg.Channel.EnterTypingState();
 

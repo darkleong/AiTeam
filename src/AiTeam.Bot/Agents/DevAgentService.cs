@@ -303,7 +303,9 @@ public class DevAgentService(
             : "";
 
         // Stage 12：若有 UI 規格全文，指示 Cody 將規格存入 docs/ui-specs/
-        var slug = Regex.Replace(task.Title.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        // 中文標題 regex 後會變空字串，改用 TaskId 前 8 碼作為 fallback
+        var slugRaw = Regex.Replace(task.Title.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        var slug    = string.IsNullOrEmpty(slugRaw) ? task.Id.ToString("N")[..8] : slugRaw;
         var uiSpecInstruction = !string.IsNullOrWhiteSpace(uiSpecContent)
             ? $"\n8. 新增檔案 `docs/ui-specs/{slug}.md`，內容為下方 UI 規格全文（不要更動內容）\n"
             : "";
