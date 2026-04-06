@@ -18,10 +18,13 @@ public class DashboardTaskService(AppDbContext db)
         string? statusFilter = null,
         CancellationToken cancellationToken = default)
     {
+        // 防禦性驗證：避免非法參數造成負數 Skip 或過大查詢
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 1;
+        if (pageSize > 200) pageSize = 200;
+
         var query = db.Tasks
             .AsNoTracking()
-            .Include(t => t.Project)
-            .Include(t => t.Team)
             .Where(t => statusFilter == null || t.Status == statusFilter)
             .OrderByDescending(t => t.CreatedAt);
 
@@ -53,8 +56,6 @@ public class DashboardTaskService(AppDbContext db)
         CancellationToken cancellationToken = default)
         => await db.Tasks
             .AsNoTracking()
-            .Include(t => t.Project)
-            .Include(t => t.Team)
             .OrderByDescending(t => t.CreatedAt)
             .Take(limit)
             .Select(t => new TaskItemDto

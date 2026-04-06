@@ -1,5 +1,6 @@
 using AiTeam.Data.Hubs;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks;
@@ -17,17 +18,21 @@ public partial class TaskCenter : IAsyncDisposable
     [Inject]
     private IConfiguration Configuration { get; set; } = null!;
 
+    [Inject]
+    private ILogger<TaskCenter> Logger { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
 
-    private MudTable<TaskItemDto> _tableRef = null!;
-    private TaskItemDto?          _selectedTask;
-    private List<TaskLogDto>      _selectedLogs = [];
-    private bool                  _isDrawerOpen;
-    private string?               _statusFilter;
-    private HubConnection?        _hubConnection;
-    private PeriodicTimer?        _elapsedTimer;
+    private MudTable<TaskItemDto>      _tableRef = null!;
+    private TaskItemDto?               _selectedTask;
+    private List<TaskLogDto>           _selectedLogs = [];
+    private bool                       _isDrawerOpen;
+    private string?                    _statusFilter;
+    private HubConnection?             _hubConnection;
+    private PeriodicTimer?             _elapsedTimer;
+    private CancellationTokenSource    _elapsedTimerCts = new();
 
     #endregion
 
@@ -96,9 +101,23 @@ public partial class TaskCenter : IAsyncDisposable
     private async Task StartElapsedTimerAsync()
     {
         _elapsedTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        while (await _elapsedTimer.WaitForNextTickAsync())
+        try
         {
-            await InvokeAsync(StateHasChanged);
+            while (await _elapsedTimer.WaitForNextTickAsync(_elapsedTimerCts.Token))
+            {
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "計時器更新 UI 時發生例外");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 元件 Dispose 時正常取消，不需記錄
         }
     }
 
@@ -118,6 +137,9 @@ public partial class TaskCenter : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // 先 Cancel 再 Dispose，確保 WaitForNextTickAsync 能夠正確終止
+        await _elapsedTimerCts.CancelAsync();
+        _elapsedTimerCts.Dispose();
         _elapsedTimer?.Dispose();
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
