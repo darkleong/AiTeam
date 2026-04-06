@@ -78,7 +78,8 @@ public class CeoAgentService(
 
     /// <summary>
     /// Stage 15：Victoria CEO 的主要處理路徑（Claude Code 模式）。
-    /// 可探索 codebase、讀寫 docs/、git commit，同時維護 Session 對話歷史與長期記憶。
+    /// 可探索 codebase、讀寫 docs/、git commit + push，同時維護 Session 對話歷史與長期記憶。
+    /// 若 CloneOrPull 失敗或 repo 未設定，自動降級為直接 LLM 呼叫（ProcessAsync）。
     /// </summary>
     public async Task<CeoResponse> ProcessWithClaudeCodeAsync(
         string userInput,
@@ -99,126 +100,148 @@ public class CeoAgentService(
         // ── 3. 載入長期記憶（最多 100 筆） ──────────────────────────────
         var memories = await memoryRepository.GetActiveMemoriesAsync(userId, cancellationToken);
 
-        // ── 4. 準備 repo 路徑 ────────────────────────────────────────────
-        var repoPath  = configuration["GitHub:ActualRepoPath"]
-                     ?? _github.WorkspacePath;
-        var claudeMd  = Path.Combine(repoPath, "CLAUDE.md");
-        var claudeBak = Path.Combine(repoPath, "CLAUDE.md.bak");
-        var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Victoria.md");
+        // ── 4. 取得 repo 副本（與其他 Agent 一致的 CloneOrPull 機制）────
+        // 容器內無法存取 Windows host 路徑，必須透過 CloneOrPull 取得本地副本。
+        var repoName = !string.IsNullOrWhiteSpace(projectName) ? projectName : _github.DefaultRepo;
+        string? repoPath = null;
 
-        // ── 4a. Crash 自動修復：若 CLAUDE.md 開頭是 Victoria 標記代表上次未還原 ──
-        if (File.Exists(claudeMd))
+        if (!string.IsNullOrWhiteSpace(repoName) && !string.IsNullOrWhiteSpace(_github.Owner))
         {
-            var firstLine = "";
             try
             {
-                using var reader = new StreamReader(claudeMd);
-                firstLine = await reader.ReadLineAsync(cancellationToken) ?? "";
-            }
-            catch { /* ignore */ }
-
-            if (firstLine.StartsWith("# Victoria", StringComparison.Ordinal))
-            {
-                logger.LogWarning("偵測到 Victoria CLAUDE.md 未還原（上次 crash？），嘗試從 .bak 還原");
-                try
-                {
-                    if (File.Exists(claudeBak))
-                        File.Copy(claudeBak, claudeMd, overwrite: true);
-                    else
-                        File.Delete(claudeMd);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "CLAUDE.md 還原失敗，繼續執行");
-                }
-            }
-        }
-
-        // ── 5. 組裝 Prompt ────────────────────────────────────────────────
-        var prompt = BuildVictoriaPrompt(
-            userInput, projectName, agentList, rules, historyTurns, memories, availableProjects,
-            await BuildGitHubContextAsync(
-                _github.Owner,
-                string.IsNullOrWhiteSpace(projectName) ? _github.DefaultRepo : projectName,
-                cancellationToken),
-            images);
-
-        // ── 6. 取得 Anthropic API Key ─────────────────────────────────────
-        var apiKey = configuration["AITEAM_ANTHROPIC_KEY"]
-                  ?? configuration["Anthropic:ApiKey"]
-                  ?? "";
-        var model  = configuration["Agents:CEO:Model"] ?? "claude-sonnet-4-6";
-
-        // ── 7. CLAUDE.md swap + 執行 Claude Code ─────────────────────────
-        ClaudeCodeResult? claudeResult = null;
-        string? originalMd = null;
-
-        await VictoriaLock.WaitAsync(cancellationToken);
-        try
-        {
-            // 讀取原始 CLAUDE.md（備份用）
-            if (File.Exists(claudeMd))
-                originalMd = await File.ReadAllTextAsync(claudeMd, cancellationToken);
-
-            // 備份到 .bak（防 process kill 導致未還原）
-            if (originalMd is not null)
-                await File.WriteAllTextAsync(claudeBak, originalMd, cancellationToken);
-
-            // 寫入 Victoria 模板
-            if (File.Exists(templatePath))
-                await File.WriteAllTextAsync(claudeMd,
-                    await File.ReadAllTextAsync(templatePath, cancellationToken),
-                    cancellationToken);
-
-            claudeResult = await claudeCodeService.RunVictoriaAsync(repoPath, prompt, model, apiKey, cancellationToken);
-        }
-        finally
-        {
-            // 還原 CLAUDE.md
-            try
-            {
-                if (originalMd is not null)
-                    await File.WriteAllTextAsync(claudeMd, originalMd, CancellationToken.None);
-                else if (File.Exists(claudeMd))
-                    File.Delete(claudeMd);
-
-                if (File.Exists(claudeBak))
-                    File.Delete(claudeBak);
+                repoPath = gitHubService.CloneOrPull(_github.Owner, repoName, "victoria");
+                logger.LogInformation("Victoria repo 準備完成（path={Path}）", repoPath);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "CLAUDE.md 還原失敗");
+                logger.LogWarning(ex, "Victoria CloneOrPull 失敗，降級使用直接 LLM 模式");
             }
-            VictoriaLock.Release();
+        }
+        else
+        {
+            logger.LogWarning("Victoria 無法確定 repo（projectName={P}, DefaultRepo={D}），降級使用直接 LLM 模式",
+                projectName, _github.DefaultRepo);
         }
 
-        // ── 8. 解析 ACTION 區塊（帶 fallback） ──────────────────────────
+        // ── 5. 組裝 GitHub 上下文（與 repo 路徑無關，先行取得） ──────────
+        var githubContext = await BuildGitHubContextAsync(
+            _github.Owner,
+            string.IsNullOrWhiteSpace(projectName) ? _github.DefaultRepo : projectName,
+            cancellationToken);
+
+        // ── 6. 若有 repo 路徑，執行 Claude Code 模式；否則降級 ─────────
         CeoResponse? ceoResponse = null;
-        if (claudeResult is not null)
+
+        if (repoPath is not null)
         {
-            ceoResponse = TryParseActionBlock(claudeResult.Output)
-                       ?? TryParseResponse(claudeResult.Output);
+            var claudeMd     = Path.Combine(repoPath, "CLAUDE.md");
+            var claudeBak    = Path.Combine(repoPath, "CLAUDE.md.bak");
+            var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Victoria.md");
+
+            // 4a. Crash 自動修復：若 CLAUDE.md 開頭是 Victoria 標記代表上次未還原
+            if (File.Exists(claudeMd))
+            {
+                try
+                {
+                    using var reader = new StreamReader(claudeMd);
+                    var firstLine = await reader.ReadLineAsync(cancellationToken) ?? "";
+                    if (firstLine.StartsWith("# Victoria", StringComparison.Ordinal))
+                    {
+                        logger.LogWarning("偵測到 Victoria CLAUDE.md 未還原（上次 crash？），嘗試從 .bak 還原");
+                        if (File.Exists(claudeBak))
+                            File.Copy(claudeBak, claudeMd, overwrite: true);
+                        else
+                            File.Delete(claudeMd);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "CLAUDE.md crash 修復失敗，繼續執行");
+                }
+            }
+
+            var prompt = BuildVictoriaPrompt(
+                userInput, projectName, agentList, rules, historyTurns, memories,
+                availableProjects, githubContext, images);
+
+            var apiKey = configuration["AITEAM_ANTHROPIC_KEY"]
+                      ?? configuration["Anthropic:ApiKey"]
+                      ?? "";
+            var model  = configuration["Agents:CEO:Model"] ?? "claude-sonnet-4-6";
+
+            ClaudeCodeResult? claudeResult = null;
+            string? originalMd = null;
+
+            await VictoriaLock.WaitAsync(cancellationToken);
+            try
+            {
+                if (File.Exists(claudeMd))
+                    originalMd = await File.ReadAllTextAsync(claudeMd, cancellationToken);
+
+                // 備份（防 process kill 導致 CLAUDE.md 未還原）
+                if (originalMd is not null)
+                    await File.WriteAllTextAsync(claudeBak, originalMd, cancellationToken);
+
+                // 寫入 Victoria 模板
+                if (File.Exists(templatePath))
+                    await File.WriteAllTextAsync(claudeMd,
+                        await File.ReadAllTextAsync(templatePath, cancellationToken),
+                        cancellationToken);
+
+                claudeResult = await claudeCodeService.RunVictoriaAsync(
+                    repoPath, prompt, model, apiKey, cancellationToken);
+            }
+            finally
+            {
+                try
+                {
+                    if (originalMd is not null)
+                        await File.WriteAllTextAsync(claudeMd, originalMd, CancellationToken.None);
+                    else if (File.Exists(claudeMd))
+                        File.Delete(claudeMd);
+
+                    if (File.Exists(claudeBak))
+                        File.Delete(claudeBak);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "CLAUDE.md 還原失敗");
+                }
+                VictoriaLock.Release();
+            }
+
+            if (claudeResult is not null)
+            {
+                ceoResponse = TryParseActionBlock(claudeResult.Output)
+                           ?? TryParseResponse(claudeResult.Output);
+            }
+
+            if (ceoResponse is null)
+            {
+                logger.LogWarning(
+                    "Claude Code 回應解析失敗（Success={S}），降級使用直接 LLM",
+                    claudeResult?.Success);
+            }
         }
 
-        if (ceoResponse is null)
-        {
-            logger.LogWarning("Claude Code 回應解析失敗，fallback 到原始 LLM。claudeResult.Success={S}", claudeResult?.Success);
-            ceoResponse = await ProcessAsync(userInput, projectName, agentList, rules,
-                cancellationToken, images, null, availableProjects);
-        }
+        // ── 7. LLM 降級（repoPath 為 null 或 Claude Code 回應解析失敗） ─
+        ceoResponse ??= await ProcessAsync(
+            userInput, projectName, agentList, rules,
+            cancellationToken, images, null, availableProjects);
 
-        // ── 9. 持久化對話 turn ────────────────────────────────────────────
-        await conversationRepository.AddTurnAsync(sessionId, userId, "user",      userInput,           cancellationToken);
-        await conversationRepository.AddTurnAsync(sessionId, userId, "assistant", ceoResponse.Reply,   cancellationToken);
+        // ── 8. 持久化對話 turn ────────────────────────────────────────────
+        await conversationRepository.AddTurnAsync(
+            sessionId, userId, "user", userInput, cancellationToken);
+        await conversationRepository.AddTurnAsync(
+            sessionId, userId, "assistant", ceoResponse.Reply, cancellationToken);
 
-        // ── 10. 持久化長期記憶 ─────────────────────────────────────────────
+        // ── 9. 持久化長期記憶 ─────────────────────────────────────────────
         if (ceoResponse.MemoriesToSave is { Count: > 0 })
         {
             var toSave = ceoResponse.MemoriesToSave
                 .Select(m => new AiTeam.Data.Repositories.MemoryToSave(m.Content, m.Category))
                 .ToList();
             await memoryRepository.SaveMemoriesAsync(userId, toSave, cancellationToken);
-
             logger.LogInformation("Victoria 儲存了 {Count} 筆長期記憶", toSave.Count);
         }
 

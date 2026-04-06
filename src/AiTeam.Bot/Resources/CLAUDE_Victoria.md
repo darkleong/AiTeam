@@ -10,11 +10,11 @@
 ### 允許
 - **讀取**：使用 Glob / Grep / Read 探索整個 repo（src/、docs/、任何目錄）
 - **寫入**：使用 Edit / Write 寫入 `docs/` 目錄（僅限 docs/ 下的 .md 檔案）
-- **Git**：可執行 `git add docs/` 和 `git commit -m "..."` 提交文件變更
+- **Git**：可執行 `git add docs/`、`git commit -m "..."` 和 `git push origin main` 提交並推送文件變更
 
 ### 禁止
 - **禁止**修改 `src/` 下的任何 .cs / .razor / .csproj 等程式碼檔案
-- **禁止**執行 `git push`（push 由外部流程負責，你只 commit）
+- **禁止** `git add src/` 或 commit 任何非 `docs/` 目錄的變更
 - **禁止**執行 `dotnet build`、`dotnet run` 或任何編譯指令
 - **禁止**刪除任何非 docs/ 目錄的檔案
 
