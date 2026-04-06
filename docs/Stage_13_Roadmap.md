@@ -1,0 +1,179 @@
+# Stage 13：系統穩定性與流程修正
+
+> 版本：v1.0
+> 建立日期：2026-04-06
+> 狀態：📋 規劃中
+
+---
+
+## 目標
+
+Stage 11 修了地基（Cody 寫好 code），Stage 12 修了源頭（Rosa / Demi 看懂 codebase 做好規格），Stage 13 修正**中間的管線和穩定性**。
+
+做完後，整條鏈從頭到尾都到位。
+
+**本 Stage 包含三個項目：技術債清償、Orchestrator 流程修正、Dashboard 可觀測性。**
+
+---
+
+## 一、Stage 10 技術債清償（Future Feature 十三）
+
+### 背景
+
+Stage 10 實作 Orchestrator 時留下多項技術債，其中 3 項影響系統穩定性。
+
+### 🔴 高優先（本 Stage 必須修）
+
+**1. TaskGroupService 並行 SaveAsync Race Condition**
+
+`HandleAgentCompletedAsync` 中對 `DevPrUrl` 和 `LastReviewBody` 分別呼叫 `SaveAsync`，並行 Agent 完成時可能覆蓋彼此更新。
+
+修正：所有欄位更新完再呼叫一次 `SaveAsync`。
+
+**2. 遞迴 Orchestration 無法優雅停止**
+
+`Task.Run(CancellationToken.None)` 使得 Bot 關閉時背景工作鏈無法被取消。
+
+修正：接入 `IHostApplicationLifetime` 的 `ApplicationStopping` token，或改用 `System.Threading.Channels` 背景佇列。
+
+**3. WebhookController PR synchronize handler 缺少 try-catch**
+
+GitHub 傳來格式異常的 JSON 時會 crash 整個 endpoint。
+
+修正：用 `TryGetProperty()` 或包 try-catch。
+
+### 🟡 中優先（本 Stage 順手處理）
+
+**4. TaskGroup.Project 用 string 不用 FK**
+
+`TaskGroup.Project` 是字串（專案名稱），而 `TaskItem.ProjectId` 是 Guid FK，兩者不一致。
+
+修正：加 `Guid? ProjectId` FK 到 TaskGroup。
+
+**5. Dev fix loop 取不到 PR number 時繼續執行**
+
+`ExtractPrNumberFromText()` 返回 0 時應中斷 fix loop 而非讓 LLM 猜 branch。
+
+**6. LLM JSON 解析用 IndexOf('{') 很脆弱**
+
+CEO、Dev 都用 `IndexOf('{')` / `LastIndexOf('}')` 抓 JSON。
+
+修正：要求 LLM 用 markdown code fence 包 JSON，解析時先找 code fence。
+
+### 需要實作的
+
+- [ ] 修正 `TaskGroupService.HandleAgentCompletedAsync` 的 SaveAsync 合併
+- [ ] `Task.Run` 改用 `ApplicationStopping` token 或 Channel 背景佇列
+- [ ] `WebhookController` PR handler 加 try-catch + `TryGetProperty`
+- [ ] `TaskGroup` 新增 `ProjectId` FK + Migration
+- [ ] `ExtractPrNumberFromText` 返回 0 時中斷 fix loop
+- [ ] JSON 解析改用 code fence 提取
+
+---
+
+## 二、Orchestrator 流程修正（Future Feature 十四，剩餘問題）
+
+### 背景
+
+十四原有五個問題，Stage 12 已解決三個（Doc 猜路徑、fix loop 後 QA/Doc 不更新、✏️ 舊規格不刪除）。剩餘兩個問題需要修改 `WorkflowEngine` 流程表。
+
+### 問題一：QA / Doc / Vera 不應同時並行
+
+目前 Dev PR 開出後，QA + Doc + Vera 三個同時跑。Vera 發現 🔴 時，QA 和 Doc 已基於舊程式碼產出——等於做白工。
+
+修改 WorkflowEngine 流程表：
+```
+目前：Dev → QA + Doc + Vera（並行）
+修正：Dev → Vera → Vera ✅ → QA + Doc（並行）→ 通知 merge
+```
+
+### 問題二：Bug 修復流程缺少 QA
+
+目前 Bug 修復流程是 `Dev → Vera → 通知 merge`，完全沒有 QA 回歸測試。
+
+修改 BugFixTable：
+```
+目前：Dev → Vera ✅ → 通知 merge
+修正：Dev → Vera ✅ → QA（回歸測試）→ 通知 merge
+```
+
+Bug 修復不需要 Doc（沒有新功能），只加 QA。
+
+### 修正後的完整流程
+
+**新功能：**
+```
+提案核准 → Dev → Vera 審查
+  🔴 → Dev 修 → Vera 重審（最多 3 輪）
+  ✅ → QA + Doc 並行 → 通知 merge
+```
+
+**Bug 修復：**
+```
+Dev → Vera 審查
+  🔴 → Dev 修 → Vera 重審（最多 3 輪）
+  ✅ → QA（回歸測試）→ 通知 merge
+```
+
+### 需要實作的
+
+- [ ] `WorkflowEngine.NewFeatureTable`：Dev 後只觸發 Reviewer（不再並行 QA/Doc）
+- [ ] `WorkflowEngine.NewFeatureTable`：Reviewer ✅ 後觸發 QA + Doc 並行
+- [ ] `WorkflowEngine.BugFixTable`：Reviewer ✅ 後觸發 QA
+- [ ] `WorkflowEngine.GetDecision` 調整 Reviewer ✅ 的路由邏輯
+- [ ] QA / Doc 完成後的 `NextAction` 判斷（全部完成才通知 merge）
+
+---
+
+## 三、Dashboard 任務詳情修正（Future Feature 十一）
+
+### 背景
+
+目前 Dashboard 任務中心的詳情顯示有兩個問題，影響日常監控和 debug。
+
+### 問題一：失敗任務看不到失敗原因
+
+點開失敗任務時，執行步驟只顯示最後一筆「執行中」，沒有錯誤訊息。
+
+修正：Bot 在寫入失敗狀態時，同步寫入一筆 `failed` 步驟，內容為 exception message 或 Agent 的錯誤說明。
+
+### 問題二：完成任務的最後步驟不是完成
+
+點開完成任務時，最後一筆步驟是業務步驟（例如「PR 已開啟」），缺少最終的「完成」步驟。
+
+修正：Bot 在寫入完成狀態時，同步寫入一筆最終 `done` 步驟。
+
+### 需要實作的
+
+- [ ] 找到 TaskItem 狀態寫入 `failed` 的地方，同步新增一筆 TaskLog
+- [ ] 找到 TaskItem 狀態寫入 `done` 的地方，同步新增一筆 TaskLog
+- [ ] Dashboard 確認 TaskLog 列表正確顯示新步驟
+
+---
+
+## 不做的事
+
+- CEO 分類補強（十五）→ 有價值但不影響現有流程正確性
+- CEO 文件記錄（十六）→ 新功能，不是修正
+- Victoria 技術顧問（二十）→ 長期願景
+
+---
+
+## 驗收標準
+
+1. 並行 Agent 完成時，TaskGroup 欄位不互相覆蓋（Race Condition 修復）
+2. Bot graceful shutdown 時，背景 Orchestration 任務能被取消
+3. GitHub webhook 收到異常 JSON 時不 crash
+4. 新功能流程：Dev → Vera ✅ → QA + Doc 並行 → 通知 merge
+5. Bug 修復流程：Dev → Vera ✅ → QA → 通知 merge
+6. Dashboard 失敗任務能看到失敗原因
+7. Dashboard 完成任務有最終「完成」步驟
+8. `dotnet build` 整個 solution 通過
+
+---
+
+## 變更紀錄
+
+| 日期 | 內容 |
+|------|------|
+| 2026-04-06 | 初版建立，整合 Future Feature 十一、十三、十四（剩餘問題） |

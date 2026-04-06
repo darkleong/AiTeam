@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v2.7
+> 版本：v2.9
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -24,6 +24,7 @@
 | [Stage_10_Roadmap.md](./Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | ✅ 已完成（2026-04-03） |
 | [Stage_11_Roadmap.md](./Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | ✅ 已完成（2026-04-05） |
 | [Stage_12_Roadmap.md](./Stage_12_Roadmap.md) | Stage 12：提案流程全面升級 | ✅ 已完成（2026-04-06） |
+| [Stage_13_Roadmap.md](./Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | 📋 規劃中 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -52,6 +53,7 @@
 | v2.6 | 2026-04-05 | Stage 11 驗收完成：ClaudeCodeService subprocess 封裝、Dockerfile 改 sdk:10.0 + Node.js 22 + claude CLI、workspace 改 Linux 路徑；三項踩坑修復後 PR #65 通過 |
 | v2.7 | 2026-04-05 | 新增 Stage_12_Roadmap.md（提案流程全面升級：Agent 唯讀探索、Rosa/Demi 串行協作、UI 規格改存 DB）；Future_Feature.md 十七/十八/十九 標記移入 Stage 12 |
 | v2.8 | 2026-04-06 | Stage 12 驗收完成（六項驗收全通過）；修正三項 bug（Discord 重複觸發、Slug 中文標題、Demi 調整 prompt）；Stage_12_Roadmap.md 結案 |
+| v2.9 | 2026-04-06 | 新增 Stage_13_Roadmap.md（系統穩定性與流程修正：技術債 + Orchestrator 流程 + Dashboard 詳情）；Future_Feature.md 清理已完成 / 已消滅項目 |
 
 ---
 
