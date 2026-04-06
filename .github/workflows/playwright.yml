@@ -14,7 +14,7 @@ env:
 jobs:
   playwright-test:
     name: Playwright UI Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       pull-requests: write   # 允許在 PR 留 comment
