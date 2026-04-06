@@ -12,4 +12,8 @@ public class TaskItemDto
     public DateTime? CompletedAt { get; set; }
     public string? ProjectName { get; set; }
     public string? TeamName { get; set; }
+
+    /// <summary>執行耗時（CompletedAt 與 CreatedAt 的差值；未完成則為 null）。</summary>
+    public TimeSpan? Duration =>
+        CompletedAt.HasValue ? CompletedAt.Value - CreatedAt : null;
 }
