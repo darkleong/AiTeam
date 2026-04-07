@@ -2,6 +2,12 @@
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
+
+@* 隱藏表單：POST /account/logout，帶有 CSRF 防護 token *@
+<form id="logout-form" method="post" action="/account/logout" style="display:none">
+    <AntiforgeryToken />
+</form>
 
 <button class="logout-btn nav-item" @onclick="ShowLogoutConfirmAsync" disabled="@_isLoggingOut" title="登出">
     <span class="nav-icon">🚪</span>
@@ -32,7 +38,8 @@
         if (result == true)
         {
             _isLoggingOut = true;
-            NavigationManager.NavigateTo("/account/logout", forceLoad: true);
+            // 以 JS interop 提交隱藏表單，觸發 POST /account/logout（帶 CSRF token）
+            await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('logout-form').submit()");
         }
     }
 }
