@@ -137,7 +137,18 @@ public class PmAgentService(
             sb.AppendLine();
         }
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("審核以上 Issues 規格，確認需求完整性、Issue 粒度、驗收條件。輸出 JSON 審核結果。");
+        sb.AppendLine("審核以上 Issues 規格，**只從需求面**判斷：");
+        sb.AppendLine("1. 有無遺漏的使用情境或功能點");
+        sb.AppendLine("2. Issue 粒度是否合理");
+        sb.AppendLine("3. 每個 Issue 是否有具體可測試的驗收條件（從使用者角度）");
+        sb.AppendLine();
+        sb.AppendLine("**不要要求 Rosa 提供以下內容，這些不是她的責任：**");
+        sb.AppendLine("- Entity / DTO / 資料庫 schema（Cody 的工作）");
+        sb.AppendLine("- Service / API 架構（Cody 的工作）");
+        sb.AppendLine("- UI 元件或互動流程細節（Demi 的工作）");
+        sb.AppendLine();
+        sb.AppendLine("approve 標準：功能點無明顯遺漏，且每個 Issue 有至少一條可從使用者角度測試的驗收條件。");
+        sb.AppendLine("輸出 JSON 審核結果。");
         return sb.ToString();
     }
 

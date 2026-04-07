@@ -748,6 +748,33 @@ public class CommandHandler(
             _pendingAdjustments[interaction.User.Id] = pending;
             logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
         }
+        else if (interaction.Data.CustomId == "escalate_retry")
+        {
+            // Petra escalate 後老闆選擇重新開始提案
+            await interaction.DeferAsync();
+            await interaction.FollowupAsync("🔄 重新啟動提案流程，Rosa 將重新分析需求...");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ShowProposalAsync(
+                        async (embed, components) =>
+                            await interaction.Channel.SendMessageAsync(embed: embed, components: components),
+                        pending.CeoResponse, pending.Project, pending.Description,
+                        images: pending.Images);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "escalate_retry 重新提案失敗");
+                }
+            }, CancellationToken.None);
+        }
+        else if (interaction.Data.CustomId == "escalate_abort")
+        {
+            // Petra escalate 後老闆選擇放棄
+            await interaction.RespondAsync("❌ 已放棄此提案。若需重新規劃，請重新下指令。");
+            logger.LogInformation("老闆放棄 Petra escalate 提案：TaskId={Id}", pending.TaskId);
+        }
         else // confirm_no、exec_no、req_no、propose_no
         {
             await interaction.RespondAsync("❌ 已取消。");
@@ -951,7 +978,10 @@ public class CommandHandler(
             readonlyWorkspace = gitHubService.CloneOrPull(owner, defaultRepo,
                 $"ro-{task.Id:N}"[..10]);
 
-            var petraChannel = FindChannel(_settings.Channels.PmChannel);
+            var petraChannel  = FindChannel(_settings.Channels.PmChannel);
+            var rosaChannel   = FindChannel(_settings.Channels.RequirementsChannel);
+            var demiChannel   = FindChannel(_settings.Channels.DesignerChannel);
+            var updateChannel = FindChannel(_settings.Channels.TaskUpdates);
 
             // ── Stage 16：Rosa 迴圈（首次 + 最多 2 次 revise）──
             List<RequirementIssuePreview> issues        = [];
@@ -980,6 +1010,12 @@ public class CommandHandler(
                     AgentName = rosaTask.AssignedAgent,
                     Status    = rosaTask.Status
                 });
+
+                var rosaRoundLabel = rosaRound == 0 ? "開始分析需求" : $"Petra 修正後重新分析（第 {rosaRound} 次）";
+                if (rosaChannel is not null)
+                    await rosaChannel.SendMessageAsync($"🔍 **Rosa** 正在分析需求（{rosaRoundLabel}）\n任務：{task.Title}");
+                if (updateChannel is not null)
+                    await updateChannel.SendMessageAsync($"🔍 **Rosa** 需求分析中（{rosaRoundLabel}）— {task.Title}");
 
                 issues = await reqService.AnalyzeOnlyAsync(
                     task,
@@ -1049,8 +1085,24 @@ public class CommandHandler(
                     taskRepo.UpdateStatus(task, "failed");
                     await taskRepo.SaveAsync();
                     if (ceoChannel is not null)
-                        await ceoChannel.SendMessageAsync(
-                            $"⚠️ **Petra 升級（Rosa）**：Rosa Issues 規格 {rosaRevCount + 1} 次審核未通過，需要老闆介入。\n任務：{task.Title}");
+                    {
+                        var escalateEmbed = new EmbedBuilder()
+                            .WithTitle("⚠️ Petra 升級通知：需要您介入")
+                            .WithColor(Color.Orange)
+                            .AddField("任務", task.Title)
+                            .AddField("問題", $"Rosa Issues 規格經過 {rosaRevCount + 1} 輪審核仍未通過")
+                            .AddField("Petra 最後意見", rosaReview.Summary)
+                            .WithTimestamp(DateTimeOffset.UtcNow)
+                            .Build();
+                        var escalateMsg = await ceoChannel.SendMessageAsync(
+                            embed: escalateEmbed,
+                            components: BuildEscalateButtons());
+                        _pendingConfirmations[escalateMsg.Id] = new PendingConfirmation(
+                            ceoResponse, project, description,
+                            TaskId: task.Id,
+                            IsProposal: false,
+                            Images: images);
+                    }
                     return;
                 }
 
@@ -1087,6 +1139,12 @@ public class CommandHandler(
                     AgentName = demiTask.AssignedAgent,
                     Status    = demiTask.Status
                 });
+
+                var demiRoundLabel = demiRound == 0 ? "開始設計 UI 規格" : $"Petra 修正後重新設計（第 {demiRound} 次）";
+                if (demiChannel is not null)
+                    await demiChannel.SendMessageAsync($"🎨 **Demi** 正在設計 UI 規格（{demiRoundLabel}）\n任務：{task.Title}");
+                if (updateChannel is not null)
+                    await updateChannel.SendMessageAsync($"🎨 **Demi** UI 規格設計中（{demiRoundLabel}）— {task.Title}");
 
                 uiSpec = await designerService.GenerateDraftAsync(
                     task.Title,
@@ -1156,8 +1214,24 @@ public class CommandHandler(
                     taskRepo.UpdateStatus(task, "failed");
                     await taskRepo.SaveAsync();
                     if (ceoChannel is not null)
-                        await ceoChannel.SendMessageAsync(
-                            $"⚠️ **Petra 升級（Demi）**：Demi UI 規格 {demiRevCount + 1} 次審核未通過，需要老闆介入。\n任務：{task.Title}");
+                    {
+                        var escalateEmbed = new EmbedBuilder()
+                            .WithTitle("⚠️ Petra 升級通知：需要您介入")
+                            .WithColor(Color.Orange)
+                            .AddField("任務", task.Title)
+                            .AddField("問題", $"Demi UI 規格經過 {demiRevCount + 1} 輪審核仍未通過")
+                            .AddField("Petra 最後意見", demiReview.Summary)
+                            .WithTimestamp(DateTimeOffset.UtcNow)
+                            .Build();
+                        var escalateMsg = await ceoChannel.SendMessageAsync(
+                            embed: escalateEmbed,
+                            components: BuildEscalateButtons());
+                        _pendingConfirmations[escalateMsg.Id] = new PendingConfirmation(
+                            ceoResponse, project, description,
+                            TaskId: task.Id,
+                            IsProposal: false,
+                            Images: images);
+                    }
                     return;
                 }
 
@@ -1685,6 +1759,13 @@ public class CommandHandler(
         => new ComponentBuilder()
             .WithButton("✅ 確認", yesId, ButtonStyle.Success)
             .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
+            .Build();
+
+    /// <summary>Stage 16：Petra escalate 後，讓老闆決定是否重試或放棄。</summary>
+    private static MessageComponent BuildEscalateButtons()
+        => new ComponentBuilder()
+            .WithButton("🔄 重新開始提案",  "escalate_retry", ButtonStyle.Primary)
+            .WithButton("❌ 放棄此提案",    "escalate_abort", ButtonStyle.Danger)
             .Build();
 
     /// <summary>Stage 10：提案書確認按鈕（三個：核准 / 需調整 / 取消）。</summary>
