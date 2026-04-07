@@ -1134,12 +1134,26 @@ public class CommandHandler(
                     await taskRepo.SaveAsync();
                     if (ceoChannel is not null)
                     {
+                        // 列出 Rosa 產出的 Issues 標題供老闆評估
+                        var issueListText = issues.Count > 0
+                            ? string.Join("\n", issues.Select((iss, i) => $"{i + 1}. {iss.Title}"))
+                            : "（無）";
+                        if (issueListText.Length > 1000) issueListText = issueListText[..1000] + "\n...（更多）";
+
+                        // 列出 Petra 的 blocking 問題
+                        var blockingText = rosaReview.Issues.Where(i => i.Severity == "blocking").ToList();
+                        var blockingField = blockingText.Count > 0
+                            ? string.Join("\n", blockingText.Select(i => $"• {i.Description}"))
+                            : rosaReview.Summary;
+                        if (blockingField.Length > 1000) blockingField = blockingField[..1000] + "...";
+
                         var escalateEmbed = new EmbedBuilder()
                             .WithTitle("⚠️ Petra 升級通知：需要您介入")
                             .WithColor(Color.Orange)
                             .AddField("任務", task.Title)
                             .AddField("問題", $"Rosa Issues 規格經過 {rosaRevCount + 1} 輪審核仍未通過")
-                            .AddField("Petra 最後意見", rosaReview.Summary)
+                            .AddField("Petra 發現的問題", blockingField)
+                            .AddField($"Rosa 目前產出（共 {issues.Count} 條 Issue）", issueListText)
                             .WithTimestamp(DateTimeOffset.UtcNow)
                             .Build();
                         var escalateMsg = await ceoChannel.SendMessageAsync(
@@ -1150,7 +1164,7 @@ public class CommandHandler(
                             TaskId: task.Id,
                             IsProposal: false,
                             Images: images,
-                            PreviewIssues: issues,      // 供 Skip 使用
+                            PreviewIssues: issues,
                             EscalateStage: "rosa");
                     }
                     return;
@@ -1265,12 +1279,20 @@ public class CommandHandler(
                     await taskRepo.SaveAsync();
                     if (ceoChannel is not null)
                     {
+                        // 列出 Petra 的 blocking 問題
+                        var blockingText = demiReview.Issues.Where(i => i.Severity == "blocking").ToList();
+                        var blockingField = blockingText.Count > 0
+                            ? string.Join("\n", blockingText.Select(i => $"• {i.Description}"))
+                            : demiReview.Summary;
+                        if (blockingField.Length > 1000) blockingField = blockingField[..1000] + "...";
+
                         var escalateEmbed = new EmbedBuilder()
                             .WithTitle("⚠️ Petra 升級通知：需要您介入")
                             .WithColor(Color.Orange)
                             .AddField("任務", task.Title)
                             .AddField("問題", $"Demi UI 規格經過 {demiRevCount + 1} 輪審核仍未通過")
-                            .AddField("Petra 最後意見", demiReview.Summary)
+                            .AddField("Petra 發現的問題", blockingField)
+                            .WithFooter("UI 規格全文見下方附件")
                             .WithTimestamp(DateTimeOffset.UtcNow)
                             .Build();
                         var escalateMsg = await ceoChannel.SendMessageAsync(
@@ -1281,9 +1303,17 @@ public class CommandHandler(
                             TaskId: task.Id,
                             IsProposal: false,
                             Images: images,
-                            PreviewIssues: issues,      // 供 Skip 使用
+                            PreviewIssues: issues,
                             UiSpecMarkdown: uiSpec,
                             EscalateStage: "demi");
+
+                        // 附上 Demi UI 規格全文供老闆評估
+                        if (!string.IsNullOrWhiteSpace(uiSpec))
+                        {
+                            var uiBytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
+                            using var uiStream = new System.IO.MemoryStream(uiBytes);
+                            await ceoChannel.SendFileAsync(uiStream, "demi-ui-spec.md", "📄 Demi UI 規格全文（供評估是否 Skip）");
+                        }
                     }
                     return;
                 }
