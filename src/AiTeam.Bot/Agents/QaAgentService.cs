@@ -180,13 +180,27 @@ public class QaAgentService(
         return testPath;
     }
 
-    /// <summary>移除 LLM 回傳內容的 Markdown code fence（```csharp ... ```），確保寫入檔案的是純程式碼。</summary>
+    /// <summary>
+    /// 移除 LLM 回傳內容的 Markdown code fence（```csharp ... ```），確保寫入檔案的是純程式碼。
+    /// 若 LLM 輸出被截斷（有開頭 ``` 但無結尾 ```），仍移除開頭的 fence 行，避免非法字元導致編譯失敗。
+    /// </summary>
     private static string StripCodeFence(string content)
     {
         var trimmed = content.Trim();
-        var match = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^```[a-zA-Z]*\r?\n([\s\S]*?)\r?\n```$");
-        return match.Success ? match.Groups[1].Value : trimmed;
+
+        // 完整 code fence：開頭 ```xxx 結尾 ``` 皆存在（使用 greedy 避免 lazy 截斷）
+        var fullMatch = Regex.Match(trimmed, @"^```[a-zA-Z]*\r?\n([\s\S]*)\r?\n```\s*$");
+        if (fullMatch.Success) return fullMatch.Groups[1].Value;
+
+        // LLM 輸出被截斷（有開頭 ``` 但無結尾 ```），只移除開頭的 fence 行
+        var startMatch = Regex.Match(trimmed, @"^```[a-zA-Z]*\r?\n([\s\S]*)$");
+        if (startMatch.Success)
+        {
+            // 移除可能的不完整結尾反引號
+            return startMatch.Groups[1].Value.TrimEnd().TrimEnd('`').TrimEnd();
+        }
+
+        return trimmed;
     }
 
     private static int ExtractPrNumber(string text)
