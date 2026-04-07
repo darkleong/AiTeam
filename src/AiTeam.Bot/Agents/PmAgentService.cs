@@ -9,14 +9,19 @@ namespace AiTeam.Bot.Agents;
 /// Stage 16：PM Agent（Petra）品質審核閘門。
 /// 負責在 Rosa / Demi / Dev_plan / Vera 完成後審核產出，
 /// 回傳 approve / revise / escalate 決定。
-/// 全部使用 LLM 直呼叫（ClaudeCode 的 result.Output 是執行摘要，非 JSON 全文，會解析失敗）。
+///
+/// 執行策略：
+/// - ReviewRosa / ReviewDemi / ReviewDevPlan：Claude Code RunReadOnlyAsync（帶 codebase context）
+///   若 Claude Code 失敗，fallback 到 LLM 直呼叫
+/// - ReviewVera：LLM 直呼叫（只看 review 報告，不需 codebase）
 /// </summary>
 public class PmAgentService(
     LlmProviderFactory providerFactory,
+    ClaudeCodeService claudeCodeService,
+    IConfiguration configuration,
     ILogger<PmAgentService> logger)
 {
     private const string AgentName = "PM";
-
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,45 +31,63 @@ public class PmAgentService(
     // ────────────── 公開審核方法 ──────────────
 
     /// <summary>
-    /// 審核 Rosa 產出的 Issues 規格。
+    /// 審核 Rosa 產出的 Issues 規格（Claude Code + LLM fallback）。
     /// </summary>
-    public Task<PetraReview> ReviewRosaAsync(
+    public async Task<PetraReview> ReviewRosaAsync(
         TaskItem ceoTask,
         IReadOnlyList<RequirementIssuePreview> issues,
-        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
+        string repoLocalPath,
         CancellationToken ct = default)
     {
         var prompt = BuildRosaReviewPrompt(ceoTask, issues);
-        return RunLlmDirectAsync(prompt, ct);
+        var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
+        if (review is not null)
+        {
+            logger.LogInformation("Petra Claude Code 審核 Rosa 完成：{Decision}", review.Decision);
+            return review;
+        }
+        return await RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
-    /// 審核 Demi 產出的 UI 規格。
+    /// 審核 Demi 產出的 UI 規格（Claude Code + LLM fallback）。
     /// </summary>
-    public Task<PetraReview> ReviewDemiAsync(
+    public async Task<PetraReview> ReviewDemiAsync(
         TaskItem ceoTask,
         IReadOnlyList<RequirementIssuePreview> issues,
         string uiSpec,
-        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
+        string repoLocalPath,
         CancellationToken ct = default)
     {
         var prompt = BuildDemiReviewPrompt(ceoTask, issues, uiSpec);
-        return RunLlmDirectAsync(prompt, ct);
+        var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
+        if (review is not null)
+        {
+            logger.LogInformation("Petra Claude Code 審核 Demi 完成：{Decision}", review.Decision);
+            return review;
+        }
+        return await RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
-    /// 審核 Cody 產出的實作計畫書（Dev_plan 步驟）。
+    /// 審核 Cody 產出的實作計畫書（Claude Code + LLM fallback）。
     /// </summary>
-    public Task<PetraReview> ReviewDevPlanAsync(
+    public async Task<PetraReview> ReviewDevPlanAsync(
         string taskTitle,
         string devPlan,
         string? issueUrlsJson,
         string? uiSpecContent,
-        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
+        string repoLocalPath,
         CancellationToken ct = default)
     {
         var prompt = BuildDevPlanReviewPrompt(taskTitle, devPlan, issueUrlsJson, uiSpecContent);
-        return RunLlmDirectAsync(prompt, ct);
+        var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
+        if (review is not null)
+        {
+            logger.LogInformation("Petra Claude Code 審核 DevPlan 完成：{Decision}", review.Decision);
+            return review;
+        }
+        return await RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
@@ -79,11 +102,80 @@ public class PmAgentService(
         return await RunLlmDirectAsync(prompt, ct);
     }
 
-    // ────────────── LLM 直呼叫 ──────────────
+    // ────────────── Claude Code 執行（主路徑）──────────────
+
+    /// <summary>
+    /// 以 Claude Code RunReadOnlyAsync 執行 Petra 審核。
+    /// 執行前將 CLAUDE.md 替換為 CLAUDE_Petra.md，執行後還原。
+    /// 成功解析 JSON 回傳 PetraReview；失敗回傳 null（由呼叫方 fallback 到 LLM）。
+    /// </summary>
+    private async Task<PetraReview?> TryRunClaudeCodeAsync(
+        string repoLocalPath, string prompt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(repoLocalPath) || !Directory.Exists(repoLocalPath))
+            return null;
+
+        var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
+        var templatePath     = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Petra.md");
+        var originalClaudeMd = File.Exists(claudeMdPath)
+            ? await File.ReadAllTextAsync(claudeMdPath, ct)
+            : null;
+
+        try
+        {
+            // 覆蓋 CLAUDE.md 為 Petra 專用（含「只輸出 JSON」指示）
+            if (File.Exists(templatePath))
+                await File.WriteAllTextAsync(claudeMdPath,
+                    await File.ReadAllTextAsync(templatePath, ct), ct);
+
+            var model  = configuration["Agents:PM:Model"]
+                      ?? configuration["Anthropic:DefaultModel"]
+                      ?? "claude-haiku-4-5";
+            var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+            var result = await claudeCodeService.RunReadOnlyAsync(repoLocalPath, prompt, model, apiKey, ct);
+
+            if (!result.Success)
+            {
+                logger.LogWarning("Petra Claude Code 執行未成功（exitCode={Code}）", result.ExitCode);
+                return null;
+            }
+
+            // 先從 Output（result 欄位摘要）解析
+            var review = TryParseReview(result.Output);
+            if (review is not null) return review;
+
+            // fallback：從 RawJson 全文搜尋第一個完整 JSON 物件
+            review = TryParseReview(result.RawJson);
+            if (review is not null)
+            {
+                logger.LogInformation("Petra 從 RawJson 解析成功");
+                return review;
+            }
+
+            logger.LogWarning("Petra Claude Code 輸出無法解析為 JSON：{Output}", result.Output);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Petra Claude Code 執行失敗，將 fallback 到 LLM");
+            return null;
+        }
+        finally
+        {
+            // 還原 CLAUDE.md
+            if (originalClaudeMd is not null)
+                await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
+            else if (File.Exists(claudeMdPath))
+                File.Delete(claudeMdPath);
+        }
+    }
+
+    // ────────────── LLM 直呼叫（fallback）──────────────
 
     private async Task<PetraReview> RunLlmDirectAsync(string prompt, CancellationToken ct)
     {
-        var provider = providerFactory.Create(AgentName);
+        var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildSystemPrompt();
 
         for (var attempt = 1; attempt <= 2; attempt++)
@@ -94,7 +186,7 @@ public class PmAgentService(
                 var review   = TryParseReview(response.Content);
                 if (review is not null)
                 {
-                    logger.LogInformation("Petra LLM 審核完成（第 {Attempt} 次）：{Decision}", attempt, review.Decision);
+                    logger.LogInformation("Petra LLM fallback 審核完成（第 {Attempt} 次）：{Decision}", attempt, review.Decision);
                     return review;
                 }
                 logger.LogWarning("Petra LLM 回應 JSON 解析失敗（第 {Attempt} 次）：{Content}", attempt, response.Content);
@@ -106,8 +198,8 @@ public class PmAgentService(
         }
 
         // 最終 fallback：回傳 approve 避免卡住流程
-        logger.LogError("Petra LLM 連續失敗，fallback 回傳 approve 避免卡住");
-        return new PetraReview("approve", "LLM 呼叫失敗，自動放行", [], null);
+        logger.LogError("Petra 所有路徑均失敗，fallback 回傳 approve 避免卡住");
+        return new PetraReview("approve", "審核失敗，自動放行", [], null);
     }
 
     // ────────────── Prompt 組建 ──────────────
@@ -205,7 +297,7 @@ public class PmAgentService(
         sb.AppendLine(devPlan);
         sb.AppendLine();
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("審核實作計畫是否對齊 Issues 規格與 UI 規格、有無遺漏重要檔案、架構方向是否合理。輸出 JSON 審核結果。");
+        sb.AppendLine("審核實作計畫是否對齊 Issues 規格與 UI 規格、有無遺漏重要檔案、架構方向是否合理。可使用 Glob / Grep / Read 工具驗證計畫中引用的檔案是否存在。輸出 JSON 審核結果。");
         return sb.ToString();
     }
 
