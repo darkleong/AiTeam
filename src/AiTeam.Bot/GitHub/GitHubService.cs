@@ -432,16 +432,24 @@ public class GitHubService(
     public async Task<int> GetLatestOpenPullRequestNumberAsync(string owner, string repo)
     {
         var client = CreateClient();
-        var prs = await client.PullRequest.GetAllForRepository(owner, repo,
-            new PullRequestRequest
-            {
-                State         = ItemStateFilter.Open,
-                SortProperty  = PullRequestSort.Created,
-                SortDirection = SortDirection.Descending
-            },
-            new ApiOptions { PageSize = 1, PageCount = 1 });
+        try
+        {
+            var prs = await client.PullRequest.GetAllForRepository(owner, repo,
+                new PullRequestRequest
+                {
+                    State         = ItemStateFilter.Open,
+                    SortProperty  = PullRequestSort.Created,
+                    SortDirection = SortDirection.Descending
+                },
+                new ApiOptions { PageSize = 1, PageCount = 1 });
 
-        return prs.Count > 0 ? prs[0].Number : 0;
+            return prs.Count > 0 ? prs[0].Number : 0;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "取得最新 open PR 失敗：{Owner}/{Repo}", owner, repo);
+            return 0;
+        }
     }
 
     /// <summary>
