@@ -8,16 +8,18 @@ using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
 using Microsoft.Extensions.Configuration;
+using Octokit;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Reviewer Agent（Vera）：讀取 PR 差異，呼叫 LLM 產出分級審查報告，
-/// 並透過 GitHub Review API 在 PR 上留下整體審查意見。
-/// Stage 12：新增 Claude Code 唯讀補強探索（影響範圍分析）。
+/// Reviewer Agent（Vera）：讀取 PR diff，以單一 Claude Code session 完成
+/// 程式碼審查 + 影響範圍分析，透過 GitHub Review API 在 PR 上留下整體審查意見。
+/// Stage 16 重構：從「LLM 逐檔呼叫 + 獨立 Claude Code 影響分析」改為
+/// 單一 Claude Code session（RunReviewAsync），只帶 patch 不帶完整檔案內容，
+/// 根本解決 LLM 混淆 diff 舊/新程式碼造成 Critical 誤判的問題。
 /// </summary>
 public class ReviewerAgentService(
-    LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
@@ -67,56 +69,30 @@ public class ReviewerAgentService(
             if (csFiles.Count == 0)
                 return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
 
-            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔待審查", "running");
+            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔，啟動 Claude Code Review session", "running");
             await taskRepository.SaveAsync(cancellationToken);
 
-            // 3. 逐檔讀取內容並呼叫 LLM 審查
-            var provider = providerFactory.Create(AgentName);
-            var allIssues = new List<ReviewIssue>();
-            var fileSummaries = new List<string>();
+            // 3. 組建 prompt（只帶 patch，不帶完整檔案內容；Claude Code 自行 Read 需要的檔案）
+            var prompt = BuildClaudeCodeReviewPrompt(csFiles, rules);
 
-            foreach (var file in csFiles)
+            // 4. 單一 Claude Code session：程式碼審查 + 影響範圍分析
+            var ccResult = await RunClaudeCodeReviewAsync(owner, repo, headRef, prompt, task, cancellationToken);
+
+            // 5. 解析 JSON（triple fallback）
+            var report = TryParseReviewReport(ccResult.Output);
+            if (report is null && !string.IsNullOrWhiteSpace(ccResult.RawJson))
+                report = TryParseReviewReport(ccResult.RawJson);
+            if (report is null)
             {
-                try
-                {
-                    var content = await gitHubService.GetFileContentAsync(owner, repo, file.FileName, headRef);
-                    if (string.IsNullOrWhiteSpace(content)) continue;
-
-                    var systemPrompt = BuildReviewSystemPrompt(rules);
-                    var userMessage  = BuildReviewUserMessage(file.FileName, file.Patch ?? "", content);
-
-                    var response = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
-                    var report   = TryParseReviewReport(response.Content);
-
-                    if (report is not null)
-                    {
-                        allIssues.AddRange(report.Critical.Select(i => i with { File = file.FileName, Severity = "critical" }));
-                        allIssues.AddRange(report.Warning .Select(i => i with { File = file.FileName, Severity = "warning"  }));
-                        allIssues.AddRange(report.Info    .Select(i => i with { File = file.FileName, Severity = "info"     }));
-                        if (!string.IsNullOrWhiteSpace(report.Summary))
-                            fileSummaries.Add($"**{file.FileName}**：{report.Summary}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "審查檔案失敗，略過：{File}", file.FileName);
-                }
+                logger.LogWarning("Vera Claude Code JSON 解析失敗（exitCode={Code}），視為無 Critical", ccResult.ExitCode);
+                report = new ReviewReport();
             }
 
-            // 4. 組建整體 Review Body
-            var reviewBody = BuildReviewBody(allIssues, fileSummaries, prNumber);
-
-            // 4b. Claude Code 唯讀補強：探索影響範圍（非阻塞，失敗不影響主流程）
-            var impactAnalysis = await RunImpactAnalysisAsync(
-                owner, repo, headRef, prFiles.Select(f => f.FileName).ToList(), task, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(impactAnalysis))
-                reviewBody += $"\n\n---\n\n## 🔭 影響範圍分析（Claude Code 探索）\n\n{impactAnalysis}";
-
-            // 5. 在 GitHub PR 上提交 Review
-            AddLog(task, "提交 GitHub Review 中...", "running");
-            await taskRepository.SaveAsync(cancellationToken);
-
-            var reviewUrl = await gitHubService.CreatePullRequestReviewAsync(owner, repo, prNumber, reviewBody);
+            // 6. 組建 issues 清單
+            var allIssues = new List<ReviewIssue>();
+            allIssues.AddRange(report.Critical.Select(i => i with { Severity = "critical" }));
+            allIssues.AddRange(report.Warning .Select(i => i with { Severity = "warning"  }));
+            allIssues.AddRange(report.Info    .Select(i => i with { Severity = "info"     }));
 
             var criticalCount = allIssues.Count(i => i.Severity == "critical");
             var warningCount  = allIssues.Count(i => i.Severity == "warning");
@@ -124,6 +100,18 @@ public class ReviewerAgentService(
             var summary = $"PR #{prNumber} 審查完成：🔴 {criticalCount} 個必修 / 🟡 {warningCount} 個建議 / 🟢 {infoCount} 個優化";
 
             AddLog(task, summary, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            // 7. 組建 Review Body（含影響範圍分析）
+            var reviewBody = BuildReviewBody(allIssues, report.Summary, report.Impact, prNumber);
+
+            // 8. 在 GitHub PR 上提交 Review
+            AddLog(task, "提交 GitHub Review 中...", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+
+            var reviewUrl = await gitHubService.CreatePullRequestReviewAsync(owner, repo, prNumber, reviewBody);
+
+            AddLog(task, $"Review 已提交：{reviewUrl}", "done");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("done", task.Id, task.Title);
 
@@ -141,128 +129,178 @@ public class ReviewerAgentService(
         }
     }
 
-    // ────────────── Prompt 建構 ──────────────
+    // ────────────── Claude Code Review Session ──────────────
 
-    private static string BuildReviewSystemPrompt(IReadOnlyList<string> rules)
+    /// <summary>
+    /// Clone repo、checkout PR branch、替換 CLAUDE.md、執行 RunReviewAsync、還原 CLAUDE.md。
+    /// </summary>
+    private async Task<ClaudeCodeResult> RunClaudeCodeReviewAsync(
+        string owner,
+        string repo,
+        string headRef,
+        string prompt,
+        TaskItem task,
+        CancellationToken cancellationToken)
     {
-        var ruleList = rules.Count > 0
-            ? string.Join("\n", rules.Select(r => $"- {r}"))
-            : "（尚無額外規則）";
+        var localPath = "";
+        try
+        {
+            localPath = gitHubService.CloneOrPull(owner, repo, $"vera-{task.Id:N}"[..8]);
+            // Checkout 到 PR branch，確保 Claude Code 看到最新的 PR 程式碼
+            if (!string.IsNullOrWhiteSpace(headRef))
+                gitHubService.CreateAndCheckoutBranch(localPath, headRef);
 
-        return $$"""
-            你是資深 C# / .NET / Blazor 程式碼審查工程師 Vera，負責程式碼品質把關。
+            var claudeMdPath = Path.Combine(localPath, "CLAUDE.md");
+            var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Vera.md");
+            var backup = File.Exists(claudeMdPath)
+                ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
+                : null;
 
-            ## 重要：你要審查的是「新增的程式碼」
-            你會收到 diff（變更）與完整檔案內容。
-            **審查對象是 diff 中「+」開頭的新增行所代表的程式碼。**
-            diff 中「-」開頭是已被移除的舊程式碼，**不得對已移除的程式碼提出問題。**
-            若你不確定某個問題是舊程式碼還是新程式碼，請以完整檔案內容為準。
-
-            ## 審查面向
-            - 邏輯正確性：功能是否符合預期、邊界情況是否處理
-            - 程式碼品質：是否符合 C# 命名規範、async/await 正確使用
-            - 效能：是否有 N+1 查詢、不必要迴圈、記憶體洩漏
-            - 安全性：是否有 SQL Injection、敏感資訊洩露、未驗證輸入
-            - 可維護性：是否過度複雜、是否需要重構
-
-            ## Critical 的嚴格定義（不符合不得填入 critical）
-            以下情況才屬於 critical：
-            1. **會在執行期拋出例外或導致程式崩潰**的真實 bug（不是「可能」或「理論上」）
-            2. **資料安全漏洞**（SQL Injection、明文密碼、未授權存取）
-            3. **資源洩漏**（未 Dispose、無限迴圈、死鎖）
-            以下情況**不得**列為 critical：
-            - 理論上可能發生但在當前呼叫順序（await 順序執行）下不會發生的問題
-            - 跨 DI scope 的順序性 DbContext 操作（非並行就不是 EF Core 衝突）
-            - 需要重構的程式碼結構（應列為 warning 或 info）
-            - 原本就存在、本次 PR 未修改的程式碼問題
-
-            ## 專案規則
-            {{ruleList}}
-
-            ## 回應格式（JSON，不得包含任何其他文字）
+            try
             {
-              "critical": [{"file": "路徑", "line": 0, "message": "問題說明（繁體中文）"}],
-              "warning":  [{"file": "路徑", "line": 0, "message": "建議說明（繁體中文）"}],
-              "info":     [{"file": "路徑", "line": 0, "message": "優化建議（繁體中文）"}],
-              "summary":  "這個檔案的整體評語（一句話，繁體中文）"
-            }
+                if (File.Exists(templatePath))
+                    await File.WriteAllTextAsync(claudeMdPath,
+                        await File.ReadAllTextAsync(templatePath, cancellationToken),
+                        cancellationToken);
+                else
+                    logger.LogWarning("CLAUDE_Vera.md 不存在於 {Path}", templatePath);
 
-            - critical：會崩潰/資安漏洞/資源洩漏 → 必須修改才能合併
-            - warning：效能問題、違反 SOLID、缺少 null 處理、可改善的架構 → 建議修改
-            - info：命名改善、可讀性提升、重構建議 → 可選優化
-            - 若無問題，對應陣列留空 []
-            - line 填原始檔案中大約的行號（不確定時填 0）
-            """;
+                var model  = configuration["Agents:Reviewer:Model"]
+                          ?? configuration["Anthropic:DefaultModel"]
+                          ?? "claude-sonnet-4-6";
+                var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+                return await claudeCodeService.RunReviewAsync(
+                    localPath, prompt, model, apiKey, cancellationToken);
+            }
+            finally
+            {
+                // 不論成功或失敗，還原 CLAUDE.md
+                if (backup is not null)
+                    await File.WriteAllTextAsync(claudeMdPath, backup, CancellationToken.None);
+                else if (File.Exists(claudeMdPath))
+                    File.Delete(claudeMdPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "RunClaudeCodeReviewAsync 失敗（headRef={Ref}）", headRef);
+            // 失敗時回傳空結果，讓 triple fallback 產生空 ReviewReport（no Critical）
+            return new ClaudeCodeResult(false, "", -1, "");
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(localPath))
+                gitHubService.CleanupLocalRepo(localPath);
+        }
     }
 
-    private static string BuildReviewUserMessage(string filePath, string patch, string content)
-        => $"""
-            ## 檔案路徑
-            {filePath}
+    // ────────────── Prompt 建構 ──────────────
 
-            ## diff（PR 變更）
-            ```diff
-            {patch}
-            ```
+    /// <summary>
+    /// 只帶 patch（diff），不帶完整檔案內容。
+    /// Claude Code 在需要時會自行用 Read 工具讀取完整檔案。
+    /// </summary>
+    private static string BuildClaudeCodeReviewPrompt(
+        IReadOnlyList<PullRequestFile> csFiles,
+        IReadOnlyList<string> rules)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## PR 變更（僅 .cs 檔案的 diff）");
+        sb.AppendLine();
+        foreach (var file in csFiles)
+        {
+            sb.AppendLine($"### {file.FileName}");
+            sb.AppendLine("```diff");
+            sb.AppendLine(file.Patch ?? "(no patch available)");
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
 
-            ## 完整檔案內容
-            ```csharp
-            {content}
-            ```
+        if (rules.Count > 0)
+        {
+            sb.AppendLine("## 專案規則");
+            foreach (var r in rules)
+                sb.AppendLine($"- {r}");
+            sb.AppendLine();
+        }
 
-            請依照格式審查此檔案。
-            """;
+        sb.AppendLine("## 你的任務");
+        sb.AppendLine("1. 審查上述 diff，依 CLAUDE.md 的規則產出分級報告");
+        sb.AppendLine("2. 可用 Read / Grep 探索 codebase 確認上下文，可用 Bash 執行 git log / dotnet build 等診斷指令");
+        sb.AppendLine("3. 探索影響範圍，找出可能受影響的其他模組");
+        sb.AppendLine("4. 只輸出 JSON 結果（格式見 CLAUDE.md）");
+        return sb.ToString();
+    }
 
     // ────────────── Review Body 組建 ──────────────
 
     private static string BuildReviewBody(
         IReadOnlyList<ReviewIssue> issues,
-        IReadOnlyList<string> fileSummaries,
+        string summary,
+        string impact,
         int prNumber)
     {
+        var lines = new StringBuilder();
+
         if (issues.Count == 0)
-            return $"## ✅ PR #{prNumber} 程式碼審查通過\n\n未發現任何問題，程式碼品質良好。";
-
-        var lines = new System.Text.StringBuilder();
-        lines.AppendLine($"## 🔍 PR #{prNumber} 程式碼審查報告");
-        lines.AppendLine();
-
-        var criticals = issues.Where(i => i.Severity == "critical").ToList();
-        var warnings  = issues.Where(i => i.Severity == "warning" ).ToList();
-        var infos     = issues.Where(i => i.Severity == "info"    ).ToList();
-
-        if (criticals.Count > 0)
         {
-            lines.AppendLine("### 🔴 必須修改（Critical）");
-            foreach (var i in criticals)
-                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+            lines.AppendLine($"## ✅ PR #{prNumber} 程式碼審查通過");
+            lines.AppendLine();
+            if (!string.IsNullOrWhiteSpace(summary))
+                lines.AppendLine(summary);
+        }
+        else
+        {
+            lines.AppendLine($"## 🔍 PR #{prNumber} 程式碼審查報告");
+            lines.AppendLine();
+
+            var criticals = issues.Where(i => i.Severity == "critical").ToList();
+            var warnings  = issues.Where(i => i.Severity == "warning" ).ToList();
+            var infos     = issues.Where(i => i.Severity == "info"    ).ToList();
+
+            if (criticals.Count > 0)
+            {
+                lines.AppendLine("### 🔴 必須修改（Critical）");
+                foreach (var i in criticals)
+                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                lines.AppendLine();
+            }
+
+            if (warnings.Count > 0)
+            {
+                lines.AppendLine("### 🟡 建議修改（Warning）");
+                foreach (var i in warnings)
+                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                lines.AppendLine();
+            }
+
+            if (infos.Count > 0)
+            {
+                lines.AppendLine("### 🟢 優化建議（Info）");
+                foreach (var i in infos)
+                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                lines.AppendLine();
+            }
+
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                lines.AppendLine("### 📝 總結");
+                lines.AppendLine(summary);
+                lines.AppendLine();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(impact))
+        {
+            lines.AppendLine("---");
+            lines.AppendLine();
+            lines.AppendLine("## 🔭 影響範圍分析");
+            lines.AppendLine();
+            lines.AppendLine(impact);
             lines.AppendLine();
         }
 
-        if (warnings.Count > 0)
-        {
-            lines.AppendLine("### 🟡 建議修改（Warning）");
-            foreach (var i in warnings)
-                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
-            lines.AppendLine();
-        }
-
-        if (infos.Count > 0)
-        {
-            lines.AppendLine("### 🟢 優化建議（Info）");
-            foreach (var i in infos)
-                lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
-            lines.AppendLine();
-        }
-
-        if (fileSummaries.Count > 0)
-        {
-            lines.AppendLine("### 📝 各檔案總結");
-            foreach (var s in fileSummaries)
-                lines.AppendLine($"- {s}");
-        }
-
-        lines.AppendLine();
         lines.AppendLine("---");
         lines.AppendLine("*由 Vera（Reviewer Agent）自動審查*");
 
@@ -273,6 +311,7 @@ public class ReviewerAgentService(
 
     private ReviewReport? TryParseReviewReport(string content)
     {
+        if (string.IsNullOrWhiteSpace(content)) return null;
         try
         {
             var start = content.IndexOf('{');
@@ -317,83 +356,6 @@ public class ReviewerAgentService(
 
     private static AgentExecutionResult Fail(TaskItem task, string message)
         => new(false, message);
-
-    // ────────────── Claude Code 影響範圍分析 ──────────────
-
-    /// <summary>
-    /// 使用 Claude Code 唯讀模式 checkout 到 PR branch，探索影響範圍。
-    /// 失敗時靜默忽略，不影響主要審查流程。
-    /// </summary>
-    private async Task<string> RunImpactAnalysisAsync(
-        string owner,
-        string repo,
-        string headRef,
-        IReadOnlyList<string> changedFiles,
-        TaskItem task,
-        CancellationToken cancellationToken)
-    {
-        var localPath = "";
-        try
-        {
-            localPath = gitHubService.CloneOrPull(owner, repo, $"vera-{task.Id:N}"[..8]);
-            // Checkout 到 PR branch，才能看到 PR 的最新變更
-            gitHubService.CreateAndCheckoutBranch(localPath, headRef);
-
-            var claudeMdPath     = Path.Combine(localPath, "CLAUDE.md");
-            var templatePath     = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Vera.md");
-            var originalClaudeMd = File.Exists(claudeMdPath)
-                ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
-                : null;
-
-            try
-            {
-                if (File.Exists(templatePath))
-                    await File.WriteAllTextAsync(claudeMdPath,
-                        await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
-
-                var prompt = BuildImpactPrompt(changedFiles);
-                var model  = configuration["Agents:Reviewer:Model"]
-                          ?? configuration["Anthropic:DefaultModel"]
-                          ?? "claude-sonnet-4-6";
-                var apiKey = configuration["Anthropic:ApiKey"] ?? "";
-
-                var result = await claudeCodeService.RunReadOnlyAsync(
-                    localPath, prompt, model, apiKey, cancellationToken);
-
-                return result.Success ? result.Output.Trim() : "";
-            }
-            finally
-            {
-                if (originalClaudeMd is not null)
-                    await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
-                else if (File.Exists(claudeMdPath))
-                    File.Delete(claudeMdPath);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Vera 影響範圍分析失敗（略過），PR branch={Branch}", headRef);
-            return "";
-        }
-        finally
-        {
-            if (!string.IsNullOrEmpty(localPath))
-                gitHubService.CleanupLocalRepo(localPath);
-        }
-    }
-
-    private static string BuildImpactPrompt(IReadOnlyList<string> changedFiles)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("## PR 變更檔案");
-        foreach (var f in changedFiles)
-            sb.AppendLine($"- {f}");
-        sb.AppendLine();
-        sb.AppendLine("## 你的任務");
-        sb.AppendLine("探索 codebase，找出上述變更檔案的相依關係與影響範圍，輸出影響範圍分析報告（Markdown 格式）。");
-
-        return sb.ToString();
-    }
 }
 
 // ────────────── 資料模型 ──────────────
@@ -404,6 +366,7 @@ public class ReviewReport
     [JsonPropertyName("warning")]  public List<ReviewIssue> Warning  { get; set; } = [];
     [JsonPropertyName("info")]     public List<ReviewIssue> Info     { get; set; } = [];
     [JsonPropertyName("summary")]  public string Summary             { get; set; } = "";
+    [JsonPropertyName("impact")]   public string Impact              { get; set; } = "";
 }
 
 public record ReviewIssue

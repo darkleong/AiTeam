@@ -79,6 +79,20 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
             ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: 10, ct);
 
+    /// <summary>
+    /// Review 模式：開放 Glob / Grep / Read / Bash，不開放 Write / Edit。
+    /// 供 Vera 做 code review + 影響範圍分析合一的 session。
+    /// Bash 僅供唯讀診斷（git log、dotnet build 等），靠 CLAUDE_Vera.md 約束使用範圍。
+    /// </summary>
+    public Task<ClaudeCodeResult> RunReviewAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        CancellationToken ct = default)
+        => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
+            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read", "Bash"], maxTurns: 15, ct);
+
     // ────────────── Private ──────────────
 
     private async Task<ClaudeCodeResult> RunCoreAsync(
