@@ -748,26 +748,65 @@ public class CommandHandler(
             _pendingAdjustments[interaction.User.Id] = pending;
             logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
         }
-        else if (interaction.Data.CustomId == "escalate_retry")
+        else if (interaction.Data.CustomId == "escalate_skip")
         {
-            // Petra escalate 後老闆選擇重新開始提案
+            // Petra escalate 後老闆選擇跳過審核，沿用當前產出繼續流程
             await interaction.DeferAsync();
-            await interaction.FollowupAsync("🔄 重新啟動提案流程，Rosa 將重新分析需求...");
-            _ = Task.Run(async () =>
+
+            if (pending.EscalateStage == "rosa")
             {
-                try
+                await interaction.FollowupAsync("⏭️ 已跳過 Rosa 規格審核，繼續進行 Demi UI 規格設計...");
+                _ = Task.Run(async () =>
                 {
-                    await ShowProposalAsync(
-                        async (embed, components) =>
-                            await interaction.Channel.SendMessageAsync(embed: embed, components: components),
-                        pending.CeoResponse, pending.Project, pending.Description,
-                        images: pending.Images);
-                }
-                catch (Exception ex)
+                    try
+                    {
+                        await ShowProposalAsync(
+                            async (embed, components) =>
+                                await interaction.Channel.SendMessageAsync(embed: embed, components: components),
+                            pending.CeoResponse, pending.Project, pending.Description,
+                            images: pending.Images,
+                            previousIssues: pending.PreviewIssues,
+                            skipRosaReview: true);
+                    }
+                    catch (Exception ex) { logger.LogError(ex, "escalate_skip (rosa) 失敗"); }
+                }, CancellationToken.None);
+            }
+            else if (pending.EscalateStage == "demi")
+            {
+                await interaction.FollowupAsync("⏭️ 已跳過 Demi 審核，直接發送提案書...");
+                _ = Task.Run(async () =>
                 {
-                    logger.LogError(ex, "escalate_retry 重新提案失敗");
-                }
-            }, CancellationToken.None);
+                    try
+                    {
+                        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
+                        if (ceoChannel is null) return;
+
+                        var issues  = pending.PreviewIssues ?? [];
+                        var uiSpec  = pending.UiSpecMarkdown ?? "";
+                        var proposalEmbed = BuildProposalEmbed(pending.Description, issues, uiSpec);
+                        var confirmMsg    = await ceoChannel.SendMessageAsync(
+                            embed: proposalEmbed, components: BuildProposalConfirmButtons());
+
+                        _pendingConfirmations[confirmMsg.Id] = pending with
+                        {
+                            IsProposal    = true,
+                            EscalateStage = ""
+                        };
+
+                        if (!string.IsNullOrWhiteSpace(uiSpec))
+                        {
+                            var bytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
+                            using var stream = new System.IO.MemoryStream(bytes);
+                            await ceoChannel.SendFileAsync(stream, "ui-spec.md", "📄 UI 規格文件（提案附件）");
+                        }
+                    }
+                    catch (Exception ex) { logger.LogError(ex, "escalate_skip (demi) 失敗"); }
+                }, CancellationToken.None);
+            }
+            else
+            {
+                await interaction.FollowupAsync("⚠️ 無法判斷跳過的位置，請重新下指令。");
+            }
         }
         else if (interaction.Data.CustomId == "escalate_abort")
         {
@@ -934,7 +973,8 @@ public class CommandHandler(
         string description,
         IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<RequirementIssuePreview>? previousIssues = null,
-        string? previousUiSpec = null)
+        string? previousUiSpec = null,
+        bool skipRosaReview = false)  // true = 老闆 Skip Rosa escalate，直接以 previousIssues 進 Demi
     {
         var notifyMessage = "🔍 CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...";
 
@@ -989,7 +1029,15 @@ public class CommandHandler(
             string? rosaRevisionContext                 = null;
             IReadOnlyList<RequirementIssuePreview>? rosaPreviousIssues = previousIssues;
 
-            for (var rosaRound = 0; rosaRound <= 2; rosaRound++)
+            // 老闆跳過 Rosa 審核：直接用 previousIssues，不再跑 Rosa + Petra
+            if (skipRosaReview && previousIssues is { Count: > 0 })
+            {
+                issues = previousIssues.ToList();
+                if (ceoChannel is not null)
+                    await ceoChannel.SendMessageAsync(
+                        $"⏭️ 已跳過 Rosa 規格審核，沿用現有 Issues（共 {issues.Count} 條），繼續進行 Demi UI 規格設計...");
+            }
+            else for (var rosaRound = 0; rosaRound <= 2; rosaRound++)
             {
                 // 建立 Rosa TaskItem
                 var rosaTask = new TaskItem
@@ -1101,7 +1149,9 @@ public class CommandHandler(
                             ceoResponse, project, description,
                             TaskId: task.Id,
                             IsProposal: false,
-                            Images: images);
+                            Images: images,
+                            PreviewIssues: issues,      // 供 Skip 使用
+                            EscalateStage: "rosa");
                     }
                     return;
                 }
@@ -1230,7 +1280,10 @@ public class CommandHandler(
                             ceoResponse, project, description,
                             TaskId: task.Id,
                             IsProposal: false,
-                            Images: images);
+                            Images: images,
+                            PreviewIssues: issues,      // 供 Skip 使用
+                            UiSpecMarkdown: uiSpec,
+                            EscalateStage: "demi");
                     }
                     return;
                 }
@@ -1761,11 +1814,11 @@ public class CommandHandler(
             .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
             .Build();
 
-    /// <summary>Stage 16：Petra escalate 後，讓老闆決定是否重試或放棄。</summary>
+    /// <summary>Stage 16：Petra escalate 後，讓老闆決定是否跳過審核或放棄。</summary>
     private static MessageComponent BuildEscalateButtons()
         => new ComponentBuilder()
-            .WithButton("🔄 重新開始提案",  "escalate_retry", ButtonStyle.Primary)
-            .WithButton("❌ 放棄此提案",    "escalate_abort", ButtonStyle.Danger)
+            .WithButton("⏭️ 跳過此審核",  "escalate_skip",  ButtonStyle.Secondary)
+            .WithButton("❌ 放棄此提案",   "escalate_abort", ButtonStyle.Danger)
             .Build();
 
     /// <summary>Stage 10：提案書確認按鈕（三個：核准 / 需調整 / 取消）。</summary>
@@ -1823,4 +1876,5 @@ internal record PendingConfirmation(
     string? UiSpecMarkdown = null,
     string? UiSpecPath = null,
     bool IsProposal = false,
-    IReadOnlyList<ImageAttachment>? Images = null);
+    IReadOnlyList<ImageAttachment>? Images = null,
+    string EscalateStage = "");  // "rosa" | "demi" — 供 escalate_skip 判斷繼續點
