@@ -80,6 +80,20 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
             ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: 10, ct);
 
     /// <summary>
+    /// QA 模式：開放所有工具（含 Write / Edit / Bash），供 Quinn 產生測試並以 dotnet build 驗證。
+    /// 不呼叫 ConfigureGitAsync（QA 不 commit，由呼叫端 GitHubService 負責）。
+    /// 靠 CLAUDE_QA.md 約束只寫入 tests/ 與 Playwright Generated/ 目錄。
+    /// </summary>
+    public Task<ClaudeCodeResult> RunQaAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        CancellationToken ct = default)
+        => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
+            DefaultTimeout, allowedTools: null, maxTurns: 20, ct);
+
+    /// <summary>
     /// Review 模式：開放 Glob / Grep / Read / Bash，不開放 Write / Edit。
     /// 供 Vera 做 code review + 影響範圍分析合一的 session。
     /// Bash 僅供唯讀診斷（git log、dotnet build 等），靠 CLAUDE_Vera.md 約束使用範圍。
