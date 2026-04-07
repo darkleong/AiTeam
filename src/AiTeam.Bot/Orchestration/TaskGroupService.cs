@@ -128,6 +128,15 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
+        // ── Stage 16：預先查詢 ProjectId，供 Petra 審核方法使用（查一次，避免跨 scope 重複查詢）──
+        Guid? groupProjectId = null;
+        if (!string.IsNullOrWhiteSpace(group.Project))
+        {
+            groupProjectId = await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+            if (groupProjectId is null)
+                logger.LogWarning("HandleAgentCompleted：找不到專案名稱 '{Project}'，Petra TaskItem.ProjectId 將為 null", group.Project);
+        }
+
         // ── Stage 16：Dev_plan 完成 → Petra 審核實作計畫 ──
         if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
         {
@@ -135,7 +144,7 @@ public class TaskGroupService(
             group.DevPlan = result.OutputContent ?? result.Summary;
             await taskRepo.SaveAsync(cancellationToken);
 
-            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, taskRepo, cancellationToken);
+            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, taskRepo, groupProjectId, cancellationToken);
             switch (petraDevPlanReview.Decision)
             {
                 case "approve":
@@ -172,7 +181,7 @@ public class TaskGroupService(
             }
             else
             {
-            var petraVeraReview = await RunPetraVeraReviewAsync(group, result, taskRepo, cancellationToken);
+            var petraVeraReview = await RunPetraVeraReviewAsync(group, result, taskRepo, groupProjectId, cancellationToken);
             switch (petraVeraReview.Decision)
             {
                 case "approve":
@@ -652,6 +661,7 @@ public class TaskGroupService(
         TaskGroup group,
         AgentExecutionResult devPlanResult,
         TaskRepository taskRepo,
+        Guid? projectId,
         CancellationToken cancellationToken)
     {
         await using var scope   = serviceProvider.CreateAsyncScope();
@@ -659,11 +669,7 @@ public class TaskGroupService(
         var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
 
-        // 建立 Petra TaskItem
-        var petraDevPlanProjectId = string.IsNullOrWhiteSpace(group.Project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
-
+        // 建立 Petra TaskItem（projectId 由呼叫方傳入，避免跨 scope 混用 DbContext）
         var petraTask = new TaskItem
         {
             Title         = $"[Petra→Dev_plan] {group.Title}",
@@ -672,7 +678,7 @@ public class TaskGroupService(
             AssignedAgent = AgentNames.Pm,
             Status        = "running",
             GroupId       = group.Id,
-            ProjectId     = petraDevPlanProjectId,
+            ProjectId     = projectId,
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
@@ -747,17 +753,14 @@ public class TaskGroupService(
         TaskGroup group,
         AgentExecutionResult veraResult,
         TaskRepository taskRepo,
+        Guid? projectId,
         CancellationToken cancellationToken)
     {
         await using var scope   = serviceProvider.CreateAsyncScope();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
 
-        // 建立 Petra TaskItem
-        var petraVeraProjectId = string.IsNullOrWhiteSpace(group.Project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
-
+        // 建立 Petra TaskItem（projectId 由呼叫方傳入，避免跨 scope 混用 DbContext）
         var petraTask = new TaskItem
         {
             Title         = $"[Petra→Vera] {group.Title}",
@@ -766,7 +769,7 @@ public class TaskGroupService(
             AssignedAgent = AgentNames.Pm,
             Status        = "running",
             GroupId       = group.Id,
-            ProjectId     = petraVeraProjectId,
+            ProjectId     = projectId,
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
