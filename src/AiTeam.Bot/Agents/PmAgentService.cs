@@ -229,17 +229,23 @@ public class PmAgentService(
             sb.AppendLine();
         }
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("審核以上 Issues 規格，**只從需求面**判斷：");
-        sb.AppendLine("1. 有無遺漏的使用情境或功能點");
-        sb.AppendLine("2. Issue 粒度是否合理");
-        sb.AppendLine("3. 每個 Issue 是否有具體可測試的驗收條件（從使用者角度）");
+        sb.AppendLine("只從需求面審核：");
+        sb.AppendLine("1. 原始需求中的功能點是否都有對應的 Issue？");
+        sb.AppendLine("2. 每個 Issue 是否有至少一條可從使用者角度測試的驗收條件？");
         sb.AppendLine();
         sb.AppendLine("**不要要求 Rosa 提供以下內容，這些不是她的責任：**");
         sb.AppendLine("- Entity / DTO / 資料庫 schema（Cody 的工作）");
         sb.AppendLine("- Service / API 架構（Cody 的工作）");
         sb.AppendLine("- UI 元件或互動流程細節（Demi 的工作）");
+        sb.AppendLine("- 權限驗證、安全性、跨裝置 / 效能場景（非需求面）");
         sb.AppendLine();
-        sb.AppendLine("approve 標準：功能點無明顯遺漏，且每個 Issue 有至少一條可從使用者角度測試的驗收條件。");
+        sb.AppendLine("**以下情況不構成 revise 理由：**");
+        sb.AppendLine("- 驗收條件「可以更精確」但已經能測試 → approve");
+        sb.AppendLine("- 文案用詞「可以更好」 → approve");
+        sb.AppendLine("- Issue 粒度「可以再拆」但目前可實作 → approve");
+        sb.AppendLine("- 「沒提到 XX 場景」但該場景非原始需求所述 → approve");
+        sb.AppendLine();
+        sb.AppendLine("**revise 的唯一理由：原始需求中明確提到的功能點，在 Issues 中完全找不到對應。**");
         sb.AppendLine("輸出 JSON 審核結果。");
         return sb.ToString();
     }
