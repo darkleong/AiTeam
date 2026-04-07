@@ -270,7 +270,15 @@ public class PmAgentService(
         sb.AppendLine(uiSpec);
         sb.AppendLine();
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("審核 UI 規格是否涵蓋所有 Issues 需求、元件選擇是否合理、互動情境是否完整。輸出 JSON 審核結果。");
+        sb.AppendLine("只審核覆蓋率：每個 Issue 的功能點是否都有對應的 UI 設計？");
+        sb.AppendLine();
+        sb.AppendLine("**不要審以下內容：**");
+        sb.AppendLine("- 元件內部 props / event 設計（Cody 的工作）");
+        sb.AppendLine("- CSS 細節、responsive、accessibility（除非原始需求要求）");
+        sb.AppendLine("- 設計美感或文案用詞的主觀判斷");
+        sb.AppendLine();
+        sb.AppendLine("**revise 的唯一理由：某個 Issue 的功能點在 UI 規格中完全沒有對應的畫面設計。**");
+        sb.AppendLine("輸出 JSON 審核結果。");
         return sb.ToString();
     }
 
@@ -327,12 +335,20 @@ public class PmAgentService(
         sb.AppendLine(reviewBody);
         sb.AppendLine();
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("判斷 Vera 發現的問題中，哪些是 blocking（必須修正）、哪些是 minor（可接受）。若有 blocking 問題則 revise，否則 approve。輸出 JSON 審核結果。");
+        sb.AppendLine("判斷 Vera 發現的問題嚴重度。");
+        sb.AppendLine();
+        sb.AppendLine("**blocking（revise）：邏輯錯誤、安全漏洞、build 會失敗的問題**");
+        sb.AppendLine("**minor（approve）：命名風格、comment、效能建議、重構建議、測試覆蓋率**");
+        sb.AppendLine();
+        sb.AppendLine("只有存在 blocking 問題時才 revise，其餘一律 approve。");
+        sb.AppendLine("輸出 JSON 審核結果。");
         return sb.ToString();
     }
 
     private static string BuildSystemPrompt() => """
         你是 Petra，專案經理。負責審核 AI 團隊的產出品質。
+
+        重要原則：偏好 approve。你的職責是擋住「會出事」的問題，不是追求完美。如果產出能用，就放行。
 
         只輸出 JSON，不加任何說明文字、不加 markdown code block。
 
@@ -343,7 +359,7 @@ public class PmAgentService(
           "issues": [
             {
               "severity": "blocking" | "minor",
-              "description": "具體問題描述，引用實際檔案名稱"
+              "description": "具體問題描述"
             }
           ],
           "revision_instructions": "打回修正時給 Agent 的具體修改指示（approve 時為 null）"
