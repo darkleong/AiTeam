@@ -118,6 +118,29 @@ body {
     padding: 4px;
 }
 
+.logout-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: inherit;
+    width: calc(100% - 16px);
+    text-align: left;
+}
+
+.logout-btn:hover {
+    background: var(--color-status-error, #d32f2f) !important;
+    color: #fff !important;
+}
+
+.logout-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.layout-wrapper.sidebar-collapsed .logout-btn {
+    width: calc(100% - 8px);
+}
+
 /* ========================================
    Nav Menu
    ======================================== */

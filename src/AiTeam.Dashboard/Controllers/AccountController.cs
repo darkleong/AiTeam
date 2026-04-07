@@ -32,6 +32,13 @@ public class AccountController(SignInManager<IdentityUser> signInManager) : Cont
         return Redirect("/login?error=1");
     }
 
+    [HttpGet("logout")]
+    public async Task<IActionResult> LogoutGetAsync()
+    {
+        await signInManager.SignOutAsync();
+        return Redirect("/login");
+    }
+
     [HttpPost("logout")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> LogoutAsync()
