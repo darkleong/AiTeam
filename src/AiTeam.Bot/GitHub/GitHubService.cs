@@ -76,12 +76,22 @@ public class GitHubService(
 
     /// <summary>
     /// 取得 PR 的 head branch 名稱（用於從 head branch 讀取檔案內容）。
+    /// 若 PR 不存在，回傳空字串（不拋例外）。
     /// </summary>
     public async Task<string> GetPullRequestHeadRefAsync(string owner, string repo, int prNumber)
     {
         var client = CreateClient();
-        var pr = await client.PullRequest.Get(owner, repo, prNumber);
-        return pr.Head.Ref;
+        try
+        {
+            var pr = await client.PullRequest.Get(owner, repo, prNumber);
+            return pr.Head.Ref;
+        }
+        catch (Octokit.NotFoundException)
+        {
+            logger.LogWarning("GetPullRequestHeadRefAsync：PR #{PrNumber} 不存在（{Owner}/{Repo}），回傳空字串",
+                prNumber, owner, repo);
+            return string.Empty;
+        }
     }
 
     /// <summary>

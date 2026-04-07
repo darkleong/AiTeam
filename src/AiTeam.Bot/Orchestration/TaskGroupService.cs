@@ -199,6 +199,18 @@ public class TaskGroupService(
             } // end else (Vera success)
         }
 
+        // ── Stage 16：Dev 初次開發失敗（非 fix loop）→ 停止流程，通知老闆介入 ──
+        // （fix loop 失敗用 "Dev_fix" 為 completedAgent，不會被這裡攔截）
+        if (completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase) && !result.Success)
+        {
+            logger.LogError("Dev Agent 執行失敗，停止工作流程：Group={Id}，原因：{Summary}",
+                group.Id, result.Summary);
+            taskRepo.UpdateGroupStatus(group, "failed");
+            await taskRepo.SaveAsync(cancellationToken);
+            await NotifyBossInterventionAsync(group, cancellationToken);
+            return;
+        }
+
         var workflowType = group.WorkflowType switch
         {
             "new_feature"      => WorkflowType.NewFeature,
