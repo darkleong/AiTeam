@@ -54,6 +54,9 @@ namespace AiTeam.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Name")
+                        .IsUnique();
+
                     b.HasIndex("TeamId");
 
                     b.ToTable("agent_configs", (string)null);
