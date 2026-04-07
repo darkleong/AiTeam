@@ -660,6 +660,10 @@ public class TaskGroupService(
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
 
         // 建立 Petra TaskItem
+        var petraDevPlanProjectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+
         var petraTask = new TaskItem
         {
             Title         = $"[Petra→Dev_plan] {group.Title}",
@@ -668,6 +672,7 @@ public class TaskGroupService(
             AssignedAgent = AgentNames.Pm,
             Status        = "running",
             GroupId       = group.Id,
+            ProjectId     = petraDevPlanProjectId,
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
@@ -749,6 +754,10 @@ public class TaskGroupService(
         var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
 
         // 建立 Petra TaskItem
+        var petraVeraProjectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+
         var petraTask = new TaskItem
         {
             Title         = $"[Petra→Vera] {group.Title}",
@@ -757,6 +766,7 @@ public class TaskGroupService(
             AssignedAgent = AgentNames.Pm,
             Status        = "running",
             GroupId       = group.Id,
+            ProjectId     = petraVeraProjectId,
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
