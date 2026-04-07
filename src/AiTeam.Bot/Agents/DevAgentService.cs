@@ -280,6 +280,15 @@ public class DevAgentService(
 
         if (!result.Success)
         {
+            // 將 Claude Code 完整輸出尾段存進 TaskLog（Dashboard / DB 永久可查）
+            if (!string.IsNullOrWhiteSpace(result.RawJson))
+            {
+                var rawTail = result.RawJson.Length > 1500
+                    ? "…(前段略)…\n" + result.RawJson[^1500..]
+                    : result.RawJson;
+                AddLog(task, $"[Claude Code 失敗輸出]\n{rawTail}", "failed");
+            }
+
             var msg = string.IsNullOrWhiteSpace(result.Output)
                 ? $"Claude Code 執行失敗（exit code={result.ExitCode}）"
                 : $"Claude Code 執行失敗：{result.Output}";
@@ -654,6 +663,17 @@ public class DevAgentService(
             var planContent = result.Success && !string.IsNullOrWhiteSpace(result.Output)
                 ? result.Output
                 : "（計畫書產出失敗，請查看 log）";
+
+            if (!result.Success)
+            {
+                // 失敗時把 Claude Code 輸出尾段存進 TaskLog（Dashboard / DB 永久可查）
+                var rawTail = result.RawJson.Length > 1500
+                    ? "…(前段略)…\n" + result.RawJson[^1500..]
+                    : result.RawJson;
+                AddLog(task, $"[Dev_plan Claude Code 失敗輸出]\n{rawTail}", "failed");
+                logger.LogError("Dev_plan Claude Code 失敗（exitCode={Code}）：{Output}",
+                    result.ExitCode, result.Output);
+            }
 
             AddLog(task, "實作計畫書產出完成", "done");
             await taskRepository.SaveAsync(cancellationToken);

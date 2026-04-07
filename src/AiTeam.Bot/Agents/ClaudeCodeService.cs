@@ -153,11 +153,26 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         var stdout  = stdoutBuilder.ToString();
         var stderr  = stderrBuilder.ToString();
 
-        if (!string.IsNullOrWhiteSpace(stderr))
-            logger.LogWarning("Claude Code stderr：{Stderr}", stderr);
-
         var exitCode = process.ExitCode;
         var (success, output) = ParseJsonOutput(stdout, exitCode);
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            // 失敗時升級為 Error 方便 Docker log 過濾；成功時降為 Debug（通常是 progress info）
+            if (!success || exitCode != 0)
+                logger.LogError("Claude Code stderr（exitCode={Code}）：{Stderr}", exitCode, stderr);
+            else
+                logger.LogDebug("Claude Code stderr：{Stderr}", stderr);
+        }
+
+        if (!success || exitCode != 0)
+        {
+            // 失敗時記錄 stdout 尾段，方便 Docker log 追查根因
+            var rawTail = stdout.Length > 3000 ? "…" + stdout[^3000..] : stdout;
+            logger.LogError(
+                "Claude Code 失敗完整輸出（exitCode={Code}）：\n{Raw}",
+                exitCode, rawTail);
+        }
 
         logger.LogInformation(
             "Claude Code subprocess 結束（exitCode={Code}，success={Success}）",
