@@ -1,0 +1,45 @@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JSRuntime
+
+@* 隱藏表單：POST /account/logout，帶有 CSRF 防護 token *@
+<form id="logout-form" method="post" action="/account/logout" style="display:none">
+    <AntiforgeryToken />
+</form>
+
+<button class="logout-btn nav-item" @onclick="ShowLogoutConfirmAsync" disabled="@_isLoggingOut" title="登出">
+    <span class="nav-icon">🚪</span>
+    <span class="nav-text">登出</span>
+</button>
+
+@code {
+    private string _currentUserName = "使用者";
+    private bool _isLoggingOut;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var name = user.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+            _currentUserName = name;
+    }
+
+    private async Task ShowLogoutConfirmAsync()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "確認登出",
+            $"您確定要登出系統嗎？（{_currentUserName}）",
+            yesText: "確認登出",
+            cancelText: "取消");
+
+        if (result == true)
+        {
+            _isLoggingOut = true;
+            // 以 JS interop 提交隱藏表單，觸發 POST /account/logout（帶 CSRF token）
+            await JSRuntime.InvokeVoidAsync("eval", "document.getElementById('logout-form').submit()");
+        }
+    }
+}
