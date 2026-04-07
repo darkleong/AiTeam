@@ -128,15 +128,6 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
-        // ── Stage 16：預先查詢 ProjectId，供 Petra 審核方法使用（查一次，避免跨 scope 重複查詢）──
-        Guid? groupProjectId = null;
-        if (!string.IsNullOrWhiteSpace(group.Project))
-        {
-            groupProjectId = await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
-            if (groupProjectId is null)
-                logger.LogWarning("HandleAgentCompleted：找不到專案名稱 '{Project}'，Petra TaskItem.ProjectId 將為 null", group.Project);
-        }
-
         // ── Stage 16：Dev_plan 完成 → Petra 審核實作計畫 ──
         if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
         {
@@ -144,7 +135,9 @@ public class TaskGroupService(
             group.DevPlan = result.OutputContent ?? result.Summary;
             await taskRepo.SaveAsync(cancellationToken);
 
-            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, taskRepo, groupProjectId, cancellationToken);
+            // 按需查詢 ProjectId（僅在進入 Petra 審核分支時才查，避免無謂的 DB 壓力）
+            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
+            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, groupProjectId, cancellationToken);
             switch (petraDevPlanReview.Decision)
             {
                 case "approve":
@@ -181,31 +174,12 @@ public class TaskGroupService(
             }
             else
             {
-            var petraVeraReview = await RunPetraVeraReviewAsync(group, result, taskRepo, groupProjectId, cancellationToken);
-            switch (petraVeraReview.Decision)
-            {
-                case "approve":
-                    result = result with { CriticalReviewCount = 0 };
-                    break;
-
-                case "revise":
-                    result = result with { CriticalReviewCount = 1 };
-                    if (!string.IsNullOrWhiteSpace(petraVeraReview.RevisionInstructions))
-                    {
-                        group.LastReviewBody =
-                            (group.LastReviewBody ?? "") +
-                            "\n\n【Petra 修正指示】" + petraVeraReview.RevisionInstructions;
-                        await taskRepo.SaveAsync(cancellationToken);
-                    }
-                    break;
-
-                default: // escalate
-                    taskRepo.UpdateGroupStatus(group, "failed");
-                    await taskRepo.SaveAsync(cancellationToken);
-                    await NotifyBossInterventionAsync(group, cancellationToken);
-                    return;
+                // 按需查詢 ProjectId（僅在進入 Petra 審核分支時才查，避免無謂的 DB 壓力）
+                var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
+                var reviewResult = await HandleReviewerCompletedAsync(group, result, taskRepo, groupProjectId, cancellationToken);
+                if (reviewResult is null) return; // escalate，已更新狀態並通知老闆
+                result = reviewResult;
             }
-            } // end else (Vera success)
         }
 
         // ── Stage 16：Dev 初次開發失敗（非 fix loop）→ 停止流程，通知老闆介入 ──
@@ -655,16 +629,67 @@ public class TaskGroupService(
     // ---- Stage 16：Petra 審核輔助方法 ----
 
     /// <summary>
+    /// 按需查詢 TaskGroup 對應的 ProjectId（避免無謂的 DB 壓力）。
+    /// </summary>
+    private async Task<Guid?> GetGroupProjectIdAsync(
+        TaskGroup group,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(group.Project)) return null;
+        var projectId = await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+        if (projectId is null)
+            logger.LogWarning("HandleAgentCompleted：找不到專案名稱 '{Project}'，Petra TaskItem.ProjectId 將為 null", group.Project);
+        return projectId;
+    }
+
+    /// <summary>
+    /// Vera 執行成功後，送 Petra 審核並依決策回傳更新後的 result。
+    /// 回傳 null 表示已 escalate（呼叫方應直接 return）。
+    /// </summary>
+    private async Task<AgentExecutionResult?> HandleReviewerCompletedAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        var petraVeraReview = await RunPetraVeraReviewAsync(group, result, projectId, cancellationToken);
+        switch (petraVeraReview.Decision)
+        {
+            case "approve":
+                return result with { CriticalReviewCount = 0 };
+
+            case "revise":
+                result = result with { CriticalReviewCount = 1 };
+                if (!string.IsNullOrWhiteSpace(petraVeraReview.RevisionInstructions))
+                {
+                    group.LastReviewBody =
+                        (group.LastReviewBody ?? "") +
+                        "\n\n【Petra 修正指示】" + petraVeraReview.RevisionInstructions;
+                    await taskRepo.SaveAsync(cancellationToken);
+                }
+                return result;
+
+            default: // escalate
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(cancellationToken);
+                await NotifyBossInterventionAsync(group, cancellationToken);
+                return null;
+        }
+    }
+
+    /// <summary>
     /// 建立 Petra TaskItem、呼叫 ReviewDevPlanAsync、推送狀態、通知 #petra-pm 頻道。
     /// </summary>
     private async Task<Agents.PetraReview> RunPetraDevPlanReviewAsync(
         TaskGroup group,
         AgentExecutionResult devPlanResult,
-        TaskRepository taskRepo,
         Guid? projectId,
         CancellationToken cancellationToken)
     {
         await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
@@ -752,11 +777,11 @@ public class TaskGroupService(
     private async Task<Agents.PetraReview> RunPetraVeraReviewAsync(
         TaskGroup group,
         AgentExecutionResult veraResult,
-        TaskRepository taskRepo,
         Guid? projectId,
         CancellationToken cancellationToken)
     {
         await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
 
