@@ -314,6 +314,81 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 
 ---
 
+## 十二、API 餘額耗盡後的流程恢復機制
+
+### 背景
+
+當 Anthropic API 餘額耗盡導致流程中斷時，目前需要完整重跑整個流程。
+對提案階段（Rosa → Demi，約 3-5 分鐘）影響尚可接受；但對開發階段（Cody 正在寫程式）代價很高：
+- 若 Claude Code subprocess 已寫了大量程式碼但尚未 commit，重啟後 workspace 清空，所有進度歸零
+- 若 branch 已 push 但 PR 尚未開，GitHub 上留有孤兒 branch，需手動清理
+- 老闆無法透過一句話讓系統從中斷點恢復
+
+### 期望行為
+
+```
+老闆：我充值了，請恢復作業
+CEO：好的，從上次中斷點繼續（Cody 重新開始實作）
+```
+
+### 設計方向
+
+**提案階段（較簡單）：**
+- 在 TaskItem 存儲 Rosa / Demi 各輪產出（JSON）
+- 中斷後可從最後成功步驟繼續（例如 Rosa 已 approve，只需重跑 Demi）
+
+**開發階段（較複雜）：**
+- `TaskGroup` 加入 `InterruptedAtStep` 欄位記錄中斷點
+- CEO 偵測「恢復 / 繼續 / 充值了」等意圖，查詢 DB 找最近失敗的 TaskGroup
+- `FireStepsAsync` 支援從指定步驟重新觸發
+
+**孤兒 Branch 防護：**
+- Cody 開始寫 code 前先記錄 `BranchName` 到 TaskGroup
+- 重試時若 branch 已存在，checkout 到現有 branch 繼續（而非建新 branch）
+
+### 前置條件
+
+- 需要 API 信用錯誤的精確偵測（目前只有一般性 Exception）
+- TaskGroup 需要 `InterruptedAtStep` 欄位
+- CEO（Victoria）需要識別「恢復」意圖
+
+### 優先級
+
+🟡 中優先級 — 等 Stage 16 驗收通過後評估，Cody 進行中被中斷的場景較為罕見但影響大
+
+---
+
+## 十三、Token 異常消耗保護機制
+
+### 背景
+
+曾發生過某個 Agent 忘記指定 context 範圍，將全系統檔案全部餵進 API，單次請求消耗 80 萬+ Token 的事故。
+此類「單次超大 request」不會被 round limit 或 retry 次數限制攔截，且若開啟 Anthropic 自動儲值，會不斷扣款直到發現問題。
+
+### 期望行為
+
+```
+單次 API 呼叫 token 數超過閾值（例如 50k）→ 立即中止並發出 Discord 警報
+月累計超過 X 美元 → 自動暫停所有 Agent 並通知老闆
+```
+
+### 設計方向
+
+- **請求前 token 估算**：對每個 LLM 呼叫，在送出前估算 prompt 長度（字元數 / 4 ≈ token 數），超過閾值直接拒絕並 log
+- **硬性月費上限**：`AppSettings` 加入 `MonthlyBudgetUsd` 欄位，Token 監控服務追蹤當月累計費用，超過則鎖定所有 LLM 呼叫
+- **現有 `DailyTokenLimitK` / `MonthlyTokenLimitK` 真正落實**：目前只存在 config 裡，並未實際 enforce
+
+### 注意事項
+
+- 這個功能比自動儲值更重要——有了硬性上限，即使有 bug 也不會無限燒錢
+- 閾值設計要合理：太低會誤殺正常大型任務（Dev Agent 有大量 codebase 需要讀）
+
+### 優先級
+
+🟠 中高優先級 — 有過實際事故，且自動儲值風險高；但目前以手動充值為保護手段，可在下個 Stage 一起評估
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -350,6 +425,7 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 | 2026-04-06 | v2.0 大整理：移除 9 個已完成項目（一、十～十四、十七～十九），重新編號為一～十二 |
 | 2026-04-06 | v2.1：第九項（CEO 分類補強）移入 Stage 14 |
 | 2026-04-06 | v2.2：第九項標記 ✅ 已完成（Stage 14 驗收通過） |
+| 2026-04-07 | v3.1：新增十二（流程恢復機制）、十三（Token 異常消耗保護）|
 | 2026-04-06 | v2.3：第十項標記被 Stage 15 吸收；第十一項 Phase 1~2 移入 Stage 15 |
 | 2026-04-06 | v2.4：第十一項改為 Phase 1~3 全部移入 Stage 15；新增十三（CEO 長期記憶向量搜索版備案）；原十二改編號為十四 |
 | 2026-04-07 | v3.0：移除 3 個已完成項目（九/十/十一→Stage 14/15），重新編號為一～十；更新一（API 費用已部分優化）、四（顧問能力已整合）、八（補充 Claude Code 綁定限制） |
