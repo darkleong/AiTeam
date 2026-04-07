@@ -157,6 +157,15 @@ body {
     white-space: nowrap;
 }
 
+.version-label {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    text-align: center;
+    padding-top: 4px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
 .nav-item:hover,
 .nav-item.active {
     background: var(--color-accent);
@@ -192,6 +201,10 @@ body {
 }
 
 .layout-wrapper.sidebar-collapsed .nav-text {
+    display: none;
+}
+
+.layout-wrapper.sidebar-collapsed .version-label {
     display: none;
 }
 
