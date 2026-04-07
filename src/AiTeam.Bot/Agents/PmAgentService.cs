@@ -1,12 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AiTeam.Bot.Services;
-using AiTeam.Bot.GitHub;
 using AiTeam.Data;
-using AiTeam.Data.Repositories;
-using AiTeam.Shared.ViewModels;
-using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
 
@@ -14,14 +9,14 @@ namespace AiTeam.Bot.Agents;
 /// Stage 16：PM Agent（Petra）品質審核閘門。
 /// 負責在 Rosa / Demi / Dev_plan / Vera 完成後審核產出，
 /// 回傳 approve / revise / escalate 決定。
+/// 全部使用 LLM 直呼叫（ClaudeCode 的 result.Output 是執行摘要，非 JSON 全文，會解析失敗）。
 /// </summary>
 public class PmAgentService(
     LlmProviderFactory providerFactory,
-    ClaudeCodeService claudeCodeService,
-    IConfiguration configuration,
     ILogger<PmAgentService> logger)
 {
     private const string AgentName = "PM";
+
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -36,11 +31,11 @@ public class PmAgentService(
     public Task<PetraReview> ReviewRosaAsync(
         TaskItem ceoTask,
         IReadOnlyList<RequirementIssuePreview> issues,
-        string repoLocalPath,
+        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
         CancellationToken ct = default)
     {
         var prompt = BuildRosaReviewPrompt(ceoTask, issues);
-        return RunWithClaudeCodeAsync(repoLocalPath, prompt, "Rosa Issues 審核", ct);
+        return RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
@@ -50,11 +45,11 @@ public class PmAgentService(
         TaskItem ceoTask,
         IReadOnlyList<RequirementIssuePreview> issues,
         string uiSpec,
-        string repoLocalPath,
+        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
         CancellationToken ct = default)
     {
         var prompt = BuildDemiReviewPrompt(ceoTask, issues, uiSpec);
-        return RunWithClaudeCodeAsync(repoLocalPath, prompt, "Demi UI 規格審核", ct);
+        return RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
@@ -65,11 +60,11 @@ public class PmAgentService(
         string devPlan,
         string? issueUrlsJson,
         string? uiSpecContent,
-        string repoLocalPath,
+        string repoLocalPath,         // 保留參數相容性，LLM 路徑不使用
         CancellationToken ct = default)
     {
         var prompt = BuildDevPlanReviewPrompt(taskTitle, devPlan, issueUrlsJson, uiSpecContent);
-        return RunWithClaudeCodeAsync(repoLocalPath, prompt, "Cody 實作計畫審核", ct);
+        return RunLlmDirectAsync(prompt, ct);
     }
 
     /// <summary>
@@ -81,66 +76,6 @@ public class PmAgentService(
         CancellationToken ct = default)
     {
         var prompt = BuildVeraReviewPrompt(taskTitle, reviewBody);
-        return await RunLlmDirectAsync(prompt, ct);
-    }
-
-    // ────────────── ClaudeCode 執行（附 CLAUDE.md 覆寫） ──────────────
-
-    private async Task<PetraReview> RunWithClaudeCodeAsync(
-        string repoLocalPath,
-        string prompt,
-        string reviewType,
-        CancellationToken ct)
-    {
-        var claudeMdPath  = Path.Combine(repoLocalPath, "CLAUDE.md");
-        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Petra.md");
-        var originalContent = File.Exists(claudeMdPath)
-            ? await File.ReadAllTextAsync(claudeMdPath, ct)
-            : null;
-
-        try
-        {
-            if (File.Exists(templatePath))
-                await File.WriteAllTextAsync(claudeMdPath,
-                    await File.ReadAllTextAsync(templatePath, ct), ct);
-
-            var model  = configuration[$"Agents:{AgentName}:Model"]
-                      ?? configuration["Anthropic:DefaultModel"]
-                      ?? "claude-haiku-4-5";
-            var apiKey = configuration["Anthropic:ApiKey"] ?? "";
-
-            var result = await claudeCodeService.RunReadOnlyAsync(
-                repoLocalPath, prompt, model, apiKey, ct);
-
-            if (result.Success)
-            {
-                var review = TryParseReview(result.Output);
-                if (review is not null)
-                {
-                    logger.LogInformation("Petra {ReviewType} ClaudeCode 完成：{Decision}", reviewType, review.Decision);
-                    return review;
-                }
-                logger.LogWarning("Petra {ReviewType} JSON 解析失敗，改用 LLM fallback", reviewType);
-            }
-            else
-            {
-                logger.LogWarning("Petra {ReviewType} ClaudeCode 失敗（exitCode={Code}），改用 LLM fallback",
-                    reviewType, result.ExitCode);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Petra {ReviewType} ClaudeCode 執行例外，改用 LLM fallback", reviewType);
-        }
-        finally
-        {
-            // 還原 CLAUDE.md
-            if (originalContent is not null)
-                await File.WriteAllTextAsync(claudeMdPath, originalContent, CancellationToken.None);
-            else if (File.Exists(claudeMdPath))
-                File.Delete(claudeMdPath);
-        }
-
         return await RunLlmDirectAsync(prompt, ct);
     }
 

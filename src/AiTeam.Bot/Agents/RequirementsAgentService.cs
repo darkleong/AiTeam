@@ -250,6 +250,15 @@ public class RequirementsAgentService(
             sb.AppendLine("基於第一版 Issues 和修正指示進行修改，探索 codebase 後輸出修改後的 JSON Issue 陣列。");
         else
             sb.AppendLine("探索 codebase，理解現有架構，然後輸出 JSON Issue 陣列。只輸出 JSON，不加說明。");
+        sb.AppendLine();
+        sb.AppendLine("## 品質要求（必須符合，否則會被打回重做）");
+        sb.AppendLine("每個 Issue 的 body 必須包含：");
+        sb.AppendLine("1. `## 背景`：說明為什麼要做這個 Issue");
+        sb.AppendLine("2. `## 驗收條件`：列出 3 條以上可具體測試的 checkbox，例如");
+        sb.AppendLine("   - [ ] 點擊 XX 按鈕後，頁面顯示 XX 資訊");
+        sb.AppendLine("   - [ ] 輸入無效值時，顯示錯誤訊息 \"XX\"");
+        sb.AppendLine("   - [ ] API 回傳 HTTP 200 且 body 包含 XX 欄位");
+        sb.AppendLine("**驗收條件不能含糊，必須是可以直接測試的具體行為。**");
 
         return sb.ToString();
     }
