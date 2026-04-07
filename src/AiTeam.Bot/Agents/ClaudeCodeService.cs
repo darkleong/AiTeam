@@ -35,7 +35,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
         // 確保 git config 已設定（容器內可能缺少 user.name/email）
         await ConfigureGitAsync(workingDir, ct);
         return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            DefaultTimeout, allowedTools: null, maxTurns: 20, ct);
+            DefaultTimeout, allowedTools: null, maxTurns: 40, ct);
     }
 
     /// <summary>

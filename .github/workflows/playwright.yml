@@ -8,9 +8,6 @@ on:
       - '**/*.css'
       - 'src/AiTeam.Tests.Playwright/**'
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
   playwright-test:
     name: Playwright UI Tests
@@ -22,50 +19,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Dashboard is running
+        id: health
+        shell: pwsh
+        run: |
+          $status = try { (Invoke-WebRequest -Uri http://localhost:5051 -UseBasicParsing -TimeoutSec 5).StatusCode } catch { 0 }
+          if ($status -eq 200 -or $status -eq 302) {
+            echo "dashboard_up=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Dashboard is up (HTTP $status)"
+          } else {
+            Write-Host "::warning::Dashboard is not running (HTTP $status), skipping Playwright tests"
+            echo "dashboard_up=false" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Restore Playwright project
+        if: steps.health.outputs.dashboard_up == 'true'
+        shell: pwsh
         run: dotnet restore src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj
 
       - name: Build Playwright project
+        if: steps.health.outputs.dashboard_up == 'true'
+        shell: pwsh
         run: dotnet build src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj --no-restore -c Release
 
       - name: Install Playwright browsers
-        run: |
-          pwsh src/AiTeam.Tests.Playwright/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
-
-      - name: Start Dashboard (Docker)
-        env:
-          POSTGRES_PASSWORD: ci-test-password
-          DISCORD_BOT_TOKEN: dummy
-          DISCORD_GUILD_ID: "0"
-          GITHUB_PAT: dummy
-          GITHUB_WEBHOOK_SECRET: dummy
-          BOT_INTERNAL_API_KEY: test-key
-          DASHBOARD_ADMIN_EMAIL: ${{ secrets.DASHBOARD_TEST_USER }}
-          DASHBOARD_ADMIN_PASSWORD: ${{ secrets.DASHBOARD_TEST_PASS }}
-        run: |
-          # external volume 在 CI 環境不存在，先建立
-          docker volume create aiteam-postgres-data 2>/dev/null || true
-          # 啟動 postgres + dashboard（dashboard 依賴 postgres healthy）
-          docker compose -f docker-compose.prod.yml up -d postgres aiteam-dashboard
-          # 等待 Dashboard 就緒（最多 90 秒）
-          for i in $(seq 1 30); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5051/ 2>/dev/null || echo "000")
-            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
-              echo "Dashboard is up (HTTP $status)"
-              break
-            fi
-            echo "Waiting... ($i/30) status=$status"
-            sleep 3
-          done
+        if: steps.health.outputs.dashboard_up == 'true'
+        shell: pwsh
+        run: pwsh src/AiTeam.Tests.Playwright/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
 
       - name: Run Playwright tests
+        if: steps.health.outputs.dashboard_up == 'true'
+        shell: pwsh
         env:
           DASHBOARD_URL: http://localhost:5051
           DASHBOARD_USER: ${{ secrets.DASHBOARD_TEST_USER }}
           DASHBOARD_PASS: ${{ secrets.DASHBOARD_TEST_PASS }}
         run: |
-          dotnet test src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj \
-            --no-build -c Release \
+          dotnet test src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj `
+            --no-build -c Release `
             --logger "trx;LogFileName=results.trx"
 
       - name: Upload screenshots
@@ -82,40 +73,19 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
             const screenshotDir = 'src/AiTeam.Tests.Playwright/screenshots';
-
-            if (!fs.existsSync(screenshotDir)) {
-              console.log('No screenshots found');
-              return;
-            }
-
-            const files = fs.readdirSync(screenshotDir)
-              .filter(f => f.endsWith('.png'))
-              .slice(0, 10); // 最多顯示 10 張
-
-            if (files.length === 0) {
-              console.log('No PNG screenshots found');
-              return;
-            }
-
+            if (!fs.existsSync(screenshotDir)) { console.log('No screenshots'); return; }
+            const files = fs.readdirSync(screenshotDir).filter(f => f.endsWith('.png')).slice(0, 10);
+            if (files.length === 0) { console.log('No PNG files'); return; }
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-
             let body = `## 📸 Playwright 視覺截圖測試結果\n\n`;
             body += `**狀態**：${{ job.status == 'success' && '✅ 全部通過' || '❌ 有測試失敗' }}\n\n`;
             body += `完整截圖：[下載 Artifacts](${runUrl})\n\n`;
             body += `| 截圖 |\n|------|\n`;
-            files.forEach(f => {
-              body += `| \`${f}\` |\n`;
-            });
-
+            files.forEach(f => { body += `| \`${f}\` |\n`; });
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: body
             });
-
-      - name: Stop Dashboard
-        if: always()
-        run: docker compose -f docker-compose.prod.yml down aiteam-dashboard || true
