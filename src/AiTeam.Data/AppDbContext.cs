@@ -40,6 +40,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasOne(x => x.Team).WithMany(t => t.Agents).HasForeignKey(x => x.TeamId);
+            // Stage 16：防止競態條件重複 seed（Bot + Dashboard 同時啟動）
+            e.HasIndex(x => x.Name).IsUnique();
         });
 
         modelBuilder.Entity<TaskGroup>(e =>
