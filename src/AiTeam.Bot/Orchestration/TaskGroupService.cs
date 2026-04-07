@@ -163,6 +163,15 @@ public class TaskGroupService(
         // ── Stage 16：Vera 完成 → Petra 審核 Review 嚴重度 ──
         if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
         {
+            // Vera 執行失敗（例如找不到 PR）→ 不送 Petra 審，直接視為無 blocking，繼續流程
+            if (!result.Success)
+            {
+                logger.LogWarning("Vera 執行失敗（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
+                result = result with { CriticalReviewCount = 0 };
+                // 繼續走 GetDecision，不 return
+            }
+            else
+            {
             var petraVeraReview = await RunPetraVeraReviewAsync(group, result, taskRepo, cancellationToken);
             switch (petraVeraReview.Decision)
             {
@@ -187,6 +196,7 @@ public class TaskGroupService(
                     await NotifyBossInterventionAsync(group, cancellationToken);
                     return;
             }
+            } // end else (Vera success)
         }
 
         var workflowType = group.WorkflowType switch
@@ -281,12 +291,17 @@ public class TaskGroupService(
             ? (Guid?)null
             : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
 
+        // Stage 16：Dev_plan 步驟由 Cody（Dev）執行，AssignedAgent 顯示為 Dev 避免 Dashboard 出現未知 Agent
+        var displayAgent = step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase)
+            ? AgentNames.Dev
+            : step.AgentName;
+
         var taskItem = new TaskItem
         {
             Title         = $"{group.Title}（{step.AgentName}）",
             Description   = description,
             TriggeredBy   = "Orchestrator",
-            AssignedAgent = step.AgentName,
+            AssignedAgent = displayAgent,
             Status        = "running",
             GroupId       = group.Id,
             ProjectId     = projectId,
