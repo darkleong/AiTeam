@@ -10,21 +10,22 @@ namespace AiTeam.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // 刪除重複的 AgentConfig（保留每個 Name 裡 Id 最小的那筆）
+            // 刪除重複的 AgentConfig（保留每個 name 裡 id 最小的那筆）
+            // 注意：PostgreSQL 資料表名稱為 snake_case（agent_configs），欄位同理
             migrationBuilder.Sql("""
-                DELETE FROM "AgentConfigs"
-                WHERE "Id" NOT IN (
-                    SELECT MIN("Id")
-                    FROM "AgentConfigs"
-                    GROUP BY "Name"
+                DELETE FROM agent_configs
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM agent_configs
+                    GROUP BY name
                 );
                 """);
 
             // 加 unique index，防止未來競態條件重複 seed
             migrationBuilder.CreateIndex(
                 name: "IX_AgentConfigs_Name",
-                table: "AgentConfigs",
-                column: "Name",
+                table: "agent_configs",
+                column: "name",
                 unique: true);
         }
 
@@ -33,7 +34,7 @@ namespace AiTeam.Data.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_AgentConfigs_Name",
-                table: "AgentConfigs");
+                table: "agent_configs");
         }
     }
 }
