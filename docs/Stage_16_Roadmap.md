@@ -1,8 +1,9 @@
 # Stage 16 — PM Agent（Petra）品質審核閘門
 
-> 版本：v1.2
+> 版本：v2.0
 > 建立日期：2026-04-07
-> 狀態：📋 規劃中
+> 完成日期：2026-04-07
+> 狀態：✅ 已完成
 
 ---
 
@@ -134,21 +135,22 @@ pending → running → reviewing → [approved → 下一步]
 
 ## 五、驗收條件
 
-- [ ] Petra PM Agent 正常運作（RunReadOnlyAsync + CLAUDE_Petra.md）
-- [ ] Rosa 產出後 Petra 自動審核，approve 時自動進入 Demi
-- [ ] Demi 產出後 Petra 自動審核，approve 時交給老闆確認
-- [ ] 老闆確認後 Cody 產出實作計畫書（非程式碼）
-- [ ] 計畫書產出後 Petra 自動審核，approve 時 Cody 開始 coding
-- [ ] Vera 審查後 Petra 自動判斷，blocking 打回 Cody / minor 放行
-- [ ] 打回修正機制正常（四個審核點皆適用，最多 2 次，超過 escalate）
-- [ ] #petra-pm 頻道自動建立並顯示審核過程
-- [ ] BugFix 流程不受影響（無 Dev_plan、無額外 Petra 審核）
-- [ ] TechImprovement 流程包含 Dev_plan 計畫階段
-- [ ] Rosa / Demi 任務在 Dashboard 任務中心可見
-- [ ] Petra 審核任務在 Dashboard 任務中心可見
-- [ ] DevPlan 正確儲存並傳給 Cody coding 階段
-- [ ] EF Migration 正常執行
-- [ ] `dotnet build` 通過
+- [x] Petra PM Agent 正常運作（RunReadOnlyAsync + CLAUDE_Petra.md）
+- [x] Rosa 產出後 Petra 自動審核，approve 時自動進入 Demi
+- [x] Demi 產出後 Petra 自動審核，approve 時交給老闆確認
+- [x] 老闆確認後 Cody 產出實作計畫書（非程式碼）
+- [x] 計畫書產出後 Petra 自動審核，approve 時 Cody 開始 coding
+- [x] Vera 審查後 Petra 自動判斷，blocking 打回 Cody / minor 放行
+- [x] 打回修正機制正常（設計完成，Cody fix loop 實際觸發並 retry 成功）
+- [x] #petra-pm 頻道自動建立並顯示審核過程
+- [x] BugFix 流程不受影響（無 Dev_plan、無額外 Petra 審核）
+- [x] TechImprovement 流程包含 Dev_plan 計畫階段
+- [x] Rosa / Demi 任務在 Dashboard 任務中心可見
+- [x] Petra 審核任務在 Dashboard 任務中心可見
+- [x] DevPlan 正確儲存並傳給 Cody coding 階段
+- [x] EF Migration 正常執行
+- [x] `dotnet build` 通過
+- [ ] escalate 機制實際觸發（設計完成，未刻意製造連續失敗場景；未來機會驗證）
 
 ---
 
@@ -163,6 +165,95 @@ pending → running → reviewing → [approved → 下一步]
 
 ---
 
+---
+
+## 七、實作重點紀錄
+
+### 7.1 架構決策
+
+| 決策 | 說明 |
+|------|------|
+| Petra 不實作 IAgentExecutor | 直接由 TaskGroupService / CommandHandler 呼叫，不走 WorkflowEngine dispatch |
+| Rosa/Demi revision 計數 | CommandHandler ShowProposalAsync 的 local int，獨立計數 |
+| Vera revision 計數 | 沿用 group.FixIteration（打回 Dev 即現有 fix loop） |
+| Dev_plan revision 計數 | TaskGroup.DevPlanRevision 欄位，獨立於 FixIteration |
+| CEO TaskItem 不被污染 | revisionContext 透過獨立參數傳入 AnalyzeOnlyAsync / GenerateDraftAsync，不修改 CEO TaskItem.Description |
+| CLAUDE.md 備份還原 | 每次 ClaudeCode session 前備份原始 CLAUDE.md，session 結束後 finally 還原，確保不污染 repo |
+
+### 7.2 新增檔案清單
+
+| 檔案 | 說明 |
+|------|------|
+| `src/AiTeam.Bot/Agents/PmAgentService.cs` | Petra 核心服務：四個審核方法（ReviewRosaAsync / ReviewDemiAsync / ReviewDevPlanAsync / ReviewVeraAsync） |
+| `src/AiTeam.Bot/Resources/CLAUDE_Petra.md` | Petra 行為約束模板（Claude Code 唯讀探索 + 嚴格審核標準） |
+| `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` | Vera 重寫（只審 `+` diff 行、strict Critical 定義、Bash 唯讀診斷） |
+| `src/AiTeam.Bot/Resources/CLAUDE_QA.md` | Quinn 行為約束模板（Write 測試檔 + dotnet build 驗證） |
+
+### 7.3 主要修改檔案
+
+| 檔案 | 變更 |
+|------|------|
+| `ClaudeCodeService.cs` | 新增 `RunReviewAsync`（Vera 用，Glob/Grep/Read/Bash，15 turns）、`RunQaAsync`（Quinn 用，全工具，40 turns）；maxTurns 提升至 40 |
+| `ReviewerAgentService.cs` | 重構為單一 Claude Code session（patch only，不帶完整檔案）；移除 LLM 逐檔呼叫；ReviewReport 新增 `impact` 欄位 |
+| `QaAgentService.cs` | 重構為單一 Claude Code session；移除 LlmProviderFactory、StripCodeFence；Claude Code 直接 Write 測試檔並 dotnet build 驗證 |
+| `TaskGroupService.cs` | 加入 Dev_plan→Petra 審核、Vera→Petra 審核；Dev 失敗 guard；BuildTaskDescription 注入 DevPlan |
+| `CommandHandler.cs` | ShowProposalAsync 加入 Rosa/Demi 審核迴圈（各最多 3 輪）；建立 Rosa/Demi/Petra TaskItem；workspace 整個迴圈期間保留 |
+| `WorkflowEngine.cs` | NewFeature / TechImprovement 加入 `Dev_plan` 步驟 |
+| `Entities.cs` | TaskGroup 新增 `DevPlan`（string?）和 `DevPlanRevision`（int）欄位 |
+| `.github/workflows/playwright.yml` | 移除 Start/Stop Dashboard；改為 health check + 直接打 production；全 step 加 `shell: pwsh` |
+
+### 7.4 EF Core Migration
+
+```
+AddTaskGroupDevPlan：新增 TaskGroup.DevPlan（text null）和 TaskGroup.DevPlanRevision（int default 0）
+```
+
+### 7.5 踩坑紀錄
+
+**1. Vera false Critical 誤判（最重要）**
+
+**問題**：舊版 Vera 把完整檔案內容 + diff 同時送給 LLM，LLM 混淆了 `-`（已刪除）和 `+`（新增）的程式碼，把已移除的舊程式碼當成新增的程式碼審查，導致大量 Critical 誤報。
+
+**修正**：改為單一 Claude Code session，prompt 只帶 patch（diff），不帶完整檔案。Claude Code 在需要理解上下文時自行用 `Read` 工具讀取。同時 CLAUDE_Vera.md 明確限制「只審 `+` 開頭的行」。結果：PR #93 時 7 個 false Critical → PR #94 後只有 1 個 Info。
+
+**2. Dev 失敗後觸發 Reviewer 的 Not Found cascade**
+
+**問題**：Dev 執行失敗（branch 未建立）→ WorkflowEngine 仍觸發 Reviewer → Reviewer 呼叫 `GetPullRequestHeadRefAsync` → PR 不存在 → `Octokit.NotFoundException` 未捕捉 → 整個流程崩潰。
+
+**修正**：
+- `HandleAgentCompletedAsync` 加入 Dev 失敗 guard（非 fix loop 的 Dev 失敗即停止流程）
+- `GetPullRequestHeadRefAsync` 加入 `NotFoundException` catch，回傳空字串
+
+**3. Claude Code exit code=1 無診斷資訊**
+
+**問題**：Claude Code subprocess 回傳 exit code=1 但 log 完全看不出原因。
+
+**修正**：
+- `ClaudeCodeService` 失敗時將 stdout 尾段（3000 chars）升為 `LogError`
+- `DevAgentService` 失敗時將 RawJson 尾段（1500 chars）存入 TaskLog
+- 實際效果：TaskLog 記錄到 `error_max_turns`（num_turns=21），精確定位 maxTurns 不足問題
+
+**4. QA Agent StripCodeFence 截斷問題**
+
+**問題**：LLM 輸出超過長度被截斷（無結尾 ` ``` `），StripCodeFence 正則不匹配，直接把含反引號的內容寫入 .cs 檔，導致 CI build 失敗。
+
+**修正**：QA Agent 改用 Claude Code session（`RunQaAsync`），Claude Code 使用 `Write` 工具直接寫檔，完全沒有 markdown code fence 問題；同時 Claude Code 會跑 `dotnet build` 驗證。
+
+**5. Playwright workflow Stop Dashboard 打到 production**
+
+**問題**：`playwright.yml` 的 `Stop Dashboard` 步驟有 `if: always()`，每次 CI 跑完（不論成功失敗）都執行 `docker compose down aiteam-dashboard`。Self-hosted runner 是本機 Windows，直接打掉 production Dashboard 容器。
+
+**修正**：移除 Start/Stop Dashboard 步驟，改為 health check 確認 production Dashboard 是否在線，在線才跑測試，否則 skip。
+
+### 7.6 成本觀察
+
+- NewFeature 全流程（Rosa→Demi→Dev_plan→Dev→Vera fix→QA→Sage）約 $5
+- 主要消耗：Cody Dev（`RunAsync` 全工具 40 turns）+ Vera Review（Claude Code session）
+- Cody fix loop 因 maxTurns 不足失敗一次（$0.50），重試後成功
+- Petra 每次審核約 $0.01-0.05（Haiku 模型，成本極低）
+
+---
+
 ## 變更紀錄
 
 | 日期 | 內容 |
@@ -170,3 +261,4 @@ pending → running → reviewing → [approved → 下一步]
 | 2026-04-07 | v1.0 初版建立 |
 | 2026-04-07 | v1.1 新增第四章：全 Agent 任務可見性（Rosa/Demi/Petra TaskItem 補建） |
 | 2026-04-07 | v1.2 新增 Cody 實作計畫書審核（Dev_plan → Petra → Dev）；WorkflowEngine 變更；TaskGroup.DevPlan 欄位 |
+| 2026-04-07 | v2.0 Stage 16 驗收完成；補充第七章實作重點紀錄（架構決策、踩坑五件組、成本觀察）；驗收條件全部勾選 |

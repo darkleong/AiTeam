@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。
 
 ---
 
@@ -11,11 +11,12 @@
     ↓ Discord 自然語言（在 #victoria-ceo 說話）
 CEO Agent（Victoria）—— 從 DB 動態載入 Agent 清單
     ├── Dev Agent（Cody）        （Claude Code CLI 自主開發、Bug 修復、開 PR）
+    ├── PM Agent（Petra）        （品質審核閘門：Rosa/Demi/Dev_plan/Vera 產出皆需過審）
     ├── Ops Agent（Maya）        （部署監控、健康檢查告警）
-    ├── QA Agent（Quinn）        （自動產生測試、開測試 PR）
+    ├── QA Agent（Quinn）        （Claude Code 產生測試、dotnet build 驗證）
     ├── Doc Agent（Sage）        （自動產出技術文件、開文件 PR）
     ├── Requirements Agent（Rosa）（需求拆解、建立 GitHub Issues）
-    ├── Reviewer Agent（Vera）   （Code Review、在 GitHub PR 留審查意見）
+    ├── Reviewer Agent（Vera）   （Claude Code session Code Review + 影響範圍分析）
     ├── Release Agent（Rena）    （版本管理、Changelog、建立 GitHub Release）
     └── Designer Agent（Demi）   （需求 → MudBlazor UI 規格文件）
          ↓
@@ -49,6 +50,14 @@ src/
 ├── AiTeam.Data/                 ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                  ← Discord Bot 主程式
 │   ├── Agents/                  ← IAgentExecutor、各 AgentService、TokenTrackingProvider、ClaudeCodeService
+│   │   ├── ClaudeCodeService.cs ← Claude Code subprocess 封裝（RunAsync/ReadOnly/Review/QA/Victoria 五種模式）
+│   │   ├── PmAgentService.cs    ← Petra PM Agent（四個審核方法）
+│   │   ├── ReviewerAgentService.cs ← Vera（單一 Claude Code session，patch only）
+│   │   └── QaAgentService.cs    ← Quinn（Claude Code session，Write + dotnet build 驗證）
+│   ├── Resources/               ← Claude Code 行為約束模板
+│   │   ├── CLAUDE_Vera.md       ← Vera：只審 + 行、strict Critical 定義
+│   │   ├── CLAUDE_Petra.md      ← Petra：審核標準（approve/revise/escalate）
+│   │   └── CLAUDE_QA.md         ← Quinn：寫測試檔 + dotnet build 驗證規範
 │   ├── Api/                     ← InternalController（/internal/tokens、/internal/deployment 等）
 │   ├── Configuration/           ← DiscordSettings、AgentSettings、GitHubSettings
 │   ├── Discord/                 ← DiscordBotService、CommandHandler
@@ -78,6 +87,7 @@ docs/
 ├── Stage_13_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_14_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_15_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
+├── Stage_16_Roadmap.md          ← ✅ 完成（含踩坑五件組 + 架構決策）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -89,6 +99,7 @@ docs/
 📁 Software Team
   # victoria-ceo        ← 主要指令中心，用自然語言跟 CEO 說話
   # cody-dev            ← Dev Agent log，可直接指派任務
+  # petra-pm            ← PM Agent log，顯示各審核點的 approve/revise/escalate 結果
   # maya-ops            ← Ops Agent log，可直接指派任務
   # quinn-qa            ← QA Agent log，可直接指派任務
   # sage-doc            ← Doc Agent log，可直接指派任務
@@ -138,11 +149,22 @@ Vera 審查
 
 老闆只需要做兩件事：**核准提案書** + **最後 merge PR**。
 
+**Stage 16 後的完整 NewFeature 流程：**
+```
+Rosa（需求）→ Petra 審核 → Demi（UI 規格）→ Petra 審核 → 老闆確認
+    ↓
+Cody Dev_plan（實作計畫書）→ Petra 審核 → Cody coding → Vera review
+    ↓
+Petra 審核（approve → QA → Doc → 通知 merge）
+（若 Vera 有 Critical → Petra 打回 → Cody fix → Vera 重審 → Petra 再審）
+```
+
 核心組件：
 - `WorkflowEngine`：純靜態流程表，無 LLM，毫秒級路由
-- `TaskGroupService`：群組管理 + 並行觸發 + 遞迴 Orchestration
-- `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecContent、DevPrUrl、LastReviewBody、FixIteration）
-- `ClaudeCodeService`：封裝 Claude Code CLI subprocess（完整模式 / 唯讀模式）
+- `TaskGroupService`：群組管理 + Petra 審核閘門 + 遞迴 Orchestration
+- `PmAgentService`：Petra 品質審核（ReviewRosa/Demi/DevPlan/Vera，Claude Code 唯讀 + LLM fallback）
+- `TaskGroup` entity：串聯整批任務（IssueUrls、UiSpecContent、DevPrUrl、LastReviewBody、FixIteration、**DevPlan、DevPlanRevision**）
+- `ClaudeCodeService`：封裝 Claude Code CLI subprocess（RunAsync / ReadOnly / Review / QA / Victoria 五種模式）
 
 ---
 
@@ -317,6 +339,7 @@ docker compose --env-file .env up -d
 | Stage 13 | 系統穩定性與流程修正：串行流程（Dev→Reviewer→QA→Doc）、單一 PR（含 Closes #XX）、技術債清償、Dashboard 可觀測性 | ✅ 完成 |
 | Stage 14 | CEO 分類補強：技術改善分類、Release/Ops/Doc 直接路由、任務取消能力；Bug fix Orchestrator 修正 | ✅ 完成 |
 | Stage 15 | Victoria 升級為技術顧問：Claude Code 探索 codebase + 讀寫 docs/ + Session 對話歷史 + 長期記憶 | ✅ 完成 |
+| Stage 16 | PM Agent（Petra）品質審核閘門：Rosa/Demi/Dev_plan/Vera 四個審核點；Vera/QA 重構為 Claude Code session | ✅ 完成 |
 
 ---
 
