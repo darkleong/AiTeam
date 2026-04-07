@@ -297,7 +297,17 @@ public class PmAgentService(
         sb.AppendLine(devPlan);
         sb.AppendLine();
         sb.AppendLine("## 你的任務");
-        sb.AppendLine("審核實作計畫是否對齊 Issues 規格與 UI 規格、有無遺漏重要檔案、架構方向是否合理。可使用 Glob / Grep / Read 工具驗證計畫中引用的檔案是否存在。輸出 JSON 審核結果。");
+        sb.AppendLine("審核實作計畫書（不是程式碼），**只從規劃面**判斷：");
+        sb.AppendLine("1. 計畫是否涵蓋所有 Issues 需求的功能點？");
+        sb.AppendLine("2. 計畫是否對齊 Demi UI 規格（若有）？");
+        sb.AppendLine("3. 架構方向是否合理（Entity / Service / Controller 分層）？");
+        sb.AppendLine();
+        sb.AppendLine("**不要做以下事情：**");
+        sb.AppendLine("- 不要用 Glob / Grep / Read 驗證檔案是否存在（這是新功能，檔案尚未建立）");
+        sb.AppendLine("- 不要要求 Cody 在計畫書內提供程式碼");
+        sb.AppendLine("- 不要以「缺少程式碼細節」作為 revise 理由");
+        sb.AppendLine();
+        sb.AppendLine("approve 標準：計畫書說明了要建立哪些檔案 / 修改哪些地方、功能點無明顯遺漏、架構方向合理。輸出 JSON 審核結果。");
         return sb.ToString();
     }
 

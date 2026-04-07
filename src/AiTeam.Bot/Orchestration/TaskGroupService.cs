@@ -155,7 +155,7 @@ public class TaskGroupService(
                 default: // escalate 或超過上限
                     taskRepo.UpdateGroupStatus(group, "failed");
                     await taskRepo.SaveAsync(cancellationToken);
-                    await NotifyBossInterventionAsync(group, cancellationToken);
+                    await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
                     return;
             }
         }
@@ -496,6 +496,54 @@ public class TaskGroupService(
             $"PR：{group.DevPrUrl ?? "（無）"}");
 
         logger.LogWarning("TaskGroup {Id} 修復次數超限（{Count} 次），升級給老闆", group.Id, group.FixIteration);
+    }
+
+    /// <summary>
+    /// Stage 16：Dev_plan Petra 審核超限，發帶 Skip/Abort 按鈕的 Embed 給老闆。
+    /// </summary>
+    private async Task NotifyBossDevPlanEscalationAsync(
+        TaskGroup group,
+        Agents.PetraReview petraReview,
+        CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        // 列出 Petra 的 blocking 問題
+        var blockingText = petraReview.Issues.Where(i => i.Severity == "blocking").ToList();
+        var blockingField = blockingText.Count > 0
+            ? string.Join("\n", blockingText.Select(i => $"• {i.Description}"))
+            : petraReview.Summary;
+        if (blockingField.Length > 1000) blockingField = blockingField[..1000] + "...";
+
+        // 附上計畫書摘要（前 800 字）
+        var devPlanPreview = string.IsNullOrWhiteSpace(group.DevPlan)
+            ? "（無）"
+            : group.DevPlan.Length > 800 ? group.DevPlan[..800] + "\n...（完整計畫書見 #cody-dev）" : group.DevPlan;
+
+        var embed = new EmbedBuilder()
+            .WithTitle("⚠️ Petra 升級通知：Dev_plan 審核未通過")
+            .WithColor(Color.Orange)
+            .AddField("任務", group.Title)
+            .AddField("問題", $"Cody 實作計畫書經過 {group.DevPlanRevision} 輪審核仍未通過")
+            .AddField("Petra 發現的問題", blockingField)
+            .AddField("Cody 計畫書摘要", devPlanPreview)
+            .WithFooter("⏭️ 跳過審核 = 直接讓 Cody coding；❌ 放棄 = 結束此任務")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        var buttons = new ComponentBuilder()
+            .WithButton("⏭️ 跳過審核，直接 coding", "escalate_devplan_skip",  ButtonStyle.Secondary)
+            .WithButton("❌ 放棄此任務",             "escalate_devplan_abort", ButtonStyle.Danger)
+            .Build();
+
+        var msg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+
+        // 讓 CommandHandler 記錄這個 pending，button handler 才能處理
+        var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+        commandHandler.RegisterDevPlanEscalation(msg.Id, group.Id);
+
+        logger.LogWarning("TaskGroup {Id} Dev_plan 審核超限，升級給老闆", group.Id);
     }
 
     // ---- 輔助方法 ----

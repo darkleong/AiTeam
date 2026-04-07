@@ -95,6 +95,20 @@ public class CommandHandler(
         client.MessageReceived       += OnMessageReceivedAsync;
     }
 
+    /// <summary>
+    /// Stage 16：供 TaskGroupService 呼叫，註冊 Dev_plan escalation 的 pending state。
+    /// 按鈕 handler 會用 messageId 查到 groupId，再繼續或放棄流程。
+    /// </summary>
+    public void RegisterDevPlanEscalation(ulong messageId, Guid groupId)
+    {
+        _pendingConfirmations[messageId] = new PendingConfirmation(
+            CeoResponse: new CeoResponse { Action = "devplan_escalate" },
+            Project: "",
+            Description: "",
+            GroupId: groupId,
+            EscalateStage: "devplan");
+    }
+
     #region 自然語言訊息路由（Stage 7）
 
     /// <summary>
@@ -813,6 +827,49 @@ public class CommandHandler(
             // Petra escalate 後老闆選擇放棄
             await interaction.RespondAsync("❌ 已放棄此提案。若需重新規劃，請重新下指令。");
             logger.LogInformation("老闆放棄 Petra escalate 提案：TaskId={Id}", pending.TaskId);
+        }
+        else if (interaction.Data.CustomId == "escalate_devplan_skip")
+        {
+            // Dev_plan Petra escalate 後老闆選擇跳過審核，直接進 Dev coding
+            await interaction.DeferAsync();
+            await interaction.FollowupAsync("⏭️ 已跳過 Dev_plan 審核，Cody 將直接開始 coding...");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var scope = serviceProvider.CreateAsyncScope();
+                    var groupRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+                    var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
+                    if (group is null) return;
+
+                    // 直接觸發 Dev 步驟（跳過計畫審核）
+                    await taskGroupService.FireStepsAsync(
+                        group, [new Orchestration.WorkflowStep("Dev")], CancellationToken.None);
+                }
+                catch (Exception ex) { logger.LogError(ex, "escalate_devplan_skip 失敗"); }
+            }, CancellationToken.None);
+        }
+        else if (interaction.Data.CustomId == "escalate_devplan_abort")
+        {
+            // Dev_plan Petra escalate 後老闆選擇放棄整個任務
+            await interaction.DeferAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var scope = serviceProvider.CreateAsyncScope();
+                    var groupRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+                    var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
+                    if (group is not null)
+                    {
+                        groupRepo.UpdateGroupStatus(group, "failed");
+                        await groupRepo.SaveAsync();
+                    }
+                }
+                catch (Exception ex) { logger.LogError(ex, "escalate_devplan_abort 失敗"); }
+            }, CancellationToken.None);
+            await interaction.FollowupAsync("❌ 已放棄此任務的開發流程。");
+            logger.LogInformation("老闆放棄 Dev_plan escalation：GroupId={Id}", pending.GroupId);
         }
         else // confirm_no、exec_no、req_no、propose_no
         {
