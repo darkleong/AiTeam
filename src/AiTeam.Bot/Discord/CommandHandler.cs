@@ -696,6 +696,7 @@ public class CommandHandler(
                 Status        = "done",
                 GroupId       = group.Id,
                 ProjectId     = projectId,
+                CompletedAt   = DateTime.UtcNow,  // 直接 done，需手動設定完成時間
             };
             taskRepo.Add(proposalTask);
             await taskRepo.SaveAsync();

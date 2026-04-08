@@ -114,8 +114,12 @@ public partial class PipelineView : IAsyncDisposable
                 }
                 else
                 {
-                    // 找不到 = 流程新建了 TaskItem（新步驟開始），重新載入
-                    _ = InvokeAsync(LoadStepsAsync);
+                    // 找不到 = 流程新建了 TaskItem（新步驟開始），重新載入並強制 re-render
+                    _ = InvokeAsync(async () =>
+                    {
+                        await LoadStepsAsync();
+                        StateHasChanged();
+                    });
                     return;
                 }
 
