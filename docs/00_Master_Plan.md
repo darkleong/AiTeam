@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v4.0
+> 版本：v4.1
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -29,6 +29,8 @@
 | [Stage_15_Roadmap.md](./Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 + 長期記憶 | ✅ 已完成（2026-04-06） |
 | [Stage_16_Roadmap.md](./Stage_16_Roadmap.md) | Stage 16：PM Agent（Petra）品質審核閘門 | ✅ 已完成（2026-04-07） |
 | [Stage_17_Roadmap.md](./Stage_17_Roadmap.md) | Stage 17：Mock Mode（模擬模式） | ✅ 已完成（2026-04-08） |
+| [Stage_18_Roadmap.md](./Stage_18_Roadmap.md) | Stage 18：Dashboard 可觀測性升級 | 📋 規劃中 |
+| [Stage_19_Roadmap.md](./Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | 📋 規劃中 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -69,6 +71,7 @@
 | v3.8 | 2026-04-07 | Stage 16 驗收完成（NewFeature 全流程跑完）；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent 重構為 Claude Code session（消滅 StripCodeFence 問題）；Playwright workflow 移除 Start/Stop Dashboard（修正打到 production 的問題）；RunAsync maxTurns 提升至 40（修正 fix loop 截斷）；踩坑五件組全記錄於 Stage_16_Roadmap.md |
 | v3.9 | 2026-04-08 | 新增 Stage_17_Roadmap.md（Mock Mode 模擬模式 — IClaudeCodeService 介面 + 代理模式 Runtime 切換 + Dashboard 開關）；Future_Feature.md v3.2 新增十四（測試環境隔離） |
 | v4.0 | 2026-04-08 | Stage 17 驗收完成（4 種 /mock 流程全通過）；Stage_17_Roadmap.md 補充實作細節、踩坑三件組（QA/Doc 缺 early return、含提案流程卡死、延遲過短）、驗收結果 |
+| v4.1 | 2026-04-08 | 新增 Stage_18_Roadmap.md（Dashboard 可觀測性 — Agent 狀態卡即時更新 + Pipeline View）、Stage_19_Roadmap.md（Dashboard UI 全面打磨）；Future Feature 十/十一 移入 Stage 18 |
 
 ---
 
