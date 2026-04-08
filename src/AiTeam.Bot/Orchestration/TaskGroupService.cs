@@ -237,6 +237,75 @@ public class TaskGroupService(
         }
     }
 
+    // ---- Mock Mode 輔助 ----
+
+    /// <summary>
+    /// Stage 17：MockMode 專用。
+    /// 建立 Requirements / PM（Rosa review）/ Designer / PM（Demi review） 四個 mock 完成任務後，
+    /// 從 proposal_approved 正式啟動後續工作流程（Dev_plan → Dev → Reviewer → Petra → QA → Doc）。
+    /// 讓 Dashboard 能看到完整的含提案流程，但不實際執行 Rosa/Demi/Petra 的 GitHub 操作。
+    /// </summary>
+    public async Task FireMockProposalAndContinueAsync(
+        TaskGroup group,
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope    = serviceProvider.CreateAsyncScope();
+        var taskRepo             = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService          = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var projectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
+
+        // 模擬提案流程四個步驟（直接建立為 "done" 狀態，不呼叫任何 GitHub / LLM）
+        var proposalSteps = new[]
+        {
+            (Agent: AgentNames.Requirements, Step: "Requirements",      Log: "[MOCK] Rosa 需求分析完成，已產出 1 個模擬 Issue"),
+            (Agent: AgentNames.Pm,           Step: "PM（Rosa 審核）",   Log: "[MOCK] Petra 審核 Rosa 完成：approve"),
+            (Agent: AgentNames.Designer,     Step: "Designer",          Log: "[MOCK] Demi UI 規格文件產出完成"),
+            (Agent: AgentNames.Pm,           Step: "PM（Demi 審核）",   Log: "[MOCK] Petra 審核 Demi 完成：approve"),
+        };
+
+        foreach (var (agent, stepName, logMessage) in proposalSteps)
+        {
+            var taskItem = new TaskItem
+            {
+                Title         = $"{group.Title}（{stepName}）",
+                Description   = "[MOCK] 模擬提案流程步驟",
+                TriggeredBy   = "Orchestrator",
+                AssignedAgent = agent,
+                Status        = "done",
+                GroupId       = group.Id,
+                ProjectId     = projectId,
+            };
+            taskRepo.Add(taskItem);
+            await taskRepo.SaveAsync(cancellationToken);
+
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId    = taskItem.Id,
+                Agent     = agent,
+                Step      = logMessage,
+                Status    = "done",
+                CreatedAt = DateTime.UtcNow
+            });
+            await taskRepo.SaveAsync(cancellationToken);
+
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = taskItem.Id,
+                Title     = taskItem.Title,
+                AgentName = agent,
+                Status    = "done"
+            });
+
+            logger.LogInformation("[MockMode] 模擬提案步驟完成：{Step}", stepName);
+        }
+
+        // 從 proposal_approved 啟動正式工作流程（Dev_plan → Dev → Reviewer → Petra → QA → Doc）
+        await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+    }
+
     // ---- 觸發 Agent 執行 ----
 
     /// <summary>

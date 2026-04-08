@@ -559,7 +559,7 @@ public class CommandHandler(
         {
             "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",        "Dev"),
             "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",        "Dev_plan"),
-            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）", "Requirements"),
+            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）", "Dev_plan"),
             _                           => (WorkflowType.NewFeature,       "新功能",          "Dev_plan")
         };
 
@@ -574,21 +574,34 @@ public class CommandHandler(
             issueUrlsJson: "[\"https://github.com/mock/repo/issues/1\"]",
             uiSpecContent: "[MOCK] 模擬 UI 規格，供 Mock Mode 測試使用。");
 
-        // 直接觸發第一步（跳過提案流程）
-        _ = Task.Run(() => taskGroupService.FireStepsAsync(
-            group, [new WorkflowStep(initialStep)]));
+        if (workflowStr == "new_feature_with_proposal")
+        {
+            // 含提案流程：建立 Requirements/PM/Designer/PM 四個 mock 完成任務後，從 Dev_plan 啟動
+            _ = Task.Run(() => taskGroupService.FireMockProposalAndContinueAsync(group));
+        }
+        else
+        {
+            // 一般流程：直接觸發起始步驟
+            _ = Task.Run(() => taskGroupService.FireStepsAsync(
+                group, [new WorkflowStep(initialStep)]));
+        }
 
         var emoji = workflowStr switch
         {
-            "bug_fix"          => "🐛",
-            "tech_improvement" => "🔧",
-            _                  => "✨"   // new_feature / new_feature_with_proposal
+            "bug_fix"                   => "🐛",
+            "tech_improvement"          => "🔧",
+            "new_feature_with_proposal" => "📋",
+            _                           => "✨"
         };
+
+        var startDesc = workflowStr == "new_feature_with_proposal"
+            ? "Requirements → PM → Designer → PM → Dev_plan"
+            : initialStep;
 
         await command.FollowupAsync(
             $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +
             $"任務：`{title}`\n" +
-            $"起始步驟：`{initialStep}` → 後續由 Orchestrator 自動推進\n" +
+            $"流程：`{startDesc}` → 後續由 Orchestrator 自動推進\n" +
             $"請至 Dashboard → 任務中心 觀察流程進度，所有輸出將標記 `[MOCK]`。");
     }
 
