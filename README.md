@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。**Stage 17 起加入 Mock Mode**：Dashboard 一鍵開關，所有 Claude Code / LLM 呼叫切換為模擬結果，不消耗 API 費用；`/mock` 斜線指令可直接觸發四種工作流程測試（新功能 / 含提案 / Bug 修復 / 技術改善）；Runtime 代理模式（ClaudeCodeProxy）切換，5 分鐘內生效，無需重啟容器。
 
 ---
 
@@ -50,7 +50,11 @@ src/
 ├── AiTeam.Data/                 ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                  ← Discord Bot 主程式
 │   ├── Agents/                  ← IAgentExecutor、各 AgentService、TokenTrackingProvider、ClaudeCodeService
-│   │   ├── ClaudeCodeService.cs ← Claude Code subprocess 封裝（RunAsync/ReadOnly/Review/QA/Victoria 五種模式）
+│   │   ├── IClaudeCodeService.cs   ← Claude Code 介面（5 種模式）
+│   │   ├── ClaudeCodeService.cs    ← Claude Code subprocess 封裝（RunAsync/ReadOnly/Review/QA/Victoria 五種模式）
+│   │   ├── MockClaudeCodeService.cs ← Mock 實作（30~60 秒延遲 + [MOCK] 預設結果）
+│   │   ├── ClaudeCodeProxy.cs      ← Runtime 代理（依 MockMode 旗標切換真/假）
+│   │   ├── MockLlmProvider.cs      ← Mock LLM（依 systemPrompt 關鍵字回傳對應格式）
 │   │   ├── PmAgentService.cs    ← Petra PM Agent（四個審核方法）
 │   │   ├── ReviewerAgentService.cs ← Vera（單一 Claude Code session，patch only）
 │   │   └── QaAgentService.cs    ← Quinn（Claude Code session，Write + dotnet build 驗證）
@@ -88,6 +92,7 @@ docs/
 ├── Stage_14_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_15_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_16_Roadmap.md          ← ✅ 完成（含踩坑五件組 + 架構決策）
+├── Stage_17_Roadmap.md          ← ✅ 完成（含踩坑三件組 + Mock Mode 架構）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -266,6 +271,7 @@ Self-hosted Runner（Windows 11 本機）
 | `/reload-rules` | 強制重新載入 DB 規則（清除記憶體快取） |
 | `/status` | 查詢各 Agent 目前狀態與啟用清單 |
 | `/new-session` | 清除目前對話 session（長期記憶不受影響，Victoria 下次回應以全新上下文開始）|
+| `/mock` | 【Mock Mode 限定】直接觸發指定工作流程（新功能 / 含提案 / Bug 修復 / 技術改善），不呼叫 LLM，供流程測試用 |
 
 ---
 
@@ -340,6 +346,7 @@ docker compose --env-file .env up -d
 | Stage 14 | CEO 分類補強：技術改善分類、Release/Ops/Doc 直接路由、任務取消能力；Bug fix Orchestrator 修正 | ✅ 完成 |
 | Stage 15 | Victoria 升級為技術顧問：Claude Code 探索 codebase + 讀寫 docs/ + Session 對話歷史 + 長期記憶 | ✅ 完成 |
 | Stage 16 | PM Agent（Petra）品質審核閘門：Rosa/Demi/Dev_plan/Vera 四個審核點；Vera/QA 重構為 Claude Code session | ✅ 完成 |
+| Stage 17 | Mock Mode：IClaudeCodeService 介面 + ClaudeCodeProxy 代理模式 + /mock 指令（4 種流程）；Dashboard 開關 5 分鐘生效 | ✅ 完成 |
 
 ---
 

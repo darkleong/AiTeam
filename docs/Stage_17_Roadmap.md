@@ -1,8 +1,9 @@
 # Stage 17 — Mock Mode（模擬模式）
 
-> 版本：v1.0
+> 版本：v2.0
 > 建立日期：2026-04-08
-> 狀態：📋 規劃中
+> 完成日期：2026-04-08
+> 狀態：✅ 已完成
 
 ---
 
@@ -46,71 +47,61 @@ Key: "MockMode"
 Value: "true" / "false"
 ```
 
-Bot 端透過 `AppSettingsService.GetBoolAsync("MockMode", false)` 讀取，5 分鐘 TTL cache。Dashboard 修改後最多 5 分鐘生效，或搭配 `InvalidateCache()` 即時生效。
+Bot 端透過 `AppSettingsService.GetBoolAsync("MockMode", false)` 讀取，5 分鐘 TTL cache。
 
 ---
 
-## 二、需要新增的元件
+## 二、新增元件
 
 ### 2.1 `IClaudeCodeService` 介面
-
-從現有 `ClaudeCodeService` 抽取介面，包含 5 個 public 方法：
 
 ```csharp
 public interface IClaudeCodeService
 {
-    Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default);
-    Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default);
-    Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default);
-    Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default);
-    Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default);
+    Task<ClaudeCodeResult> RunAsync(...);
+    Task<ClaudeCodeResult> RunVictoriaAsync(...);
+    Task<ClaudeCodeResult> RunReadOnlyAsync(...);
+    Task<ClaudeCodeResult> RunQaAsync(...);
+    Task<ClaudeCodeResult> RunReviewAsync(...);
 }
 ```
 
 ### 2.2 `MockClaudeCodeService : IClaudeCodeService`
 
-每個方法回傳預設的 `ClaudeCodeResult`，並加入延遲模擬真實執行時間：
+每個方法回傳預設 `ClaudeCodeResult`，延遲 **30~60 秒**（模擬真實執行時間，讓 Dashboard 可觀測）：
 
-| 方法 | 延遲 | 回傳內容 |
-|------|------|---------|
-| `RunAsync` | 5-8 秒 | 模擬 Dev 開發成功（含假 PR 訊息） |
-| `RunVictoriaAsync` | 2-3 秒 | 模擬 CEO 分類/回覆 |
-| `RunReadOnlyAsync` | 2-3 秒 | 模擬 Rosa/Demi/Petra 探索結果（JSON 格式） |
-| `RunQaAsync` | 3-5 秒 | 模擬 QA 測試產出 |
-| `RunReviewAsync` | 3-5 秒 | 模擬 Vera review 結果（JSON 格式） |
-
-重點：回傳的內容格式必須與真實輸出一致（JSON 結構），否則下游解析會失敗。
+| 方法 | 回傳內容（格式必須與真實解析一致） |
+|------|--------------------------------|
+| `RunAsync` | `[MOCK] 開發完成...\nhttps://github.com/mock/repo/pull/999` |
+| `RunVictoriaAsync` | `<ACTION>{"action":"reply","reply":"[MOCK]...","require_confirmation":false}</ACTION>` |
+| `RunReadOnlyAsync` | `[MOCK] 探索完成\n[{"title":"[MOCK]...","body":"...","labels":["enhancement"]}]` |
+| `RunQaAsync` | `{"generated":["[MOCK] MockFeatureTest.cs"],"summary":"[MOCK] QA 測試通過，0 個失敗"}` |
+| `RunReviewAsync` | `{"critical":[],"warning":[],"info":[],"summary":"[MOCK] 模擬審查通過","impact":"[MOCK] 無影響範圍"}` |
 
 ### 2.3 `MockLlmProvider : ILlmProvider`
 
-回傳預設的 `LlmResponse`，內含合理的 JSON 格式回應：
+依 `systemPrompt` 關鍵字偵測呼叫情境，回傳對應格式：
 
-| 使用場景 | 回傳內容 |
-|---------|---------|
-| Petra 審核 | `{"decision":"approve","summary":"模擬審核通過","issues":[]}` |
-| Victoria 分類 | 模擬分類結果（new_feature / bug_fix 等） |
-| 其他 Agent | 通用成功回應 |
+| 偵測關鍵字 | 回傳格式 |
+|-----------|---------|
+| `decision` / `approve` / `revise` / `Petra` / `審核` | `{"decision":"approve","summary":"[MOCK]...","issues":[]}` |
+| `Victoria` / `CEO` / `delegate` / `分類` | `{"action":"reply","reply":"[MOCK]...","require_confirmation":false}` |
+| `Dev` / `branch` / `commit` / `計畫` | DevPlan JSON |
+| 其他 | `[MOCK] 模擬 LLM 回應` |
 
-延遲：1-2 秒。
+延遲：**30~60 秒**（與 MockClaudeCodeService 一致，有意跳過 TokenTrackingProvider，避免產生假的 Token 統計污染 Dashboard）。
 
 ### 2.4 `ClaudeCodeProxy : IClaudeCodeService`
 
-代理類別，注入真的和假的實作，根據 `AppSettingsService` 的 MockMode 旗標決定路由：
+代理類別，每次呼叫都 `await settings.GetBoolAsync("MockMode", false)` 動態決定路由：
 
 ```csharp
-public class ClaudeCodeProxy(
-    ClaudeCodeService real,
-    MockClaudeCodeService mock,
-    AppSettingsService settings,
-    ILogger<ClaudeCodeProxy> logger) : IClaudeCodeService
+public class ClaudeCodeProxy(ClaudeCodeService real, MockClaudeCodeService mock,
+    AppSettingsService settings, ILogger<ClaudeCodeProxy> logger) : IClaudeCodeService
 {
     public async Task<ClaudeCodeResult> RunAsync(...)
     {
-        if (await settings.GetBoolAsync("MockMode", false))
-        {
-            logger.LogInformation("MockMode: RunAsync 使用模擬結果");
-            return await mock.RunAsync(...);
-        }
+        if (await settings.GetBoolAsync("MockMode", false)) return await mock.RunAsync(...);
         return await real.RunAsync(...);
     }
     // 其餘 4 個方法同理
@@ -119,138 +110,145 @@ public class ClaudeCodeProxy(
 
 ---
 
-## 三、需要修改的元件
+## 三、修改的元件
 
 ### 3.1 `LlmProviderFactory`
 
-在 `Create()` 方法中加入 MockMode 檢查：
+`Create()` 方法開頭加入 MockMode 判斷：
 
 ```csharp
 public ILlmProvider Create(string agentName)
 {
     if (_appSettings.GetBoolAsync("MockMode", false).GetAwaiter().GetResult())
         return new MockLlmProvider();
-
     // 現有邏輯不變...
 }
 ```
 
-注意：`LlmProviderFactory.Create()` 目前是同步方法。可以：
-- 使用 `GetAwaiter().GetResult()`（簡單但不理想）
-- 或改為 `CreateAsync()`（更乾淨但影響所有呼叫端）
-- 或在 Factory 中 cache 一份 MockMode 狀態（推薦，配合 AppSettingsService 的 TTL）
+採用 `GetAwaiter().GetResult()` 因為 `Create()` 是同步方法（AppSettingsService 有 in-memory cache，不會真的阻塞）。
 
 ### 3.2 `Program.cs` — DI 註冊
 
 ```csharp
-// 原本：
-// builder.Services.AddSingleton<ClaudeCodeService>();
-
-// 改為：
-builder.Services.AddSingleton<ClaudeCodeService>();           // 真的實作
-builder.Services.AddSingleton<MockClaudeCodeService>();       // 假的實作
-builder.Services.AddSingleton<IClaudeCodeService, ClaudeCodeProxy>();  // 代理
+builder.Services.AddSingleton<ClaudeCodeService>();
+builder.Services.AddSingleton<MockClaudeCodeService>();
+builder.Services.AddSingleton<IClaudeCodeService, ClaudeCodeProxy>();
 ```
-
-所有注入 `ClaudeCodeService` 的地方改為注入 `IClaudeCodeService`。
 
 ### 3.3 Agent Services — 型別更新
 
-以下 Service 的 constructor 中 `ClaudeCodeService` 改為 `IClaudeCodeService`：
+以下 8 個 Service 的 constructor 改為注入 `IClaudeCodeService`：
+`DevAgentService`、`ReviewerAgentService`、`QaAgentService`、`RequirementsAgentService`、`DesignerAgentService`、`DocAgentService`、`PmAgentService`、`CeoAgentService`。
 
-- `DevAgentService`
-- `ReviewerAgentService`
-- `QaAgentService`
-- `RequirementsAgentService`（Rosa）
-- `DesignerAgentService`（Demi）
-- `DocAgentService`（Sage）
-- `PmAgentService`（Petra）
-- `CeoAgentService`（Victoria）
+### 3.4 MockMode Early Return（防止真實 GitHub API 呼叫）
 
-改動極小：只是把參數型別從 `ClaudeCodeService` 換成 `IClaudeCodeService`，程式碼邏輯不變。
+`Dev`、`Reviewer`、`QA`、`Doc`、`Rosa` 的 `ExecuteTaskAsync` 開頭加 early return，跳過所有 GitHub 操作：
 
-### 3.4 Dashboard — AgentSettings.razor
-
-在現有的系統設定區塊中新增 Mock Mode 開關（參考 SkipCeoConfirm 的模式）：
-
-```razor
-<MudSwitch T="bool" @bind-Value="_mockMode" Color="Color.Warning"
-           Label="Mock Mode（模擬模式）"
-           ValueChanged="OnMockModeChanged" />
-<MudText Typo="Typo.caption">
-    啟用後所有 AI 呼叫將使用模擬結果，不消耗 API 費用。適用於 Dashboard / Discord 功能開發測試。
-</MudText>
+```csharp
+if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
+{
+    AddLog(task, "[MOCK] ... 模擬執行完成", "done");
+    // ...回傳假結果
+    return new AgentExecutionResult(true, "[MOCK] ...");
+}
 ```
 
----
+### 3.5 Dashboard — AgentSettings.razor
 
-## 四、Mock 回傳內容設計原則
+新增 Mock Mode 開關卡（橘色邊框，與 SkipCeoConfirm 模式一致），5 分鐘 TTL 提示。
 
-### 4.1 格式一致性
+### 3.6 `/mock` 斜線指令
 
-Mock 回傳的 JSON 必須能通過現有的解析邏輯（`TryParseReviewReport`、`TryParseReview` 等），否則下游會走 fallback 甚至失敗。
+新增 `/mock` 指令供 MockMode 測試用：
 
-### 4.2 模擬延遲
+| 選項 | 起始步驟 | 流程 |
+|------|---------|------|
+| `新功能（new_feature）` | Dev_plan | Dev_plan → Dev → Reviewer → Petra → QA → Doc |
+| `新功能（含提案）` | FireMockProposalAndContinueAsync | Requirements/PM/Designer/PM（mock done）→ Dev_plan → ... |
+| `Bug 修復（bug_fix）` | Dev | Dev → Reviewer → Petra → QA |
+| `技術改善（tech_improvement）` | Dev_plan | Dev_plan → Dev → Reviewer → Petra → QA |
 
-每個方法加入隨機延遲（`Task.Delay(Random.Shared.Next(min, max))`），讓 Dashboard 和 Discord 的即時更新體驗接近真實情境。
+指令設有 MockMode 守衛，未啟用時拒絕執行。
 
-### 4.3 可辨識性
+### 3.7 `TaskGroupService.FireMockProposalAndContinueAsync`
 
-Mock 產出的內容應包含明確標記（例如 `[MOCK]` 前綴），方便在 Dashboard / Discord / DB 中辨識哪些是模擬資料。
+新增方法，模擬「新功能含提案」的完整流程：
 
-### 4.4 不建立真實 GitHub 資源
+```
+建立 Requirements / PM（Rosa review）/ Designer / PM（Demi review）四個 mock done TaskItem
+    ↓
+FireStepsAsync([new WorkflowStep("Dev_plan")])  ← 從 proposal_approved 後正式啟動
+```
 
-Mock Dev 不應真的建 branch / 開 PR。GitHubService 的呼叫需要在 Mock 路徑中跳過或 mock 掉。
-
----
-
-## 五、GitHub 相關處理
-
-Dev Agent 在正式模式下會：Clone repo → 建 branch → 寫 code → push → 開 PR。
-
-在 Mock 模式下，需要跳過這些 GitHub 操作。有兩種做法：
-
-**方案 A：在 DevAgentService 中檢查 MockMode**
-- `ExecuteTaskAsync` 開頭檢查 MockMode
-- 若為 mock，直接回傳假的 `AgentExecutionResult`（含假 PR URL）
-- 不進入 CloneOrPull / CreateBranch 流程
-
-**方案 B：也 mock GitHubService**
-- 抽 `IGitHubService` 介面 + MockGitHubService
-- 工作量較大，但更乾淨
-
-**建議採方案 A**：只有 DevAgentService 會真正操作 GitHub（建 branch、開 PR），其他 Agent 只是讀取。在 DevAgentService 頂層做一個 early return 最簡單，不需要 mock 整個 GitHubService。
-
-同理，Vera 的 `CloneOrPull` + `CreateAndCheckoutBranch` 也需要在 Mock 模式下跳過。
+**為什麼不從 WorkflowEngine 的 `Requirements` 步驟啟動：**
+`NewFeatureTable` 沒有 `["Requirements"]` 的映射，`GetDecision` 會回傳 `Nothing`，流程在 Rosa 完成後直接停住。提案流程（Rosa → Petra → Demi → Petra → 老闆確認）是 `CommandHandler.ShowProposalAsync` 的互動式 Discord 流程，不在 WorkflowEngine 裡，故需要這個專用方法模擬。
 
 ---
 
-## 六、驗收條件
+## 四、踩坑紀錄
 
-- [ ] `IClaudeCodeService` 介面抽取完成，所有 Agent Service 改用介面注入
-- [ ] `MockClaudeCodeService` 實作完成，5 個方法各有合理的模擬回傳
-- [ ] `MockLlmProvider` 實作完成，Petra / Victoria 等回傳格式正確
-- [ ] `ClaudeCodeProxy` 代理模式運作正常，根據 MockMode 旗標切換
-- [ ] `LlmProviderFactory` 支援 MockMode 檢查
-- [ ] Dashboard AgentSettings 頁面有 Mock Mode 開關（MudSwitch）
-- [ ] 開關切換後即時生效（或 5 分鐘內），不需重啟容器
-- [ ] Mock 模式下完整 NewFeature 流程可跑完（Discord 觸發 → 全流程 → Discord 通知完成）
-- [ ] 所有 TaskItem / TaskLog / SignalR 推送在 Mock 模式下正常運作
-- [ ] Mock 產出內容帶 `[MOCK]` 標記，可辨識
-- [ ] Mock 模式不建立真實 GitHub branch / PR
-- [ ] `dotnet build` 通過
-- [ ] EF Migration 無新增（純程式碼變更）
+### 坑一：QA / Doc 缺少 MockMode Early Return（GitHub API 404）
+
+**現象**：新功能 mock 流程跑到 QA / Doc 時失敗，log 顯示 GitHub 404。
+
+**根因**：QA 和 Doc 在呼叫 Claude Code 之前，都先呼叫 `gitHubService.GetPullRequestFilesAsync(999)`，對假 PR #999 發出真實 GitHub API 請求，回傳 404。
+
+**修正**：在 `QaAgentService.ExecuteTaskAsync` 和 `DocAgentService.ExecuteTaskAsync` 開頭補上 MockMode early return，在任何 GitHub 呼叫之前直接回傳 mock 結果。
 
 ---
 
-## 七、風險評估
+### 坑二：`/mock 新功能（含提案）` 從 WorkflowEngine Requirements 步驟啟動導致流程卡死
 
-| 風險 | 影響 | 緩解措施 |
-|------|------|---------|
-| Mock JSON 格式與解析不匹配 | 下游報錯或走 fallback | 測試所有解析路徑，確保 mock 內容通過 |
-| Agent Service 漏改型別 | 編譯失敗 | `IClaudeCodeService` 改完後 `dotnet build` 即可發現 |
-| MockMode 旗標 cache 延遲 | 切換後最多 5 分鐘才生效 | 搭配 `InvalidateCache()` 或加一個 API 讓 Dashboard 通知 Bot |
-| 混用 Mock 資料和真實資料 | DB 中混雜模擬紀錄 | `[MOCK]` 標記 + 未來可加 `IsMock` 欄位篩選 |
+**現象**：Dashboard 顯示 Requirements 任務失敗（或完成後流程停住），後續 Petra / Demi 都不觸發。
+
+**根因一**：`WorkflowEngine.NewFeatureTable` 沒有 `["Requirements"]` 這個 key，`GetDecision("Requirements")` 回傳 `NextAction.Nothing`，流程在 Rosa 後停住。
+
+**根因二**：Rosa 的 `ExecuteTaskAsync` 沒有 MockMode early return，會嘗試 `gitHubService.CreateIssueAsync` 在真實 repo 建立 GitHub Issues。
+
+**修正**：
+1. 新增 `TaskGroupService.FireMockProposalAndContinueAsync`，直接建立四個 mock done 任務後從 `Dev_plan` 啟動。
+2. `CommandHandler.HandleMockCommandAsync` 的 `new_feature_with_proposal` 分支改呼叫此方法，不走 `FireStepsAsync([new WorkflowStep("Requirements")])`。
+
+---
+
+### 坑三：MockLlmProvider 延遲過短（1~2 秒），Dashboard 來不及觀察
+
+**現象**：mock 流程幾秒內跑完，Dashboard 幾乎看不到中間狀態。
+
+**修正**：所有 mock 延遲統一改為 `Random.Shared.Next(30000, 60000)`（30~60 秒），包含 `MockClaudeCodeService` 的 5 個方法和 `MockLlmProvider.CompleteAsync`。
+
+---
+
+### 已知小問題（不影響正確性）
+
+Petra 的 `ReviewVera` 路徑設計為「先嘗試 Claude Code，失敗再 fallback LLM」。Mock 模式下，Claude Code 回傳 `[MOCK] 探索完成\n[...]`（Rosa 格式），Petra 無法解析為 `{"decision":"..."}` JSON，觸發 fallback 走 `MockLlmProvider`，仍正確回傳 `approve`。Log 會出現：
+
+```
+Petra Claude Code 輸出無法解析為 JSON：[MOCK] 探索完成
+Petra LLM fallback 審核完成（第 1 次）：approve
+```
+
+邏輯正確，只是多了一次無謂的 mock Claude Code 呼叫。`ReviewVera` 本來就是設計為 LLM only（只看 review 報告，不需要 codebase），未來可將此路徑直接走 LLM 略過 Claude Code 嘗試。
+
+---
+
+## 五、驗收結果
+
+| 驗收項目 | 結果 |
+|---------|------|
+| Dashboard Mock Mode 開關 | ✅ |
+| 開關後 5 分鐘內生效，不需重啟容器 | ✅ |
+| Victoria 在 Mock Mode 下回應帶 `[MOCK]` 標記 | ✅ |
+| `/mock workflow:新功能` 全流程跑完 | ✅ |
+| `/mock workflow:新功能（含提案）` 全流程跑完（含 Requirements/PM/Designer/PM mock 任務） | ✅ |
+| `/mock workflow:bug_fix` 全流程跑完（Dev→Reviewer→QA，無 Doc） | ✅ |
+| `/mock workflow:tech_improvement` 全流程跑完（Dev_plan→Dev→Reviewer→QA，無 Doc） | ✅ |
+| Mock Mode 關閉後 `/mock` 指令正確拒絕 | ✅ |
+| 所有 MockMode early return 正確跳過 GitHub API | ✅ |
+| SignalR / Dashboard 任務中心即時更新正常 | ✅ |
+| Mock 不建立真實 GitHub branch / PR / Issues | ✅ |
+| `dotnet build` 0 Error | ✅ |
+| EF Migration 無新增 | ✅ |
 
 ---
 
@@ -258,4 +256,5 @@ Dev Agent 在正式模式下會：Clone repo → 建 branch → 寫 code → pus
 
 | 日期 | 內容 |
 |------|------|
-| 2026-04-08 | v1.0 初版建立 |
+| 2026-04-08 | v1.0 初版建立（規劃） |
+| 2026-04-08 | v2.0 實作完成，補充實作細節、踩坑三件組、驗收結果 |
