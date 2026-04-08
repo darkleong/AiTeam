@@ -294,6 +294,7 @@ public class TaskGroupService(
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
             {
                 TaskId    = taskItem.Id,
+                GroupId   = group.Id,
                 Title     = taskItem.Title,
                 AgentName = agent,
                 Status    = "done"
@@ -377,6 +378,7 @@ public class TaskGroupService(
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = taskItem.Id,
+            GroupId   = group.Id,
             Title     = taskItem.Title,
             AgentName = taskItem.AssignedAgent,
             Status    = "running"
@@ -440,6 +442,7 @@ public class TaskGroupService(
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
             {
                 TaskId    = taskItem.Id,
+                GroupId   = group.Id,
                 Title     = taskItem.Title,
                 AgentName = taskItem.AssignedAgent,
                 Status    = finalStatus
@@ -496,6 +499,7 @@ public class TaskGroupService(
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
             {
                 TaskId    = taskItem.Id,
+                GroupId   = group.Id,
                 Title     = taskItem.Title,
                 AgentName = taskItem.AssignedAgent,
                 Status    = "cancelled"
@@ -525,6 +529,7 @@ public class TaskGroupService(
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
             {
                 TaskId    = taskItem.Id,
+                GroupId   = group.Id,
                 Title     = taskItem.Title,
                 AgentName = taskItem.AssignedAgent,
                 Status    = "failed"
@@ -814,6 +819,7 @@ public class TaskGroupService(
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = petraTask.Id,
+            GroupId   = group.Id,
             Title     = petraTask.Title,
             AgentName = petraTask.AssignedAgent,
             Status    = "running"
@@ -861,6 +867,7 @@ public class TaskGroupService(
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = petraTask.Id,
+            GroupId   = group.Id,
             Title     = petraTask.Title,
             AgentName = petraTask.AssignedAgent,
             Status    = petraStatus
@@ -905,6 +912,7 @@ public class TaskGroupService(
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = petraTask.Id,
+            GroupId   = group.Id,
             Title     = petraTask.Title,
             AgentName = petraTask.AssignedAgent,
             Status    = "running"
@@ -938,6 +946,7 @@ public class TaskGroupService(
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = petraTask.Id,
+            GroupId   = group.Id,
             Title     = petraTask.Title,
             AgentName = petraTask.AssignedAgent,
             Status    = petraStatus

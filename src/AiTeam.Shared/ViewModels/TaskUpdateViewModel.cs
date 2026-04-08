@@ -6,6 +6,7 @@ namespace AiTeam.Shared.ViewModels;
 public class TaskUpdateViewModel
 {
     public Guid   TaskId    { get; set; }
+    public Guid?  GroupId   { get; set; }
     public string Title     { get; set; } = "";
     public string Status    { get; set; } = "";
     public string AgentName { get; set; } = "";

@@ -67,11 +67,14 @@ public partial class TaskCenter : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        // 收到任務更新時，Tab 1 自動重新整理，Tab 2 pipeline view 由元件內部處理
+        // 收到任務更新時，Tab 1 / Tab 2 列表同步刷新，Pipeline View 由元件內部處理
         _hubConnection.On<object>(
             AgentStatusHub.ReceiveTaskUpdate,
             async _ => await InvokeAsync(async () =>
-                await (_tableRef?.ReloadServerData() ?? Task.CompletedTask)));
+            {
+                await (_tableRef?.ReloadServerData()      ?? Task.CompletedTask);
+                await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+            }));
 
         await _hubConnection.StartAsync();
     }

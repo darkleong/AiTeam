@@ -88,13 +88,29 @@ public partial class PipelineView : IAsyncDisposable
             AgentStatusHub.ReceiveTaskUpdate,
             update =>
             {
-                // 只處理屬於本 Group 的 TaskItem
-                var step = _steps.FirstOrDefault(s => s.Task.Id == update.TaskId);
-                if (step is null) return;
+                // 只處理屬於本 Group 的更新
+                if (Group is null) return;
+                if (update.GroupId.HasValue && update.GroupId.Value != Group.Id) return;
 
-                step.Task.Status = update.Status;
-                if (update.Status is "done" or "failed" or "cancelled")
-                    step.Task.CompletedAt = DateTime.UtcNow;
+                var step = _steps.FirstOrDefault(s => s.Task.Id == update.TaskId);
+                if (step is not null)
+                {
+                    // 找到對應步驟，直接更新狀態
+                    step.Task.Status = update.Status;
+                    if (update.Status is "done" or "failed" or "cancelled")
+                        step.Task.CompletedAt = DateTime.UtcNow;
+
+                    // 更新 ActiveIndex 到目前 running 的步驟
+                    var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
+                    if (runningIdx >= 0)
+                        _activeStepIndex = runningIdx;
+                }
+                else
+                {
+                    // 找不到 = 流程新建了 TaskItem（新步驟開始），重新載入
+                    _ = InvokeAsync(LoadStepsAsync);
+                    return;
+                }
 
                 // 500ms debounce 避免高頻觸發導致 UI 閃爍
                 _debounceTimer?.Dispose();
