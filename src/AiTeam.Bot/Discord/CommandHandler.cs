@@ -85,6 +85,20 @@ public class CommandHandler(
                 .WithName("new-session")
                 .WithDescription("清除 Victoria 的對話記憶，開始全新 Session（長期記憶不受影響）")
                 .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("mock")
+                .WithDescription("【Mock Mode 限定】直接觸發指定工作流程，不呼叫 LLM，供流程測試使用")
+                .AddOption(new SlashCommandOptionBuilder()
+                    .WithName("workflow")
+                    .WithDescription("要測試的流程類型")
+                    .WithType(ApplicationCommandOptionType.String)
+                    .WithRequired(true)
+                    .AddChoice("新功能（new_feature）", "new_feature")
+                    .AddChoice("Bug 修復（bug_fix）", "bug_fix")
+                    .AddChoice("技術改善（tech_improvement）", "tech_improvement"))
+                .AddOption("title", ApplicationCommandOptionType.String, "（選用）模擬任務標題", isRequired: false)
+                .Build(),
         };
 
         await guild.BulkOverwriteApplicationCommandAsync(commands);
@@ -403,6 +417,7 @@ public class CommandHandler(
                 "reload-rules" => HandleReloadRulesAsync(command),
                 "status"       => HandleStatusAsync(command),
                 "new-session"  => HandleNewSessionAsync(command),
+                "mock"         => HandleMockCommandAsync(command),
                 _              => command.FollowupAsync("未知指令")
             });
         }
@@ -519,6 +534,60 @@ public class CommandHandler(
         await command.FollowupAsync(
             "✅ Session 已重置。Victoria 的對話語境已清空，下次回應將以全新上下文開始。\n" +
             "（長期記憶不受影響，Victoria 仍記得你過去記錄的設計決策與偏好。）");
+    }
+
+    /// <summary>
+    /// Stage 17：/mock — MockMode 限定指令，直接注入模擬 TaskGroup 觸發指定工作流程。
+    /// 繞過 Victoria 分類與所有提案流程，讓測試者可立即驗證完整 Agent 執行鏈。
+    /// </summary>
+    private async Task HandleMockCommandAsync(SocketSlashCommand command)
+    {
+        // 確認 MockMode 已啟用
+        if (!await appSettings.GetBoolAsync("MockMode", false))
+        {
+            await command.FollowupAsync(
+                "⚠️ `/mock` 指令僅在 **Mock Mode 啟用**時有效。\n" +
+                "請至 Dashboard → Agent 設定 → 啟用 Mock Mode 後再試。");
+            return;
+        }
+
+        var workflowStr = command.Data.Options.First(o => o.Name == "workflow").Value.ToString()!;
+        var customTitle = command.Data.Options.FirstOrDefault(o => o.Name == "title")?.Value?.ToString();
+
+        var (workflowType, workflowLabel, initialStep) = workflowStr switch
+        {
+            "bug_fix"          => (WorkflowType.BugFix,          "Bug 修復",   "Dev"),
+            "tech_improvement" => (WorkflowType.TechImprovement, "技術改善",   "Dev_plan"),
+            _                  => (WorkflowType.NewFeature,       "新功能",     "Dev_plan")
+        };
+
+        var title   = customTitle ?? $"[MOCK] 模擬{workflowLabel}任務（{DateTime.Now:HH:mm:ss}）";
+        var project = _gitHubSettings.DefaultRepo;
+
+        logger.LogInformation("[MockMode] /mock 觸發：workflow={Workflow}，title={Title}", workflowStr, title);
+
+        // 建立模擬 TaskGroup
+        var group = await taskGroupService.CreateGroupAsync(
+            title, project, workflowType,
+            issueUrlsJson: "[\"https://github.com/mock/repo/issues/1\"]",
+            uiSpecContent: "[MOCK] 模擬 UI 規格，供 Mock Mode 測試使用。");
+
+        // 直接觸發第一步（跳過提案流程）
+        _ = Task.Run(() => taskGroupService.FireStepsAsync(
+            group, [new WorkflowStep(initialStep)]));
+
+        var emoji = workflowStr switch
+        {
+            "bug_fix"          => "🐛",
+            "tech_improvement" => "🔧",
+            _                  => "✨"
+        };
+
+        await command.FollowupAsync(
+            $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +
+            $"任務：`{title}`\n" +
+            $"起始步驟：`{initialStep}` → 後續由 Orchestrator 自動推進\n" +
+            $"請至 Dashboard → 任務中心 觀察流程進度，所有輸出將標記 `[MOCK]`。");
     }
 
     private async Task HandleReloadRulesAsync(SocketSlashCommand command)
