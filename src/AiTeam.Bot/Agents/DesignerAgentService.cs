@@ -17,7 +17,7 @@ public class DesignerAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     ILogger<DesignerAgentService> logger) : IAgentExecutor
 {

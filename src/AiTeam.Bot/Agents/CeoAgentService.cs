@@ -19,7 +19,7 @@ public class CeoAgentService(
     LlmProviderFactory providerFactory,
     TaskRepository taskRepository,
     GitHubService gitHubService,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     CeoConversationRepository conversationRepository,
     CeoMemoryRepository memoryRepository,
     IOptions<GitHubSettings> gitHubSettings,

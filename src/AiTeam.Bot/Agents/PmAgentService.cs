@@ -17,7 +17,7 @@ namespace AiTeam.Bot.Agents;
 /// </summary>
 public class PmAgentService(
     LlmProviderFactory providerFactory,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     ILogger<PmAgentService> logger)
 {

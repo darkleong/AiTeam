@@ -30,6 +30,7 @@ public partial class AgentSettings
 
     // 系統設定
     private bool _skipCeoConfirm;
+    private bool _mockMode;
 
     // 新增 Agent 表單
     private bool    _showCreateForm;
@@ -53,6 +54,9 @@ public partial class AgentSettings
 
             var skipSetting = await AppSettingsService.GetAsync("SkipCeoConfirm");
             _skipCeoConfirm = bool.TryParse(skipSetting?.Value, out var v) && v;
+
+            var mockSetting = await AppSettingsService.GetAsync("MockMode");
+            _mockMode = bool.TryParse(mockSetting?.Value, out var mv) && mv;
         }
         catch (Exception ex)
         {
@@ -119,6 +123,13 @@ public partial class AgentSettings
         _skipCeoConfirm = (bool)e.Value!;
         await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
         _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
+    }
+
+    private async Task OnMockModeChanged(ChangeEventArgs e)
+    {
+        _mockMode = (bool)e.Value!;
+        await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
+        _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
     }
 
     private async Task RestartBotAsync()

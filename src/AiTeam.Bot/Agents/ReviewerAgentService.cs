@@ -23,7 +23,8 @@ public class ReviewerAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
+    AppSettingsService appSettings,
     IConfiguration configuration,
     ILogger<ReviewerAgentService> logger) : IAgentExecutor
 {
@@ -42,6 +43,17 @@ public class ReviewerAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
+        // Stage 17：MockMode early return — 跳過 CloneOrPull 與 GitHub API 呼叫，回傳模擬審查結果
+        if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
+        {
+            logger.LogInformation("[MockMode] ReviewerAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Vera 模擬審查完成，0 個必修問題", "done");
+            taskRepository.UpdateStatus(task, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+            const string mockBody = "[MOCK] 程式碼審查通過，無 Critical 問題。這是模擬模式產生的審查報告。";
+            return new AgentExecutionResult(true, "[MOCK] Vera 審查完成：0 個必修", ReviewBody: mockBody);
+        }
+
         AddLog(task, "Reviewer Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Id, task.Title);

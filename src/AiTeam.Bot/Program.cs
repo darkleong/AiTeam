@@ -78,7 +78,10 @@ builder.Services.AddSingleton<DashboardPushService>();
 builder.Services.AddSingleton<GitHubService>();
 
 // Stage 11：Claude Code subprocess 封裝（供 DevAgentService 使用）
+// Stage 17：Proxy pattern — ClaudeCodeProxy 依 MockMode flag 路由到 real 或 mock
 builder.Services.AddSingleton<ClaudeCodeService>();
+builder.Services.AddSingleton<MockClaudeCodeService>();
+builder.Services.AddSingleton<IClaudeCodeService, ClaudeCodeProxy>();
 builder.Services.AddControllers();
 
 // Stage 10：CEO Orchestrator（WorkflowEngine 無狀態，TaskGroupService 管理群組流程）

@@ -8,7 +8,7 @@ namespace AiTeam.Bot.Agents;
 /// 封裝 Claude Code CLI subprocess 呼叫，供 Dev Agent 與唯讀探索使用。
 /// 透過 `claude -p` 非互動模式在指定 repo 目錄內執行任務。
 /// </summary>
-public class ClaudeCodeService(ILogger<ClaudeCodeService> logger)
+public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeService
 {
     private static readonly TimeSpan DefaultTimeout     = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ReadOnlyTimeout    = TimeSpan.FromMinutes(10);

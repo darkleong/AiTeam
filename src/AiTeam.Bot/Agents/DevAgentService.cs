@@ -15,10 +15,11 @@ namespace AiTeam.Bot.Agents;
 /// </summary>
 public class DevAgentService(
     LlmProviderFactory providerFactory,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
+    AppSettingsService appSettings,
     IConfiguration configuration,
     ILogger<DevAgentService> logger) : IAgentExecutor
 {
@@ -610,6 +611,17 @@ public class DevAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
+        // Stage 17：MockMode early return — 跳過所有 GitHub 操作，回傳模擬 PR URL
+        if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
+        {
+            const string mockPrUrl = "https://github.com/mock/repo/pull/999";
+            logger.LogInformation("[MockMode] DevAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Dev Agent 模擬執行完成，PR: " + mockPrUrl, "done");
+            taskRepository.UpdateStatus(task, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+            return new AgentExecutionResult(true, "[MOCK] PR 已開啟：" + mockPrUrl, mockPrUrl);
+        }
+
         // Stage 16：Dev_plan 模式：唯讀探索 codebase，產出實作計畫書，不寫程式碼
         if (IsDevPlanMode(task.Description))
             return await ExecutePlanModeAsync(task, owner, repo, cancellationToken);

@@ -137,3 +137,22 @@ else if (_agents.Count == 0)
         </label>
     </div>
 </div>
+
+<div class="agent-setting-card" style="border-color: var(--color-status-warning, #f59e0b)">
+    <div class="agent-setting-header">
+        <div>
+            <strong>Mock Mode（模擬模式）</strong>
+            <p style="font-size:0.85rem; color:var(--color-text-secondary); margin:4px 0 0">
+                啟用後，所有 AI 呼叫（Claude Code subprocess 與直接 LLM）改用預設模擬結果，不消耗 API 費用。<br/>
+                適合 Dashboard / Discord 功能開發與流程測試。修改後 5 分鐘內自動生效，免重啟 Bot。<br/>
+                <span style="color: var(--color-status-warning, #f59e0b)">⚠ 注意：所有 TaskLog / Discord embed 將標記為 [MOCK]，不建立真實 GitHub PR / branch。</span>
+            </p>
+        </div>
+        <label class="active-toggle">
+            <input type="checkbox"
+                   checked="@_mockMode"
+                   @onchange="OnMockModeChanged" />
+            <span class="toggle-label">@(_mockMode ? "啟用" : "停用")</span>
+        </label>
+    </div>
+</div>

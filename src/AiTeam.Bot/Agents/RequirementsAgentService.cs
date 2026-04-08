@@ -19,7 +19,7 @@ public class RequirementsAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     ILogger<RequirementsAgentService> logger) : IAgentExecutor
 {

@@ -23,7 +23,7 @@ public class QaAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ClaudeCodeService claudeCodeService,
+    IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     ILogger<QaAgentService> logger) : IAgentExecutor
 {
