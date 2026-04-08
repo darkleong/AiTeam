@@ -95,6 +95,7 @@ public class CommandHandler(
                     .WithType(ApplicationCommandOptionType.String)
                     .WithRequired(true)
                     .AddChoice("新功能（new_feature）", "new_feature")
+                    .AddChoice("新功能（含提案）", "new_feature_with_proposal")
                     .AddChoice("Bug 修復（bug_fix）", "bug_fix")
                     .AddChoice("技術改善（tech_improvement）", "tech_improvement"))
                 .AddOption("title", ApplicationCommandOptionType.String, "（選用）模擬任務標題", isRequired: false)
@@ -556,9 +557,10 @@ public class CommandHandler(
 
         var (workflowType, workflowLabel, initialStep) = workflowStr switch
         {
-            "bug_fix"          => (WorkflowType.BugFix,          "Bug 修復",   "Dev"),
-            "tech_improvement" => (WorkflowType.TechImprovement, "技術改善",   "Dev_plan"),
-            _                  => (WorkflowType.NewFeature,       "新功能",     "Dev_plan")
+            "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",        "Dev"),
+            "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",        "Dev_plan"),
+            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）", "Requirements"),
+            _                           => (WorkflowType.NewFeature,       "新功能",          "Dev_plan")
         };
 
         var title   = customTitle ?? $"[MOCK] 模擬{workflowLabel}任務（{DateTime.Now:HH:mm:ss}）";
@@ -580,7 +582,7 @@ public class CommandHandler(
         {
             "bug_fix"          => "🐛",
             "tech_improvement" => "🔧",
-            _                  => "✨"
+            _                  => "✨"   // new_feature / new_feature_with_proposal
         };
 
         await command.FollowupAsync(

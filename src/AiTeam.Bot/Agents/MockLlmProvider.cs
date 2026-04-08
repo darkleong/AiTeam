@@ -13,7 +13,7 @@ public class MockLlmProvider : ILlmProvider
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null)
     {
-        await Task.Delay(Random.Shared.Next(1000, 2000), cancellationToken);
+        await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
 
         var content = BuildMockResponse(systemPrompt);
         return new LlmResponse(content, InputTokens: 0, OutputTokens: 0);
