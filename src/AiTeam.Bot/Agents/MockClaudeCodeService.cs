@@ -15,7 +15,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(5000, 8000), ct);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
         const string output = "[MOCK] 開發完成，程式碼已實作並通過 build\nhttps://github.com/mock/repo/pull/999";
         return new ClaudeCodeResult(true, output, 0, "");
     }
@@ -30,7 +30,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(2000, 3000), ct);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
         const string output =
             "[MOCK] 探索完成\n" +
             "[{\"title\":\"[MOCK] 模擬需求功能\",\"body\":\"這是 Mock Mode 產生的模擬需求，用於測試流程。\",\"labels\":[\"enhancement\"]}]";
@@ -45,7 +45,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunVictoriaAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(2000, 3000), ct);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
         const string output =
             "[MOCK] Victoria 分析完成\n" +
             "<ACTION>{\"action\":\"reply\",\"reply\":\"[MOCK] Victoria 已完成分析，這是模擬模式回應。\",\"require_confirmation\":false,\"docs_committed\":false}</ACTION>";
@@ -60,7 +60,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunQaAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(3000, 5000), ct);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
         const string output =
             "[MOCK] QA 完成\n" +
             "{\"generated\":[\"[MOCK] MockFeatureTest.cs\"],\"summary\":\"[MOCK] QA 測試通過，0 個失敗\"}";
@@ -75,7 +75,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReviewAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(3000, 5000), ct);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
         const string output =
             "[MOCK] 審查完成\n" +
             "{\"critical\":[],\"warning\":[],\"info\":[],\"summary\":\"[MOCK] 模擬審查通過，程式碼品質符合要求\",\"impact\":\"[MOCK] 無影響範圍\"}";

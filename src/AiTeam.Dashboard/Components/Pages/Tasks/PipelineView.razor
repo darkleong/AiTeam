@@ -1,0 +1,108 @@
+@* Stage 18：Pipeline View - 垂直 MudStepper 顯示 TaskGroup 的各步驟 *@
+
+@if (Group is null) return;
+
+<div class="pipeline-header">
+    <div class="pipeline-title">
+        <MudText Typo="Typo.h6">@Group.Title</MudText>
+        <StatusBadge Status="@Group.Status" />
+        @if (Group.Title.Contains("[MOCK]"))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Class="pipeline-mock-badge">MOCK</MudChip>
+        }
+    </div>
+    <div class="pipeline-meta">
+        @if (!string.IsNullOrEmpty(Group.WorkflowType))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@WorkflowTypeLabel</MudChip>
+        }
+        @if (!string.IsNullOrEmpty(Group.Project))
+        {
+            <MudText Typo="Typo.caption" Class="ml-2">專案：@Group.Project</MudText>
+        }
+        <MudText Typo="Typo.caption" Class="ml-2">@Group.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</MudText>
+        @if (!string.IsNullOrEmpty(Group.DevPrUrl))
+        {
+            <MudLink Href="@Group.DevPrUrl" Target="_blank" Typo="Typo.caption" Class="ml-2">PR 連結</MudLink>
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+}
+else if (_steps.Count == 0)
+{
+    <MudText Typo="Typo.body2" Class="mt-4 text-muted">尚無步驟資料</MudText>
+}
+else
+{
+    <MudStepper @bind-ActiveIndex="_activeStepIndex"
+                NonLinear="true"
+                Vertical="true"
+                Color="Color.Info"
+                CompletedStepColor="Color.Success"
+                SkippedStepColor="Color.Warning"
+                ErrorStepColor="Color.Error"
+                Class="mt-2 pipeline-stepper">
+        @foreach (var step in _steps)
+        {
+            <MudStep Title="@GetStepTitle(step)"
+                     Completed="@IsCompleted(step.Task.Status)"
+                     HasError="@IsFailed(step.Task.Status)"
+                     Skipped="@IsRevision(step.Task.Status)">
+                <ChildContent>
+                    <div class="pipeline-step-content">
+                        <div class="d-flex align-center gap-2">
+                            <StatusBadge Status="@step.Task.Status" />
+                            <MudText Typo="Typo.caption">@FormatDuration(step.Task)</MudText>
+                            @if (step.Task.Title.Contains("[MOCK]"))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">M</MudChip>
+                            }
+                        </div>
+
+                        @if (step.LogsLoaded)
+                        {
+                            @if (step.Logs.Count > 0)
+                            {
+                                <MudTimeline TimelinePosition="TimelinePosition.Start" Class="mt-2 pipeline-timeline">
+                                    @foreach (var log in step.Logs)
+                                    {
+                                        <MudTimelineItem Color="@GetLogColor(log.Status)" Size="Size.Small">
+                                            <ItemContent>
+                                                <div class="d-flex align-center gap-2">
+                                                    <StatusBadge Status="@log.Status" />
+                                                    <MudText Typo="Typo.caption">@log.CreatedAt.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                                                </div>
+                                                <MudText Typo="Typo.body2">@log.Step</MudText>
+                                                @if (!string.IsNullOrEmpty(log.Payload))
+                                                {
+                                                    <details class="pipeline-payload">
+                                                        <summary>Payload</summary>
+                                                        <pre>@log.Payload</pre>
+                                                    </details>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                    }
+                                </MudTimeline>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Class="text-muted mt-1">無 Log 紀錄</MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                       Class="mt-1"
+                                       OnClick="@(() => LoadLogsAsync(step))">載入 Log</MudButton>
+                        }
+                    </div>
+                </ChildContent>
+            </MudStep>
+        }
+    </MudStepper>
+}

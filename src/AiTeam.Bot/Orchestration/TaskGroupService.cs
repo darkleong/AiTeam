@@ -399,6 +399,13 @@ public class TaskGroupService(
             logger.LogError("TaskGroupService：找不到 Agent 實作：{Agent}", step.AgentName);
             taskRepo.UpdateStatus(taskItem, "failed");
             await taskRepo.SaveAsync(cancellationToken);
+            // Stage 18：Agent 找不到，推送 error 狀態
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = displayAgent,
+                Status           = "error",
+                CurrentTaskTitle = $"找不到 Agent 實作：{step.AgentName}"
+            });
             return;
         }
 
@@ -408,7 +415,14 @@ public class TaskGroupService(
 
         try
         {
-            var rules  = await rulesService.GetRulesAsync(step.AgentName);
+            var rules = await rulesService.GetRulesAsync(step.AgentName);
+            // Stage 18：Agent 開始執行前推送 running 狀態
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = displayAgent,
+                Status           = "running",
+                CurrentTaskTitle = group.Title
+            });
             var result = await executor.ExecuteTaskAsync(taskItem, owner, repo, rules, linkedCts.Token);
 
             var finalStatus = result.Success ? "done" : "failed";
@@ -429,6 +443,13 @@ public class TaskGroupService(
                 Title     = taskItem.Title,
                 AgentName = taskItem.AssignedAgent,
                 Status    = finalStatus
+            });
+            // Stage 18：Agent 完成後推送 idle / error 狀態
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = displayAgent,
+                Status           = result.Success ? "idle" : "error",
+                CurrentTaskTitle = result.Success ? null : result.Summary
             });
 
             // 推送結果到頻道
@@ -479,6 +500,12 @@ public class TaskGroupService(
                 AgentName = taskItem.AssignedAgent,
                 Status    = "cancelled"
             });
+            // Stage 18：取消後恢復 idle
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName = displayAgent,
+                Status    = "idle"
+            });
         }
         catch (Exception ex)
         {
@@ -501,6 +528,13 @@ public class TaskGroupService(
                 Title     = taskItem.Title,
                 AgentName = taskItem.AssignedAgent,
                 Status    = "failed"
+            });
+            // Stage 18：例外導致失敗，推送 error 狀態
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = displayAgent,
+                Status           = "error",
+                CurrentTaskTitle = ex.Message
             });
         }
         finally

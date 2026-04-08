@@ -70,6 +70,61 @@ public class DashboardTaskService(AppDbContext db)
             })
             .ToListAsync(cancellationToken);
 
+    /// <summary>取得 TaskGroup 分頁列表（流程追蹤 Tab 用）。</summary>
+    public async Task<PagedResult<TaskGroupDto>> GetTaskGroupsPagedAsync(
+        int page = 1,
+        int pageSize = 50,
+        string? statusFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = db.TaskGroups
+            .AsNoTracking()
+            .Where(g => statusFilter == null || g.Status == statusFilter)
+            .OrderByDescending(g => g.CreatedAt);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(g => new TaskGroupDto
+            {
+                Id              = g.Id,
+                Title           = g.Title,
+                Status          = g.Status,
+                WorkflowType    = g.WorkflowType,
+                Project         = g.Project,
+                FixIteration    = g.FixIteration,
+                DevPlanRevision = g.DevPlanRevision,
+                DevPrUrl        = g.DevPrUrl,
+                CreatedAt       = g.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<TaskGroupDto>(items, total);
+    }
+
+    /// <summary>取得 TaskGroup 下所有 TaskItem（Pipeline View 步驟用）。</summary>
+    public async Task<List<TaskItemDto>> GetTaskItemsByGroupAsync(
+        Guid groupId,
+        CancellationToken cancellationToken = default)
+        => await db.Tasks
+            .AsNoTracking()
+            .Where(t => t.GroupId == groupId)
+            .OrderBy(t => t.CreatedAt)
+            .ThenBy(t => t.Id)
+            .Select(t => new TaskItemDto
+            {
+                Id            = t.Id,
+                GroupId       = t.GroupId,
+                Title         = t.Title,
+                TriggeredBy   = t.TriggeredBy,
+                AssignedAgent = t.AssignedAgent,
+                Status        = t.Status,
+                CreatedAt     = t.CreatedAt,
+                CompletedAt   = t.CompletedAt
+            })
+            .ToListAsync(cancellationToken);
+
     /// <summary>取得任務的所有 Log（點擊任務後展開用）。</summary>
     public async Task<List<TaskLogDto>> GetTaskLogsAsync(
         Guid taskId,
