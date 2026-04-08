@@ -19,6 +19,7 @@ public class DocAgentService(
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
+    AppSettingsService appSettings,
     IConfiguration configuration,
     ILogger<DocAgentService> logger) : IAgentExecutor
 {
@@ -32,6 +33,16 @@ public class DocAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
+        // Stage 17：MockMode early return — 跳過 GitHub API 呼叫，回傳模擬文件生成結果
+        if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
+        {
+            logger.LogInformation("[MockMode] DocAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Sage 模擬文件生成完成", "done");
+            taskRepository.UpdateStatus(task, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+            return new AgentExecutionResult(true, "[MOCK] 文件生成完成");
+        }
+
         AddLog(task, "Doc Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Title);

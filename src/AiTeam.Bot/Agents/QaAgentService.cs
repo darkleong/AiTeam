@@ -24,6 +24,7 @@ public class QaAgentService(
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
+    AppSettingsService appSettings,
     IConfiguration configuration,
     ILogger<QaAgentService> logger) : IAgentExecutor
 {
@@ -42,6 +43,16 @@ public class QaAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
+        // Stage 17：MockMode early return — 跳過 GitHub API 呼叫，回傳模擬 QA 結果
+        if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
+        {
+            logger.LogInformation("[MockMode] QaAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Quinn 模擬 QA 完成，已生成測試案例，0 個失敗", "done");
+            taskRepository.UpdateStatus(task, "done");
+            await taskRepository.SaveAsync(cancellationToken);
+            return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗");
+        }
+
         AddLog(task, "QA Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Title);
