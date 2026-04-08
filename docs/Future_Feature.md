@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v3.1
+> 版本：v3.2
 > 建立日期：2026-04-01
 > 最後更新：2026-04-07
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -305,8 +305,8 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 
 ### 前置條件
 
-- Stage 16 完成後（全 Agent 任務可見性 + Petra 審核 TaskItem）
-- TaskItem 資料完整，才能渲染出完整 Pipeline
+- ✅ Stage 16 已完成（全 Agent 任務可見性 + Petra 審核 TaskItem）
+- TaskItem 資料完整，可渲染完整 Pipeline
 
 ### 優先級
 
@@ -389,6 +389,52 @@ CEO：好的，從上次中斷點繼續（Cody 重新開始實作）
 
 ---
 
+## 十四、測試環境隔離（Docker Compose Test Stack）
+
+### 背景
+
+目前 Playwright CI 在 self-hosted runner（production 機器）上直接操作 `docker-compose.prod.yml`，導致測試啟動/關閉會影響 production 容器。Stage 16 驗收時 Dashboard 容器就是被 `playwright.yml` 的 `Stop Dashboard`（`if: always()`）殺掉的。
+
+根本原因是單機環境下沒有 production / test 隔離，CI 和正式服務共用同一組 container name 和 port。
+
+### 期望行為
+
+feature branch CI 觸發時，自動在測試區部署並跑 Playwright，完全不影響 production。
+
+### 設計方向
+
+同一台 Windows 11 機器，用 port 和 container name 隔離：
+
+| | 正式區 | 測試區 |
+|---|---|---|
+| Dashboard | `localhost:5051` | `localhost:5061` |
+| PostgreSQL | `aiteam-postgres`（volume: prod-data） | `aiteam-test-postgres`（volume: test-data） |
+| Compose file | `docker-compose.prod.yml` | `docker-compose.test.yml` |
+
+**`docker-compose.test.yml`：**
+- 不同的 container name + project name（與 production 完全不衝突）
+- 不同的 port mapping（5061 / 5462）
+- 獨立的 postgres volume
+- 使用 ghcr.io 上已 build 好的 image（不重複 build）
+
+**`playwright.yml` 改版：**
+```
+1. docker compose -f docker-compose.test.yml up -d
+2. health check → localhost:5061
+3. 跑 Playwright
+4. docker compose -f docker-compose.test.yml down  ← 殺的是測試區
+```
+
+### 資源評估
+
+現有環境 RAM 15.21GB，目前使用 679MB（Bot + PostgreSQL + pgAdmin）。測試區估計額外消耗 500MB-1GB，完全沒問題。測試區只在 CI 跑時啟動，平常不佔資源。
+
+### 優先級
+
+🟡 中優先級 — 解決 CI 打到 production 的根本問題，但短期可用「Playwright 直接打 production」過渡
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -430,3 +476,4 @@ CEO：好的，從上次中斷點繼續（Cody 重新開始實作）
 | 2026-04-06 | v2.4：第十一項改為 Phase 1~3 全部移入 Stage 15；新增十三（CEO 長期記憶向量搜索版備案）；原十二改編號為十四 |
 | 2026-04-07 | v3.0：移除 3 個已完成項目（九/十/十一→Stage 14/15），重新編號為一～十；更新一（API 費用已部分優化）、四（顧問能力已整合）、八（補充 Claude Code 綁定限制） |
 | 2026-04-07 | v3.1：新增十一（任務流程可視化 Pipeline View — MudStepper + MudTimeline） |
+| 2026-04-07 | v3.2：新增十四（測試環境隔離 — Docker Compose Test Stack，解決 CI 打到 production 問題） |
