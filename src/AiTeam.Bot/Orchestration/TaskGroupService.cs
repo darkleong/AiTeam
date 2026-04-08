@@ -824,6 +824,13 @@ public class TaskGroupService(
             AgentName = petraTask.AssignedAgent,
             Status    = "running"
         });
+        // Stage 18：PM (Petra) DevPlan 審核開始，推送 running
+        await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = "running",
+            CurrentTaskTitle = group.Title
+        });
 
         var petraChannel = FindChannel(_discord.Channels.PmChannel);
         if (petraChannel is not null)
@@ -872,6 +879,13 @@ public class TaskGroupService(
             AgentName = petraTask.AssignedAgent,
             Status    = petraStatus
         });
+        // Stage 18：PM (Petra) DevPlan 審核結束，推送 idle / error
+        await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = petraStatus is "failed" ? "error" : "idle",
+            CurrentTaskTitle = petraStatus is "failed" ? petraReview.Summary : null
+        });
 
         if (petraChannel is not null)
             await petraChannel.SendMessageAsync(
@@ -917,6 +931,13 @@ public class TaskGroupService(
             AgentName = petraTask.AssignedAgent,
             Status    = "running"
         });
+        // Stage 18：PM (Petra) Vera 審核開始，推送 running
+        await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = "running",
+            CurrentTaskTitle = group.Title
+        });
 
         var petraChannel = FindChannel(_discord.Channels.PmChannel);
         if (petraChannel is not null)
@@ -950,6 +971,13 @@ public class TaskGroupService(
             Title     = petraTask.Title,
             AgentName = petraTask.AssignedAgent,
             Status    = petraStatus
+        });
+        // Stage 18：PM (Petra) Vera 審核結束，推送 idle / error
+        await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = petraStatus is "failed" ? "error" : "idle",
+            CurrentTaskTitle = petraStatus is "failed" ? petraReview.Summary : null
         });
 
         if (petraChannel is not null)

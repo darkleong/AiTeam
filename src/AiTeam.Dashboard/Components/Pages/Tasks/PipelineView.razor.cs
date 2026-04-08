@@ -33,6 +33,7 @@ public partial class PipelineView : IAsyncDisposable
     private int  _activeStepIndex;
     private IDisposable? _hubSubscription;
     private Timer? _debounceTimer;
+    private bool _subscribed;
 
     #endregion
 
@@ -42,11 +43,16 @@ public partial class PipelineView : IAsyncDisposable
     {
         if (Group is not null)
             await LoadStepsAsync();
+
+        // HubConnection 可能在 Group 設定後才傳入，確保只訂閱一次
+        if (!_subscribed && HubConnection is not null)
+            SubscribeSignalR();
     }
 
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender && HubConnection is not null)
+        // 初次 render 後若仍未訂閱（HubConnection 在 firstRender 前已傳入），補訂閱
+        if (!_subscribed && HubConnection is not null)
             SubscribeSignalR();
     }
 
@@ -84,6 +90,7 @@ public partial class PipelineView : IAsyncDisposable
 
     private void SubscribeSignalR()
     {
+        _subscribed      = true;
         _hubSubscription = HubConnection!.On<TaskUpdateViewModel>(
             AgentStatusHub.ReceiveTaskUpdate,
             update =>

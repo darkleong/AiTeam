@@ -619,31 +619,7 @@ public class CommandHandler(
             return;
         }
 
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo     = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var pushService  = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-
-        var projectId = string.IsNullOrWhiteSpace(project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(project);
-
-        // ── 1. 建立 CEO 主任務（pending）──
-        var ceoTask = new TaskItem
-        {
-            Title         = title,
-            Description   = "[MOCK] 模擬新功能提案流程",
-            TriggeredBy   = "Discord",
-            AssignedAgent = "CEO",
-            Status        = "pending",
-            ProjectId     = projectId,
-        };
-        taskRepo.Add(ceoTask);
-        await taskRepo.SaveAsync();
-        var ceoTaskId = ceoTask.Id; // 供背景任務使用（scope 結束後 ceoTask 仍可用，但保存 Id 更安全）
-
-        await ceoChannel.SendMessageAsync("🔍 **[MOCK]** CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...");
-
-        // ── 2. Mock 提案資料（Rosa Issues + Demi UI 規格）──
+        // ── 1. Mock 提案資料（Rosa Issues + Demi UI 規格）──
         var mockIssues = new List<RequirementIssuePreview>
         {
             new("[MOCK] 模擬新功能需求 A（主要流程）",
@@ -658,8 +634,49 @@ public class CommandHandler(
             "## 頁面結構\n此為 Mock Mode 模擬 UI 規格，供 Mock Mode 測試流程使用。\n\n" +
             "## 元件清單\n- `MudCard`：主要資訊卡片\n- `MudButton`：操作按鈕\n- `MudDataGrid`：列表顯示\n- `MudTextField`：輸入欄位\n\n" +
             "## 互動說明\n使用者點擊按鈕後，MudDataGrid 動態更新顯示結果。";
+        var mockIssueUrls = "[\"https://github.com/mock/repo/issues/1\",\"https://github.com/mock/repo/issues/2\"]";
 
-        // ── 3. 建立提案流程四個 mock 任務（直接 done，同步完成顯示於 Dashboard）──
+        // ── 2. 先建立 TaskGroup，讓提案步驟能掛上 GroupId，Pipeline View 才能顯示──
+        var group = await taskGroupService.CreateGroupAsync(
+            title, project, workflowType,
+            issueUrlsJson: mockIssueUrls,
+            uiSpecContent: mockUiSpec);
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo     = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService  = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var projectId = string.IsNullOrWhiteSpace(project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(project);
+
+        // ── 3. 建立 CEO 主任務（pending，掛 GroupId）──
+        var ceoTask = new TaskItem
+        {
+            Title         = title,
+            Description   = "[MOCK] 模擬新功能提案流程",
+            TriggeredBy   = "Discord",
+            AssignedAgent = "CEO",
+            Status        = "pending",
+            GroupId       = group.Id,
+            ProjectId     = projectId,
+        };
+        taskRepo.Add(ceoTask);
+        await taskRepo.SaveAsync();
+        var ceoTaskId = ceoTask.Id;
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = ceoTask.Id,
+            GroupId   = group.Id,
+            Title     = ceoTask.Title,
+            AgentName = ceoTask.AssignedAgent,
+            Status    = "pending"
+        });
+
+        await ceoChannel.SendMessageAsync("🔍 **[MOCK]** CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...");
+
+        // ── 4. 建立提案流程四個 mock 任務（直接 done，掛 GroupId，Pipeline View 才能顯示）──
         (string ItemTitle, string Agent, string LogMsg)[] proposalSteps =
         [
             ($"[Rosa] {title}",                    AgentNames.Requirements, "[MOCK] Rosa 需求分析完成，產出 2 個 Issue"),
@@ -677,6 +694,7 @@ public class CommandHandler(
                 TriggeredBy   = "Proposal",
                 AssignedAgent = agent,
                 Status        = "done",
+                GroupId       = group.Id,
                 ProjectId     = projectId,
             };
             taskRepo.Add(proposalTask);
@@ -693,34 +711,35 @@ public class CommandHandler(
             await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
             {
                 TaskId    = proposalTask.Id,
+                GroupId   = group.Id,
                 Title     = proposalTask.Title,
                 AgentName = agent,
                 Status    = "done"
             });
         }
 
-        // ── 4. 傳送與真實流程完全相同的提案 Embed + 按鈕 ──
+        // ── 5. 傳送與真實流程完全相同的提案 Embed + 按鈕 ──
         var proposalEmbed = BuildProposalEmbed(title, mockIssues, mockUiSpec);
         await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: BuildProposalConfirmButtons());
 
-        // ── 5. 傳送 [MOCK] UI 規格附件（與真實流程一致）──
+        // ── 6. 傳送 [MOCK] UI 規格附件（與真實流程一致）──
         var uiSpecBytes = System.Text.Encoding.UTF8.GetBytes(mockUiSpec);
         using var uiStream = new System.IO.MemoryStream(uiSpecBytes);
         await ceoChannel.SendFileAsync(uiStream, "ui-spec.md", "📄 **[MOCK]** UI 規格文件（提案附件）");
 
-        // ── 6. 自動確認說明訊息 ──
+        // ── 7. 自動確認說明訊息 ──
         var autoConfirmDelaySec = Random.Shared.Next(30, 60);
         await ceoChannel.SendMessageAsync(
             $"🤖 **【Mock Mode】** 上方提案書將在 **{autoConfirmDelaySec} 秒後**自動確認，無需手動操作。\n" +
             $"（按鈕不需點擊，自動確認後流程將繼續至 Dev_plan → Dev → Reviewer → QA → Doc）");
 
-        // ── 7. 回應 /mock 指令 ──
+        // ── 8. 回應 /mock 指令 ──
         await command.FollowupAsync(
             $"📋 **[MOCK] 新功能（含提案）流程已啟動**\n" +
             $"任務：`{title}`\n" +
             $"請至 <#{ceoChannel.Id}> 觀察提案書確認流程（**{autoConfirmDelaySec} 秒後自動確認**）。");
 
-        // ── 8. 背景倒數，自動確認後繼續工作流程 ──
+        // ── 9. 背景倒數，自動確認後繼續工作流程（TaskGroup 已建立，直接 FireStepsAsync）──
         _ = Task.Run(async () =>
         {
             try
@@ -743,19 +762,14 @@ public class CommandHandler(
                     await confirmPush.PushTaskUpdateAsync(new TaskUpdateViewModel
                     {
                         TaskId    = ceoTaskItem.Id,
+                        GroupId   = group.Id,
                         Title     = ceoTaskItem.Title,
                         AgentName = ceoTaskItem.AssignedAgent,
                         Status    = "done"
                     });
                 }
 
-                // 建立 TaskGroup 並從 Dev_plan 啟動正式工作流程
-                var mockIssueUrls = "[\"https://github.com/mock/repo/issues/1\",\"https://github.com/mock/repo/issues/2\"]";
-                var group = await taskGroupService.CreateGroupAsync(
-                    title, project, workflowType,
-                    issueUrlsJson: mockIssueUrls,
-                    uiSpecContent: mockUiSpec);
-
+                // TaskGroup 已在流程開始時建立，直接從 Dev_plan 啟動正式工作流程
                 await taskGroupService.FireStepsAsync(group, [new WorkflowStep("Dev_plan")]);
             }
             catch (Exception ex)
