@@ -43,6 +43,7 @@
     </div>
 }
 
+<div style="overflow-x: auto; max-width: 100%;">
 <MudTable Items="@_projects"
           Dense="true"
           Hover="true"
@@ -84,6 +85,7 @@
         </div>
     </NoRecordsContent>
 </MudTable>
+</div>
 
 @if (_isDrawerOpen && _selectedProject is not null)
 {

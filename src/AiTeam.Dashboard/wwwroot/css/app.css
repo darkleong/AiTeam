@@ -250,6 +250,8 @@ body {
     flex: 1;
     padding: 24px;
     transition: margin-left 0.25s ease;
+    overflow-x: hidden;  /* 防止頁面產生水平 Scrollbar，Drawer 才能固定在視窗右側 */
+    max-width: 100%;
 }
 
 .page-header {

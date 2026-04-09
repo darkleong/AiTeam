@@ -18,6 +18,7 @@
     </select>
 </div>
 
+<div style="overflow-x: auto; max-width: 100%;">
 <MudTable @ref="_groupTableRef"
           ServerData="LoadGroupServerDataAsync"
           Dense="true"
@@ -53,6 +54,7 @@
         <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
 </MudTable>
+</div>
 
 @* Pipeline View 側邊 Drawer *@
 <MudDrawer @bind-Open="@_isPipelineDrawerOpen"
