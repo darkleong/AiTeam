@@ -69,6 +69,17 @@ public partial class PipelineView : IAsyncDisposable
             await LoadStepsAsync();
         }
 
+        // 根據步驟狀態推算 Group 整體狀態，即時更新 header 徽章（無需額外 DB 查詢）
+        if (_steps.Count > 0)
+        {
+            if (_steps.Any(s => s.Task.Status == "failed"))
+                Group.Status = "failed";
+            else if (_steps.All(s => s.Task.Status is "done" or "cancelled"))
+                Group.Status = "done";
+            else if (_steps.Any(s => s.Task.Status == "running"))
+                Group.Status = "running";
+        }
+
         StateHasChanged();
     }
 
