@@ -18,7 +18,6 @@
     </select>
 </div>
 
-<div style="overflow-x: auto; max-width: 100%;">
 <MudTable @ref="_tableRef"
           ServerData="LoadServerDataAsync"
           Dense="true"
@@ -53,7 +52,6 @@
         <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
 </MudTable>
-</div>
 
 <TaskLogDrawer @bind-IsOpen="@_isTaskDrawerOpen"
                SelectedTask="@_selectedTask"

@@ -8,7 +8,6 @@
     <h2>部署紀錄</h2>
 </div>
 
-<div style="overflow-x: auto; max-width: 100%;">
 <MudTable Items="@_deployments"
           Dense="true"
           Hover="true"
@@ -36,7 +35,6 @@
         <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
 </MudTable>
-</div>
 
 <TaskLogDrawer @bind-IsOpen="@_isDrawerOpen"
                SelectedTask="@_selectedTask"

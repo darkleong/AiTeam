@@ -18,7 +18,6 @@
     </select>
 </div>
 
-<div style="overflow-x: auto; max-width: 100%;">
 <MudTable @ref="_groupTableRef"
           ServerData="LoadGroupServerDataAsync"
           Dense="true"
@@ -54,25 +53,20 @@
         <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
 </MudTable>
-</div>
 
-@* Pipeline View 側邊 Drawer *@
-<MudDrawer @bind-Open="@_isPipelineDrawerOpen"
-           Anchor="Anchor.End"
-           Elevation="1"
-           Variant="DrawerVariant.Temporary"
-           Width="480px"
-           OverlayAutoClose="true">
-    <MudDrawerHeader>
-        <MudText Typo="Typo.subtitle1">流程詳情</MudText>
-        <MudSpacer />
-        <MudIconButton Icon="@Icons.Material.Filled.Close"
-                       Size="Size.Small"
-                       OnClick="@(() => _isPipelineDrawerOpen = false)" />
-    </MudDrawerHeader>
-    <div class="pa-3">
-        <PipelineView @ref="_pipelineViewRef"
-                      Group="@_selectedGroup"
-                      OnGroupStatusChanged="@OnGroupStatusChangedAsync" />
+@* Pipeline View 側邊 Drawer（position: fixed CSS Drawer） *@
+@if (_isPipelineDrawerOpen)
+{
+    <div class="slide-panel-overlay" @onclick="@(() => _isPipelineDrawerOpen = false)"></div>
+    <div class="slide-panel">
+        <div class="drawer-header">
+            <h4>流程詳情</h4>
+            <button class="btn-close" @onclick="@(() => _isPipelineDrawerOpen = false)" aria-label="關閉">✕</button>
+        </div>
+        <div style="flex: 1; overflow-y: auto; padding: 12px;">
+            <PipelineView @ref="_pipelineViewRef"
+                          Group="@_selectedGroup"
+                          OnGroupStatusChanged="@OnGroupStatusChangedAsync" />
+        </div>
     </div>
-</MudDrawer>
+}

@@ -250,8 +250,6 @@ body {
     flex: 1;
     padding: 24px;
     transition: margin-left 0.25s ease;
-    overflow-x: hidden;  /* 防止頁面產生水平 Scrollbar，Drawer 才能固定在視窗右側 */
-    max-width: 100%;
 }
 
 .page-header {
@@ -430,6 +428,54 @@ body {
 }
 
 /* ========================================
+   Slide Panel（固定定位的右側 Drawer，position: fixed）
+   MainLayout 未使用 MudLayout，不能用 MudDrawer Temporary，改用 CSS 方案
+   ======================================== */
+
+.slide-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1000;
+}
+
+.slide-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 480px;
+    height: 100vh;
+    background: var(--color-bg-card);
+    border-left: 1px solid var(--color-border);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-close:hover {
+    background: var(--color-border);
+    color: var(--color-text-primary);
+}
+
+/* ========================================
    Drawer
    ======================================== */
 
@@ -439,6 +485,15 @@ body {
     gap: 12px;
     padding: 16px;
     border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.drawer-header h4 {
+    margin: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .drawer-meta {
