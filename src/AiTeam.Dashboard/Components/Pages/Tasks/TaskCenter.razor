@@ -121,8 +121,8 @@
                                OnClick="@(() => _isPipelineDrawerOpen = false)" />
             </MudDrawerHeader>
             <MudDrawerContainer Class="pa-3">
-                <PipelineView Group="@_selectedGroup"
-                              HubConnection="@_hubConnection" />
+                <PipelineView @ref="_pipelineViewRef"
+                              Group="@_selectedGroup" />
             </MudDrawerContainer>
         </MudDrawer>
     </MudTabPanel>

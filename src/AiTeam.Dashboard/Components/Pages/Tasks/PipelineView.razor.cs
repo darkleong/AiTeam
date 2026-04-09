@@ -1,8 +1,6 @@
-using AiTeam.Data.Hubs;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.SignalR.Client;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks;
@@ -21,9 +19,6 @@ public partial class PipelineView : IAsyncDisposable
     [Parameter]
     public TaskGroupDto? Group { get; set; }
 
-    [Parameter]
-    public HubConnection? HubConnection { get; set; }
-
     #endregion
 
     #region Private State
@@ -31,9 +26,6 @@ public partial class PipelineView : IAsyncDisposable
     private List<PipelineStepViewModel> _steps = [];
     private bool _loading;
     private int  _activeStepIndex;
-    private IDisposable? _hubSubscription;
-    private Timer? _debounceTimer;
-    private bool _subscribed;
 
     #endregion
 
@@ -43,28 +35,46 @@ public partial class PipelineView : IAsyncDisposable
     {
         if (Group is not null)
             await LoadStepsAsync();
-
-        // HubConnection 可能在 Group 設定後才傳入，確保只訂閱一次
-        if (!_subscribed && HubConnection is not null)
-            SubscribeSignalR();
-    }
-
-    protected override void OnAfterRender(bool firstRender)
-    {
-        // 初次 render 後若仍未訂閱（HubConnection 在 firstRender 前已傳入），補訂閱
-        if (!_subscribed && HubConnection is not null)
-            SubscribeSignalR();
     }
 
     #endregion
 
     #region Public Methods
 
-    public async ValueTask DisposeAsync()
+    /// <summary>
+    /// 由 TaskCenter（父元件）收到 SignalR ReceiveTaskUpdate 後直接呼叫，
+    /// 避免雙重訂閱同一 HubConnection 導致 dispatch 不觸發的問題。
+    /// </summary>
+    public async Task HandleTaskUpdateAsync(TaskUpdateViewModel update)
     {
-        _hubSubscription?.Dispose();
-        _debounceTimer?.Dispose();
-        await ValueTask.CompletedTask;
+        if (Group is null) return;
+        if (update.GroupId.HasValue && update.GroupId.Value != Group.Id) return;
+
+        var step = _steps.FirstOrDefault(s => s.Task.Id == update.TaskId);
+        if (step is not null)
+        {
+            // 找到對應步驟，直接更新狀態
+            step.Task.Status = update.Status;
+            if (update.Status is "done" or "failed" or "cancelled")
+                step.Task.CompletedAt = DateTime.UtcNow;
+
+            // 更新 ActiveIndex 到目前 running 的步驟
+            var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
+            if (runningIdx >= 0)
+                _activeStepIndex = runningIdx;
+        }
+        else
+        {
+            // 找不到 = 流程新建了 TaskItem（新步驟開始），重新從 DB 載入
+            await LoadStepsAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 
     #endregion
@@ -86,49 +96,6 @@ public partial class PipelineView : IAsyncDisposable
         _activeStepIndex = runningIdx >= 0 ? runningIdx : Math.Max(0, _steps.Count - 1);
 
         _loading = false;
-    }
-
-    private void SubscribeSignalR()
-    {
-        _subscribed      = true;
-        _hubSubscription = HubConnection!.On<TaskUpdateViewModel>(
-            AgentStatusHub.ReceiveTaskUpdate,
-            update =>
-            {
-                // 只處理屬於本 Group 的更新
-                if (Group is null) return;
-                if (update.GroupId.HasValue && update.GroupId.Value != Group.Id) return;
-
-                var step = _steps.FirstOrDefault(s => s.Task.Id == update.TaskId);
-                if (step is not null)
-                {
-                    // 找到對應步驟，直接更新狀態
-                    step.Task.Status = update.Status;
-                    if (update.Status is "done" or "failed" or "cancelled")
-                        step.Task.CompletedAt = DateTime.UtcNow;
-
-                    // 更新 ActiveIndex 到目前 running 的步驟
-                    var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
-                    if (runningIdx >= 0)
-                        _activeStepIndex = runningIdx;
-                }
-                else
-                {
-                    // 找不到 = 流程新建了 TaskItem（新步驟開始），重新載入並強制 re-render
-                    _ = InvokeAsync(async () =>
-                    {
-                        await LoadStepsAsync();
-                        StateHasChanged();
-                    });
-                    return;
-                }
-
-                // 500ms debounce 避免高頻觸發導致 UI 閃爍
-                _debounceTimer?.Dispose();
-                _debounceTimer = new Timer(
-                    _ => InvokeAsync(StateHasChanged),
-                    null, 500, Timeout.Infinite);
-            });
     }
 
     private async Task LoadLogsAsync(PipelineStepViewModel step)

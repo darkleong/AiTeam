@@ -1,4 +1,6 @@
 using AiTeam.Data.Hubs;
+using AiTeam.Shared.Dtos;
+using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.SignalR.Client;
 using MudBlazor;
 
@@ -32,6 +34,7 @@ public partial class TaskCenter : IAsyncDisposable
     #region Private Variables — Tab 2（流程追蹤）
 
     private MudTable<TaskGroupDto> _groupTableRef         = null!;
+    private PipelineView           _pipelineViewRef       = null!;
     private TaskGroupDto?          _selectedGroup;
     private bool                   _isPipelineDrawerOpen;
     private string?                _groupStatusFilter;
@@ -67,13 +70,16 @@ public partial class TaskCenter : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        // 收到任務更新時，Tab 1 / Tab 2 列表同步刷新，Pipeline View 由元件內部處理
-        _hubConnection.On<object>(
+        // 收到任務更新時，Tab 1 / Tab 2 列表同步刷新，並直接轉發給 PipelineView 即時更新 Stepper
+        _hubConnection.On<TaskUpdateViewModel>(
             AgentStatusHub.ReceiveTaskUpdate,
-            async _ => await InvokeAsync(async () =>
+            async update => await InvokeAsync(async () =>
             {
                 await (_tableRef?.ReloadServerData()      ?? Task.CompletedTask);
                 await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+                // 直接呼叫 PipelineView，避免雙重訂閱同一 HubConnection 的 dispatch 問題
+                if (_pipelineViewRef is not null)
+                    await _pipelineViewRef.HandleTaskUpdateAsync(update);
             }));
 
         await _hubConnection.StartAsync();
