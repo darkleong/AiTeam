@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。**Stage 17 起加入 Mock Mode**：Dashboard 一鍵開關，所有 Claude Code / LLM 呼叫切換為模擬結果，不消耗 API 費用；`/mock` 斜線指令可直接觸發四種工作流程測試（新功能 / 含提案 / Bug 修復 / 技術改善）；Runtime 代理模式（ClaudeCodeProxy）切換，5 分鐘內生效，無需重啟容器。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。**Stage 17 起加入 Mock Mode**：Dashboard 一鍵開關，所有 Claude Code / LLM 呼叫切換為模擬結果，不消耗 API 費用；`/mock` 斜線指令可直接觸發四種工作流程測試（新功能 / 含提案 / Bug 修復 / 技術改善）；Runtime 代理模式（ClaudeCodeProxy）切換，5 分鐘內生效，無需重啟容器。**Stage 18 起 Dashboard 可觀測性升級**：首頁 Agent 狀態卡即時更新（執行中 / 閒置 / 錯誤）；任務中心新增「流程追蹤」Tab，點擊 TaskGroup 展開 Pipeline View（垂直 MudStepper + 懶載入 MudTimeline），流程進行中 Stepper 即時更新步驟狀態，不需手動刷新。
 
 ---
 
@@ -93,6 +93,7 @@ docs/
 ├── Stage_15_Roadmap.md          ← ✅ 完成（含踩坑紀錄）
 ├── Stage_16_Roadmap.md          ← ✅ 完成（含踩坑五件組 + 架構決策）
 ├── Stage_17_Roadmap.md          ← ✅ 完成（含踩坑三件組 + Mock Mode 架構）
+├── Stage_18_Roadmap.md          ← ✅ 完成（含踩坑五件組 + Pipeline View 架構）
 └── Future_Feature.md            ← 未來功能候選清單
 ```
 
@@ -203,6 +204,35 @@ Victoria（CEO）在每次回應前會主動查詢 GitHub 開啟 PR / Issues，�
 | **操作指派** | `delegate` → Release（發版）/ Ops（部署）/ Doc（文件），單次任務直接執行 |
 | **取消任務** | 列出進行中任務，確認後取消並 kill subprocess |
 | **正常行為／疑問** | 直接回覆說明或回答，不派任何任務 |
+
+---
+
+## Dashboard 可觀測性（Stage 18）
+
+Stage 18 讓 Dashboard 從「看任務清單」升級為「看流水線在動」。
+
+### Agent 狀態卡即時更新
+
+首頁 Agent 卡片即時反映各 Agent 的執行狀態，無需手動刷新：
+
+| 狀態 | 顏色 | 觸發時機 |
+|------|------|---------|
+| 執行中 | 藍色 | `FireOneStepAsync` 呼叫 executor 前 |
+| 閒置 | 灰色 | Agent 執行完成後 |
+| 錯誤 | 紅色 | Agent 執行失敗 / Exception |
+
+### Pipeline View
+
+任務中心新增「流程追蹤」Tab，點擊任意 TaskGroup 展開右側 Pipeline 抽屜：
+
+```
+CEO ✅ → Rosa ✅ → Petra ✅ → Demi ✅ → Petra ✅ → Dev ✅ → Petra ✅ → Dev ✅ → Reviewer ✅ → Petra ✅ → QA ✅ → Doc ✅
+```
+
+- **垂直 MudStepper**（NonLinear）：每步驟顯示 Agent 名稱、狀態色、耗時、[MOCK] 標記
+- **MudTimeline 懶載入**：點擊「載入 Log」才讀取該步驟的 TaskLog，不拖慢初始渲染
+- **SignalR 即時更新**：流程進行中，Stepper 節點即時變色（執行中→完成），無需手動刷新
+- **群組列表同步**：流程完成後 1.5 秒（等 Bot 寫入 DB），列表狀態自動更新為「完成」
 
 ---
 
@@ -347,6 +377,7 @@ docker compose --env-file .env up -d
 | Stage 15 | Victoria 升級為技術顧問：Claude Code 探索 codebase + 讀寫 docs/ + Session 對話歷史 + 長期記憶 | ✅ 完成 |
 | Stage 16 | PM Agent（Petra）品質審核閘門：Rosa/Demi/Dev_plan/Vera 四個審核點；Vera/QA 重構為 Claude Code session | ✅ 完成 |
 | Stage 17 | Mock Mode：IClaudeCodeService 介面 + ClaudeCodeProxy 代理模式 + /mock 指令（4 種流程）；Dashboard 開關 5 分鐘生效 | ✅ 完成 |
+| Stage 18 | Dashboard 可觀測性升級：Agent 狀態卡即時更新 + Pipeline View（垂直 MudStepper + MudTimeline 懶載入 + SignalR 即時推進） | ✅ 完成 |
 
 ---
 
