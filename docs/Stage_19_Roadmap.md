@@ -1,19 +1,31 @@
 # Stage 19 — Dashboard UI 全面打磨
 
-> 版本：v2.0
+> 版本：v2.1
 > 建立日期：2026-04-08
-> 更新日期：2026-04-09
-> 狀態：📋 規劃中
+> 更新日期：2026-04-10
+> 狀態：🔄 第一批已完成，第二批暫緩（待 Stage 20）
+
+---
+
+## 執行順序說明
+
+| 批次 | 狀態 | 說明 |
+|------|------|------|
+| 第一批（🔴 高優先） | ✅ 已完成 | StatusBadge、PipelineList、MudSwitch、表格 FixedHeader 等 |
+| 第二批（🟡 中優先） | ⏸️ 暫緩 | 依賴 MudLayout 穩定基礎，**待 Stage 20 完成後接續執行** |
+| 第三批（🔵 低優先） | ⏸️ 暫緩 | 同上 |
+
+> **暫緩原因：** Stage 19 Pt.1 實作過程中發現 `TaskLogDrawer` 無法正確使用 `MudDrawer Temporary`，根本原因是 `MainLayout` 未使用 `MudLayout`。第二批多項改善（MudDialog 表單、Drawer overlay、主題切換統一樣式）均依賴穩定的 MudLayout 基礎。因此決定先執行 **Stage 20**（全面換 MudBlazor Layout），再回頭完成 Stage 19 第二批。
 
 ---
 
 ## 目標
 
-全面修正 Dashboard 的 UI 顯示缺陷、樣式不一致與操作體驗問題。依優先級分兩批實作，避免一次改太多出 bug。
+全面修正 Dashboard 的 UI 顯示缺陷、樣式不一致與操作體驗問題。依優先級分三批實作，避免一次改太多出 bug。
 
 ---
 
-## 第一批：高優先（🔴 視覺明顯 / 功能性問題）
+## 第一批：高優先（🔴 視覺明顯 / 功能性問題）✅ 已完成
 
 ### 1. StatusBadge 補齊缺少的狀態
 
@@ -224,3 +236,4 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 | v1.0 | 2026-04-08 | 初版建立 |
 | v1.1 | 2026-04-09 | 新增導覽 UX 重構、表格改善、首頁佈局、MudDialog |
 | v2.0 | 2026-04-09 | 全面重整結構，依優先級分三批，整合所有 UI 問題清單（18 項） |
+| v2.1 | 2026-04-10 | 第一批驗收完成；第二三批暫緩，待 Stage 20（全面換 MudBlazor Layout）完成後接續 |

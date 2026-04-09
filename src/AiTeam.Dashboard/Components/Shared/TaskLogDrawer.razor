@@ -1,13 +1,16 @@
-@* 任務 Log 側邊抽屜組件（position: fixed CSS Drawer） *@
+@* 任務 Log 側邊抽屜組件（MudDrawer Temporary） *@
 
-@if (IsOpen && SelectedTask is not null)
-{
-    <div class="slide-panel-overlay" @onclick="CloseAsync"></div>
-    <div class="slide-panel">
+<MudDrawer @bind-Open="IsOpen"
+           Anchor="Anchor.End"
+           Variant="DrawerVariant.Temporary"
+           Width="480px"
+           OverlayAutoClose="true">
+    @if (SelectedTask is not null)
+    {
         <div class="drawer-header">
-            <h4>@SelectedTask.Title</h4>
+            <MudText Typo="Typo.h6" Style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@SelectedTask.Title</MudText>
             <StatusBadge Status="@SelectedTask.Status" />
-            <button class="btn-close" @onclick="CloseAsync" aria-label="關閉">✕</button>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
         </div>
         <div class="drawer-meta">
             <span>觸發：@SelectedTask.TriggeredBy</span>
@@ -42,8 +45,8 @@
                 }
             }
         </div>
-    </div>
-}
+    }
+</MudDrawer>
 
 @code {
     [Parameter]

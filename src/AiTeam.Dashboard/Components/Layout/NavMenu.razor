@@ -1,38 +1,11 @@
-<nav class="nav-menu">
-    <NavLink class="nav-item" href="/" Match="NavLinkMatch.All">
-        <span class="nav-icon">🏠</span>
-        <span class="nav-text">首頁</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/tasks">
-        <span class="nav-icon">📋</span>
-        <span class="nav-text">任務列表</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/pipeline">
-        <span class="nav-icon">🔄</span>
-        <span class="nav-text">流程追蹤</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/deployments">
-        <span class="nav-icon">🚀</span>
-        <span class="nav-text">部署紀錄</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/projects">
-        <span class="nav-icon">📁</span>
-        <span class="nav-text">專案管理</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/agents">
-        <span class="nav-icon">🤖</span>
-        <span class="nav-text">Agent 設定</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/office">
-        <span class="nav-icon">🏢</span>
-        <span class="nav-text">Team Office</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/rules">
-        <span class="nav-icon">📜</span>
-        <span class="nav-text">規則管理</span>
-    </NavLink>
-    <NavLink class="nav-item" href="/tokens">
-        <span class="nav-icon">📊</span>
-        <span class="nav-text">Token 監控</span>
-    </NavLink>
-</nav>
+<MudNavMenu>
+    <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">首頁</MudNavLink>
+    <MudNavLink Href="/tasks" Icon="@Icons.Material.Filled.List">任務列表</MudNavLink>
+    <MudNavLink Href="/pipeline" Icon="@Icons.Material.Filled.AccountTree">流程追蹤</MudNavLink>
+    <MudNavLink Href="/deployments" Icon="@Icons.Material.Filled.RocketLaunch">部署紀錄</MudNavLink>
+    <MudNavLink Href="/projects" Icon="@Icons.Material.Filled.Folder">專案管理</MudNavLink>
+    <MudNavLink Href="/agents" Icon="@Icons.Material.Filled.SmartToy">Agent 設定</MudNavLink>
+    <MudNavLink Href="/office" Icon="@Icons.Material.Filled.Business">Team Office</MudNavLink>
+    <MudNavLink Href="/rules" Icon="@Icons.Material.Filled.Rule">規則管理</MudNavLink>
+    <MudNavLink Href="/tokens" Icon="@Icons.Material.Filled.BarChart">Token 監控</MudNavLink>
+</MudNavMenu>

@@ -24,8 +24,6 @@
 
     --shadow-card:             0 2px 8px rgba(0, 0, 0, 0.08);
     --radius-card:             8px;
-    --sidebar-width:           220px;
-    --sidebar-collapsed-width: 52px;
 }
 
 html[data-theme="dark"] {
@@ -40,7 +38,7 @@ html[data-theme="dark"] {
 }
 
 /* ========================================
-   基礎佈局
+   基礎
    ======================================== */
 
 * { box-sizing: border-box; }
@@ -48,209 +46,11 @@ html[data-theme="dark"] {
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--color-bg-primary);
-    color: var(--color-text-primary);
-}
-
-.layout-wrapper {
-    display: flex;
-    min-height: 100vh;
 }
 
 /* ========================================
-   Sidebar
+   Page Header
    ======================================== */
-
-.sidebar {
-    width: var(--sidebar-width);
-    background: var(--color-bg-secondary);
-    border-right: 1px solid var(--color-border);
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    height: 100vh;
-    overflow: hidden;
-    transition: width 0.25s ease;
-}
-
-.sidebar-header {
-    padding: 16px;
-    border-bottom: 1px solid var(--color-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.sidebar-logo {
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: var(--color-accent);
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.sidebar-footer {
-    margin-top: auto;
-    padding: 12px 16px;
-    border-top: 1px solid var(--color-border);
-}
-
-.sidebar-toggle {
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 6px 10px;
-    color: var(--color-text-secondary);
-    border-radius: 4px;
-    line-height: 1;
-    transition: color 0.15s, background 0.15s;
-}
-
-.sidebar-toggle:hover {
-    color: var(--color-accent);
-    background: var(--color-border);
-}
-
-.theme-toggle {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.2rem;
-    padding: 4px;
-}
-
-.logout-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: inherit;
-    width: calc(100% - 16px);
-    text-align: left;
-}
-
-.logout-btn:hover {
-    background: var(--color-status-error, #d32f2f) !important;
-    color: #fff !important;
-}
-
-.logout-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.layout-wrapper.sidebar-collapsed .logout-btn {
-    width: calc(100% - 8px);
-}
-
-/* ========================================
-   Nav Menu
-   ======================================== */
-
-.nav-menu {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 0;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    color: var(--color-text-primary);
-    text-decoration: none;
-    border-radius: 4px;
-    margin: 2px 8px;
-    transition: background 0.15s;
-    white-space: nowrap;
-}
-
-.nav-icon {
-    flex-shrink: 0;
-    font-size: 1rem;
-    width: 20px;
-    text-align: center;
-    /* 強制使用系統 emoji 字型，避免 Windows 側欄收合時顯示色塊 */
-    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
-    line-height: 1.4;
-    display: inline-block;
-}
-
-.nav-text {
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.version-label {
-    font-size: 0.75rem;
-    color: var(--color-muted);
-    text-align: center;
-    padding-top: 4px;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.nav-item:hover,
-.nav-item.active {
-    background: var(--color-accent);
-    color: #fff;
-}
-
-/* ========================================
-   Sidebar Collapsed State
-   ======================================== */
-
-.layout-wrapper.sidebar-collapsed .sidebar {
-    width: var(--sidebar-collapsed-width);
-}
-
-.layout-wrapper.sidebar-collapsed .main-content {
-    margin-left: var(--sidebar-collapsed-width);
-}
-
-.layout-wrapper.sidebar-collapsed .sidebar-header {
-    justify-content: center;
-    padding: 16px 0;
-}
-
-.layout-wrapper.sidebar-collapsed .sidebar-logo {
-    display: none;
-}
-
-.layout-wrapper.sidebar-collapsed .nav-item {
-    justify-content: center;
-    padding: 10px 0;
-    margin: 2px 4px;
-    gap: 0;
-}
-
-.layout-wrapper.sidebar-collapsed .nav-text {
-    display: none;
-}
-
-.layout-wrapper.sidebar-collapsed .version-label {
-    display: none;
-}
-
-.layout-wrapper.sidebar-collapsed .sidebar-footer {
-    display: flex;
-    justify-content: center;
-    padding: 12px 0;
-}
-
-/* ========================================
-   Main Content
-   ======================================== */
-
-.main-content {
-    margin-left: var(--sidebar-width);
-    flex: 1;
-    padding: 24px;
-    transition: margin-left 0.25s ease;
-}
 
 .page-header {
     display: flex;
@@ -428,55 +228,7 @@ body {
 }
 
 /* ========================================
-   Slide Panel（固定定位的右側 Drawer，position: fixed）
-   MainLayout 未使用 MudLayout，不能用 MudDrawer Temporary，改用 CSS 方案
-   ======================================== */
-
-.slide-panel-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.45);
-    z-index: 1000;
-}
-
-.slide-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 480px;
-    height: 100vh;
-    background: var(--color-bg-card);
-    border-left: 1px solid var(--color-border);
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.btn-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    color: var(--color-text-secondary);
-    padding: 4px 8px;
-    border-radius: 4px;
-    line-height: 1;
-    flex-shrink: 0;
-    margin-left: auto;
-}
-
-.btn-close:hover {
-    background: var(--color-border);
-    color: var(--color-text-primary);
-}
-
-/* ========================================
-   Drawer
+   Drawer 內容樣式（MudDrawer 內使用）
    ======================================== */
 
 .drawer-header {
@@ -679,49 +431,6 @@ body {
 .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
 
 /* ========================================
-   MudBlazor Dark Mode — 覆蓋 CSS 變數
-   MudBlazor 元件透過 --mud-palette-* 變數決定顏色，
-   在 html[data-theme="dark"] 層覆蓋後所有元件自動套用，
-   不需針對每個 class 個別處理。
-   ======================================== */
-
-html[data-theme="dark"] {
-    /* 文字 */
-    --mud-palette-text-primary:    rgba(233, 236, 239, 0.87);
-    --mud-palette-text-secondary:  rgba(173, 181, 189, 0.60);
-    --mud-palette-text-disabled:   rgba(173, 181, 189, 0.38);
-
-    /* 背景與表面 */
-    --mud-palette-background:      #1a1a2e;
-    --mud-palette-background-grey: #16213e;
-    --mud-palette-surface:         #0f3460;
-
-    /* 分隔線 */
-    --mud-palette-divider:         rgba(73, 80, 87, 1);
-    --mud-palette-divider-light:   rgba(73, 80, 87, 0.4);
-
-    /* 表格 */
-    --mud-palette-table-hover:     rgba(255, 255, 255, 0.08);
-    --mud-palette-table-striped:   rgba(255, 255, 255, 0.04);
-    --mud-palette-table-lines:     rgba(73, 80, 87, 1);
-
-    /* 動作按鈕 */
-    --mud-palette-action-default:  rgba(173, 181, 189, 0.54);
-    --mud-palette-action-disabled: rgba(173, 181, 189, 0.26);
-
-    /* Overlay */
-    --mud-palette-overlay-dark:    rgba(33, 33, 33, 0.5);
-    --mud-palette-overlay-light:   rgba(255, 255, 255, 0.06);
-
-    /* Drawer / Appbar（若有使用） */
-    --mud-palette-drawer-background: #16213e;
-    --mud-palette-drawer-text:        rgba(233, 236, 239, 0.87);
-    --mud-palette-drawer-icon:        rgba(173, 181, 189, 0.54);
-    --mud-palette-appbar-background:  #16213e;
-    --mud-palette-appbar-text:        rgba(233, 236, 239, 0.87);
-}
-
-/* ========================================
    Form Controls
    ======================================== */
 
@@ -737,3 +446,20 @@ html[data-theme="dark"] {
     font-size: 0.9rem;
 }
 
+/* ========================================
+   Project Detail（Drawer 內）
+   ======================================== */
+
+.project-detail {
+    padding: 16px;
+    font-size: 0.9rem;
+    line-height: 1.8;
+}
+
+.project-detail pre {
+    background: var(--color-bg-secondary);
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    overflow: auto;
+}

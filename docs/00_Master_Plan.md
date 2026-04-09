@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v4.1
+> 版本：v4.3
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -31,6 +31,7 @@
 | [Stage_17_Roadmap.md](./Stage_17_Roadmap.md) | Stage 17：Mock Mode（模擬模式） | ✅ 已完成（2026-04-08） |
 | [Stage_18_Roadmap.md](./Stage_18_Roadmap.md) | Stage 18：Dashboard 可觀測性升級 | ✅ 已完成（2026-04-09） |
 | [Stage_19_Roadmap.md](./Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | 📋 規劃中 |
+| [Stage_20_Roadmap.md](./Stage_20_Roadmap.md) | Stage 20：Dashboard 全面換 MudBlazor Layout | 🔄 實作完成，待驗收 |
 | [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
 
@@ -73,6 +74,8 @@
 | v4.0 | 2026-04-08 | Stage 17 驗收完成（4 種 /mock 流程全通過）；Stage_17_Roadmap.md 補充實作細節、踩坑三件組（QA/Doc 缺 early return、含提案流程卡死、延遲過短）、驗收結果 |
 | v4.1 | 2026-04-08 | 新增 Stage_18_Roadmap.md（Dashboard 可觀測性 — Agent 狀態卡即時更新 + Pipeline View）、Stage_19_Roadmap.md（Dashboard UI 全面打磨）；Future Feature 十/十一 移入 Stage 18 |
 | v4.2 | 2026-04-09 | Stage 18 驗收完成（新功能含提案 + Bug Fix 全通過）；踩坑五件組（雙重訂閱 HubConnection、Rosa/Demi GroupId、提案步驟 CompletedAt、header 徽章本地推算、群組列表延遲刷新）；Stage_18_Roadmap.md 補充實作紀錄 |
+| v4.3 | 2026-04-10 | Stage 19 Pt.1 驗收完成（StatusBadge 補齊、PipelineList 獨立頁、MudSwitch、表格 FixedHeader）；Stage_19_Roadmap.md 改版為 v2.0（三批 18 項問題清單）；新增 Stage_20_Roadmap.md（全面換 MudBlazor Layout）；決策：Stage 19 Pt.2 暫緩，先執行 Stage 20 奠定 MudLayout 基礎 |
+| v4.4 | 2026-04-10 | Stage 20 實作完成（MainLayout → MudLayout、NavMenu → MudNavMenu、Dark Mode → MudThemeProvider、三處 Drawer → MudDrawer Temporary、app.css 清理）；dotnet build 通過（0 errors）；待瀏覽器驗收 |
 
 ---
 

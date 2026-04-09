@@ -1,29 +1,31 @@
 @inherits LayoutComponentBase
 
-<MudProviders />
+<MudThemeProvider IsDarkMode="_isDarkMode" IsDarkModeChanged="OnDarkModeChangedAsync" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
 
-<div class="layout-wrapper" id="layout-wrapper">
-    <nav class="sidebar">
-        <div class="sidebar-header">
-            <span class="sidebar-logo">AI Team</span>
-            <button class="sidebar-toggle" id="sidebar-toggle-btn" title="收合選單"
-                    onclick="(function(){var lw=document.getElementById('layout-wrapper'),c=lw.classList.toggle('sidebar-collapsed');localStorage.setItem('sidebarCollapsed',c?'1':'');document.getElementById('sidebar-toggle-btn').textContent=c?'▶':'◀'})()">
-                ◀
-            </button>
-        </div>
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Default" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Edge="Edge.Start" OnClick="ToggleSidebar" />
+        <MudText Typo="Typo.h6" Class="ml-2">AI Team</MudText>
+        <MudSpacer />
+    </MudAppBar>
+    <MudDrawer @bind-Open="_sidebarOpen" Variant="DrawerVariant.Persistent" Elevation="2" ClipMode="DrawerClipMode.Always">
         <NavMenu />
-        <div class="sidebar-footer">
-            <button class="theme-toggle" title="切換主題" id="theme-toggle-btn"
-                    onclick="var h=document.documentElement,t=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=t;localStorage.setItem('theme',t);this.textContent=t==='dark'?'☀':'🌙'">
-                🌙
-            </button>
-            <LogoutButton />
-            <span class="version-label">@AppVersion</span>
+        <MudSpacer />
+        <div class="pa-2">
+            <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                               title="切換主題" OnClick="@(() => OnDarkModeChangedAsync(!_isDarkMode))" />
+                <LogoutButton />
+            </MudStack>
+            <MudText Typo="Typo.caption" Class="d-block text-center">@AppVersion</MudText>
         </div>
-    </nav>
-    <main class="main-content">
-        <div class="content-area">
+    </MudDrawer>
+    <MudMainContent>
+        <div class="pa-4">
             @Body
         </div>
-    </main>
-</div>
+    </MudMainContent>
+</MudLayout>

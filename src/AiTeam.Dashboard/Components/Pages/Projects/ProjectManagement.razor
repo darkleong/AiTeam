@@ -85,13 +85,16 @@
     </NoRecordsContent>
 </MudTable>
 
-@if (_isDrawerOpen && _selectedProject is not null)
-{
-    <div class="slide-panel-overlay" @onclick="CloseDrawer"></div>
-    <div class="slide-panel">
+<MudDrawer @bind-Open="_isDrawerOpen"
+           Anchor="Anchor.End"
+           Variant="DrawerVariant.Temporary"
+           Width="480px"
+           OverlayAutoClose="true">
+    @if (_selectedProject is not null)
+    {
         <div class="drawer-header">
-            <h4>@_selectedProject.Name</h4>
-            <button class="btn-close" @onclick="CloseDrawer" aria-label="關閉">✕</button>
+            <MudText Typo="Typo.h6" Style="flex:1">@_selectedProject.Name</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDrawer" />
         </div>
         <div class="project-detail">
             <p><strong>團隊：</strong>@_selectedProject.TeamName</p>
@@ -118,5 +121,5 @@
             }
             <p><strong>建立時間：</strong>@_selectedProject.CreatedAt.ToString("yyyy/MM/dd")</p>
         </div>
-    </div>
-}
+    }
+</MudDrawer>

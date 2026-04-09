@@ -7,55 +7,25 @@
     <title>AI Team Dashboard</title>
     <base href="/" />
     <script>
+        // 立即套用主題，避免首次渲染閃白
         (function(){
-            var _sidebarObs = null;
+            var t = localStorage.getItem('theme') || 'light';
+            document.documentElement.dataset.theme = t;
+        })();
 
-            function applyTheme() {
+        // appTheme：供 MainLayout C# 透過 JS Interop 呼叫
+        window.appTheme = {
+            init: function () {
                 var t = localStorage.getItem('theme') || 'light';
                 document.documentElement.dataset.theme = t;
-                var btn = document.getElementById('theme-toggle-btn');
-                if (btn) btn.textContent = t === 'dark' ? '☀' : '🌙';
+                return t === 'dark';
+            },
+            setDark: function (isDark) {
+                var t = isDark ? 'dark' : 'light';
+                localStorage.setItem('theme', t);
+                document.documentElement.dataset.theme = t;
             }
-
-            function applySidebar() {
-                var lw = document.getElementById('layout-wrapper');
-                if (!lw) return;
-                var collapsed = localStorage.getItem('sidebarCollapsed') === '1';
-                lw.classList.toggle('sidebar-collapsed', collapsed);
-                var btn = document.getElementById('sidebar-toggle-btn');
-                if (btn) btn.textContent = collapsed ? '▶' : '◀';
-            }
-
-            // 監控 layout-wrapper 的 class 屬性：
-            // Blazor Enhanced Navigation / Interactive hydration 可能重設 class，
-            // MutationObserver 偵測到後立刻還原（disconnect 防止自身觸發遞迴）
-            function watchSidebar() {
-                if (_sidebarObs) { _sidebarObs.disconnect(); _sidebarObs = null; }
-                var lw = document.getElementById('layout-wrapper');
-                if (!lw) return;
-                _sidebarObs = new MutationObserver(function() {
-                    _sidebarObs.disconnect();
-                    applySidebar();
-                    _sidebarObs.observe(lw, { attributes: true, attributeFilter: ['class'] });
-                });
-                _sidebarObs.observe(lw, { attributes: true, attributeFilter: ['class'] });
-            }
-
-            // 立即套用主題，避免閃白
-            applyTheme();
-            // DOMContentLoaded 後套用狀態並啟動監聽
-            document.addEventListener('DOMContentLoaded', function() { applyTheme(); applySidebar(); watchSidebar(); });
-            // Blazor Enhanced Navigation 後重新套用（SSR patch 可能重設 DOM）
-            document.addEventListener('enhancedload', function() { applyTheme(); applySidebar(); watchSidebar(); });
-            // MutationObserver 偵測 data-theme 被移除時立即還原
-            new MutationObserver(function(ms) {
-                for (var m of ms) {
-                    if (m.attributeName === 'data-theme' && !document.documentElement.dataset.theme) {
-                        applyTheme();
-                    }
-                }
-            }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-        })();
+        };
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
