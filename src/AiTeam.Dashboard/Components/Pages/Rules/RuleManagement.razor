@@ -55,58 +55,80 @@
         <p class="empty-state-hint">點擊右上角「新增規則」來建立 CEO 的行為準則</p>
     </div>
 }
-else
+else if (_rules.Count > 0)
 {
-    @foreach (var rule in _rules)
-    {
-        <div class="agent-setting-card">
-            @if (_editingId == rule.Id)
+    <MudTable Items="@_rules"
+              Dense="true"
+              Hover="true"
+              Height="600px"
+              FixedHeader="true"
+              RowsPerPage="10"
+              T="Rule">
+        <HeaderContent>
+            <MudTh>規則內容</MudTh>
+            <MudTh>套用對象</MudTh>
+            <MudTh>排序</MudTh>
+            <MudTh>狀態</MudTh>
+            <MudTh>操作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            @if (_editingId == context.Id)
             {
-                <div class="form-group">
-                    <textarea class="form-control" @bind="_editContent" rows="3"></textarea>
-                </div>
-                <div class="form-group" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
-                    <div>
-                        <label>套用對象</label>
-                        <select class="form-select" @bind="_editAgentName" style="width:180px">
-                            @foreach (var opt in _agentOptions)
-                            {
-                                <option value="@opt.Value">@opt.Label</option>
-                            }
-                        </select>
+                <MudTd colspan="5">
+                    <div class="form-group">
+                        <textarea class="form-control" @bind="_editContent" rows="3"></textarea>
                     </div>
-                    <div>
-                        <label>排序</label>
-                        <input type="number" class="form-control" @bind="_editSortOrder" style="width:80px" />
+                    <div class="form-group" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+                        <div>
+                            <label>套用對象</label>
+                            <select class="form-select" @bind="_editAgentName" style="width:180px">
+                                @foreach (var opt in _agentOptions)
+                                {
+                                    <option value="@opt.Value">@opt.Label</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label>排序</label>
+                            <input type="number" class="form-control" @bind="_editSortOrder" style="width:80px" />
+                        </div>
                     </div>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:8px">
-                    <button class="btn btn-primary" @onclick="() => SaveEditAsync(rule.Id)">儲存</button>
-                    <button class="btn btn-secondary" @onclick="CancelEdit">取消</button>
-                </div>
+                    <div style="display:flex; gap:8px; margin-top:8px">
+                        <button class="btn btn-primary" @onclick="() => SaveEditAsync(context.Id)">儲存</button>
+                        <button class="btn btn-secondary" @onclick="CancelEdit">取消</button>
+                    </div>
+                </MudTd>
             }
             else
             {
-                <div class="agent-setting-header">
-                    <span style="flex:1; font-size:0.9rem">@rule.Content</span>
-                    <label class="active-toggle" title="@(rule.IsActive ? "點擊停用" : "點擊啟用")">
-                        <input type="checkbox"
-                               checked="@rule.IsActive"
-                               @onchange="(e) => ToggleActiveAsync(rule, (bool)e.Value!)" />
-                        <span class="toggle-label">@(rule.IsActive ? "啟用" : "停用")</span>
-                    </label>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:8px; align-items:center">
-                    <span style="font-size:0.75rem; color:var(--color-text-secondary)">排序: @rule.SortOrder</span>
-                    <span class="status-badge" style="background:@GetAgentColor(rule.AgentName)">
-                        @(rule.AgentName ?? "全域")
+                <MudTd style="flex:1; font-size:0.9rem">@context.Content</MudTd>
+                <MudTd>
+                    <span class="status-badge" style="background:@GetAgentColor(context.AgentName)">
+                        @(context.AgentName ?? "全域")
                     </span>
-                    <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px"
-                            @onclick="() => StartEdit(rule)">編輯</button>
-                    <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px; color:var(--color-status-failed)"
-                            @onclick="() => DeleteRuleAsync(rule.Id)">刪除</button>
-                </div>
+                </MudTd>
+                <MudTd>
+                    <span style="font-size:0.75rem; color:var(--color-text-secondary)">@context.SortOrder</span>
+                </MudTd>
+                <MudTd>
+                    <MudSwitch T="bool"
+                               Value="@context.IsActive"
+                               ValueChanged="@((bool v) => ToggleActiveAsync(context, v))"
+                               Color="Color.Primary"
+                               Label="@(context.IsActive ? "啟用" : "停用")" />
+                </MudTd>
+                <MudTd>
+                    <div style="display:flex; gap:8px">
+                        <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px"
+                                @onclick="() => StartEdit(context)">編輯</button>
+                        <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px; color:var(--color-status-failed)"
+                                @onclick="() => DeleteRuleAsync(context.Id)">刪除</button>
+                    </div>
+                </MudTd>
             }
-        </div>
-    }
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
+        </PagerContent>
+    </MudTable>
 }

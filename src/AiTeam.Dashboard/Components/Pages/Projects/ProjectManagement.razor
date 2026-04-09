@@ -46,7 +46,9 @@
 <MudTable Items="@_projects"
           Dense="true"
           Hover="true"
-          RowsPerPage="50"
+          Height="600px"
+          FixedHeader="true"
+          RowsPerPage="10"
           T="ProjectDto"
           OnRowClick="OnRowClickAsync"
           RowClass="cursor-pointer">
@@ -72,7 +74,7 @@
         <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd")</MudTd>
     </RowTemplate>
     <PagerContent>
-        <MudTablePager />
+        <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
     <NoRecordsContent>
         <div class="empty-state">

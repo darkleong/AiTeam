@@ -118,16 +118,16 @@ public partial class AgentSettings
         _isSaving    = false;
     }
 
-    private async Task OnSkipCeoConfirmChanged(ChangeEventArgs e)
+    private async Task OnSkipCeoConfirmChanged(bool newValue)
     {
-        _skipCeoConfirm = (bool)e.Value!;
+        _skipCeoConfirm = newValue;
         await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
         _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
     }
 
-    private async Task OnMockModeChanged(ChangeEventArgs e)
+    private async Task OnMockModeChanged(bool newValue)
     {
-        _mockMode = (bool)e.Value!;
+        _mockMode = newValue;
         await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
         _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
     }

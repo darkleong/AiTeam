@@ -11,12 +11,16 @@
     --color-accent:        #6366f1;
     --color-border:        #dee2e6;
 
-    --color-status-pending: #6c757d;
-    --color-status-running: #fd7e14;
-    --color-status-done:    #198754;
-    --color-status-failed:  #dc3545;
-    --color-status-idle:    #20c997;
-    --color-status-error:   #dc3545;
+    --color-status-pending:   #6c757d;
+    --color-status-running:   #fd7e14;
+    --color-status-done:      #198754;
+    --color-status-failed:    #dc3545;
+    --color-status-idle:      #20c997;
+    --color-status-error:     #dc3545;
+    --color-status-warning:   #f59e0b;
+    --color-status-revision:  #f59e0b;
+    --color-status-reviewing: #7c3aed;
+    --color-status-cancelled: #6c757d;
 
     --shadow-card:             0 2px 8px rgba(0, 0, 0, 0.08);
     --radius-card:             8px;
@@ -337,12 +341,22 @@ body {
     color: #fff;
 }
 
-.status-pending  { background: var(--color-status-pending);  }
-.status-running  { background: var(--color-status-running);  }
-.status-done     { background: var(--color-status-done);     }
-.status-failed   { background: var(--color-status-failed);   }
-.status-idle     { background: var(--color-status-idle);     }
-.status-error    { background: var(--color-status-error);    }
+.status-pending   { background: var(--color-status-pending);   }
+.status-running   { background: var(--color-status-running);   }
+.status-done      { background: var(--color-status-done);      }
+.status-failed    { background: var(--color-status-failed);    }
+.status-idle      { background: var(--color-status-idle);      }
+.status-error     { background: var(--color-status-error);     }
+.status-revision  { background: var(--color-status-revision);  }
+.status-reviewing { background: var(--color-status-reviewing); }
+.status-cancelled { background: var(--color-status-cancelled); }
+
+/* ========================================
+   工具類別
+   ======================================== */
+
+.cursor-pointer { cursor: pointer; }
+.text-muted     { color: var(--color-text-secondary); }
 
 /* ========================================
    Task List Simple (首頁)

@@ -1,0 +1,76 @@
+@page "/pipeline"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>流程追蹤 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>流程追蹤</h2>
+</div>
+
+<div class="page-filters mb-3">
+    <select @bind="_groupStatusFilter" @bind:after="OnGroupStatusFilterChangedAsync" class="form-select">
+        <option value="">全部狀態</option>
+        <option value="running">進行中</option>
+        <option value="done">已完成</option>
+        <option value="failed">失敗</option>
+        <option value="pending">等待中</option>
+    </select>
+</div>
+
+<MudTable @ref="_groupTableRef"
+          ServerData="LoadGroupServerDataAsync"
+          Dense="true"
+          Hover="true"
+          Height="600px"
+          FixedHeader="true"
+          RowsPerPage="10"
+          T="TaskGroupDto"
+          OnRowClick="OnGroupRowClickAsync"
+          RowClass="cursor-pointer">
+    <HeaderContent>
+        <MudTh>狀態</MudTh>
+        <MudTh>任務標題</MudTh>
+        <MudTh>流程類型</MudTh>
+        <MudTh>專案</MudTh>
+        <MudTh>建立時間</MudTh>
+        <MudTh>PR</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+        <MudTd>@context.Title</MudTd>
+        <MudTd>@WorkflowTypeLabel(context.WorkflowType)</MudTd>
+        <MudTd>@context.Project</MudTd>
+        <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</MudTd>
+        <MudTd>
+            @if (!string.IsNullOrEmpty(context.DevPrUrl))
+            {
+                <MudLink Href="@context.DevPrUrl" Target="_blank">PR</MudLink>
+            }
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
+    </PagerContent>
+</MudTable>
+
+@* Pipeline View 側邊 Drawer *@
+<MudDrawer @bind-Open="@_isPipelineDrawerOpen"
+           Anchor="Anchor.End"
+           Elevation="1"
+           Variant="DrawerVariant.Temporary"
+           Width="480px"
+           OverlayAutoClose="true">
+    <MudDrawerHeader>
+        <MudText Typo="Typo.subtitle1">流程詳情</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                       Size="Size.Small"
+                       OnClick="@(() => _isPipelineDrawerOpen = false)" />
+    </MudDrawerHeader>
+    <div class="pa-3">
+        <PipelineView @ref="_pipelineViewRef"
+                      Group="@_selectedGroup"
+                      OnGroupStatusChanged="@OnGroupStatusChangedAsync" />
+    </div>
+</MudDrawer>

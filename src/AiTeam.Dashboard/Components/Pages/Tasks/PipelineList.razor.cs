@@ -6,7 +6,7 @@ using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks;
 
-public partial class TaskCenter : IAsyncDisposable
+public partial class PipelineList : IAsyncDisposable
 {
     #region Dependencies
 
@@ -23,11 +23,11 @@ public partial class TaskCenter : IAsyncDisposable
 
     #region Private Variables
 
-    private MudTable<TaskItemDto> _tableRef         = null!;
-    private TaskItemDto?          _selectedTask;
-    private List<TaskLogDto>      _selectedLogs     = [];
-    private bool                  _isTaskDrawerOpen;
-    private string?               _statusFilter;
+    private MudTable<TaskGroupDto> _groupTableRef     = null!;
+    private PipelineView           _pipelineViewRef   = null!;
+    private TaskGroupDto?          _selectedGroup;
+    private bool                   _isPipelineDrawerOpen;
+    private string?                _groupStatusFilter;
 
     #endregion
 
@@ -64,7 +64,9 @@ public partial class TaskCenter : IAsyncDisposable
             AgentStatusHub.ReceiveTaskUpdate,
             async update => await InvokeAsync(async () =>
             {
-                await (_tableRef?.ReloadServerData() ?? Task.CompletedTask);
+                await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+                if (_pipelineViewRef is not null)
+                    await _pipelineViewRef.HandleTaskUpdateAsync(update);
             }));
 
         await _hubConnection.StartAsync();
@@ -74,53 +76,53 @@ public partial class TaskCenter : IAsyncDisposable
 
     #region Private Methods
 
-    private async Task<TableData<TaskItemDto>> LoadServerDataAsync(
+    private async Task<TableData<TaskGroupDto>> LoadGroupServerDataAsync(
         TableState state,
         CancellationToken cancellationToken)
     {
-        var result = await TaskService.GetTasksPagedAsync(
+        var result = await TaskService.GetTaskGroupsPagedAsync(
             page: state.Page + 1,
             pageSize: state.PageSize,
-            statusFilter: _statusFilter);
+            statusFilter: _groupStatusFilter);
 
-        return new TableData<TaskItemDto>
+        return new TableData<TaskGroupDto>
         {
             Items      = result.Items,
             TotalItems = result.TotalCount
         };
     }
 
-    private async Task OnTaskRowClickAsync(TableRowClickEventArgs<TaskItemDto> args)
+    private void OnGroupRowClickAsync(TableRowClickEventArgs<TaskGroupDto> args)
     {
-        _selectedTask = args.Item;
-        if (_selectedTask is null) return;
-
-        _selectedLogs     = await TaskService.GetTaskLogsAsync(_selectedTask.Id);
-        _isTaskDrawerOpen = true;
+        _selectedGroup        = args.Item;
+        _isPipelineDrawerOpen = true;
     }
 
-    private async Task OnStatusFilterChangedAsync()
-        => await (_tableRef?.ReloadServerData() ?? Task.CompletedTask);
-
-    /// <summary>將 TimeSpan 格式化為人類易讀字串，如「3 分 42 秒」。</summary>
-    private static string FormatDuration(TimeSpan? duration)
+    /// <summary>
+    /// PipelineView 推算 Group 狀態變化時呼叫。
+    /// Bot 寫 DB 需要一點時間，延遲 1.5 秒再刷新群組列表，確保讀到最新狀態。
+    /// </summary>
+    private void OnGroupStatusChangedAsync(string newStatus)
     {
-        if (duration is null) return "—";
+        if (newStatus is not ("done" or "failed" or "cancelled")) return;
 
-        var ts = duration.Value;
-
-        if (ts.TotalSeconds < 60)
-            return $"{(int)ts.TotalSeconds} 秒";
-
-        if (ts.TotalMinutes < 60)
-            return ts.Seconds > 0
-                ? $"{(int)ts.TotalMinutes} 分 {ts.Seconds} 秒"
-                : $"{(int)ts.TotalMinutes} 分";
-
-        return ts.Minutes > 0
-            ? $"{(int)ts.TotalHours} 時 {ts.Minutes} 分"
-            : $"{(int)ts.TotalHours} 時";
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1500);
+            await InvokeAsync(() => _groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+        });
     }
+
+    private async Task OnGroupStatusFilterChangedAsync()
+        => await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+
+    private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
+    {
+        "new_feature"      => "新功能",
+        "bug_fix"          => "Bug Fix",
+        "tech_improvement" => "技術改善",
+        _                  => workflowType ?? ""
+    };
 
     #endregion
 

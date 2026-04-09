@@ -69,9 +69,9 @@
 }
 else if (_agents.Count == 0)
 {
-    <div class="alert alert-info">
+    <MudAlert Severity="Severity.Info">
         尚未載入 Agent 資料，請確認 Bot 服務已啟動並重新整理頁面。
-    </div>
+    </MudAlert>
 }
 
 @foreach (var agent in _agents)
@@ -80,12 +80,12 @@ else if (_agents.Count == 0)
         <div class="agent-setting-header">
             <h4>@agent.Name</h4>
             <span class="team-label">@agent.TeamName</span>
-            <label class="active-toggle" title="@(agent.IsActive ? "點擊停用" : "點擊啟用")">
-                <input type="checkbox"
-                       checked="@agent.IsActive"
-                       @onchange="(e) => ToggleIsActiveAsync(agent, (bool)e.Value!)" />
-                <span class="toggle-label">@(agent.IsActive ? "啟用中" : "已停用")</span>
-            </label>
+            <MudSwitch T="bool"
+                       Value="@agent.IsActive"
+                       ValueChanged="@((bool v) => ToggleIsActiveAsync(agent, v))"
+                       Color="Color.Primary"
+                       Label="@(agent.IsActive ? "啟用中" : "已停用")"
+                       title="@(agent.IsActive ? "點擊停用" : "點擊啟用")" />
         </div>
 
         @if (!string.IsNullOrEmpty(agent.Description))
@@ -129,12 +129,11 @@ else if (_agents.Count == 0)
                 建議 CEO 準確率穩定後再開啟。修改後 5 分鐘內自動生效，免重啟 Bot。
             </p>
         </div>
-        <label class="active-toggle">
-            <input type="checkbox"
-                   checked="@_skipCeoConfirm"
-                   @onchange="OnSkipCeoConfirmChanged" />
-            <span class="toggle-label">@(_skipCeoConfirm ? "啟用" : "停用")</span>
-        </label>
+        <MudSwitch T="bool"
+                   Value="@_skipCeoConfirm"
+                   ValueChanged="@OnSkipCeoConfirmChanged"
+                   Color="Color.Primary"
+                   Label="@(_skipCeoConfirm ? "啟用" : "停用")" />
     </div>
 </div>
 
@@ -148,11 +147,10 @@ else if (_agents.Count == 0)
                 <span style="color: var(--color-status-warning, #f59e0b)">⚠ 注意：所有 TaskLog / Discord embed 將標記為 [MOCK]，不建立真實 GitHub PR / branch。</span>
             </p>
         </div>
-        <label class="active-toggle">
-            <input type="checkbox"
-                   checked="@_mockMode"
-                   @onchange="OnMockModeChanged" />
-            <span class="toggle-label">@(_mockMode ? "啟用" : "停用")</span>
-        </label>
+        <MudSwitch T="bool"
+                   Value="@_mockMode"
+                   ValueChanged="@OnMockModeChanged"
+                   Color="Color.Warning"
+                   Label="@(_mockMode ? "啟用" : "停用")" />
     </div>
 </div>

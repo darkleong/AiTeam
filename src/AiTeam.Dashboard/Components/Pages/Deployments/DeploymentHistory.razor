@@ -11,7 +11,9 @@
 <MudTable Items="@_deployments"
           Dense="true"
           Hover="true"
-          RowsPerPage="50"
+          Height="600px"
+          FixedHeader="true"
+          RowsPerPage="10"
           T="TaskItemDto"
           OnRowClick="OnRowClickAsync"
           RowClass="cursor-pointer">
@@ -30,7 +32,7 @@
         <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
     </RowTemplate>
     <PagerContent>
-        <MudTablePager />
+        <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
     </PagerContent>
 </MudTable>
 

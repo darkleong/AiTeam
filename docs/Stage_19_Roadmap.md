@@ -1,174 +1,226 @@
 # Stage 19 — Dashboard UI 全面打磨
 
-> 版本：v1.0
+> 版本：v2.0
 > 建立日期：2026-04-08
+> 更新日期：2026-04-09
 > 狀態：📋 規劃中
 
 ---
 
 ## 目標
 
-全面修正 Dashboard 的 UI 顯示缺陷與樣式不一致問題，提升使用體驗的一致性和完整性。
+全面修正 Dashboard 的 UI 顯示缺陷、樣式不一致與操作體驗問題。依優先級分兩批實作，避免一次改太多出 bug。
 
 ---
 
-## 一、狀態 Badge 修正（Critical）
+## 第一批：高優先（🔴 視覺明顯 / 功能性問題）
 
-### 1.1 StatusBadge.razor 缺少 `revision` / `reviewing` 狀態
+### 1. StatusBadge 補齊缺少的狀態
 
-**檔案：** `Components/Shared/StatusBadge.razor`
+**檔案：** `Components/Shared/StatusBadge.razor`、`wwwroot/css/app.css`
 
-**現況：** `GetLabel()` switch 只處理 pending / running / done / failed / idle / error，缺少 Stage 16 新增的 `revision` 和 `reviewing` 狀態。
+`GetLabel()` switch 缺少 Stage 16 新增的狀態：
 
-**修正：**
-- 新增 `revision` → 橘色 Badge，標籤「修正中」
-- 新增 `reviewing` → 藍紫色 Badge，標籤「審核中」
-- 新增 `cancelled` → 灰色 Badge，標籤「已取消」
-- `app.css` 新增 `.status-revision`、`.status-reviewing`、`.status-cancelled` 樣式
-
----
-
-## 二、任務詳情顯示方式改善
-
-### 2.1 現況問題
-
-點擊任務後，詳情以自訂 `.slide-panel` 在表格下方或右側滑出，但：
-- `.slide-panel`、`.slide-panel-overlay`、`.btn-close` CSS **未定義**，樣式可能不完整
-- 不同頁面（TaskCenter / DeploymentHistory / ProjectManagement）各自實作，未統一
-
-### 2.2 改善方案
-
-**統一使用 MudDrawer 或 MudDialog：**
-
-| 方案 | 適合場景 |
-|------|---------|
-| **MudDrawer**（側邊抽屜） | 快速預覽任務詳情，不離開當前頁面 |
-| **MudDialog**（彈窗） | 完整的任務詳情頁，適合 Pipeline View 展開 |
-
-建議採 **MudDrawer**（右側滑出），取代所有自訂 `.slide-panel`。MudBlazor 已安裝，直接使用原生元件。
-
----
-
-## 三、CSS 缺失修補
-
-### 3.1 缺失的 CSS 變數
-
-| 變數 | 用途 | 修正 |
+| 狀態 | 標籤 | 顏色 |
 |------|------|------|
-| `--color-status-warning` | 橘色警告狀態 | 新增到 `:root` 和 dark mode |
-| `--color-status-revision` | 修正中狀態 | 新增 |
-| `--color-status-reviewing` | 審核中狀態 | 新增 |
+| `revision` | 修正中 | 橘色（`--color-status-warning`） |
+| `reviewing` | 審核中 | 藍紫色 |
+| `cancelled` | 已取消 | 灰色 |
 
-### 3.2 缺失的 CSS Class
+同步新增 `app.css` 對應樣式與缺失的 CSS 變數（`--color-status-warning`、`--color-status-revision`、`--color-status-reviewing`）。
 
-| Class | 使用位置 | 修正 |
-|------|---------|------|
-| `.slide-panel` / `.slide-panel-overlay` | TaskLogDrawer, ProjectManagement | 改用 MudDrawer 後移除，或補定義 |
-| `.btn-close` | 各 Drawer | 改用 MudDrawer 後移除，或補定義 |
-| `.active-toggle` / `.toggle-label` | AgentSettings, RuleManagement | 改用 MudSwitch，或補 CSS |
-| `.alert-info` | AgentSettings | 改用 MudAlert，或補 CSS |
-| `.cursor-pointer` | TaskCenter MudTable row | 補定義 `cursor: pointer` |
+---
+
+### 2. 流程追蹤獨立成頁
+
+**現況：** 流程追蹤藏在任務中心的 Tab 2，需要兩層點擊，且表格過寬造成水平 Scrollbar，Drawer 被藏在右邊。
+
+**改善：**
+- 側邊欄新增「流程追蹤」獨立項目，路由 `/pipeline`
+- 原「任務中心」改名為「任務列表」，路由維持 `/tasks`
+- `TaskCenter.razor` Tab 2 內容移至新的 `PipelineList.razor`（獨立頁面）
+- PipelineView Drawer 繼續沿用，不需修改
+- 表格欄寬限制在可視區域內，消除水平 Scrollbar
+
+---
+
+### 3. PipelineView Drawer 點擊外部自動關閉
+
+**改善：** MudDrawer 加上 `OverlayAutoClose="true"`，點擊 Drawer 外部即自動關閉，不需點關閉按鈕。
+
+---
+
+### 4. 表格 Scrollbar 改為元件內 + PageSize 預設 10
+
+**適用頁面：** 任務列表、流程追蹤、規則管理、專案管理、部署紀錄
+
+- 所有 MudTable 加上 `Height="600px" FixedHeader="true"`，Scrollbar 限制在表格內
+- `RowsPerPage` 預設改為 10，加上 `PageSizeOptions="new int[]{10, 25, 50}"`
+
+---
+
+### 5. CSS 缺失修補
+
+補定義或改用 MudBlazor 原生元件：
+
+| Class | 使用位置 | 處理方式 |
+|------|---------|---------|
+| `.slide-panel` / `.slide-panel-overlay` | TaskLogDrawer, ProjectManagement | 改用 MudDrawer |
+| `.btn-close` | 各 Drawer | 改用 MudDrawer 後移除 |
+| `.active-toggle` / `.toggle-label` | AgentSettings, RuleManagement | 改用 MudSwitch |
+| `.alert-info` | AgentSettings | 改用 MudAlert |
+| `.cursor-pointer` | 各 MudTable 行 | 補定義 `cursor: pointer` |
 | `.text-muted` | AgentSettings | 補定義或用 MudText Typo |
 
-### 3.3 Utility Class 策略
-
-目前混用了自訂 utility class（`.d-flex`、`.justify-space-between`）和 MudBlazor 內建樣式。
-
-**統一方向：** 盡量使用 MudBlazor 的 `Class` 屬性和內建 utility（`d-flex`、`justify-space-between` 等由 MudBlazor 提供），移除 `app.css` 中的重複定義。
-
 ---
 
-## 四、Toggle 開關統一化
+### 6. Toggle 統一改用 MudSwitch
 
-### 4.1 現況
-
-AgentSettings、RuleManagement 使用自訂 HTML checkbox + `.active-toggle` CSS（未定義），外觀為原生 checkbox。
-
-### 4.2 改善方案
-
-全部改用 **MudSwitch**，與 Stage 17 Mock Mode 開關（如有使用 MudSwitch）保持一致：
+AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ```razor
-<MudSwitch T="bool" @bind-Value="_skipCeoConfirm"
+<MudSwitch T="bool" @bind-Value="_isEnabled"
            Color="Color.Primary"
-           Label="跳過 CEO 派工確認" />
+           Label="啟用" />
 ```
 
 ---
 
-## 五、inline style 清理
+## 第二批：中優先（🟡 UX 改善）
 
-### 5.1 現況
+### 7. 首頁佈局重構
 
-多個頁面有硬編碼 `style="..."` 屬性：
+**現況：** Agent 卡片 + 最近任務垂直疊放，最近任務需 scroll 才看到；且最近任務顯示 TaskItem 細節過多。
 
-| 頁面 | 問題 |
-|------|------|
-| AgentSettings.razor | `style="color:red"`、`style="display:flex; gap:8px"` |
-| Home.razor | `style="font-size:0.8rem; padding:4px 10px;"` |
-| RuleManagement.razor | `style="display:flex; align-items:center; gap:16px"` |
-| ProjectManagement.razor | 多處 inline style |
-
-### 5.2 改善方案
-
-- 抽取為 CSS class（在 `app.css` 中定義）
-- 硬編碼顏色改為 CSS 變數（`color:red` → `color:var(--color-status-failed)`）
-- 布局類 inline style 改用 MudBlazor 的 `MudGrid` / `MudStack` / `Class` 屬性
+**改善：**
+- Agent 卡片縮成緊湊小卡（名稱 + 狀態 Badge + 今日完成數），高度約 60px，兩行排完
+- 下方「最近任務」改為「**最近流程**」，資料來源改為 TaskGroup
+- 最近流程顯示欄位：流程名稱、類型 Badge、狀態 Badge、建立時間、PR 連結
+- 預設顯示最近 10 筆
 
 ---
 
-## 六、表單卡片樣式統一
+### 8. 流程類型 / 觸發來源 改用 Badge
 
-### 6.1 現況
+**流程追蹤頁 — 流程類型欄：**
 
-AgentSettings、ProjectManagement、RuleManagement 的新增表單都套用 `.agent-setting-card` class，語義不正確。
+| 值 | Badge 顏色 |
+|---|---|
+| 新功能 | Color.Primary（藍） |
+| Bug Fix | Color.Warning（橘） |
+| 技術改善 | Color.Secondary（紫） |
 
-### 6.2 改善方案
-
-新增 `.form-card` 通用 class，或直接使用 MudBlazor 的 `<MudCard>` + `<MudCardContent>` 取代自訂 CSS。
-
----
-
-## 七、Empty State 一致性
-
-各頁面的空白狀態（無資料）使用 `.empty-state` class + emoji icon，但 emoji 跨瀏覽器顯示不一致。
-
-**改善：** 改用 MudBlazor 的 `<MudIcon>` 或 Material Design icon，確保一致性。
+**任務列表頁 — 觸發來源欄：**
+- `Orchestrator` → 灰色 Badge
+- `Discord` → 藍紫色 Badge
 
 ---
 
-## 八、驗收條件
+### 9. 狀態篩選改為多選
 
-- [ ] 所有任務狀態（pending / running / done / failed / revision / reviewing / cancelled）Badge 樣式一致
-- [ ] 任務詳情使用統一的 MudDrawer 或 MudDialog（不再使用自訂 slide-panel）
-- [ ] 所有缺失的 CSS class 已修復或改用 MudBlazor 元件替代
-- [ ] Toggle 開關統一使用 MudSwitch
-- [ ] 無硬編碼 `style="color:red"` 等 inline 顏色
+改用 `MudSelect` 的 `MultiSelection="true"` 模式，允許同時勾選多個狀態（例如「執行中 + 失敗」）。任務列表與流程追蹤頁同步更新。
+
+---
+
+### 10. Agent 設定頁面改版
+
+**現況：** 每個 Agent 一張大卡片，往下 scroll 才能看到下一個。
+
+**改善：** 左右雙欄佈局：
+- 左側：MudList 顯示所有 Agent 名稱 + 啟用狀態
+- 右側：點選 Agent 後顯示詳情（描述、信任等級 Slider、儲存按鈕）
+
+---
+
+### 11. 新增 / 編輯表單改用 MudDialog
+
+**適用：**
+- 規則管理 → 新增 / 編輯規則
+- Agent 設定 → 新增 Agent
+- 專案管理 → 新增專案
+
+---
+
+### 12. Token 監控標題列 Sticky
+
+向下 scroll 查看圖表時，「Token 監控」標題 + 「今日/本週/本月」切換按鈕列加上 `position: sticky; top: 0`，保持可見。Agent 卡片與圖表正常捲動。
+
+---
+
+### 13. 左側欄主題切換按鈕統一樣式
+
+「主題切換（✳️）」按鈕樣式與「登出」按鈕風格不一致，改用統一的 MudIconButton 或補上 hover 效果。
+
+---
+
+## 第三批：低優先（🔵 細節）
+
+- inline `style="color:red"` 等硬編碼顏色，改為 CSS 變數
+- `.agent-setting-card` 語義不正確，改用 `.form-card` 或 MudCard
+- Empty State emoji 改用 MudBlazor MudIcon（跨瀏覽器一致）
+- inline 布局 style 改用 MudGrid / MudStack
+
+---
+
+## 驗收條件
+
+### 第一批
+- [ ] `revision` / `reviewing` / `cancelled` 狀態 Badge 樣式正確
+- [ ] 側邊欄新增「流程追蹤」獨立項目，點一下即可進入
+- [ ] 「任務中心」已改名為「任務列表」
+- [ ] 流程追蹤表格欄寬正常，無水平 Scrollbar，Drawer 可從右側滑出
+- [ ] PipelineView Drawer 點擊外部自動關閉
+- [ ] 所有 MudTable Scrollbar 在元件內，PageSize 預設 10
+- [ ] 缺失 CSS class 補齊或改用 MudBlazor 元件
+- [ ] Toggle 統一使用 MudSwitch
+
+### 第二批
+- [ ] 首頁 Agent 卡片改為緊湊小卡
+- [ ] 首頁「最近任務」改為「最近流程」（TaskGroup），顯示類型 Badge、狀態、PR 連結
+- [ ] 流程類型、觸發來源欄位以 Badge 顯示
+- [ ] 狀態篩選支援多選
+- [ ] Agent 設定改為左右雙欄佈局
+- [ ] 新增 / 編輯表單改用 MudDialog
+- [ ] Token 監控標題列 sticky
+- [ ] 主題切換按鈕樣式統一
+
+### 共同
+- [ ] 無硬編碼 `style="color:red"` 等 inline 顏色（第一批修高優先，其餘第二批）
 - [ ] Dashboard 各頁面 Dark Mode 下顯示正常
 - [ ] 用 Mock Mode 觸發完整流程，確認 Pipeline View + 狀態 Badge 配合正確
 - [ ] `dotnet build` 通過
 
 ---
 
-## 附錄：Dashboard 已知 UI 問題清單
+## 附錄：已知 UI 問題清單
 
-> 此清單隨開發過程持續更新。Christ 使用 Dashboard 時發現的問題也記在這裡。
-
-| # | 問題 | 頁面 | 優先級 |
-|---|------|------|--------|
-| 1 | `revision` 狀態 Badge 無樣式 | 任務中心 | 🔴 高 |
-| 2 | 任務詳情顯示在表格下方，操作不直覺 | 任務中心 | 🔴 高 |
-| 3 | `.slide-panel` CSS 未定義 | TaskLogDrawer | 🟡 中 |
-| 4 | `.active-toggle` CSS 未定義 | Agent 設定 | 🟡 中 |
-| 5 | `--color-status-warning` CSS 變數缺失 | Agent 設定 | 🟡 中 |
-| 6 | inline `style="color:red"` 硬編碼顏色 | Agent 設定 | 🔵 低 |
-| 7 | `.agent-setting-card` 被各頁面混用 | 多頁面 | 🔵 低 |
-| 8 | Empty State 使用 emoji（跨瀏覽器不一致） | 多頁面 | 🔵 低 |
+| # | 問題 | 頁面 | 優先級 | 批次 |
+|---|------|------|--------|------|
+| 1 | `revision` / `reviewing` / `cancelled` 狀態 Badge 無樣式 | 全域 | 🔴 高 | 第一批 |
+| 2 | 流程追蹤是 Tab 而非獨立頁面，導覽層級太深 | 任務中心 | 🔴 高 | 第一批 |
+| 3 | 流程追蹤表格過寬，水平 Scrollbar 把 Drawer 藏到右邊 | 流程追蹤 | 🔴 高 | 第一批 |
+| 4 | PipelineView Drawer 點擊外部無法關閉 | 流程追蹤 | 🔴 高 | 第一批 |
+| 5 | 表格使用瀏覽器 Scrollbar，PageSize 預設 50 | 多頁面 | 🔴 高 | 第一批 |
+| 6 | `.slide-panel` / `.active-toggle` 等 CSS 未定義 | 多頁面 | 🔴 高 | 第一批 |
+| 7 | Toggle 顯示原生 checkbox（未套用 MudSwitch） | Agent 設定 | 🔴 高 | 第一批 |
+| 8 | 首頁佈局：Agent 卡片 + 最近任務垂直疊放，最近任務需 scroll | 首頁 | 🟡 中 | 第二批 |
+| 9 | 首頁「最近任務」顯示 TaskItem 細節，資訊過細 | 首頁 | 🟡 中 | 第二批 |
+| 10 | 流程類型 / 觸發來源為純文字，辨識度低 | 任務中心 | 🟡 中 | 第二批 |
+| 11 | 狀態篩選為單選，無法多選 | 任務中心 | 🟡 中 | 第二批 |
+| 12 | Agent 設定大卡片佈局，瀏覽費力 | Agent 設定 | 🟡 中 | 第二批 |
+| 13 | 新增表單 inline 展開，擠壓頁面空間 | 多頁面 | 🟡 中 | 第二批 |
+| 14 | Token 監控捲動時標題列消失 | Token 監控 | 🟡 中 | 第二批 |
+| 15 | 主題切換按鈕樣式與登出按鈕不一致 | 全域 | 🟡 中 | 第二批 |
+| 16 | inline `style="color:red"` 硬編碼顏色 | 多頁面 | 🔵 低 | 第三批 |
+| 17 | `.agent-setting-card` 語義不正確，被各頁面混用 | 多頁面 | 🔵 低 | 第三批 |
+| 18 | Empty State 使用 emoji，跨瀏覽器顯示不一致 | 多頁面 | 🔵 低 | 第三批 |
 
 ---
 
 ## 變更紀錄
 
-| 日期 | 內容 |
-|------|------|
-| 2026-04-08 | v1.0 初版建立 |
+| 版本 | 日期 | 內容 |
+|------|------|------|
+| v1.0 | 2026-04-08 | 初版建立 |
+| v1.1 | 2026-04-09 | 新增導覽 UX 重構、表格改善、首頁佈局、MudDialog |
+| v2.0 | 2026-04-09 | 全面重整結構，依優先級分三批，整合所有 UI 問題清單（18 項） |

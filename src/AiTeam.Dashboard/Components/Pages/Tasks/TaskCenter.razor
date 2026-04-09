@@ -2,130 +2,57 @@
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<PageTitle>任務中心 - AI Team Dashboard</PageTitle>
+<PageTitle>任務列表 - AI Team Dashboard</PageTitle>
 
 <div class="page-header">
-    <h2>任務中心</h2>
+    <h2>任務列表</h2>
 </div>
 
-<MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true" PanelClass="pt-3">
+<div class="page-filters mb-3">
+    <select @bind="_statusFilter" @bind:after="OnStatusFilterChangedAsync" class="form-select">
+        <option value="">全部狀態</option>
+        <option value="pending">等待中</option>
+        <option value="running">執行中</option>
+        <option value="done">完成</option>
+        <option value="failed">失敗</option>
+    </select>
+</div>
 
-    @* ── Tab 1：任務列表 ── *@
-    <MudTabPanel Text="任務列表">
-        <div class="page-filters mb-3">
-            <select @bind="_statusFilter" @bind:after="OnStatusFilterChangedAsync" class="form-select">
-                <option value="">全部狀態</option>
-                <option value="pending">等待中</option>
-                <option value="running">執行中</option>
-                <option value="done">完成</option>
-                <option value="failed">失敗</option>
-            </select>
-        </div>
+<MudTable @ref="_tableRef"
+          ServerData="LoadServerDataAsync"
+          Dense="true"
+          Hover="true"
+          Height="600px"
+          FixedHeader="true"
+          RowsPerPage="10"
+          T="TaskItemDto"
+          OnRowClick="OnTaskRowClickAsync"
+          RowClass="cursor-pointer">
+    <HeaderContent>
+        <MudTh>狀態</MudTh>
+        <MudTh>任務標題</MudTh>
+        <MudTh>Agent</MudTh>
+        <MudTh>專案</MudTh>
+        <MudTh>觸發來源</MudTh>
+        <MudTh>建立時間</MudTh>
+        <MudTh>完成時間</MudTh>
+        <MudTh>執行耗時</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+        <MudTd>@context.Title</MudTd>
+        <MudTd>@context.AssignedAgent</MudTd>
+        <MudTd>@context.ProjectName</MudTd>
+        <MudTd>@context.TriggeredBy</MudTd>
+        <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
+        <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
+        <MudTd>@FormatDuration(context.Duration)</MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
+    </PagerContent>
+</MudTable>
 
-        <MudTable @ref="_tableRef"
-                  ServerData="LoadServerDataAsync"
-                  Dense="true"
-                  Hover="true"
-                  RowsPerPage="50"
-                  T="TaskItemDto"
-                  OnRowClick="OnTaskRowClickAsync"
-                  RowClass="cursor-pointer">
-            <HeaderContent>
-                <MudTh>狀態</MudTh>
-                <MudTh>任務標題</MudTh>
-                <MudTh>Agent</MudTh>
-                <MudTh>專案</MudTh>
-                <MudTh>觸發來源</MudTh>
-                <MudTh>建立時間</MudTh>
-                <MudTh>完成時間</MudTh>
-                <MudTh>執行耗時</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd><StatusBadge Status="@context.Status" /></MudTd>
-                <MudTd>@context.Title</MudTd>
-                <MudTd>@context.AssignedAgent</MudTd>
-                <MudTd>@context.ProjectName</MudTd>
-                <MudTd>@context.TriggeredBy</MudTd>
-                <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
-                <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
-                <MudTd>@FormatDuration(context.Duration)</MudTd>
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
-
-        <TaskLogDrawer @bind-IsOpen="@_isTaskDrawerOpen"
-                       SelectedTask="@_selectedTask"
-                       Logs="@_selectedLogs" />
-    </MudTabPanel>
-
-    @* ── Tab 2：流程追蹤 ── *@
-    <MudTabPanel Text="流程追蹤">
-        <div class="page-filters mb-3">
-            <select @bind="_groupStatusFilter" @bind:after="OnGroupStatusFilterChangedAsync" class="form-select">
-                <option value="">全部狀態</option>
-                <option value="running">進行中</option>
-                <option value="done">已完成</option>
-                <option value="failed">失敗</option>
-                <option value="pending">等待中</option>
-            </select>
-        </div>
-
-        <MudTable @ref="_groupTableRef"
-                  ServerData="LoadGroupServerDataAsync"
-                  Dense="true"
-                  Hover="true"
-                  RowsPerPage="20"
-                  T="TaskGroupDto"
-                  OnRowClick="OnGroupRowClickAsync"
-                  RowClass="cursor-pointer">
-            <HeaderContent>
-                <MudTh>狀態</MudTh>
-                <MudTh>任務標題</MudTh>
-                <MudTh>流程類型</MudTh>
-                <MudTh>專案</MudTh>
-                <MudTh>建立時間</MudTh>
-                <MudTh>PR</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd><StatusBadge Status="@context.Status" /></MudTd>
-                <MudTd>@context.Title</MudTd>
-                <MudTd>@WorkflowTypeLabel(context.WorkflowType)</MudTd>
-                <MudTd>@context.Project</MudTd>
-                <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</MudTd>
-                <MudTd>
-                    @if (!string.IsNullOrEmpty(context.DevPrUrl))
-                    {
-                        <MudLink Href="@context.DevPrUrl" Target="_blank">PR</MudLink>
-                    }
-                </MudTd>
-            </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
-        </MudTable>
-
-        @* Pipeline View 側邊 Drawer *@
-        <MudDrawer @bind-Open="@_isPipelineDrawerOpen"
-                   Anchor="Anchor.End"
-                   Elevation="1"
-                   Variant="DrawerVariant.Temporary"
-                   Width="480px"
-                   CloseAfterNavigation="true">
-            <MudDrawerHeader>
-                <MudText Typo="Typo.subtitle1">流程詳情</MudText>
-                <MudSpacer />
-                <MudIconButton Icon="@Icons.Material.Filled.Close"
-                               Size="Size.Small"
-                               OnClick="@(() => _isPipelineDrawerOpen = false)" />
-            </MudDrawerHeader>
-            <MudDrawerContainer Class="pa-3">
-                <PipelineView @ref="_pipelineViewRef"
-                              Group="@_selectedGroup"
-                              OnGroupStatusChanged="@OnGroupStatusChangedAsync" />
-            </MudDrawerContainer>
-        </MudDrawer>
-    </MudTabPanel>
-
-</MudTabs>
+<TaskLogDrawer @bind-IsOpen="@_isTaskDrawerOpen"
+               SelectedTask="@_selectedTask"
+               Logs="@_selectedLogs" />
