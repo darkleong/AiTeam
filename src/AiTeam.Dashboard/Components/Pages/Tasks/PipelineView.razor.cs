@@ -19,6 +19,12 @@ public partial class PipelineView : IAsyncDisposable
     [Parameter]
     public TaskGroupDto? Group { get; set; }
 
+    /// <summary>
+    /// Group 狀態推算後發生變化時通知父元件（TaskCenter），讓父元件延遲刷新群組列表。
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnGroupStatusChanged { get; set; }
+
     #endregion
 
     #region Private State
@@ -72,12 +78,18 @@ public partial class PipelineView : IAsyncDisposable
         // 根據步驟狀態推算 Group 整體狀態，即時更新 header 徽章（無需額外 DB 查詢）
         if (_steps.Count > 0)
         {
+            var prevStatus = Group.Status;
+
             if (_steps.Any(s => s.Task.Status == "failed"))
                 Group.Status = "failed";
             else if (_steps.All(s => s.Task.Status is "done" or "cancelled"))
                 Group.Status = "done";
             else if (_steps.Any(s => s.Task.Status == "running"))
                 Group.Status = "running";
+
+            // 狀態變化時通知父元件，讓父元件延遲刷新群組列表（等 Bot 寫完 DB）
+            if (Group.Status != prevStatus && OnGroupStatusChanged.HasDelegate)
+                await OnGroupStatusChanged.InvokeAsync(Group.Status);
         }
 
         StateHasChanged();

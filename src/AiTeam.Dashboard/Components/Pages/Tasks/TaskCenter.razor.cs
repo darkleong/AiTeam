@@ -143,6 +143,21 @@ public partial class TaskCenter : IAsyncDisposable
         _isPipelineDrawerOpen = true;
     }
 
+    /// <summary>
+    /// PipelineView 推算 Group 狀態變化時呼叫。
+    /// Bot 寫 DB 需要一點時間，延遲 1.5 秒再刷新群組列表，確保讀到最新狀態。
+    /// </summary>
+    private void OnGroupStatusChangedAsync(string newStatus)
+    {
+        if (newStatus is not ("done" or "failed" or "cancelled")) return;
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1500);
+            await InvokeAsync(() => _groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
+        });
+    }
+
     private async Task OnGroupStatusFilterChangedAsync()
         => await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
 

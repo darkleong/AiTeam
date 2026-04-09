@@ -122,7 +122,8 @@
             </MudDrawerHeader>
             <MudDrawerContainer Class="pa-3">
                 <PipelineView @ref="_pipelineViewRef"
-                              Group="@_selectedGroup" />
+                              Group="@_selectedGroup"
+                              OnGroupStatusChanged="@OnGroupStatusChangedAsync" />
             </MudDrawerContainer>
         </MudDrawer>
     </MudTabPanel>
