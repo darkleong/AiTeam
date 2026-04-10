@@ -100,6 +100,20 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ## 第二批：中優先（🟡 UX 改善）
 
+> **架構前提說明（Stage 20 已完成，請閱讀最新架構）**
+>
+> Stage 20 已將 Dashboard 升級為 **全域 InteractiveServer 架構**：`Routes.razor` 宣告 `@rendermode InteractiveServer(prerender: false)`，Layout 與所有頁面共享同一 Circuit。
+>
+> 這代表 Stage 19 Pt.2 實作時：
+> - **`MudThemeProvider` C# binding** 仍不適用（Layout 接收 `@Body` RenderFragment，加 rendermode 會 HTTP 500，這是框架限制）；Dark Mode 維持 CSS 變數 + JS 方案（`html[data-theme="dark"]`）
+> - **`MudDialogProvider` / `IDialogService`** 可完全正常運作（所有元件共享同一 Circuit）
+> - **MudDialog 表單**（Pt.2 主要改善項）已有穩定的 MudLayout 基礎，可直接實作
+> - 不需要再擔心「跨 Circuit scoped service 隔離」問題（Stage 20 已解決）
+>
+> 詳細架構說明請參閱 [Stage_20_Roadmap.md](./Stage_20_Roadmap.md)。
+
+---
+
 ### 7. 首頁佈局重構
 
 **現況：** Agent 卡片 + 最近任務垂直疊放，最近任務需 scroll 才看到；且最近任務顯示 TaskItem 細節過多。
