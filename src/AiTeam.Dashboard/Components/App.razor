@@ -13,7 +13,7 @@
             document.documentElement.dataset.theme = t;
         })();
 
-        // appTheme：供 MainLayout C# 透過 JS Interop 呼叫
+        // appTheme：Dark Mode 管理（localStorage + html[data-theme]）
         window.appTheme = {
             init: function () {
                 var t = localStorage.getItem('theme') || 'light';
@@ -24,6 +24,20 @@
                 var t = isDark ? 'dark' : 'light';
                 localStorage.setItem('theme', t);
                 document.documentElement.dataset.theme = t;
+            }
+        };
+
+        // aiteamToggleSidebar：透過 CSS class 切換 MudDrawer Persistent 收合狀態
+        window.aiteamToggleSidebar = function () {
+            var drawer = document.querySelector('.mud-drawer-persistent');
+            if (!drawer) return;
+            var isOpen = drawer.classList.contains('mud-drawer--open');
+            if (isOpen) {
+                drawer.classList.remove('mud-drawer--open');
+                drawer.classList.add('mud-drawer-closed');
+            } else {
+                drawer.classList.remove('mud-drawer-closed');
+                drawer.classList.add('mud-drawer--open');
             }
         };
     </script>

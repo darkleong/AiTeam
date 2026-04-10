@@ -1,24 +1,33 @@
 @inherits LayoutComponentBase
-@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
-<MudThemeProvider IsDarkMode="_isDarkMode" IsDarkModeChanged="OnDarkModeChangedAsync" />
+<MudThemeProvider IsDarkMode="false" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Default" Dense="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Edge="Edge.Start" OnClick="ToggleSidebar" />
+        <span onclick="window.aiteamToggleSidebar()">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Edge="Edge.Start" />
+        </span>
         <MudText Typo="Typo.h6" Class="ml-2">AI Team</MudText>
         <MudSpacer />
     </MudAppBar>
-    <MudDrawer @bind-Open="_sidebarOpen" Variant="DrawerVariant.Persistent" Elevation="2" ClipMode="DrawerClipMode.Always">
+    <MudDrawer Open="true" id="main-sidebar" Variant="DrawerVariant.Persistent"
+               Elevation="2" ClipMode="DrawerClipMode.Always">
         <NavMenu />
         <MudSpacer />
         <div class="pa-2">
             <MudStack Row="true" AlignItems="AlignItems.Center">
-                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
-                               title="切換主題" OnClick="@(() => OnDarkModeChangedAsync(!_isDarkMode))" />
+                @* 主題切換：CSS 雙圖示，隨 html[data-theme] 自動顯示/隱藏 *@
+                <span class="theme-btn-dark" onclick="window.appTheme.setDark(true)">
+                    <MudIconButton Icon="@Icons.Material.Filled.DarkMode"
+                                   title="切換深色模式" />
+                </span>
+                <span class="theme-btn-light" onclick="window.appTheme.setDark(false)">
+                    <MudIconButton Icon="@Icons.Material.Filled.LightMode"
+                                   title="切換淺色模式" />
+                </span>
                 <LogoutButton />
             </MudStack>
             <MudText Typo="Typo.caption" Class="d-block text-center">@AppVersion</MudText>

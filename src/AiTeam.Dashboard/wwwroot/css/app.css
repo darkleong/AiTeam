@@ -431,6 +431,59 @@ body {
 .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
 
 /* ========================================
+   MudBlazor Dark Mode — 覆蓋 CSS 變數
+   MainLayout 為 Static SSR，無法透過 MudThemeProvider IsDarkMode 動態切換，
+   改由 html[data-theme="dark"] 高優先度 selector 覆寫 --mud-palette-* 變數。
+   ======================================== */
+
+html[data-theme="dark"] {
+    /* 文字 */
+    --mud-palette-text-primary:    rgba(233, 236, 239, 0.87);
+    --mud-palette-text-secondary:  rgba(173, 181, 189, 0.60);
+    --mud-palette-text-disabled:   rgba(173, 181, 189, 0.38);
+
+    /* 背景與表面 */
+    --mud-palette-background:      #1a1a2e;
+    --mud-palette-background-grey: #16213e;
+    --mud-palette-surface:         #0f3460;
+
+    /* 分隔線 */
+    --mud-palette-divider:         rgba(73, 80, 87, 1);
+    --mud-palette-divider-light:   rgba(73, 80, 87, 0.4);
+
+    /* 表格 */
+    --mud-palette-table-hover:     rgba(255, 255, 255, 0.08);
+    --mud-palette-table-striped:   rgba(255, 255, 255, 0.04);
+    --mud-palette-table-lines:     rgba(73, 80, 87, 1);
+
+    /* 動作按鈕 */
+    --mud-palette-action-default:  rgba(173, 181, 189, 0.54);
+    --mud-palette-action-disabled: rgba(173, 181, 189, 0.26);
+
+    /* Overlay */
+    --mud-palette-overlay-dark:    rgba(33, 33, 33, 0.5);
+    --mud-palette-overlay-light:   rgba(255, 255, 255, 0.06);
+
+    /* Drawer / AppBar */
+    --mud-palette-drawer-background: #16213e;
+    --mud-palette-drawer-text:       rgba(233, 236, 239, 0.87);
+    --mud-palette-drawer-icon:       rgba(173, 181, 189, 0.54);
+    --mud-palette-appbar-background: #16213e;
+    --mud-palette-appbar-text:       rgba(233, 236, 239, 0.87);
+}
+
+/* ========================================
+   主題切換雙圖示 — CSS 控制顯示/隱藏
+   Light mode: 顯示「切換深色」圖示；Dark mode: 顯示「切換淺色」圖示
+   ======================================== */
+
+/* Light mode：隱藏淺色按鈕（已是淺色，不需切換到淺色） */
+html:not([data-theme="dark"]) .theme-btn-light { display: none; }
+
+/* Dark mode：隱藏深色按鈕（已是深色，不需切換到深色） */
+html[data-theme="dark"] .theme-btn-dark { display: none; }
+
+/* ========================================
    Form Controls
    ======================================== */
 
