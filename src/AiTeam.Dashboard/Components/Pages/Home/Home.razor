@@ -6,13 +6,12 @@
 
 <div class="page-header">
     <h2>總覽</h2>
-    <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done,#22c55e)" : "var(--color-status-failed,#ef4444)")">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
             ● SignalR @(_hubConnected ? "已連線" : "未連線")
         </span>
-        <button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px;"
-                @onclick="TestSignalRAsync">測試推送</button>
-    </div>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="TestSignalRAsync">測試推送</MudButton>
+    </MudStack>
 </div>
 
 <section class="agent-status-section">
@@ -20,7 +19,7 @@
     @if (_agentStatuses.Count == 0)
     {
         <div class="empty-state">
-            <div class="empty-state-icon">🤖</div>
+            <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Large" Color="Color.Default" /></div>
             <p class="empty-state-title">尚未載入 Agent 資料</p>
             <p class="empty-state-hint">請確認 Bot 服務已啟動，並重新整理頁面</p>
         </div>
@@ -70,7 +69,7 @@
         @if (_recentGroups.Count == 0)
         {
             <div class="empty-state">
-                <div class="empty-state-icon">📭</div>
+                <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Default" /></div>
                 <p class="empty-state-title">還沒有任何流程</p>
                 <p class="empty-state-hint">去 Discord 的 <strong>#victoria-ceo</strong> 頻道下達指令，或直接在各 Agent 頻道分配任務</p>
             </div>

@@ -33,13 +33,12 @@
         <MudTd>@context.Name</MudTd>
         <MudTd>@context.TeamName</MudTd>
         <MudTd>@context.TaskCount</MudTd>
-        <MudTd>
-            <label @onclick:stopPropagation="true">
-                <input type="checkbox"
-                       checked="@context.IsActive"
-                       @onchange="(e) => ToggleIsActiveAsync(context, (bool)e.Value!)" />
-                @(context.IsActive ? "啟用" : "停用")
-            </label>
+        <MudTd @onclick:stopPropagation="true">
+            <MudSwitch T="bool"
+                       Value="@context.IsActive"
+                       ValueChanged="@((bool v) => ToggleIsActiveAsync(context, v))"
+                       Color="Color.Primary"
+                       Label="@(context.IsActive ? "啟用中" : "已停用")" />
         </MudTd>
         <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd")</MudTd>
     </RowTemplate>
@@ -48,7 +47,7 @@
     </PagerContent>
     <NoRecordsContent>
         <div class="empty-state">
-            <div class="empty-state-icon">📁</div>
+            <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Large" Color="Color.Default" /></div>
             <p class="empty-state-title">還沒有任何專案</p>
             <p class="empty-state-hint">點擊右上角「新增專案」建立第一個專案，讓任務可以正確關聯</p>
         </div>
@@ -71,12 +70,11 @@
             <p><strong>任務數量：</strong>@_selectedProject.TaskCount</p>
             <p>
                 <strong>狀態：</strong>
-                <label>
-                    <input type="checkbox"
-                           checked="@_selectedProject.IsActive"
-                           @onchange="(e) => ToggleIsActiveAsync(_selectedProject, (bool)e.Value!)" />
-                    @(_selectedProject.IsActive ? "啟用中" : "已停用")
-                </label>
+                <MudSwitch T="bool"
+                           Value="@_selectedProject.IsActive"
+                           ValueChanged="@((bool v) => ToggleIsActiveAsync(_selectedProject, v))"
+                           Color="Color.Primary"
+                           Label="@(_selectedProject.IsActive ? "啟用中" : "已停用")" />
             </p>
             @if (_selectedProject.RepoUrl is not null)
             {

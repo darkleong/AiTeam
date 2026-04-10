@@ -1,9 +1,9 @@
 # Stage 19 — Dashboard UI 全面打磨
 
-> 版本：v2.2
+> 版本：v3.3
 > 建立日期：2026-04-08
 > 更新日期：2026-04-11
-> 狀態：✅ 第一批、第二批均已完成
+> 狀態：✅ 第一批、第二批、第三批均已完成
 
 ---
 
@@ -13,7 +13,7 @@
 |------|------|------|
 | 第一批（🔴 高優先） | ✅ 已完成 | StatusBadge、PipelineList、MudSwitch、表格 FixedHeader 等 |
 | 第二批（🟡 中優先） | ✅ 已完成 | 2026-04-11 實作完成 |
-| 第三批（🔵 低優先） | ⏸️ 待排 | 第二批完成後接續 |
+| 第三批（🔵 低優先） | ✅ 已完成 | 2026-04-11 實作完成 |
 
 ---
 
@@ -206,24 +206,121 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ## 第三批：低優先（🔵 細節）
 
-- inline `style="color:red"` 等硬編碼顏色，改為 CSS 變數
-- `.agent-setting-card` 語義不正確，改用 `.form-card` 或 MudCard
-- Empty State emoji 改用 MudBlazor MudIcon（跨瀏覽器一致）
-- inline 布局 style 改用 MudGrid / MudStack
+### 16. Inline 硬編碼顏色改為 CSS 變數
+
+全域搜尋 `style="color:red"`、`style="color:#`、`style="background:` 等 inline 顏色，改為對應的 CSS 變數（`--mud-palette-error`、`--color-status-*` 等）或 MudBlazor 屬性（`Color="Color.Error"`）。
+
+---
+
+### 17. `.agent-setting-card` 語義修正
+
+`.agent-setting-card` 被多處頁面混用，語義不正確。改用 `.form-card` 或直接換成 `MudCard`，並確認 CSS 中對應 class 一起更名或移除。
+
+---
+
+### 18. Empty State emoji 改用 MudIcon
+
+Empty State 區塊使用 emoji（如 📭、🤖），在不同作業系統 / 瀏覽器顯示不一致。改用 MudBlazor 的 `MudIcon`：
+```razor
+<MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Default" />
+```
+
+---
+
+### 19. Inline 布局 style 改用 MudGrid / MudStack
+
+`style="display:flex; gap:8px"` 等 inline 布局 style，改用 `MudStack Row="true" Spacing="2"` 或 `MudGrid` 統一管理間距。
+
+---
+
+### 20. ProjectManagement IsActive 改用 MudSwitch
+
+**檔案：** `Components/Pages/Projects/ProjectManagement.razor`
+
+目前有**兩處**原生 `<input checked="...">` 需換成 MudSwitch：
+- 表格列的 IsActive 欄（`@onchange` 直接觸發 ToggleIsActiveAsync）
+- Drawer 內的詳情表單
+
+統一改為：
+```razor
+<MudSwitch T="bool"
+           Value="@context.IsActive"
+           ValueChanged="@((bool v) => ToggleIsActiveAsync(context, v))"
+           Color="Color.Primary"
+           Label="@(context.IsActive ? "啟用中" : "已停用")" />
+```
+
+---
+
+### 21. 側邊欄收合狀態持久化
+
+**檔案：** `Components/App.razor`（`aiteamToggleSidebar` JS）
+
+目前側邊欄收合只是 DOM class 切換，重整頁面後狀態遺失。補上 localStorage 讀寫：
+```js
+window.aiteamToggleSidebar = function () {
+    // 切換邏輯（現有）...
+    localStorage.setItem('sidebarOpen', isOpen ? '0' : '1');
+};
+// 頁面載入時讀取初始狀態（加在 App.razor 的 inline script）：
+(function () {
+    if (localStorage.getItem('sidebarOpen') === '0') {
+        // 套用收合 class
+    }
+})();
+```
+
+---
+
+### 22. Home.razor 測試推送按鈕改用 MudButton
+
+**檔案：** `Components/Pages/Home/Home.razor`
+
+頁首的「測試推送」目前是原生 `<button class="btn btn-secondary">`，與整個 Dashboard 的 MudButton 風格不一致：
+```razor
+@* 原本 *@
+<button class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px;"
+        @onclick="TestSignalRAsync">測試推送</button>
+
+@* 改為 *@
+<MudButton Variant="Variant.Outlined" Size="Size.Small"
+           OnClick="TestSignalRAsync">測試推送</MudButton>
+```
+
+---
+
+### 23. RuleManagement Agent Badge 改用 MudChip
+
+**檔案：** `Components/Pages/Rules/RuleManagement.razor`
+
+「套用對象」欄目前使用 `<span class="status-badge" style="background:@GetAgentColor(...)">` 加 inline 動態背景色，應改用 MudChip 統一風格：
+```razor
+@* 原本 *@
+<span class="status-badge" style="background:@GetAgentColor(context.AgentName)">
+    @(context.AgentName ?? "全域")
+</span>
+
+@* 改為 *@
+<MudChip T="string" Size="Size.Small" Color="@GetAgentChipColor(context.AgentName)">
+    @(context.AgentName ?? "全域")
+</MudChip>
+```
+
+`GetAgentChipColor()` 將 Agent 名稱對應 MudBlazor `Color` enum（`Color.Primary`、`Color.Secondary` 等），取代原本回傳 CSS 色碼的 `GetAgentColor()`。
 
 ---
 
 ## 驗收條件
 
 ### 第一批
-- [ ] `revision` / `reviewing` / `cancelled` 狀態 Badge 樣式正確
-- [ ] 側邊欄新增「流程追蹤」獨立項目，點一下即可進入
-- [ ] 「任務中心」已改名為「任務列表」
-- [ ] 流程追蹤表格欄寬正常，無水平 Scrollbar，Drawer 可從右側滑出
-- [ ] PipelineView Drawer 點擊外部自動關閉
-- [ ] 所有 MudTable Scrollbar 在元件內，PageSize 預設 10
-- [ ] 缺失 CSS class 補齊或改用 MudBlazor 元件
-- [ ] Toggle 統一使用 MudSwitch
+- [x] `revision` / `reviewing` / `cancelled` 狀態 Badge 樣式正確
+- [x] 側邊欄新增「流程追蹤」獨立項目，點一下即可進入
+- [x] 「任務中心」已改名為「任務列表」
+- [x] 流程追蹤表格欄寬正常，無水平 Scrollbar，Drawer 可從右側滑出
+- [x] PipelineView Drawer 點擊外部自動關閉
+- [x] 所有 MudTable Scrollbar 在元件內，PageSize 預設 10
+- [x] 缺失 CSS class 補齊或改用 MudBlazor 元件
+- [x] Toggle 統一使用 MudSwitch
 
 ### 第二批
 - [x] 首頁 Agent 卡片改為緊湊小卡
@@ -237,11 +334,20 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 - [x] TaskLogDrawer overlay 關閉後父元件狀態正確同步（提前完成，Stage 19 Pt.1 已修）
 - [x] MudProviders.razor prerender 對齊其他頁面（提前完成，Stage 20 已修）
 
+### 第三批
+- [x] Inline 硬編碼顏色全部改為 CSS 變數或 MudBlazor 屬性
+- [x] `.agent-setting-card` 更名為 `.system-config-card`
+- [x] Empty State emoji 改用 MudIcon
+- [x] Inline 布局 style 改用 MudStack
+- [x] ProjectManagement IsActive 改用 MudSwitch（表格列 + Drawer 各一處）
+- [x] 側邊欄收合狀態重整後仍保留（localStorage 持久化）
+- [x] Home.razor 測試推送按鈕改用 MudButton
+- [x] RuleManagement Agent Badge 改用 MudChip（`GetAgentChipColor()` 取代 inline CSS 色碼）
+
 ### 共同
-- [ ] 無硬編碼 `style="color:red"` 等 inline 顏色（第一批修高優先，其餘第二批）
 - [ ] Dashboard 各頁面 Dark Mode 下顯示正常
 - [ ] 用 Mock Mode 觸發完整流程，確認 Pipeline View + 狀態 Badge 配合正確
-- [ ] `dotnet build` 通過
+- [ ] `dotnet build` 通過（0 errors、0 warnings）
 
 ---
 
@@ -267,6 +373,11 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 | 16 | inline `style="color:red"` 硬編碼顏色 | 多頁面 | 🔵 低 | 第三批 |
 | 17 | `.agent-setting-card` 語義不正確，被各頁面混用 | 多頁面 | 🔵 低 | 第三批 |
 | 18 | Empty State 使用 emoji，跨瀏覽器顯示不一致 | 多頁面 | 🔵 低 | 第三批 |
+| 19 | Inline 布局 style 未使用 MudGrid / MudStack | 多頁面 | 🔵 低 | 第三批 |
+| 20 | ProjectManagement IsActive 仍使用原生 checkbox（表格列 + Drawer 各一處） | 專案管理 | 🔵 低 | 第三批 |
+| 21 | 側邊欄收合狀態未持久化（重整後重置） | 全域 | 🔵 低 | 第三批 |
+| 22 | Home.razor 測試推送按鈕仍為原生 `<button class="btn btn-secondary">` | 首頁 | 🔵 低 | 第三批 |
+| 23 | RuleManagement Agent 名稱 Badge 使用 `<span>` + inline 動態背景色 | 規則管理 | 🔵 低 | 第三批 |
 
 ---
 
@@ -405,3 +516,6 @@ public async Task<...> GetTaskGroupsPagedAsync(
 | v2.2 | 2026-04-11 | Stage 20 驗收完成；第二批狀態改為進行中；架構說明修正（Per-page Interactive 維持不變） |
 | v2.3 | 2026-04-11 | 第二批實作完成（7 項：首頁重構、Badge、多選篩選、Agent 雙欄、MudDialog 表單、Sticky、hover）|
 | v3.0 | 2026-04-11 | 補充第二批完整實作紀錄（新建檔案、關鍵模式、五項踩坑、驗收結果）|
+| v3.1 | 2026-04-11 | 第三批擴充為 7 項（補入：inline 布局、ProjectManagement MudSwitch、側邊欄持久化、原生 select 對齊）；附錄問題清單更新至 22 項 |
+| v3.2 | 2026-04-11 | 第三批再次調整：移除已完成的「原生 select」項目；新增 Item 22（Home 測試推送按鈕）、Item 23（RuleManagement Agent Badge）；Item 20 補充兩處 checkbox 位置；附錄更新至 23 項 |
+| v3.3 | 2026-04-11 | 第三批實作完成（8 項：MudChip、MudIcon×4、MudStack×4、MudSwitch×2、MudButton、class 更名、localStorage 持久化）|

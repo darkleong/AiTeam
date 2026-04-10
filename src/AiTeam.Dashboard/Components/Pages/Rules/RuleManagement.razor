@@ -16,7 +16,7 @@
 @if (_rules.Count == 0)
 {
     <div class="empty-state">
-        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Default" /></div>
         <p class="empty-state-title">還沒有任何規則</p>
         <p class="empty-state-hint">點擊右上角「新增規則」來建立 CEO 的行為準則</p>
     </div>
@@ -40,9 +40,9 @@ else if (_rules.Count > 0)
         <RowTemplate>
             <MudTd style="flex:1; font-size:0.9rem">@context.Content</MudTd>
             <MudTd>
-                <span class="status-badge" style="background:@GetAgentColor(context.AgentName)">
+                <MudChip T="string" Size="Size.Small" Color="@GetAgentChipColor(context.AgentName)">
                     @(context.AgentName ?? "全域")
-                </span>
+                </MudChip>
             </MudTd>
             <MudTd>
                 <span style="font-size:0.75rem; color:var(--color-text-secondary)">@context.SortOrder</span>
@@ -55,12 +55,12 @@ else if (_rules.Count > 0)
                            Label="@(context.IsActive ? "啟用" : "停用")" />
             </MudTd>
             <MudTd>
-                <div style="display:flex; gap:8px">
+                <MudStack Row="true" Spacing="2">
                     <MudButton Size="Size.Small" Variant="Variant.Outlined"
                                OnClick="@(() => OpenEditRuleDialogAsync(context))">編輯</MudButton>
                     <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
                                OnClick="@(() => DeleteRuleAsync(context.Id))">刪除</MudButton>
-                </div>
+                </MudStack>
             </MudTd>
         </RowTemplate>
         <PagerContent>

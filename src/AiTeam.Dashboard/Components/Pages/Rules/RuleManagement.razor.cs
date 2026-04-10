@@ -32,18 +32,19 @@ public partial class RuleManagement
         new("Designer",     AgentNames.Designer),
     ];
 
-    private static string GetAgentColor(string? agentName) => agentName switch
+    private static Color GetAgentChipColor(string? agentName) => agentName switch
     {
-        AgentNames.Ceo          => "#6366f1",
-        AgentNames.Dev          => "#0284c7",
-        AgentNames.Ops          => "#0891b2",
-        AgentNames.Qa           => "#7c3aed",
-        AgentNames.Doc          => "#6d28d9",
-        AgentNames.Requirements => "#b45309",
-        AgentNames.Reviewer     => "#be185d",
-        AgentNames.Release      => "#047857",
-        AgentNames.Designer     => "#c2410c",
-        _                       => "#6c757d",  // 全域
+        AgentNames.Ceo          => Color.Primary,
+        AgentNames.Dev          => Color.Info,
+        AgentNames.Ops          => Color.Tertiary,
+        AgentNames.Qa           => Color.Secondary,
+        AgentNames.Doc          => Color.Secondary,
+        AgentNames.Requirements => Color.Warning,
+        AgentNames.Reviewer     => Color.Error,
+        AgentNames.Release      => Color.Success,
+        AgentNames.Designer     => Color.Warning,
+        AgentNames.Pm           => Color.Info,
+        _                       => Color.Default,  // 全域
     };
 
     #endregion

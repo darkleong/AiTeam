@@ -300,10 +300,10 @@ body {
 }
 
 /* ========================================
-   Agent Setting Card
+   System Config Card（原 Agent Setting Card）
    ======================================== */
 
-.agent-setting-card {
+.system-config-card {
     background: var(--color-bg-card);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-card);
@@ -312,7 +312,11 @@ body {
     box-shadow: var(--shadow-card);
 }
 
-.agent-setting-header {
+.system-config-card--warning {
+    border-color: var(--color-status-warning) !important;
+}
+
+.system-config-header {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -389,9 +393,9 @@ body {
 }
 
 .empty-state-icon {
-    font-size: 2.5rem;
     margin-bottom: 12px;
-    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    display: flex;
+    justify-content: center;
 }
 
 .empty-state-title {

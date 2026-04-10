@@ -42,12 +42,29 @@
                 drawer.classList.remove('mud-drawer--open');
                 drawer.classList.add('mud-drawer--closed');
                 layout.classList.remove('mud-drawer-open-persistent-left');
+                localStorage.setItem('sidebarOpen', '0');
             } else {
                 drawer.classList.remove('mud-drawer--closed');
                 drawer.classList.add('mud-drawer--open');
                 layout.classList.add('mud-drawer-open-persistent-left');
+                localStorage.setItem('sidebarOpen', '1');
             }
         };
+
+        // 側邊欄初始化：讀取 localStorage 決定初始收合狀態
+        (function () {
+            if (localStorage.getItem('sidebarOpen') === '0') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    var drawer = document.querySelector('.mud-drawer-persistent');
+                    var layout = document.querySelector('.mud-layout');
+                    if (!drawer || !layout) return;
+                    drawer.classList.remove('mud-drawer--initial');
+                    drawer.classList.remove('mud-drawer--open');
+                    drawer.classList.add('mud-drawer--closed');
+                    layout.classList.remove('mud-drawer-open-persistent-left');
+                });
+            }
+        })();
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
