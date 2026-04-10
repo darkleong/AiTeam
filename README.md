@@ -1,6 +1,6 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。**Stage 17 起加入 Mock Mode**：Dashboard 一鍵開關，所有 Claude Code / LLM 呼叫切換為模擬結果，不消耗 API 費用；`/mock` 斜線指令可直接觸發四種工作流程測試（新功能 / 含提案 / Bug 修復 / 技術改善）；Runtime 代理模式（ClaudeCodeProxy）切換，5 分鐘內生效，無需重啟容器。**Stage 18 起 Dashboard 可觀測性升級**：首頁 Agent 狀態卡即時更新（執行中 / 閒置 / 錯誤）；任務中心新增「流程追蹤」Tab，點擊 TaskGroup 展開 Pipeline View（垂直 MudStepper + 懶載入 MudTimeline），流程進行中 Stepper 即時更新步驟狀態，不需手動刷新。**Stage 19 Pt.1 Dashboard UI 全面打磨**：StatusBadge 統一元件、PipelineList 獨立頁面（`/pipeline`）、MudTable 規格統一（FixedHeader、Hover、Breakpoint）、MudSwitch 取代自訂 toggle。**Stage 20 Dashboard 全面換 MudBlazor Layout**：`MainLayout` 改用 `MudLayout` + `MudAppBar` + `MudDrawer Persistent`；`NavMenu` 改用 `MudNavMenu`；Dark Mode 改用 CSS 變數 + JS（`html[data-theme="dark"]` 覆寫 `--mud-palette-*`）；TaskLogDrawer / PipelineList / ProjectManagement 三處 `slide-panel` 全換 `MudDrawer Temporary`；建立 `Routes.razor` 宣告全域 `@rendermode InteractiveServer`，讓 Layout、頁面、MudProviders 共享同一 Circuit，解決 scoped DI 隔離問題。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（9 個 Agent）負責執行軟體開發與部署任務，**Stage 10 起全流程自動閉環**：從老闆說需求到通知 merge PR，中間所有推進都不需要手動介入。**Stage 11 起 Dev Agent（Cody）透過 Claude Code CLI 自主開發**：自行探索 repo、寫碼、dotnet build 驗證、修錯，直到 build 通過才 commit 開 PR。**Stage 12 起提案流程全面升級**：Rosa / Demi / Vera / Sage 均可透過 Claude Code 唯讀探索 codebase，老闆附圖也能正確解讀，UI 規格從 GitHub commit 改存 DB 並以 Discord 附件傳送。**Stage 13 起流程全面修正**：Dev → Reviewer → QA → Doc 全串行、一個需求只產生一個 PR（code + tests + docs 三個 commit）、Issues 在 PR merge 後自動關閉。**Stage 14 起 CEO 分類補強**：Victoria 新增技術改善分類、Release/Ops/Doc 直接路由、任務取消能力，老闆只需在 #victoria-ceo 一站式指揮所有 Agent。**Stage 15 起 Victoria 升級為有腦的技術顧問**：透過 Claude Code 自主探索 codebase 回答技術問題、讀寫 docs/ 文件並 git push、Session 對話歷史（DB 持久化，30 分鐘 timeout）、長期記憶（跨 session 記住偏好與決策）。**Stage 16 起加入 PM Agent（Petra）品質審核閘門**：Rosa → Petra → Demi → Petra → 老闆確認 → Cody 計畫書 → Petra → Cody coding → Vera → Petra；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent（Quinn）重構為 Claude Code session（Write 工具直接寫測試檔 + dotnet build 驗證）。**Stage 17 起加入 Mock Mode**：Dashboard 一鍵開關，所有 Claude Code / LLM 呼叫切換為模擬結果，不消耗 API 費用；`/mock` 斜線指令可直接觸發四種工作流程測試（新功能 / 含提案 / Bug 修復 / 技術改善）；Runtime 代理模式（ClaudeCodeProxy）切換，5 分鐘內生效，無需重啟容器。**Stage 18 起 Dashboard 可觀測性升級**：首頁 Agent 狀態卡即時更新（執行中 / 閒置 / 錯誤）；任務中心新增「流程追蹤」Tab，點擊 TaskGroup 展開 Pipeline View（垂直 MudStepper + 懶載入 MudTimeline），流程進行中 Stepper 即時更新步驟狀態，不需手動刷新。**Stage 19 Dashboard UI 全面打磨（Pt.1 + Pt.2）**：Pt.1：StatusBadge 統一元件、PipelineList 獨立頁面（`/pipeline`）、MudTable 規格統一（FixedHeader、Hover）、MudSwitch 取代自訂 toggle；Pt.2：首頁緊湊 Agent 小卡 + 最近流程（TaskGroup）、流程類型 / 觸發來源 MudChip Badge、MudSelect 多選篩選、Agent 設定左右雙欄（MudList `@bind-SelectedValue`）、新增 / 編輯表單改用 MudDialog（`IDialogService.ShowAsync` + `result is { Canceled: false }` 安全取值）、Token 監控標題列 sticky、主題切換按鈕 hover CSS。**Stage 20 Dashboard 全面換 MudBlazor Layout**：`MainLayout` 改用 `MudLayout` + `MudAppBar` + `MudDrawer Persistent`；`NavMenu` 改用 `MudNavMenu`；Dark Mode 改用 CSS 變數 + JS（`html[data-theme="dark"]` 覆寫 `--mud-palette-*`）；TaskLogDrawer / PipelineList / ProjectManagement 三處 `slide-panel` 全換 `MudDrawer Temporary`；建立 `Routes.razor` 宣告全域 `@rendermode InteractiveServer`，讓 Layout、頁面、MudProviders 共享同一 Circuit，解決 scoped DI 隔離問題。
 
 ---
 
@@ -238,6 +238,40 @@ CEO ✅ → Rosa ✅ → Petra ✅ → Demi ✅ → Petra ✅ → Dev ✅ → Pe
 
 ---
 
+## Dashboard UX 打磨（Stage 19 Pt.2）
+
+Stage 19 Pt.2 在 MudBlazor Layout 基礎上（Stage 20 完成後）全面改善 Dashboard 操作體驗。
+
+### 首頁重構
+
+- **Agent 狀態區**：每個 Agent 改為緊湊 MudPaper 小卡（高度約 52px），名稱 + StatusBadge + 今日完成數，用 MudGrid 兩行排完
+- **最近流程**：資料來源改為 `TaskGroup`（呼叫 `DashboardTaskService.GetRecentTaskGroupsAsync(limit: 10)`），顯示流程名稱、類型 Badge、狀態 Badge、建立時間、PR 連結
+
+### 流程追蹤 / 任務列表 — Badge 欄位
+
+| 欄位 | 值 → Badge 顏色 |
+|------|----------------|
+| 流程類型 | 新功能 → Primary（藍）、Bug Fix → Warning（橘）、技術改善 → Secondary（紫） |
+| 觸發來源 | Discord → Secondary（藍紫）、Orchestrator → Default（灰） |
+
+### 狀態篩選多選
+
+MudSelect `MultiSelection="true"` + `@bind-SelectedValues:after="OnStatusFilterChangedAsync"`；Service 層參數改為 `IReadOnlyCollection<string>?`，LINQ 用 `.Contains()`。
+
+### Agent 設定左右雙欄
+
+左側 MudList 列出所有 Agent，右側顯示詳情（描述、信任等級 Slider、啟停 Switch、儲存按鈕）。`@bind-SelectedValue="_selectedAgent"` 自動同步，**不另加 `SelectedValueChanged`**（兩者共存會編譯報錯）。
+
+### 新增 / 編輯表單 MudDialog
+
+規則管理、Agent 設定（新增）、專案管理的新增 / 編輯表單全部改為 MudDialog 彈出式，移除 inline `@if (_showCreateForm)` 區塊。安全取值寫法：
+```csharp
+var result = await dialog.Result;
+if (result is { Canceled: false } && result.Data is T created) { ... }
+```
+
+---
+
 ## Dashboard MudBlazor Layout 架構（Stage 20）
 
 Stage 20 將 Dashboard 的 Layout 基礎設施全面換成 MudBlazor，建立穩定的元件體系。
@@ -410,7 +444,7 @@ docker compose --env-file .env up -d
 | Stage 16 | PM Agent（Petra）品質審核閘門：Rosa/Demi/Dev_plan/Vera 四個審核點；Vera/QA 重構為 Claude Code session | ✅ 完成 |
 | Stage 17 | Mock Mode：IClaudeCodeService 介面 + ClaudeCodeProxy 代理模式 + /mock 指令（4 種流程）；Dashboard 開關 5 分鐘生效 | ✅ 完成 |
 | Stage 18 | Dashboard 可觀測性升級：Agent 狀態卡即時更新 + Pipeline View（垂直 MudStepper + MudTimeline 懶載入 + SignalR 即時推進） | ✅ 完成 |
-| Stage 19 | Dashboard UI 全面打磨：StatusBadge 統一元件、PipelineList 獨立頁、MudTable 規格統一、MudSwitch 替換（Pt.1 完成；Pt.2 規劃中） | 🔄 進行中 |
+| Stage 19 | Dashboard UI 全面打磨：StatusBadge、PipelineList 獨立頁、MudTable 規格統一（Pt.1）；首頁緊湊小卡 + 最近流程、MudChip Badge、MudSelect 多選、Agent 雙欄、MudDialog 表單、Sticky、hover CSS（Pt.2） | ✅ 完成 |
 | Stage 20 | Dashboard 全面換 MudBlazor Layout：MudLayout + Routes.razor 全域 Circuit + CSS 變數 Dark Mode + MudDrawer Temporary（三處 slide-panel） | ✅ 完成 |
 
 ---

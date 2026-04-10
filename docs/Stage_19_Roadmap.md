@@ -226,16 +226,16 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 - [ ] Toggle 統一使用 MudSwitch
 
 ### 第二批
-- [ ] 首頁 Agent 卡片改為緊湊小卡
-- [ ] 首頁「最近任務」改為「最近流程」（TaskGroup），顯示類型 Badge、狀態、PR 連結
-- [ ] 流程類型、觸發來源欄位以 Badge 顯示
-- [ ] 狀態篩選支援多選
-- [ ] Agent 設定改為左右雙欄佈局
-- [ ] 新增 / 編輯表單改用 MudDialog
-- [ ] Token 監控標題列 sticky
-- [ ] 主題切換按鈕樣式統一
-- [ ] TaskLogDrawer overlay 關閉後父元件狀態正確同步
-- [ ] MudProviders.razor prerender 對齊其他頁面（prerender: false）
+- [x] 首頁 Agent 卡片改為緊湊小卡
+- [x] 首頁「最近任務」改為「最近流程」（TaskGroup），顯示類型 Badge、狀態、PR 連結
+- [x] 流程類型、觸發來源欄位以 Badge 顯示
+- [x] 狀態篩選支援多選
+- [x] Agent 設定改為左右雙欄佈局
+- [x] 新增 / 編輯表單改用 MudDialog
+- [x] Token 監控標題列 sticky
+- [x] 主題切換按鈕樣式統一
+- [x] TaskLogDrawer overlay 關閉後父元件狀態正確同步（提前完成，Stage 19 Pt.1 已修）
+- [x] MudProviders.razor prerender 對齊其他頁面（提前完成，Stage 20 已修）
 
 ### 共同
 - [ ] 無硬編碼 `style="color:red"` 等 inline 顏色（第一批修高優先，其餘第二批）
@@ -270,6 +270,130 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ---
 
+## 第二批：實作紀錄（2026-04-11）
+
+> commit: f2437a1
+
+### 新建檔案
+
+| 檔案 | 說明 |
+|------|------|
+| `Pages/Agents/Dialogs/AgentCreateDialog.razor` | 新增 Agent Dialog（Name / Description / TrustLevel 欄位） |
+| `Pages/Projects/ProjectCreateDialog.razor` | 新增專案 Dialog（Name / RepoUrl / TechStack） |
+| `Pages/Rules/RuleFormDialog.razor` | 新增＋編輯合一；`[Parameter] Rule? EditingRule` 決定模式 |
+
+### 關鍵實作模式
+
+#### MudDialog 標準寫法
+```razor
+@* Dialog 元件內 *@
+[CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+@* 確認：回傳資料 *@
+MudDialog.Close(DialogResult.Ok(created));
+
+@* 取消 *@
+MudDialog.Cancel();
+```
+
+```csharp
+@* 呼叫端（父頁面）*@
+var dialog = await DialogService.ShowAsync<RuleFormDialog>("新增規則", parameters);
+var result = await dialog.Result;
+
+// result 可能為 null（視 MudBlazor 版本）；用 pattern matching 安全取值
+if (result is { Canceled: false } && result.Data is Rule created)
+    _rules.Add(created);
+```
+
+#### MudSelect 多選 + 觸發 ReloadServerData
+```razor
+<MudSelect T="string" MultiSelection="true"
+           @bind-SelectedValues="_statusFilters"
+           @bind-SelectedValues:after="OnStatusFilterChangedAsync"
+           Label="篩選狀態" Dense="true">
+    <MudSelectItem Value="@("running")">執行中</MudSelectItem>
+    ...
+</MudSelect>
+```
+```csharp
+// _statusFilters 型別：IEnumerable<string>（不是 List<string>）
+private IEnumerable<string> _statusFilters = [];
+
+private async Task OnStatusFilterChangedAsync()
+    => await _tableRef.ReloadServerData();
+    // 注意：@bind-SelectedValues 已自動同步值，這裡只需觸發重載，不用再讀 _statusFilters
+```
+
+#### Service 層多值篩選
+```csharp
+// DashboardTaskService：參數改為 IReadOnlyCollection<string>?
+public async Task<...> GetTaskGroupsPagedAsync(
+    ...,
+    IReadOnlyCollection<string>? statusFilters = null,
+    ...)
+{
+    var query = db.TaskGroups.AsNoTracking();
+    if (statusFilters is { Count: > 0 })
+        query = query.Where(g => statusFilters.Contains(g.Status));
+    ...
+}
+```
+
+#### MudList 左右雙欄（Agent 設定）
+```razor
+<MudList T="AgentConfigDto" @bind-SelectedValue="_selectedAgent">
+    @foreach (var agent in _agents)
+    {
+        <MudListItem Value="@agent">@agent.Name</MudListItem>
+    }
+</MudList>
+```
+> **重點**：`@bind-SelectedValue` 展開後已包含 `SelectedValueChanged`，**不可再手動加 `SelectedValueChanged` 參數**，否則編譯錯誤「參數被設定超過一次」。
+
+#### Token 監控 Sticky 標題列
+```razor
+<div class="page-header" style="position:sticky; top:0; z-index:10; background:var(--color-bg-primary)">
+```
+
+#### 主題切換按鈕 hover CSS
+```css
+/* 不依賴 MudBlazor 內部 class，避免升版失效 */
+.theme-btn-dark:hover,
+.theme-btn-light:hover {
+    opacity: 0.8;
+    border-radius: 50%;
+}
+```
+
+### 踩坑紀錄
+
+| # | 問題 | 原因 | 修法 |
+|---|------|------|------|
+| 1 | `CS0103 _showCreateForm` 不存在 | `.razor` 的 empty state 條件 `!_showCreateForm` 忘了一起移除 | 改為 `@if (_rules.Count == 0)` |
+| 2 | `CS8602` 可能 null 參考（4 個 warning） | `await dialog.Result` 回傳 `DialogResult?`，直接取 `.Canceled` / `.Data` 會警告 | 改用 `result is { Canceled: false } && result.Data is T val` pattern matching |
+| 3 | `@bind-SelectedValues` 不觸發重載 | `@bind-SelectedValues` 只同步值，不觸發 side effect | 加上 `@bind-SelectedValues:after="OnStatusFilterChangedAsync"` |
+| 4 | MudList `@bind-SelectedValue` + `SelectedValueChanged` 衝突 | `@bind-SelectedValue` 展開後已含 `SelectedValueChanged`；兩者共存編譯錯誤 | 移除 `SelectedValueChanged` 及對應的 `OnAgentSelected` 方法 |
+| 5 | 主題按鈕 hover 靠 `.mud-icon-button` 不穩 | MudBlazor 內部 class 可能隨版本改名 | 改用容器 span 的 `opacity: 0.8`（`--mud-palette-*` 不受影響） |
+
+---
+
+## 驗收結果（第二批，2026-04-11）
+
+| 項目 | 功能 | 結果 |
+|------|------|------|
+| Item 7 | 首頁緊湊 Agent 小卡 + 最近流程（TaskGroup） | ✅ |
+| Item 8 | 流程類型 / 觸發來源 MudChip Badge（橘/藍/紫等彩色） | ✅ |
+| Item 9 | 狀態篩選改為 MudSelect 多選 | ✅ |
+| Item 10 | Agent 設定左右雙欄（點選 CEO → 右側顯示詳情） | ✅ |
+| Item 11 | 新增規則 → MudDialog 彈出表單 | ✅ |
+| Item 12 | Token 監控標題列 sticky（捲動時不消失） | ✅ |
+| Item 13 | 主題切換按鈕 hover CSS 補齊 | ✅ |
+
+`dotnet build` 通過（0 errors、0 warnings）。
+
+---
+
 ## 變更紀錄
 
 | 版本 | 日期 | 內容 |
@@ -280,3 +404,4 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 | v2.1 | 2026-04-10 | 第一批驗收完成；第二三批暫緩，待 Stage 20（全面換 MudBlazor Layout）完成後接續 |
 | v2.2 | 2026-04-11 | Stage 20 驗收完成；第二批狀態改為進行中；架構說明修正（Per-page Interactive 維持不變） |
 | v2.3 | 2026-04-11 | 第二批實作完成（7 項：首頁重構、Badge、多選篩選、Agent 雙欄、MudDialog 表單、Sticky、hover）|
+| v3.0 | 2026-04-11 | 補充第二批完整實作紀錄（新建檔案、關鍵模式、五項踩坑、驗收結果）|
