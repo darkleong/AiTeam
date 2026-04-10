@@ -1,9 +1,8 @@
 @inherits LayoutComponentBase
 
-<MudThemeProvider IsDarkMode="false" />
-<MudDialogProvider />
-<MudSnackbarProvider />
-<MudPopoverProvider />
+@* Providers 需在 Interactive 環境執行（MudProviders.razor 有 @rendermode InteractiveServer），
+   不能直接放在 Static SSR 的 Layout 裡，否則 Interactive pages 無法找到 scoped services *@
+<MudProviders />
 
 <MudLayout>
     <MudAppBar Elevation="1" Color="Color.Default" Dense="true">
