@@ -1,12 +1,13 @@
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.WebUtilities;
+
 namespace AiTeam.Dashboard.Components.Pages.Auth;
 
 public partial class Login
 {
-    #region Parameters
+    #region Injections
 
-    // Static SSR：從 HTTP Context 讀取 query string（error / ReturnUrl）
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = null!;
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
 
     #endregion
 
@@ -21,14 +22,15 @@ public partial class Login
 
     protected override void OnInitialized()
     {
-        var query = HttpContext.Request.Query;
+        // Interactive Server 模式下 HttpContext 不可用，改從 NavigationManager.Uri 解析 query string
+        var uri = new Uri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
 
         if (query.ContainsKey("error"))
             _errorMessage = "帳號或密碼錯誤";
 
-        var returnUrl = query["ReturnUrl"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(returnUrl))
-            _returnUrl = returnUrl;
+        if (query.TryGetValue("ReturnUrl", out var returnUrl) && !string.IsNullOrEmpty(returnUrl))
+            _returnUrl = returnUrl!;
     }
 
     #endregion
