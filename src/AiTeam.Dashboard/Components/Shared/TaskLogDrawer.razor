@@ -1,6 +1,7 @@
 @* 任務 Log 側邊抽屜組件（MudDrawer Temporary） *@
 
-<MudDrawer @bind-Open="IsOpen"
+<MudDrawer Open="@IsOpen"
+           OpenChanged="IsOpenChanged"
            Anchor="Anchor.End"
            Variant="DrawerVariant.Temporary"
            Width="480px"
