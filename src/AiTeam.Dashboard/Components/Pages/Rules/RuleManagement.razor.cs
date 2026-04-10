@@ -1,3 +1,5 @@
+using MudBlazor;
+
 namespace AiTeam.Dashboard.Components.Pages.Rules;
 
 public partial class RuleManagement
@@ -6,6 +8,9 @@ public partial class RuleManagement
 
     [Inject]
     private DashboardRuleService RuleService { get; set; } = null!;
+
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
 
     #endregion
 
@@ -47,20 +52,6 @@ public partial class RuleManagement
 
     private List<Rule> _rules = [];
 
-    // 新增表單
-    private bool    _showCreateForm;
-    private string  _newContent    = "";
-    private string  _newAgentName  = "";
-    private int     _newSortOrder  = 0;
-    private bool    _isCreating;
-    private string? _createError;
-
-    // 編輯狀態
-    private Guid?  _editingId;
-    private string _editContent   = "";
-    private string _editAgentName = "";
-    private int    _editSortOrder = 0;
-
     #endregion
 
     #region Override Methods
@@ -72,67 +63,42 @@ public partial class RuleManagement
 
     #region Private Methods
 
-    private void ToggleCreateForm()
+    private List<(string Label, string Value)> GetDialogAgentOptions()
+        => _agentOptions.Select(o => (o.Label, o.Value)).ToList();
+
+    private async Task OpenCreateRuleDialogAsync()
     {
-        _showCreateForm = !_showCreateForm;
-        _createError    = null;
-        _newContent     = "";
-        _newAgentName   = "";
-        _newSortOrder   = _rules.Count > 0 ? _rules.Max(r => r.SortOrder) + 10 : 10;
-    }
+        var nextSortOrder = _rules.Count > 0 ? _rules.Max(r => r.SortOrder) + 10 : 10;
 
-    private async Task CreateRuleAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newContent))
+        var parameters = new DialogParameters<RuleFormDialog>
         {
-            _createError = "規則內容為必填";
-            return;
-        }
+            { d => d.AgentOptions,   GetDialogAgentOptions() },
+            { d => d.NextSortOrder,  nextSortOrder }
+        };
 
-        _isCreating  = true;
-        _createError = null;
+        var dialog = await DialogService.ShowAsync<RuleFormDialog>("新增規則", parameters);
+        var result = await dialog.Result;
 
-        try
+        if (result is { Canceled: false } && result.Data is Rule created)
         {
-            var created = await RuleService.CreateRuleAsync(_newContent, _newAgentName, _newSortOrder);
             _rules.Add(created);
             _rules = [.. _rules.OrderBy(r => r.SortOrder).ThenBy(r => r.CreatedAt)];
-            _showCreateForm = false;
-            _newContent     = "";
-            _newAgentName   = "";
-        }
-        catch (Exception ex)
-        {
-            _createError = $"新增失敗：{ex.Message}";
-        }
-        finally
-        {
-            _isCreating = false;
         }
     }
 
-    private void StartEdit(Rule rule)
+    private async Task OpenEditRuleDialogAsync(Rule rule)
     {
-        _editingId    = rule.Id;
-        _editContent  = rule.Content;
-        _editAgentName = rule.AgentName ?? "";
-        _editSortOrder = rule.SortOrder;
-    }
-
-    private void CancelEdit() => _editingId = null;
-
-    private async Task SaveEditAsync(Guid id)
-    {
-        await RuleService.UpdateRuleAsync(id, _editContent, _editAgentName, _editSortOrder);
-        var rule = _rules.FirstOrDefault(r => r.Id == id);
-        if (rule is not null)
+        var parameters = new DialogParameters<RuleFormDialog>
         {
-            rule.Content   = _editContent;
-            rule.AgentName = string.IsNullOrWhiteSpace(_editAgentName) ? null : _editAgentName;
-            rule.SortOrder = _editSortOrder;
+            { d => d.EditingRule,  rule },
+            { d => d.AgentOptions, GetDialogAgentOptions() }
+        };
+
+        var dialog = await DialogService.ShowAsync<RuleFormDialog>("編輯規則", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
             _rules = [.. _rules.OrderBy(r => r.SortOrder).ThenBy(r => r.CreatedAt)];
-        }
-        _editingId = null;
     }
 
     private async Task ToggleActiveAsync(Rule rule, bool isActive)

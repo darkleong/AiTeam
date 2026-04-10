@@ -9,6 +9,9 @@ public partial class ProjectManagement
     [Inject]
     private DashboardProjectService ProjectService { get; set; } = null!;
 
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -16,14 +19,6 @@ public partial class ProjectManagement
     private List<ProjectDto> _projects = [];
     private ProjectDto?      _selectedProject;
     private bool             _isDrawerOpen;
-
-    // 新增表單
-    private bool   _showCreateForm;
-    private string _newName        = "";
-    private string _newRepoUrl     = "";
-    private string _newTechStack   = "";
-    private bool   _isCreating;
-    private string? _createError;
 
     #endregion
 
@@ -45,41 +40,13 @@ public partial class ProjectManagement
 
     private void CloseDrawer() => _isDrawerOpen = false;
 
-    private void ToggleCreateForm()
+    private async Task OpenCreateProjectDialogAsync()
     {
-        _showCreateForm = !_showCreateForm;
-        _createError    = null;
-        _newName        = "";
-        _newRepoUrl     = "";
-        _newTechStack   = "";
-    }
+        var dialog = await DialogService.ShowAsync<ProjectCreateDialog>("新增專案");
+        var result = await dialog.Result;
 
-    private async Task CreateProjectAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_newName))
-        {
-            _createError = "專案名稱為必填";
-            return;
-        }
-
-        _isCreating  = true;
-        _createError = null;
-
-        try
-        {
-            var created = await ProjectService.CreateProjectAsync(_newName, _newRepoUrl, _newTechStack);
+        if (result is { Canceled: false } && result.Data is ProjectDto created)
             _projects.Insert(0, created);
-            _showCreateForm = false;
-            _newName = _newRepoUrl = _newTechStack = "";
-        }
-        catch (Exception ex)
-        {
-            _createError = $"新增失敗：{ex.Message}";
-        }
-        finally
-        {
-            _isCreating = false;
-        }
     }
 
     private async Task ToggleIsActiveAsync(ProjectDto project, bool isActive)

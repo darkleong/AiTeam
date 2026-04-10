@@ -483,6 +483,13 @@ html:not([data-theme="dark"]) .theme-btn-light { display: none; }
 /* Dark mode：隱藏深色按鈕（已是深色，不需切換到深色） */
 html[data-theme="dark"] .theme-btn-dark { display: none; }
 
+/* 主題切換按鈕 hover 效果（不依賴 MudBlazor 內部 class） */
+.theme-btn-dark:hover,
+.theme-btn-light:hover {
+    opacity: 0.8;
+    border-radius: 50%;
+}
+
 /* ========================================
    Form Controls
    ======================================== */

@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using AiTeam.Data.Hubs;
+using AiTeam.Shared.Dtos;
 using Microsoft.AspNetCore.SignalR.Client;
+using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
 
@@ -31,9 +33,9 @@ public partial class Home : IAsyncDisposable
     #region Private Variables
 
     private List<AgentStatusViewModel> _agentStatuses = [];
-    private List<TaskItemDto> _recentTasks = [];
-    private HubConnection? _hubConnection;
-    private bool _hubConnected;
+    private List<TaskGroupDto>         _recentGroups  = [];
+    private HubConnection?             _hubConnection;
+    private bool                       _hubConnected;
 
     #endregion
 
@@ -42,7 +44,7 @@ public partial class Home : IAsyncDisposable
     protected override async Task OnInitializedAsync()
     {
         _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
-        _recentTasks   = await TaskService.GetRecentTasksAsync(limit: 10);
+        _recentGroups  = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
         await ConnectSignalRAsync();
     }
 
@@ -75,7 +77,7 @@ public partial class Home : IAsyncDisposable
             AgentStatusHub.ReceiveTaskUpdate,
             async _ =>
             {
-                _recentTasks = await TaskService.GetRecentTasksAsync(limit: 10);
+                _recentGroups = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
                 await InvokeAsync(StateHasChanged);
             });
 
@@ -128,6 +130,22 @@ public partial class Home : IAsyncDisposable
             Logger.LogError(ex, "測試推送失敗");
         }
     }
+
+    private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
+    {
+        "new_feature"      => "新功能",
+        "bug_fix"          => "Bug Fix",
+        "tech_improvement" => "技術改善",
+        _                  => workflowType ?? ""
+    };
+
+    private static Color WorkflowTypeColor(string? workflowType) => workflowType switch
+    {
+        "new_feature"      => Color.Primary,
+        "bug_fix"          => Color.Warning,
+        "tech_improvement" => Color.Secondary,
+        _                  => Color.Default
+    };
 
     #endregion
 

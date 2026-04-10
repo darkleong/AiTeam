@@ -1,9 +1,9 @@
 # Stage 19 — Dashboard UI 全面打磨
 
-> 版本：v2.1
+> 版本：v2.2
 > 建立日期：2026-04-08
-> 更新日期：2026-04-10
-> 狀態：🔄 第一批已完成，第二批暫緩（待 Stage 20）
+> 更新日期：2026-04-11
+> 狀態：✅ 第一批、第二批均已完成
 
 ---
 
@@ -12,10 +12,8 @@
 | 批次 | 狀態 | 說明 |
 |------|------|------|
 | 第一批（🔴 高優先） | ✅ 已完成 | StatusBadge、PipelineList、MudSwitch、表格 FixedHeader 等 |
-| 第二批（🟡 中優先） | ⏸️ 暫緩 | 依賴 MudLayout 穩定基礎，**待 Stage 20 完成後接續執行** |
-| 第三批（🔵 低優先） | ⏸️ 暫緩 | 同上 |
-
-> **暫緩原因：** Stage 19 Pt.1 實作過程中發現 `TaskLogDrawer` 無法正確使用 `MudDrawer Temporary`，根本原因是 `MainLayout` 未使用 `MudLayout`。第二批多項改善（MudDialog 表單、Drawer overlay、主題切換統一樣式）均依賴穩定的 MudLayout 基礎。因此決定先執行 **Stage 20**（全面換 MudBlazor Layout），再回頭完成 Stage 19 第二批。
+| 第二批（🟡 中優先） | ✅ 已完成 | 2026-04-11 實作完成 |
+| 第三批（🔵 低優先） | ⏸️ 待排 | 第二批完成後接續 |
 
 ---
 
@@ -100,17 +98,16 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ## 第二批：中優先（🟡 UX 改善）
 
-> **架構前提說明（Stage 20 已完成，請閱讀最新架構）**
+> **架構前提說明（Stage 20 已完成，實作前請閱讀）**
 >
-> Stage 20 已將 Dashboard 升級為 **全域 InteractiveServer 架構**：`Routes.razor` 宣告 `@rendermode InteractiveServer(prerender: false)`，Layout 與所有頁面共享同一 Circuit。
+> Stage 20 完成後，Dashboard 的 render mode 架構**維持 Per-page Interactive 不變**：各頁面自行宣告 `@rendermode @(new InteractiveServerRenderMode(prerender: false))`，`MainLayout` 維持 Static SSR。
 >
 > 這代表 Stage 19 Pt.2 實作時：
-> - **`MudThemeProvider` C# binding** 仍不適用（Layout 接收 `@Body` RenderFragment，加 rendermode 會 HTTP 500，這是框架限制）；Dark Mode 維持 CSS 變數 + JS 方案（`html[data-theme="dark"]`）
-> - **`MudDialogProvider` / `IDialogService`** 可完全正常運作（所有元件共享同一 Circuit）
-> - **MudDialog 表單**（Pt.2 主要改善項）已有穩定的 MudLayout 基礎，可直接實作
-> - 不需要再擔心「跨 Circuit scoped service 隔離」問題（Stage 20 已解決）
+> - **`MudThemeProvider` C# binding 仍不適用**：Layout 因接收 `@Body`（RenderFragment）無法加 rendermode，Dark Mode 繼續維持 CSS 變數 + JS 方案（`html[data-theme="dark"]`）
+> - **`MudDialogProvider` / `IDialogService` 可正常運作**：頁面元件本身是 Interactive，呼叫 `IDialogService.ShowAsync()` 完全沒問題
+> - **MudDialog 表單**（Pt.2 主要改善項）現在有穩定的 MudLayout 基礎，可直接實作
 >
-> 詳細架構說明請參閱 [Stage_20_Roadmap.md](./Stage_20_Roadmap.md)。
+> 若未來需要在 Layout 持有 C# 狀態，可考慮升級為全域 Interactive（`App.razor` 的 Router 改用 `<Routes @rendermode="InteractiveServer" />`），但目前收益不足以觸發此變更。
 
 ---
 
@@ -179,6 +176,34 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 
 ---
 
+### 14. TaskLogDrawer `Open` + `OpenChanged` 正確接線
+
+**檔案：** `Components/Shared/TaskLogDrawer.razor`
+
+**問題：** 目前使用 `@bind-Open="IsOpen"`，展開後等於 `OpenChanged="(v) => IsOpen = v"`，只直接 mutate 參數，**不會呼叫父元件的 `IsOpenChanged` EventCallback**。使用者點 overlay 關閉 Drawer 後，父元件（TaskCenter、DeploymentHistory）的 `_isDrawerOpen` 狀態不同步，下次點擊同一列時 Drawer 不重新載入選中任務。
+
+**修法：**
+```razor
+<MudDrawer Open="@IsOpen"
+           OpenChanged="IsOpenChanged"
+           ...>
+```
+
+---
+
+### 15. MudProviders.razor 對齊 `prerender: false`
+
+**檔案：** `Components/Layout/MudProviders.razor`
+
+**問題：** 目前使用 `@rendermode InteractiveServer`（預設有 prerender），其他頁面一律使用 `InteractiveServerRenderMode(prerender: false)`。不一致可能造成 providers 初始化閃爍。
+
+**修法：**
+```razor
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+```
+
+---
+
 ## 第三批：低優先（🔵 細節）
 
 - inline `style="color:red"` 等硬編碼顏色，改為 CSS 變數
@@ -209,6 +234,8 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 - [ ] 新增 / 編輯表單改用 MudDialog
 - [ ] Token 監控標題列 sticky
 - [ ] 主題切換按鈕樣式統一
+- [ ] TaskLogDrawer overlay 關閉後父元件狀態正確同步
+- [ ] MudProviders.razor prerender 對齊其他頁面（prerender: false）
 
 ### 共同
 - [ ] 無硬編碼 `style="color:red"` 等 inline 顏色（第一批修高優先，其餘第二批）
@@ -251,3 +278,5 @@ AgentSettings、RuleManagement 的原生 checkbox 全部改用 MudSwitch：
 | v1.1 | 2026-04-09 | 新增導覽 UX 重構、表格改善、首頁佈局、MudDialog |
 | v2.0 | 2026-04-09 | 全面重整結構，依優先級分三批，整合所有 UI 問題清單（18 項） |
 | v2.1 | 2026-04-10 | 第一批驗收完成；第二三批暫緩，待 Stage 20（全面換 MudBlazor Layout）完成後接續 |
+| v2.2 | 2026-04-11 | Stage 20 驗收完成；第二批狀態改為進行中；架構說明修正（Per-page Interactive 維持不變） |
+| v2.3 | 2026-04-11 | 第二批實作完成（7 項：首頁重構、Badge、多選篩選、Agent 雙欄、MudDialog 表單、Sticky、hover）|

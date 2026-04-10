@@ -9,13 +9,19 @@
 </div>
 
 <div class="page-filters mb-3">
-    <select @bind="_statusFilter" @bind:after="OnStatusFilterChangedAsync" class="form-select">
-        <option value="">全部狀態</option>
-        <option value="pending">等待中</option>
-        <option value="running">執行中</option>
-        <option value="done">完成</option>
-        <option value="failed">失敗</option>
-    </select>
+    <MudSelect T="string" MultiSelection="true"
+               @bind-SelectedValues="_statusFilters"
+               @bind-SelectedValues:after="OnStatusFilterChangedAsync"
+               Label="篩選狀態" Dense="true" Style="max-width:300px"
+               AdornmentIcon="@Icons.Material.Filled.FilterList">
+        <MudSelectItem Value="@("pending")">等待中</MudSelectItem>
+        <MudSelectItem Value="@("running")">執行中</MudSelectItem>
+        <MudSelectItem Value="@("done")">完成</MudSelectItem>
+        <MudSelectItem Value="@("failed")">失敗</MudSelectItem>
+        <MudSelectItem Value="@("revision")">修正中</MudSelectItem>
+        <MudSelectItem Value="@("reviewing")">審核中</MudSelectItem>
+        <MudSelectItem Value="@("cancelled")">已取消</MudSelectItem>
+    </MudSelect>
 </div>
 
 <MudTable @ref="_tableRef"
@@ -43,7 +49,11 @@
         <MudTd>@context.Title</MudTd>
         <MudTd>@context.AssignedAgent</MudTd>
         <MudTd>@context.ProjectName</MudTd>
-        <MudTd>@context.TriggeredBy</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@TriggeredByColor(context.TriggeredBy)">
+                @context.TriggeredBy
+            </MudChip>
+        </MudTd>
         <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@FormatDuration(context.Duration)</MudTd>

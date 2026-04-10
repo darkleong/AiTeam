@@ -9,13 +9,19 @@
 </div>
 
 <div class="page-filters mb-3">
-    <select @bind="_groupStatusFilter" @bind:after="OnGroupStatusFilterChangedAsync" class="form-select">
-        <option value="">全部狀態</option>
-        <option value="running">進行中</option>
-        <option value="done">已完成</option>
-        <option value="failed">失敗</option>
-        <option value="pending">等待中</option>
-    </select>
+    <MudSelect T="string" MultiSelection="true"
+               @bind-SelectedValues="_statusFilters"
+               @bind-SelectedValues:after="OnStatusFilterChangedAsync"
+               Label="篩選狀態" Dense="true" Style="max-width:300px"
+               AdornmentIcon="@Icons.Material.Filled.FilterList">
+        <MudSelectItem Value="@("pending")">等待中</MudSelectItem>
+        <MudSelectItem Value="@("running")">執行中</MudSelectItem>
+        <MudSelectItem Value="@("done")">已完成</MudSelectItem>
+        <MudSelectItem Value="@("failed")">失敗</MudSelectItem>
+        <MudSelectItem Value="@("revision")">修正中</MudSelectItem>
+        <MudSelectItem Value="@("reviewing")">審核中</MudSelectItem>
+        <MudSelectItem Value="@("cancelled")">已取消</MudSelectItem>
+    </MudSelect>
 </div>
 
 <MudTable @ref="_groupTableRef"
@@ -39,7 +45,11 @@
     <RowTemplate>
         <MudTd><StatusBadge Status="@context.Status" /></MudTd>
         <MudTd>@context.Title</MudTd>
-        <MudTd>@WorkflowTypeLabel(context.WorkflowType)</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@WorkflowTypeColor(context.WorkflowType)">
+                @WorkflowTypeLabel(context.WorkflowType)
+            </MudChip>
+        </MudTd>
         <MudTd>@context.Project</MudTd>
         <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>

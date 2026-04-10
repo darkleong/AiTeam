@@ -1,3 +1,6 @@
+using AiTeam.Dashboard.Components.Pages.Agents.Dialogs;
+using MudBlazor;
+
 namespace AiTeam.Dashboard.Components.Pages.Agents;
 
 public partial class AgentSettings
@@ -13,12 +16,16 @@ public partial class AgentSettings
     [Inject]
     private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
 
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
 
-    private List<AgentConfigDto>  _agents      = [];
-    private Dictionary<Guid, int> _trustLevels = [];
+    private List<AgentConfigDto>  _agents         = [];
+    private Dictionary<Guid, int> _trustLevels    = [];
+    private AgentConfigDto?       _selectedAgent;
     private bool                  _isSaving;
     private bool                  _isTogglingActive;
     private string?               _saveMessage;
@@ -31,14 +38,6 @@ public partial class AgentSettings
     // 系統設定
     private bool _skipCeoConfirm;
     private bool _mockMode;
-
-    // 新增 Agent 表單
-    private bool    _showCreateForm;
-    private string  _newName        = "";
-    private string  _newDescription = "";
-    private int     _newTrustLevel  = 1;
-    private bool    _isCreating;
-    private string? _createError;
 
     #endregion
 
@@ -79,31 +78,16 @@ public partial class AgentSettings
         _isTogglingActive = false;
     }
 
-    private async Task CreateAgentAsync()
+    private async Task OpenCreateAgentDialogAsync()
     {
-        _createError = null;
-        if (string.IsNullOrWhiteSpace(_newName))
+        var dialog = await DialogService.ShowAsync<AgentCreateDialog>("新增 Agent");
+        var result = await dialog.Result;
+        if (result is { Canceled: false } && result.Data is AgentConfigDto created)
         {
-            _createError = "名稱不可為空白。";
-            return;
+            _agents.Add(created);
+            _trustLevels[created.Id] = created.TrustLevel;
+            _saveMessage = $"Agent「{created.Name}」已新增，重啟 Bot 後生效。";
         }
-        if (_agents.Any(a => a.Name.Equals(_newName.Trim(), StringComparison.OrdinalIgnoreCase)))
-        {
-            _createError = $"Agent「{_newName.Trim()}」已存在。";
-            return;
-        }
-
-        _isCreating = true;
-        var created = await AgentService.CreateAgentAsync(_newName, _newDescription, _newTrustLevel);
-        _agents.Add(created);
-        _trustLevels[created.Id] = created.TrustLevel;
-
-        _newName        = "";
-        _newDescription = "";
-        _newTrustLevel  = 1;
-        _showCreateForm = false;
-        _saveMessage    = $"Agent「{created.Name}」已新增，重啟 Bot 後生效。";
-        _isCreating     = false;
     }
 
     private async Task SaveTrustLevelAsync(AgentConfigDto agent)

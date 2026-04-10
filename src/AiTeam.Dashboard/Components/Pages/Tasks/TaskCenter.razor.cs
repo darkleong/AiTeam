@@ -23,11 +23,11 @@ public partial class TaskCenter : IAsyncDisposable
 
     #region Private Variables
 
-    private MudTable<TaskItemDto> _tableRef         = null!;
-    private TaskItemDto?          _selectedTask;
-    private List<TaskLogDto>      _selectedLogs     = [];
-    private bool                  _isTaskDrawerOpen;
-    private string?               _statusFilter;
+    private MudTable<TaskItemDto>  _tableRef         = null!;
+    private TaskItemDto?           _selectedTask;
+    private List<TaskLogDto>       _selectedLogs     = [];
+    private bool                   _isTaskDrawerOpen;
+    private IEnumerable<string>    _statusFilters    = [];
 
     #endregion
 
@@ -81,7 +81,7 @@ public partial class TaskCenter : IAsyncDisposable
         var result = await TaskService.GetTasksPagedAsync(
             page: state.Page + 1,
             pageSize: state.PageSize,
-            statusFilter: _statusFilter);
+            statusFilters: _statusFilters.ToHashSet());
 
         return new TableData<TaskItemDto>
         {
@@ -101,6 +101,13 @@ public partial class TaskCenter : IAsyncDisposable
 
     private async Task OnStatusFilterChangedAsync()
         => await (_tableRef?.ReloadServerData() ?? Task.CompletedTask);
+
+    private static Color TriggeredByColor(string? triggeredBy) => triggeredBy switch
+    {
+        "Discord"      => Color.Secondary,
+        "Orchestrator" => Color.Default,
+        _              => Color.Default
+    };
 
     /// <summary>將 TimeSpan 格式化為人類易讀字串，如「3 分 42 秒」。</summary>
     private static string FormatDuration(TimeSpan? duration)

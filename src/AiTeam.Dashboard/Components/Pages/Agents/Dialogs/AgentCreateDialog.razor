@@ -1,0 +1,73 @@
+@* 新增 Agent 對話框 *@
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_name"
+                      Label="名稱"
+                      Required="true"
+                      RequiredError="名稱不可為空白"
+                      Placeholder="例如：Analytics"
+                      Class="mb-3" />
+        <MudTextField @bind-Value="_description"
+                      Label="描述"
+                      Placeholder="簡述此 Agent 的職責"
+                      Class="mb-3" />
+        <MudText Typo="Typo.body2" Class="mb-1">
+            信任等級：<strong>Lv@_trustLevel</strong>
+        </MudText>
+        <MudSlider @bind-Value="_trustLevel" Min="0" Max="3" Step="1" Style="max-width:240px" />
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">取消</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="SubmitAsync" Disabled="@_isSubmitting">
+            @(_isSubmitting ? "新增中..." : "確認新增")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Inject]
+    private DashboardAgentService AgentService { get; set; } = null!;
+
+    private string  _name        = "";
+    private string  _description = "";
+    private int     _trustLevel  = 1;
+    private bool    _isSubmitting;
+    private string? _error;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _error = "名稱不可為空白。";
+            return;
+        }
+
+        _isSubmitting = true;
+        _error        = null;
+
+        try
+        {
+            var created = await AgentService.CreateAgentAsync(_name.Trim(), _description, _trustLevel);
+            MudDialog.Close(DialogResult.Ok(created));
+        }
+        catch (Exception ex)
+        {
+            _error = $"新增失敗：{ex.Message}";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

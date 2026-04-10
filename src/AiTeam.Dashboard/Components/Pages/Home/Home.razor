@@ -17,39 +17,61 @@
 
 <section class="agent-status-section">
     <h3>Agent 狀態</h3>
-    <div class="agent-cards">
-        @foreach (var agent in _agentStatuses)
-        {
-            <AgentStatusCard Status="@agent" />
-        }
-        @if (_agentStatuses.Count == 0)
-        {
-            <div class="empty-state">
-                <div class="empty-state-icon">🤖</div>
-                <p class="empty-state-title">尚未載入 Agent 資料</p>
-                <p class="empty-state-hint">請確認 Bot 服務已啟動，並重新整理頁面</p>
-            </div>
-        }
-    </div>
+    @if (_agentStatuses.Count == 0)
+    {
+        <div class="empty-state">
+            <div class="empty-state-icon">🤖</div>
+            <p class="empty-state-title">尚未載入 Agent 資料</p>
+            <p class="empty-state-hint">請確認 Bot 服務已啟動，並重新整理頁面</p>
+        </div>
+    }
+    else
+    {
+        <MudGrid Spacing="2" Class="mb-2">
+            @foreach (var agent in _agentStatuses)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3">
+                    <MudPaper Elevation="1" Class="pa-2 d-flex align-center" Style="gap:8px; min-height:52px">
+                        <div style="flex:1; overflow:hidden">
+                            <MudText Typo="Typo.body2" Style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                                @agent.AgentName
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                今日完成 @agent.TodayCompletedCount
+                            </MudText>
+                        </div>
+                        <StatusBadge Status="@agent.Status" />
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
 </section>
 
 <section class="recent-tasks-section">
-    <h3>最近任務</h3>
+    <h3>最近流程</h3>
     <div class="task-list-simple">
-        @foreach (var task in _recentTasks)
+        @foreach (var group in _recentGroups)
         {
             <div class="task-row">
-                <StatusBadge Status="@task.Status" />
-                <span class="task-title">@task.Title</span>
-                <span class="task-agent">@task.AssignedAgent</span>
-                <small>@task.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
+                <StatusBadge Status="@group.Status" />
+                <MudChip T="string" Size="Size.Small" Color="@WorkflowTypeColor(group.WorkflowType)"
+                         Style="margin:0">
+                    @WorkflowTypeLabel(group.WorkflowType)
+                </MudChip>
+                <span class="task-title">@group.Title</span>
+                <small>@group.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
+                @if (!string.IsNullOrEmpty(group.DevPrUrl))
+                {
+                    <MudLink Href="@group.DevPrUrl" Target="_blank" Typo="Typo.caption">PR</MudLink>
+                }
             </div>
         }
-        @if (_recentTasks.Count == 0)
+        @if (_recentGroups.Count == 0)
         {
             <div class="empty-state">
                 <div class="empty-state-icon">📭</div>
-                <p class="empty-state-title">還沒有任何任務</p>
+                <p class="empty-state-title">還沒有任何流程</p>
                 <p class="empty-state-hint">去 Discord 的 <strong>#victoria-ceo</strong> 頻道下達指令，或直接在各 Agent 頻道分配任務</p>
             </div>
         }

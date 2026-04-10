@@ -15,14 +15,14 @@ public class DashboardTaskService(AppDbContext db)
     public async Task<PagedResult<TaskItemDto>> GetTasksPagedAsync(
         int page = 1,
         int pageSize = 50,
-        string? statusFilter = null,
+        IReadOnlyCollection<string>? statusFilters = null,
         CancellationToken cancellationToken = default)
     {
         var query = db.Tasks
             .AsNoTracking()
             .Include(t => t.Project)
             .Include(t => t.Team)
-            .Where(t => statusFilter == null || t.Status == statusFilter)
+            .Where(t => statusFilters == null || statusFilters.Count == 0 || statusFilters.Contains(t.Status))
             .OrderByDescending(t => t.CreatedAt);
 
         var total = await query.CountAsync(cancellationToken);
@@ -70,16 +70,38 @@ public class DashboardTaskService(AppDbContext db)
             })
             .ToListAsync(cancellationToken);
 
+    /// <summary>取得最近 N 筆流程（首頁快速摘要用）。</summary>
+    public async Task<List<TaskGroupDto>> GetRecentTaskGroupsAsync(
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+        => await db.TaskGroups
+            .AsNoTracking()
+            .OrderByDescending(g => g.CreatedAt)
+            .Take(limit)
+            .Select(g => new TaskGroupDto
+            {
+                Id              = g.Id,
+                Title           = g.Title,
+                Status          = g.Status,
+                WorkflowType    = g.WorkflowType,
+                Project         = g.Project,
+                FixIteration    = g.FixIteration,
+                DevPlanRevision = g.DevPlanRevision,
+                DevPrUrl        = g.DevPrUrl,
+                CreatedAt       = g.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
     /// <summary>取得 TaskGroup 分頁列表（流程追蹤 Tab 用）。</summary>
     public async Task<PagedResult<TaskGroupDto>> GetTaskGroupsPagedAsync(
         int page = 1,
         int pageSize = 50,
-        string? statusFilter = null,
+        IReadOnlyCollection<string>? statusFilters = null,
         CancellationToken cancellationToken = default)
     {
         var query = db.TaskGroups
             .AsNoTracking()
-            .Where(g => statusFilter == null || g.Status == statusFilter)
+            .Where(g => statusFilters == null || statusFilters.Count == 0 || statusFilters.Contains(g.Status))
             .OrderByDescending(g => g.CreatedAt);
 
         var total = await query.CountAsync(cancellationToken);

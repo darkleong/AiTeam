@@ -23,11 +23,11 @@ public partial class PipelineList : IAsyncDisposable
 
     #region Private Variables
 
-    private MudTable<TaskGroupDto> _groupTableRef     = null!;
-    private PipelineView           _pipelineViewRef   = null!;
-    private TaskGroupDto?          _selectedGroup;
-    private bool                   _isPipelineDrawerOpen;
-    private string?                _groupStatusFilter;
+    private MudTable<TaskGroupDto>  _groupTableRef        = null!;
+    private PipelineView            _pipelineViewRef      = null!;
+    private TaskGroupDto?           _selectedGroup;
+    private bool                    _isPipelineDrawerOpen;
+    private IEnumerable<string>     _statusFilters        = [];
 
     #endregion
 
@@ -83,7 +83,7 @@ public partial class PipelineList : IAsyncDisposable
         var result = await TaskService.GetTaskGroupsPagedAsync(
             page: state.Page + 1,
             pageSize: state.PageSize,
-            statusFilter: _groupStatusFilter);
+            statusFilters: _statusFilters.ToHashSet());
 
         return new TableData<TaskGroupDto>
         {
@@ -113,7 +113,7 @@ public partial class PipelineList : IAsyncDisposable
         });
     }
 
-    private async Task OnGroupStatusFilterChangedAsync()
+    private async Task OnStatusFilterChangedAsync()
         => await (_groupTableRef?.ReloadServerData() ?? Task.CompletedTask);
 
     private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
@@ -122,6 +122,14 @@ public partial class PipelineList : IAsyncDisposable
         "bug_fix"          => "Bug Fix",
         "tech_improvement" => "技術改善",
         _                  => workflowType ?? ""
+    };
+
+    private static Color WorkflowTypeColor(string? workflowType) => workflowType switch
+    {
+        "new_feature"      => Color.Primary,
+        "bug_fix"          => Color.Warning,
+        "tech_improvement" => Color.Secondary,
+        _                  => Color.Default
     };
 
     #endregion
