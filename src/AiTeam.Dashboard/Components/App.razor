@@ -28,16 +28,24 @@
         };
 
         // aiteamToggleSidebar：透過 CSS class 切換 MudDrawer Persistent 收合狀態
+        // MudBlazor Persistent Drawer 使用兩組 class 控制：
+        //   1. drawer 本身：mud-drawer--open / mud-drawer--closed（雙 hyphen）
+        //   2. .mud-layout：mud-drawer-open-persistent-left（控制 .mud-main-content margin-left）
         window.aiteamToggleSidebar = function () {
             var drawer = document.querySelector('.mud-drawer-persistent');
-            if (!drawer) return;
+            var layout = document.querySelector('.mud-layout');
+            if (!drawer || !layout) return;
             var isOpen = drawer.classList.contains('mud-drawer--open');
+            // 移除 initial class 以啟用動畫
+            drawer.classList.remove('mud-drawer--initial');
             if (isOpen) {
                 drawer.classList.remove('mud-drawer--open');
-                drawer.classList.add('mud-drawer-closed');
+                drawer.classList.add('mud-drawer--closed');
+                layout.classList.remove('mud-drawer-open-persistent-left');
             } else {
-                drawer.classList.remove('mud-drawer-closed');
+                drawer.classList.remove('mud-drawer--closed');
                 drawer.classList.add('mud-drawer--open');
+                layout.classList.add('mud-drawer-open-persistent-left');
             }
         };
     </script>
