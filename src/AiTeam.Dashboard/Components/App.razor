@@ -52,18 +52,22 @@
         };
 
         // 側邊欄初始化：讀取 localStorage 決定初始收合狀態
+        // 使用 rAF 輪詢，等 Blazor 渲染 MudDrawer 後再套用（DOMContentLoaded 太早，元素尚未存在）
         (function () {
-            if (localStorage.getItem('sidebarOpen') === '0') {
-                document.addEventListener('DOMContentLoaded', function () {
-                    var drawer = document.querySelector('.mud-drawer-persistent');
-                    var layout = document.querySelector('.mud-layout');
-                    if (!drawer || !layout) return;
-                    drawer.classList.remove('mud-drawer--initial');
-                    drawer.classList.remove('mud-drawer--open');
-                    drawer.classList.add('mud-drawer--closed');
-                    layout.classList.remove('mud-drawer-open-persistent-left');
-                });
+            if (localStorage.getItem('sidebarOpen') !== '0') return;
+            function applySidebarClosed() {
+                var drawer = document.querySelector('.mud-drawer-persistent');
+                var layout = document.querySelector('.mud-layout');
+                if (!drawer || !layout) {
+                    requestAnimationFrame(applySidebarClosed);
+                    return;
+                }
+                drawer.classList.remove('mud-drawer--initial');
+                drawer.classList.remove('mud-drawer--open');
+                drawer.classList.add('mud-drawer--closed');
+                layout.classList.remove('mud-drawer-open-persistent-left');
             }
+            requestAnimationFrame(applySidebarClosed);
         })();
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
