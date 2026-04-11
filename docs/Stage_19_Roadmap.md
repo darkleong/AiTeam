@@ -505,6 +505,158 @@ public async Task<...> GetTaskGroupsPagedAsync(
 
 ---
 
+## 第三批：實作紀錄（2026-04-11）
+
+> commits: 4add20e（主要改善）、ddc19da（側邊欄持久化 bug fix）
+
+### 修改檔案
+
+| 檔案 | 改動說明 |
+|------|---------|
+| `Pages/Rules/RuleManagement.razor` | Agent Badge → MudChip、Empty State emoji → MudIcon、操作按鈕 div → MudStack |
+| `Pages/Rules/RuleManagement.razor.cs` | 新增 `GetAgentChipColor()` 回傳 MudBlazor `Color` enum；移除 `GetAgentColor()` hex 字串方法 |
+| `Pages/Projects/ProjectManagement.razor` | IsActive 原生 checkbox → MudSwitch（表格列 + Drawer 各一）；Empty State emoji → MudIcon |
+| `Pages/Home/Home.razor` | 測試推送按鈕 → MudButton；Empty State emoji × 2 → MudIcon；頂部狀態列 div → MudStack；inline color fallback 移除 |
+| `Pages/Agents/AgentSettings.razor` | `agent-setting-card` / `agent-setting-header` → `system-config-card` / `system-config-header`（4 行）；按鈕群 div → MudStack；Agent 列表項 div → MudStack；inline `color:var()` → `class="text-muted"`；Mock Mode warning span → `MudText Color="Color.Warning"` |
+| `wwwroot/css/app.css` | `.agent-setting-card` → `.system-config-card`；`.agent-setting-header` → `.system-config-header`；新增 `.system-config-card--warning`；`.empty-state-icon` 移除 emoji 字型設定，改為 flex 置中容器 |
+| `Components/App.razor` | 擴充 `aiteamToggleSidebar` 加 `localStorage.setItem`；新增 rAF 輪詢 IIFE 讀取初始收合狀態 |
+
+### 關鍵實作模式
+
+#### MudChip 取代 inline 動態背景色 Badge
+
+```csharp
+// ❌ 舊寫法：回傳 hex 字串，套用 inline style
+private static string GetAgentColor(string? agentName) => agentName switch
+{
+    AgentNames.Dev => "#0284c7",
+    _ => "#6c757d",
+};
+// 用法：<span style="background:@GetAgentColor(context.AgentName)">
+
+// ✅ 新寫法：回傳 MudBlazor Color enum，套用 MudChip
+private static Color GetAgentChipColor(string? agentName) => agentName switch
+{
+    AgentNames.Ceo          => Color.Primary,
+    AgentNames.Dev          => Color.Info,
+    AgentNames.Ops          => Color.Tertiary,
+    AgentNames.Qa           => Color.Secondary,
+    AgentNames.Doc          => Color.Secondary,
+    AgentNames.Requirements => Color.Warning,
+    AgentNames.Reviewer     => Color.Error,
+    AgentNames.Release      => Color.Success,
+    AgentNames.Designer     => Color.Warning,
+    AgentNames.Pm           => Color.Info,
+    _                       => Color.Default,  // 全域
+};
+// 用法：<MudChip T="string" Size="Size.Small" Color="@GetAgentChipColor(context.AgentName)">
+```
+
+#### Empty State emoji → MudIcon
+
+```razor
+@* ❌ 舊：emoji（跨平台不一致） *@
+<div class="empty-state-icon">📋</div>
+
+@* ✅ 新：MudIcon（跨平台統一） *@
+<div class="empty-state-icon">
+    <MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Default" />
+</div>
+```
+
+常用對應：`📋` → `Assignment`、`📁` → `FolderOpen`、`📭` → `Inbox`、`🤖` → `SmartToy`
+
+CSS 端同步調整 `.empty-state-icon`，移除 emoji 專用字型設定：
+```css
+/* ✅ 新：通用 flex 容器，MudIcon 自行控制大小 */
+.empty-state-icon {
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: center;
+}
+```
+
+#### CSS class 語義修正 + warning modifier
+
+```css
+/* ✅ 新：system-config-card 語義正確；--warning modifier 消除 inline style */
+.system-config-card {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    ...
+}
+
+.system-config-card--warning {
+    border-color: var(--color-status-warning) !important;
+}
+```
+
+```razor
+@* ❌ 舊：inline fallback 硬編碼 *@
+<div class="agent-setting-card" style="border-color: var(--color-status-warning, #f59e0b)">
+
+@* ✅ 新：純 CSS class，無 fallback 色碼 *@
+<div class="system-config-card system-config-card--warning">
+```
+
+#### 側邊欄收合 localStorage 持久化
+
+```js
+// 切換時寫入
+window.aiteamToggleSidebar = function () {
+    ...
+    if (isOpen) {
+        // 收合邏輯...
+        localStorage.setItem('sidebarOpen', '0');
+    } else {
+        // 展開邏輯...
+        localStorage.setItem('sidebarOpen', '1');
+    }
+};
+
+// 頁面載入時恢復狀態（rAF 輪詢，等 Blazor 渲染 MudDrawer 後才執行）
+(function () {
+    if (localStorage.getItem('sidebarOpen') !== '0') return;
+    function applySidebarClosed() {
+        var drawer = document.querySelector('.mud-drawer-persistent');
+        var layout = document.querySelector('.mud-layout');
+        if (!drawer || !layout) {
+            requestAnimationFrame(applySidebarClosed);  // 元素不存在時持續重試
+            return;
+        }
+        drawer.classList.remove('mud-drawer--initial', 'mud-drawer--open');
+        drawer.classList.add('mud-drawer--closed');
+        layout.classList.remove('mud-drawer-open-persistent-left');
+    }
+    requestAnimationFrame(applySidebarClosed);
+})();
+```
+
+### 踩坑紀錄
+
+| # | 問題 | 原因 | 修法 |
+|---|------|------|------|
+| 1 | 側邊欄重整後仍恢復展開 | `DOMContentLoaded` 觸發時 Blazor 尚未渲染 MudDrawer，`querySelector` 回傳 null，callback 直接返回 | 改用 `requestAnimationFrame` 反覆輪詢，直到 `.mud-drawer-persistent` 存在後才套用收合 class |
+
+---
+
+## 驗收結果（第三批，2026-04-11）
+
+| 項目 | 功能 | 結果 |
+|------|------|------|
+| Item 16 | inline 硬編碼顏色清除（AgentSettings warning border + span color） | ✅ |
+| Item 17 | `.agent-setting-card` → `.system-config-card` 更名 | ✅ |
+| Item 18 | Empty State emoji → MudIcon（4 頁面：Home × 2、Projects、Rules） | ✅ |
+| Item 19 | Inline flex → MudStack（Home、AgentSettings × 2、RuleManagement 共 4 處） | ✅ |
+| Item 20 | ProjectManagement IsActive → MudSwitch（表格列 + Drawer 各一） | ✅ |
+| Item 21 | 側邊欄收合 localStorage 持久化（rAF 輪詢 bug fix 後通過） | ✅ |
+| Item 22 | Home 測試推送按鈕 → MudButton | ✅ |
+| Item 23 | RuleManagement Agent Badge → MudChip + `GetAgentChipColor()` | ✅ |
+
+`dotnet build` 通過（0 errors、1 pre-existing warning in PipelineView.razor）。
+
+---
+
 ## 變更紀錄
 
 | 版本 | 日期 | 內容 |
