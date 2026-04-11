@@ -1,9 +1,14 @@
 # CEO Agent — 總指揮
 
-> 文件用途：定義 CEO Agent 的角色、能力與整合方式
+> 文件用途：定義 CEO Agent 的角色、背景與整合方式（行為細節詳見執行指引）
 > 建立日期：2026-03-31
-> 最後更新：2026-04-07
+> 最後更新：2026-04-11
 > 狀態：✅ 已實作（Stage 2 建立，Stage 10 Orchestrator，Stage 14 分類補強，Stage 15 Claude Code + Session + 記憶）
+
+## 執行指引
+
+> 實際行為、工具權限、輸出格式、指令分類規則，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Victoria.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Victoria.md)**
 
 ---
 
@@ -16,7 +21,7 @@ CEO Agent 是 AI Team 的總指揮兼技術顧問，負責接收老闆指令、�
     ↓
 CEO Agent（Victoria）← 你的唯一窗口，統籌所有任務
     │
-    ├── PM Agent（Petra）← 品質審核閘門（Stage 16 規劃中）
+    ├── PM Agent（Petra）← 品質審核閘門（Stage 16 ✅ 已實作）
     ├── Requirements Agent（Rosa）
     ├── Designer Agent（Demi）
     ├── Dev Agent（Cody）
@@ -90,7 +95,7 @@ CEO Agent（Victoria）← 你的唯一窗口，統籌所有任務
 | **主要工作** | 分派、協調、追蹤 | 寫程式、操作 repo | 部署、監控 |
 | **觸發方式** | 老闆指令 / 事件自動觸發 | CEO 分派 | CEO 分派 / 事件觸發 |
 | **輸出** | 任務分派、確認請求、摘要報告 | 程式碼、PR | 部署結果、監控警報 |
-| **記憶方式** | Notion 規則庫 + PostgreSQL | 任務 context | 任務 context |
+| **記憶方式** | PostgreSQL 規則庫 + Session 對話歷史 + 長期記憶 | 任務 context | 任務 context |
 
 ---
 
@@ -118,8 +123,8 @@ CEO Agent（Victoria）← 你的唯一窗口，統籌所有任務
 |------|------|
 | 模型 | Claude Sonnet（需要強推理與分派判斷）|
 | Claude Code | RunVictoriaAsync（10 分鐘 timeout、15 turns、全工具） |
-| 記憶來源 | PostgreSQL 規則庫（Cache TTL 1小時）+ Session 對話歷史 + 長期記憶 |
-| System Prompt | CLAUDE_Victoria.md 模板（Claude Code 模式）或 BuildSystemPrompt（LLM fallback 模式） |
+| 記憶來源 | PostgreSQL 規則庫（Cache TTL 1小時）+ Session 對話歷史 + 長期記憶（CeoMemory） |
+| System Prompt | `CLAUDE_Victoria.md`（Claude Code 模式）或 `BuildSystemPrompt`（LLM fallback 模式） |
 
 ---
 

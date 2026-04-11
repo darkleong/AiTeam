@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v4.5
+> 版本：v5.0
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -8,32 +8,33 @@
 
 ## 文件索引
 
-| 文件 | 說明 | 狀態 |
-|------|------|------|
-| [01_Vision_and_Architecture.md](./01_Vision_and_Architecture.md) | 願景、核心設計原則、整體架構、Agent 定義 | ✅ 已確認 |
-| [02_Infrastructure.md](./02_Infrastructure.md) | Discord 頻道、資料儲存、已確認細節 | ✅ 已確認 |
-| [Stage_1_Design.md](./Stage_1_Design.md) | Stage 1：設計與決策 | ✅ 完成 |
-| [Stage_2_Foundation.md](./Stage_2_Foundation.md) | Stage 2：基礎建設 | ✅ 已完成（2026-03-31） |
-| [Stage_3_Agents.md](./Stage_3_Agents.md) | Stage 3：第一批 Agent 上線 | ✅ 已完成（2026-03-31） |
-| [Stage_4_Dashboard.md](./Stage_4_Dashboard.md) | Stage 4：Blazor Dashboard | ✅ 已完成（2026-03-31） |
-| [Stage_5_Expansion.md](./Stage_5_Expansion.md) | Stage 5：擴充更多 Agent | ✅ 已完成（2026-04-01） |
-| [Stage_6_Roadmap.md](./Stage_6_Roadmap.md) | Stage 6：強化、驗收與技術債清償 | ✅ 已完成（2026-04-01） |
-| [Stage_7_Roadmap.md](./Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | ✅ 已完成（2026-04-02） |
-| [Stage_8_Roadmap.md](./Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | ✅ 已完成（2026-04-02） |
-| [Stage_9_Roadmap.md](./Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | ✅ 已完成（2026-04-03） |
-| [Stage_10_Roadmap.md](./Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | ✅ 已完成（2026-04-03） |
-| [Stage_11_Roadmap.md](./Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | ✅ 已完成（2026-04-05） |
-| [Stage_12_Roadmap.md](./Stage_12_Roadmap.md) | Stage 12：提案流程全面升級 | ✅ 已完成（2026-04-06） |
-| [Stage_13_Roadmap.md](./Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | ✅ 已完成（2026-04-06） |
-| [Stage_14_Roadmap.md](./Stage_14_Roadmap.md) | Stage 14：CEO 分類與流程完整性補強 | ✅ 已完成（2026-04-06） |
-| [Stage_15_Roadmap.md](./Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 + 長期記憶 | ✅ 已完成（2026-04-06） |
-| [Stage_16_Roadmap.md](./Stage_16_Roadmap.md) | Stage 16：PM Agent（Petra）品質審核閘門 | ✅ 已完成（2026-04-07） |
-| [Stage_17_Roadmap.md](./Stage_17_Roadmap.md) | Stage 17：Mock Mode（模擬模式） | ✅ 已完成（2026-04-08） |
-| [Stage_18_Roadmap.md](./Stage_18_Roadmap.md) | Stage 18：Dashboard 可觀測性升級 | ✅ 已完成（2026-04-09） |
-| [Stage_19_Roadmap.md](./Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | ✅ 已完成（Pt.1 2026-04-10、Pt.2 2026-04-11） |
-| [Stage_20_Roadmap.md](./Stage_20_Roadmap.md) | Stage 20：Dashboard 全面換 MudBlazor Layout | ✅ 已完成（2026-04-11） |
-| [Future_Feature.md](./Future_Feature.md) | 未來功能候選清單（不限 Stage） | 🔵 持續維護 |
-| [agents/software team/Agent_Capability_Gaps.md](./agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | 🔵 持續維護 |
+| 文件 | 說明 | 版本 | 狀態 |
+|------|------|------|------|
+| [01_Vision_and_Architecture.md](./01_Vision_and_Architecture.md) | 願景、核心設計原則、整體架構、Agent 定義 | — | ✅ 已確認 |
+| [02_Infrastructure.md](./02_Infrastructure.md) | Discord 頻道、資料儲存、已確認細節 | — | ✅ 已確認 |
+| [Stage_1_Design.md](../planning/Stage_1_Design.md) | Stage 1：設計與決策 | v0.1.0 | ✅ 完成 |
+| [Stage_2_Foundation.md](../planning/Stage_2_Foundation.md) | Stage 2：基礎建設 | v0.1.0 | ✅ 已完成（2026-03-31） |
+| [Stage_3_Agents.md](../planning/Stage_3_Agents.md) | Stage 3：第一批 Agent 上線 | v0.2.0 | ✅ 已完成（2026-03-31） |
+| [Stage_4_Dashboard.md](../planning/Stage_4_Dashboard.md) | Stage 4：Blazor Dashboard | v0.3.0 | ✅ 已完成（2026-03-31） |
+| [Stage_5_Expansion.md](../planning/Stage_5_Expansion.md) | Stage 5：擴充更多 Agent | v0.4.0 | ✅ 已完成（2026-04-01） |
+| [Stage_6_Roadmap.md](../planning/Stage_6_Roadmap.md) | Stage 6：強化、驗收與技術債清償 | v1.0.0 | ✅ 已完成（2026-04-01） |
+| [Stage_7_Roadmap.md](../planning/Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | v1.1.0 | ✅ 已完成（2026-04-02） |
+| [Stage_8_Roadmap.md](../planning/Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | v1.2.0 | ✅ 已完成（2026-04-02） |
+| [Stage_9_Roadmap.md](../planning/Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | v1.3.0 | ✅ 已完成（2026-04-03） |
+| [Stage_10_Roadmap.md](../planning/Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | v1.4.0 | ✅ 已完成（2026-04-03） |
+| [Stage_11_Roadmap.md](../planning/Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | v2.0.0 | ✅ 已完成（2026-04-05） |
+| [Stage_12_Roadmap.md](../planning/Stage_12_Roadmap.md) | Stage 12：提案流程全面升級 | v2.1.0 | ✅ 已完成（2026-04-06） |
+| [Stage_13_Roadmap.md](../planning/Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | v2.2.0 | ✅ 已完成（2026-04-06） |
+| [Stage_14_Roadmap.md](../planning/Stage_14_Roadmap.md) | Stage 14：CEO 分類與流程完整性補強 | v2.3.0 | ✅ 已完成（2026-04-06） |
+| [Stage_15_Roadmap.md](../planning/Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 + 長期記憶 | v2.4.0 | ✅ 已完成（2026-04-06） |
+| [Stage_16_Roadmap.md](../planning/Stage_16_Roadmap.md) | Stage 16：PM Agent（Petra）品質審核閘門 | v3.0.0 | ✅ 已完成（2026-04-07） |
+| [Stage_17_Roadmap.md](../planning/Stage_17_Roadmap.md) | Stage 17：Mock Mode（模擬模式） | v3.1.0 | ✅ 已完成（2026-04-08） |
+| [Stage_18_Roadmap.md](../planning/Stage_18_Roadmap.md) | Stage 18：Dashboard 可觀測性升級 | v3.2.0 | ✅ 已完成（2026-04-09） |
+| [Stage_19_Roadmap.md](../planning/Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | v3.3.0 | ✅ 已完成（Pt.1 2026-04-10、Pt.2/Pt.3 2026-04-11） |
+| [Stage_20_Roadmap.md](../planning/Stage_20_Roadmap.md) | Stage 20：Dashboard 全面換 MudBlazor Layout | v3.4.0 | ✅ 已完成（2026-04-11） |
+| [Stage_21_Roadmap.md](../planning/Stage_21_Roadmap.md) | Stage 21：文件整理與 SemVer 導入 | v3.5.0 | ✅ 已完成（2026-04-11） |
+| [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
+| [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
 ---
 
@@ -77,7 +78,14 @@
 | v4.3 | 2026-04-10 | Stage 19 Pt.1 驗收完成（StatusBadge 補齊、PipelineList 獨立頁、MudSwitch、表格 FixedHeader）；Stage_19_Roadmap.md 改版為 v2.0（三批 18 項問題清單）；新增 Stage_20_Roadmap.md（全面換 MudBlazor Layout）；決策：Stage 19 Pt.2 暫緩，先執行 Stage 20 奠定 MudLayout 基礎 |
 | v4.4 | 2026-04-10 | Stage 20 實作完成（MainLayout → MudLayout、NavMenu → MudNavMenu、Dark Mode → MudThemeProvider、三處 Drawer → MudDrawer Temporary、app.css 清理）；dotnet build 通過（0 errors）；待瀏覽器驗收 |
 | v4.5 | 2026-04-11 | Stage 20 驗收完成；補充五項踩坑完整記錄（Layout @rendermode HTTP 500、onclick C# 解析、MudBlazor CSS 雙 hyphen、跨 Circuit 服務隔離、HttpContext Interactive 不可用）；最終架構：Routes.razor 全域 InteractiveServer、Layout 靠 JS onclick + CSS 變數 Dark Mode；Stage_20_Roadmap.md 更新至 v2.0 |
-| v4.6 | 2026-04-11 | Stage 19 Pt.2 驗收完成（7 項：首頁緊湊小卡 + 最近流程、MudChip Badge、MudSelect 多選篩選、Agent 左右雙欄、MudDialog 表單、Token Sticky、hover CSS）；五項踩坑記錄；Stage_19_Roadmap.md 更新至 v3.0；Stage 19 全部結案 |
+| v4.6 | 2026-04-11 | Stage 19 Pt.2 驗收完成（7 項：首頁緊湊小卡 + 最近流程、MudChip Badge、MudSelect 多選篩選、Agent 左右雙欄、MudDialog 表單、Token Sticky、hover CSS）；五項踩坑記錄；Stage_19_Roadmap.md 更新至 v3.0 |
+| v4.7 | 2026-04-11 | Stage 19 Pt.3 驗收完成（8 項：MudIcon Empty State、MudSwitch、MudChip Agent Badge、MudButton、MudStack inline flex 清除、system-config-card 更名、側邊欄 localStorage 持久化、inline 色碼消除）；Stage_19_Roadmap.md 更新至 v3.3；Stage 19 三批全部結案 |
+| v4.8 | 2026-04-11 | 新增 Stage_21_Roadmap.md（文件整理 + SemVer 導入）；Future_Feature.md 整理至 v4.0（移除已完成的十/十一，重新編號為一～十二） |
+| v4.9 | 2026-04-11 | 建立 docs/conventions/mudblazor.md（MudBlazor 8.x 使用規範，13 大項，含累積踩坑記錄）；Stage_21_Roadmap.md 更新至 v1.1（補入前置作業）|
+| v4.10 | 2026-04-11 | 建立 docs/README.md（docs 資料夾導覽入口，說明各子資料夾用途）；Stage_21_Roadmap.md 更新至 v1.2 |
+| v4.11 | 2026-04-11 | docs/agents/ 全面重整：8 個有對應 Resources/ 的 Agent 文件加入「執行指引」指標，移除與 CLAUDE_*.md 重疊的行為細節，修正所有錯誤（Notion、PM 狀態、Reviewer 輸出格式、QA/Doc/Rosa 流程描述）|
+| v4.12 | 2026-04-11 | CLAUDE.md 全面更新：修正 Blazor Server → Web App、補齊 Stage 11~21 文件清單、新增 mudblazor.md、修正 dotnet ef 指令、新增「版本號管理（SemVer）」章節 |
+| v5.0 | 2026-04-11 | Stage 21 完成：docs/ 資料夾重整（planning/ + architecture/ 子資料夾）、telerik.md 刪除、SemVer 導入（Bot + Dashboard 版本號升至 v3.5.0）、索引表加入版本欄 |
 
 ---
 

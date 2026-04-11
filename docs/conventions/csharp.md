@@ -72,15 +72,13 @@ Wrapper（廠商包裝）+ Parser（格式解析）+ Factory（物件建立）
 |------|------|
 | `Repository` | 資料存取 CRUD，一個對應一種資料來源 |
 | `Service` | 業務邏輯編排，無狀態 |
-| `Controller` | 狀態機管理 |
+| `Controller` | ASP.NET Core API 控制器 |
 | `Manager` | 管理一組同類物件生命週期 |
-| `Wrapper` | 廠商 Library 介面包裝 |
-| `Driver` | 設備操作，組合多步驟加入業務語義 |
+| `Wrapper` | 外部 SDK / CLI 工具包裝，對內提供統一介面（如 `ClaudeCodeService`） |
 | `Factory` | 建立複雜物件 |
 | `Validator` | 驗證邏輯 |
 | `Parser` | 資料格式解析 |
 | `Helper` / `Utility` | 無狀態靜態輔助方法 |
-| `Converter` | UI 格式轉換 |
 
 **命名慣例：** `{業務領域}{角色}`，例如 `CustomerProductViewModel`、`ProductRepository`
 
@@ -104,8 +102,7 @@ CustomerService.GetProductsByCustomerAsync(customerId)
 
 ```csharp
 #region Constructor
-#region Dependencies       // [Inject] 注入的服務
-#region Services           // 外部 API 相關物件
+#region Dependencies       // [Inject] 注入的服務（Blazor 組件）
 #region Constants
 #region Parameters         // [Parameter] Razor 參數
 #region Private Variables
@@ -120,6 +117,54 @@ CustomerService.GetProductsByCustomerAsync(customerId)
 #region Nested Classes
 #region Nested Structs
 ```
+
+## 建構子注入（Primary Constructor）
+
+非 Blazor 組件的類別（Service、Repository、Controller）使用 **C# 12 Primary Constructor** 注入相依：
+
+```csharp
+// ✅ Primary Constructor（Service / Controller / CommandHandler）
+public class CommandHandler(
+    ILogger<CommandHandler> logger,
+    RulesService rulesService,
+    IOptions<DiscordSettings> settings)
+{
+    private readonly DiscordSettings _settings = settings.Value;
+    // logger 和 rulesService 直接使用，無需手動宣告私有欄位
+}
+
+// Blazor 組件仍使用 [Inject] 屬性（代碼後置 .razor.cs）
+public partial class MyComponent
+{
+    [Inject]
+    private MyService MyService { get; set; } = null!;
+}
+```
+
+## 結構化日誌（ILogger）
+
+```csharp
+// ✅ 注入 ILogger<T>（Primary Constructor）
+public class MyService(ILogger<MyService> logger)
+{
+    public async Task DoSomethingAsync(string taskName)
+    {
+        logger.LogInformation("開始執行 {TaskName}", taskName);
+        try
+        {
+            // ...
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "執行失敗：{TaskName}", taskName);
+            throw;
+        }
+    }
+}
+```
+
+- 使用結構化佔位符（`{TaskName}`），**不要字串串接**
+- 等級選擇：`Debug` 細節診斷 → `Information` 正常流程 → `Warning` 異常但可繼續 → `Error` 需處理的錯誤
 
 ## 非同步規範
 
@@ -209,4 +254,5 @@ if (user.RegistrationDate < DateTime.Now.AddDays(-1))
 - [ ] 類別命名使用正確的角色後綴
 - [ ] Service 沒超過 300 行
 - [ ] DTO 不往上展開父物件
-- [ ] ViewModel 用於跨領域扁平化頁面
+- [ ] Service / Controller 使用 Primary Constructor 注入（非 Blazor 組件）
+- [ ] ILogger 訊息使用結構化佔位符（非字串串接）

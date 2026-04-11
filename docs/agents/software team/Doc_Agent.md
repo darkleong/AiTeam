@@ -1,8 +1,14 @@
 # Doc Agent — 文件管理
 
-> 文件用途：定義 Doc Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已完成（Stage 5，Stage 6 強化）
+> 文件用途：定義 Doc Agent 的角色、背景與整合方式（行為細節詳見執行指引）
+> 建立日期：2026-03-31
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 5 建立，Stage 6 強化，Stage 13 納入單一 PR 流程）
+
+## 執行指引
+
+> 實際行為、工作流程（讀取 PR changed files → 產出文件）、輸出格式，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Sage.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Sage.md)**
 
 ---
 
@@ -11,15 +17,13 @@
 Doc Agent 是 AI Team 的文件工程師，負責自動產出技術文件、API 說明，讓程式碼有清楚的文字說明，降低維護成本。
 
 ```
-CEO Agent 分派文件任務
+QA Agent（Quinn）完成測試
     ↓
-Doc Agent 讀取目標程式碼
+Doc Agent（Sage）讀取 PR 的 changed files
     ↓
-產出 Markdown 文件 或 XML 註解
+產出 Markdown 技術文件（直接寫入檔案，Stage 13 起不另開 PR）
     ↓
-開 PR（`docs/auto-{taskId}`）
-    ↓
-老闆審查後 Merge
+WorkflowEngine 將所有產出（Cody + Quinn + Sage）合入同一 PR
 ```
 
 ---
@@ -27,21 +31,12 @@ Doc Agent 讀取目標程式碼
 ## 核心能力
 
 ### 1. 文件產出類型
-- **Markdown 文件**（預設）：模組說明、架構說明、使用指南
-- **XML 註解**：程式碼內的 `/// <summary>` 說明（當任務標題含「XML 註解」時）
+- **Markdown 技術文件**：針對 PR 的變更說明（概述、主要變更、API 參考、注意事項）
+- 只記錄 public API 和重要行為，不記錄實作細節
 
-### 2. 文件涵蓋範圍
-- 遞迴列舉指定路徑下的 `.cs` 檔案（含子目錄）
-- 分析類別、方法、屬性的用途
-- 產出人類可讀的說明文字
-
-### 3. 路徑處理（Stage 6 強化）
-- 自動修正路徑尾巴斜線（避免 GitHub Contents API 404）
-- 遞迴目錄列舉，遇到 `NotFoundException` 靜默略過
-
-### 4. 品質控管
-- 產出後開 PR，老闆審查後才 Merge
-- 文件準確性依賴程式碼品質，建議搭配 Code Review 使用
+### 2. 作業範圍（Stage 13 調整）
+- 根據 PR 的 changed files 列表，使用 Read / Glob / Grep 讀取實際程式碼
+- **不另開 PR**：文件直接寫入，與 Cody 的程式碼合入同一個 PR
 
 ---
 
@@ -79,10 +74,10 @@ Doc Agent 讀取目標程式碼
 
 | 項目 | 建議 |
 |------|------|
-| 模型 | Claude Haiku（Stage 13 起接入 Claude Code 唯讀探索，成本優先）|
-| 溫度 | 中（0.3-0.5，文件需要一點表達彈性）|
-| 記憶來源 | 任務 context + 目標程式碼內容 |
-| System Prompt 重點 | 技術文件寫作規範、繁體中文為主、結構清楚 |
+| 模型 | Claude Haiku（成本優先，文件任務不需頂級推理）|
+| 執行模式 | Claude Code session（Stage 13 起）|
+| 記憶來源 | 任務 context + PR changed files |
+| System Prompt | `CLAUDE_Sage.md` |
 
 ---
 

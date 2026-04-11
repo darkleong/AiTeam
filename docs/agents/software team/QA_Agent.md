@@ -1,8 +1,14 @@
 # QA Agent — 品質保證
 
-> 文件用途：定義 QA Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已完成（Stage 5，Stage 6 強化）
+> 文件用途：定義 QA Agent 的角色、背景與整合方式（行為細節詳見執行指引）
+> 建立日期：2026-03-31
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 5 建立，Stage 6 強化，Stage 9 Playwright 加入，Stage 16 重構為 Claude Code session）
+
+## 執行指引
+
+> 實際行為、測試策略（xUnit / Playwright）、輸出路徑規則，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_QA.md`](../../src/AiTeam.Bot/Resources/CLAUDE_QA.md)**
 
 ---
 
@@ -11,33 +17,27 @@
 QA Agent 是 AI Team 的品質保證工程師，負責為 Dev Agent 產出的程式碼撰寫自動化測試，確保功能正確、避免 regression。
 
 ```
-Dev Agent 開 PR
+Reviewer Agent（Vera）完成審查
     ↓
-QA Agent 分析變更的程式碼
+QA Agent（Quinn）分析 PR 變更
     ↓
-產出測試程式碼，開測試 PR
+產出測試檔案（直接寫入，不開新 PR）
     ↓
-測試通過後，通知老闆審查 Dev PR
+WorkflowEngine 繼續串行流程（→ Doc Agent）
 ```
 
 ---
 
 ## 核心能力
 
-### 1. 自動化測試產出
-- 分析 PR 的變更檔案（取得 PR head branch，避免讀取尚未合入 main 的檔案）
-- 針對變更邏輯產出對應的測試程式碼
-- 自動過濾測試檔本身（`*Tests.cs`、`*Spec.cs`、`.Tests/`、`.Test/` 路徑）
-- 建立測試 branch，開 PR（`test/qa-{taskId}`）
+### 1. 雙軌測試策略（Stage 9 / Stage 16）
+- **.cs 變更** → xUnit 單元測試（xUnit + NSubstitute + FluentAssertions）
+- **.razor / .css 變更** → Playwright 視覺截圖測試（light / dark mode 各截一張）
 
-### 2. 測試框架
-- **xUnit**：測試框架
-- **NSubstitute**：Mock 相依物件
-- **FluentAssertions**：讓斷言更易讀
-
-### 3. 測試類型
-- 單元測試（Unit Test）
-- 整合測試（Integration Test，視情況）
+### 2. 輸出方式（Stage 16 重構）
+- 直接使用 Write 工具寫入測試檔案，**不另開測試 branch / PR**
+- 輸出路徑：`tests/Generated/` 或 `src/AiTeam.Tests.Playwright/Generated/`
+- 完成後執行 `dotnet build` 確認編譯，並回傳 JSON 摘要
 
 ---
 
@@ -76,9 +76,9 @@ QA Agent 分析變更的程式碼
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Sonnet（需要理解程式邏輯）|
-| 溫度 | 低（0.1-0.2）|
-| 記憶來源 | 任務 context + 變更的程式碼內容 |
-| System Prompt 重點 | C# QA 工程師角色、xUnit + NSubstitute + FluentAssertions、直接回傳完整 .cs 檔 |
+| 執行模式 | Claude Code session（Stage 16 重構）|
+| 記憶來源 | 任務 context + PR changed files |
+| System Prompt | `CLAUDE_QA.md` |
 
 ---
 

@@ -1,8 +1,14 @@
 # Reviewer Agent — 程式碼審查
 
-> 文件用途：定義 Reviewer Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已實作（Stage 7，Stage 12 新增 Claude Code 唯讀探索補強）
+> 文件用途：定義 Reviewer Agent 的角色、背景與整合方式（行為細節詳見執行指引）
+> 建立日期：2026-03-31
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 7 建立，Stage 12 Claude Code 探索補強，Stage 16 重構為 Claude Code session）
+
+## 執行指引
+
+> 實際行為、審查範圍（只審 + 行）、Critical 嚴格定義、JSON 輸出格式，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Vera.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Vera.md)**
 
 ---
 
@@ -33,10 +39,11 @@ Dev Agent 修正後，Reviewer 確認通過
 - **安全性**：是否有 SQL Injection、敏感資訊洩露
 - **可維護性**：是否過度複雜、是否需要重構
 
-### 2. 審查報告格式
-- 問題分級：🔴 必須修改 / 🟡 建議修改 / 🟢 小建議
-- 每個問題附上具體說明與建議做法
-- 整體評分與摘要
+### 2. 審查報告格式（Stage 16 重新定義）
+- 輸出 JSON：`critical / warning / info` 三級，各附檔案路徑與行號
+- **只審查 PR 中「+」開頭的新增 / 修改行**，不報告未修改的既有問題
+- Critical 有嚴格定義（會 crash / 資安漏洞 / 資源洩漏），其餘不得誤報為 critical
+- Petra（PM Agent）接收 Vera 輸出，判斷是否需打回 Cody 修正（Stage 16）
 
 ### 3. 與 QA Agent 的協作
 - Reviewer 負責程式碼邏輯與品質
@@ -80,9 +87,9 @@ Dev Agent 修正後，Reviewer 確認通過
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Sonnet（需要深入理解程式碼）|
-| 溫度 | 低（0.1-0.2）|
-| 記憶來源 | 任務 context + PR 程式碼內容 + 編程規範 |
-| System Prompt 重點 | 資深 C# 工程師角色、編程規範清單、問題分級標準 |
+| 執行模式 | Claude Code session（Stage 16 重構，可執行 dotnet build 驗證）|
+| 記憶來源 | 任務 context + PR diff（changed files）|
+| System Prompt | `CLAUDE_Vera.md` |
 
 ---
 

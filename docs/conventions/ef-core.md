@@ -51,22 +51,26 @@ var userDtos = await _dbContext.Users
 
 ## 異常處理
 
+本專案使用 **PostgreSQL（Npgsql）**，例外型別為 `PostgresException`，不是 SQL Server 的 `SqlException`：
+
 ```csharp
-catch (DbUpdateException ex) when (ex.InnerException is SqlException sx)
+using Npgsql;
+
+catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx)
 {
     _dbContext.ChangeTracker.Clear();  // 必須清除追蹤狀態
-    return sx.Number switch
+    return pgEx.SqlState switch
     {
-        2627 => BadRequest("Unique constraint error."),
-        547  => BadRequest("Constraint check violation."),
-        2601 => BadRequest("Duplicated key row error."),
-        _    => BadRequest(ex.Message),
+        PostgresErrorCodes.UniqueViolation     => BadRequest("唯一鍵衝突"),
+        PostgresErrorCodes.ForeignKeyViolation => BadRequest("外鍵約束失敗"),
+        PostgresErrorCodes.NotNullViolation    => BadRequest("必填欄位不得為空"),
+        _                                       => BadRequest(pgEx.MessageText),
     };
 }
 catch (Exception ex)
 {
     _dbContext.ChangeTracker.Clear();  // 必須清除追蹤狀態
-    return BadRequest(ex.ToString());
+    return BadRequest(ex.Message);
 }
 ```
 
@@ -85,6 +89,23 @@ await _dbContext.SaveChangesAsync();
 ```
 
 **Repository 不應呼叫 SaveChangesAsync，只有外層呼叫。**
+
+## Migration 工作流程
+
+```bash
+# 新增 Migration
+dotnet ef migrations add [MigrationName] --project AiTeam.Data --startup-project AiTeam.AppHost
+
+# 套用到本機資料庫（Aspire 啟動後執行）
+dotnet ef database update --project AiTeam.Data --startup-project AiTeam.AppHost
+
+# 確認即將執行的 SQL
+dotnet ef migrations script --project AiTeam.Data --startup-project AiTeam.AppHost
+```
+
+**命名慣例：** `Add{Entity}Table`、`Add{Column}To{Table}`、`Update{Table}{描述}`
+
+> 每個 Stage 的 Migration 應在 PR 說明中明確列出，並在驗收前確認已 `database update`。
 
 ## Repository 模式
 
@@ -105,5 +126,6 @@ public interface IUserRepository
 - [ ] LINQ 在伺服器端執行
 - [ ] 所有資料庫操作使用 Async 方法
 - [ ] 只讀查詢使用 AsNoTracking
-- [ ] catch 區塊有 ChangeTracker.Clear()
+- [ ] catch 區塊捕捉 `PostgresException`（而非 `SqlException`），且有 `ChangeTracker.Clear()`
 - [ ] SaveChangesAsync 只在最外層呼叫一次
+- [ ] 有新 Entity 或欄位變更時，已新增對應 Migration 並確認可套用

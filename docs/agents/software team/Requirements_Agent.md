@@ -1,8 +1,14 @@
 # Requirements Agent — 需求分析
 
-> 文件用途：定義 Requirements Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已完成（Stage 5，Stage 6 強化）
+> 文件用途：定義 Requirements Agent 的角色、背景與整合方式（行為細節詳見執行指引）
+> 建立日期：2026-03-31
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 5 建立，Stage 6 強化，Stage 12 升級 Claude Code 唯讀探索）
+
+## 執行指引
+
+> 實際行為、輸出格式（JSON Array）、工作流程，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Rosa.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Rosa.md)**
 
 ---
 
@@ -29,36 +35,26 @@ Dev Agent 按照 Issue 逐一實作
 ## 核心能力
 
 ### 1. 需求拆解
-- 分析模糊的需求描述
-- 拆解成獨立、可實作的 GitHub Issues
-- 每個 Issue 包含：標題、背景說明、驗收條件
+- 分析老闆需求，拆解成獨立、可實作的 GitHub Issues
+- Stage 12 起：透過 Claude Code 唯讀探索 codebase，確保 Issues 引用實際存在的檔案與元件
 
-### 2. Issue 格式規範
+### 2. 輸出方式
+- Rosa 只輸出 JSON Array（Issue 規格）
+- **GitHub Issues 的實際建立由 WorkflowEngine 負責**，不是 Rosa 直呼 API
+- Petra（PM Agent）審核 Rosa 輸出後才放行到下一步（Stage 16）
 
-```json
-{
-  "title": "動詞開頭的標題",
-  "body": "## 背景\n...\n## 驗收條件\n- [ ] ...",
-  "labels": ["feature", "P1"]
-}
+### 3. 流程位置
 ```
-
-### 3. 三層確認機制（Stage 6 強化）
-
+CEO 分派提案任務
+    ↓
+Rosa（需求分析）→ Petra 審核
+    ↓
+Demi（UI 規格）→ Petra 審核
+    ↓
+老闆確認提案書
+    ↓
+WorkflowEngine 建立 GitHub Issues → 啟動開發
 ```
-老闆下指令
-    ↓ CEO 分派（第一層確認）
-    ↓ Requirements Agent 說明即將建立的 Issue 清單（第二層確認）
-    ↓ LLM 分析需求，展示準備建立的完整 Issue 清單（第三層確認）
-    ↓ 老闆按 exec_yes
-    → 實際呼叫 GitHub Issues API
-```
-
-確認後才呼叫 GitHub API，避免誤建 Issues。
-
-### 4. 直接操作 GitHub Issues API
-- 不做 Git 操作，直接建立 Issues
-- 支援批次建立多個 Issues
 
 ---
 
@@ -97,9 +93,9 @@ Dev Agent 按照 Issue 逐一實作
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Haiku（Stage 12 起接入 Claude Code 唯讀探索，成本優先）|
-| 溫度 | 中（0.3-0.5）|
-| 記憶來源 | 任務 context + 專案背景說明 |
-| System Prompt 重點 | 需求分析師角色、Issue 格式規範、回傳純 JSON |
+| 執行模式 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read）|
+| 記憶來源 | 任務 context + 老闆原始需求描述 |
+| System Prompt | `CLAUDE_Rosa.md` |
 
 ---
 

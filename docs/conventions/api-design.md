@@ -62,10 +62,12 @@ POST /api/createUser
 
 ## Controller 結構
 
+使用 **Primary Constructor** 注入相依（C# 12）：
+
 ```csharp
 [ApiController]
 [Route("api/v1/[controller]")]
-public class UsersController : ControllerBase
+public class UsersController(IUserService userService) : ControllerBase
 {
     #region GET Methods
     [HttpGet("{id}")]
@@ -82,6 +84,43 @@ public class UsersController : ControllerBase
     #endregion
 }
 ```
+
+## Internal API（跨 Process 通信）
+
+Bot → Dashboard 的內部通信走 `/internal/` 前綴端點，**不遵守 `/api/v1/` 版本路由慣例**：
+
+```csharp
+// ✅ Internal API 範例
+[ApiController]
+[Route("internal/agent-status")]
+public class AgentStatusController(IHubContext<AgentStatusHub> hubContext) : ControllerBase
+{
+    [HttpPost]
+    public async Task<IActionResult> PushAgentStatusAsync([FromBody] AgentStatusViewModel status)
+    {
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveAgentStatus, status);
+        return Ok();
+    }
+}
+```
+
+- Internal API 僅限容器間通信，不對外暴露
+- 回傳 `IActionResult` 而非 `ApiResponse<T>`（呼叫方是 Bot，不需統一格式）
+- 不加 Swagger 文件（非公開 API）
+
+## SignalR Hub（即時推送）
+
+Dashboard 的即時更新通過 SignalR Hub，而非 REST 輪詢：
+
+```
+Bot → POST /internal/agent-status → AgentStatusController
+    → hubContext.Clients.All.SendAsync(...)
+        → Dashboard Browser（HubConnection.On<T>(...)）
+```
+
+- Hub 定義集中在 `AiTeam.Data/Hubs/`
+- Hub method 名稱統一定義為 Hub 類別的 `const string`（避免拼錯字串）
+- REST endpoint 負責觸發，Hub 負責廣播，兩者職責分明
 
 ## 查詢參數規範
 
@@ -107,9 +146,10 @@ public class UsersController : ControllerBase
 
 - [ ] 端點使用複數名詞
 - [ ] 使用正確的 HTTP 方法與狀態碼
-- [ ] 回應格式統一
+- [ ] 回應格式統一（Public API 用 `ApiResponse<T>`，Internal API 用 `IActionResult`）
 - [ ] 包含適當的錯誤處理
 - [ ] 支援分頁、排序、篩選（如適用）
-- [ ] 使用版本控制（/api/v1/）
-- [ ] 包含 Swagger 文件與註解
+- [ ] Public API 使用版本路由（/api/v1/）；Internal API 使用 /internal/ 前綴
+- [ ] Public API 有 Swagger 文件與 `/// <summary>` 註解
 - [ ] 不回傳敏感資訊
+- [ ] Controller 使用 Primary Constructor 注入

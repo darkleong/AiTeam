@@ -1,8 +1,14 @@
 # Designer Agent — UI 設計規格
 
-> 文件用途：定義 Designer Agent 的角色、能力與整合方式  
-> 建立日期：2026-03-31  
-> 狀態：✅ 已實作（Stage 7，Stage 12 強化 Claude Code 唯讀探索）
+> 文件用途：定義 Designer Agent 的角色、背景與整合方式（行為細節詳見執行指引）
+> 建立日期：2026-03-31
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 7 建立，Stage 12 強化 Claude Code 唯讀探索）
+
+## 執行指引
+
+> 實際行為、輸出格式（Markdown 規格文件六大區塊）、工作流程，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Demi.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Demi.md)**
 
 ---
 
@@ -38,15 +44,9 @@ Dev 開始寫程式
 - 考量 Blazor Server 的渲染特性與 InteractiveServer 電路隔離
 
 ### 3. 輸出格式
-- UI 規格文件（Markdown）
-- 頁面結構描述
-- 元件清單與配置
-- 低保真線框稿（文字描述或 HTML 原型）
-
-### 4. 設計限制說明
-- 不做視覺設計稿（顏色、字體、精緻排版）
-- 不做使用者研究
-- 專注於功能性的結構規格
+- UI 規格文件（Markdown，共六大區塊：頁面目的、頁面結構、元件規格、資料來源、互動行為、注意事項）
+- **只輸出規格描述，禁止輸出任何程式碼**（含 HTML 原型）
+- Petra（PM Agent）審核 Demi 輸出後才放行到下一步（Stage 16）
 
 ---
 
@@ -109,9 +109,9 @@ Dev 開始寫程式
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Haiku（Stage 12 起接入 Claude Code 唯讀探索，成本優先）|
-| 溫度 | 中（0.4-0.6，需要一點創意思考）|
-| 記憶來源 | 任務 context + 現有頁面結構 + MudBlazor 元件清單 |
-| System Prompt 重點 | UI 規格師角色、MudBlazor 元件熟悉度、Blazor Server 特性、以可實作為前提 |
+| 執行模式 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read）|
+| 記憶來源 | 任務 context + Rosa 的 Issues + 老闆附圖說明（若有）|
+| System Prompt | `CLAUDE_Demi.md` |
 
 ---
 

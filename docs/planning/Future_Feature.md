@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v3.3
+> 版本：v4.0
 > 建立日期：2026-04-01
-> 最後更新：2026-04-07
+> 最後更新：2026-04-11
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -182,7 +182,7 @@ DocAgentService 自動產出技術文件並開 PR，目前沒有人工審查以�
 1. **實作 `GeminiProvider : ILlmProvider`** — 串接 Google Gemini API，支援文字與 Vision
 2. **每個 Agent 可獨立設定供應商與模型** — `appsettings.json` 的 Agent 設定已有 `Provider` 和 `Model` 欄位，實作後直接生效
 
-設定��例：
+設定範例：
 ```json
 "CEO":  { "Provider": "Anthropic", "Model": "claude-sonnet-4-6" },
 "Ops":  { "Provider": "Gemini",    "Model": "gemini-2.5-flash"  },
@@ -214,7 +214,7 @@ DocAgentService 自動產出技術文件並開 PR，目前沒有人工審查以�
 
 ### 背景
 
-Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在記憶量少時（< 100 筆）足夠使用。但隨著使用時間增長��記憶量會超過 prompt 容量限制。
+Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在記憶量少時（< 100 筆）足夠使用。但隨著使用時間增長，記憶量會超過 prompt 容量限制。
 
 ### 簡易版 vs 向量搜索版
 
@@ -247,74 +247,7 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 
 ---
 
-## 十、Dashboard Agent 狀態卡即時更新
-
-### 背景
-
-目前 Dashboard 總覽頁的 Agent 狀態卡（「閒置」/「執行中」）在 Agent 開始或完成任務時**不會即時更新**，需手動 F5 刷新才能看到正確狀態。任務清單（最近任務）已透過 SignalR 即時推送正確，但 Agent 狀態卡使用獨立的渲染��徑，`DashboardPushService.PushTaskUpdateAsync` 並未廣播 Agent 狀態變更事件。
-
-### 期望行為
-
-當 `FireOneStepAsync` 啟動 Agent 或任務完成時，Dashboard 總覽頁的對應 Agent 卡片應即時切換「閒置」↔「執行中」，無需頁面刷新。
-
-### 實作方向
-
-1. `DashboardPushService` 新增 `PushAgentStatusAsync(string agentName, string status)` 方法
-2. `TaskGroupService.FireOneStepAsync` 在 Agent 開始執行前 Push `"running"`，完成後 Push `"idle"`
-3. Dashboard 總覽頁訂閱對應 SignalR 事件，收到後更新對應 Agent 卡片狀態
-
-### 優先級
-
-🟡 中優先級 — ⇒ 已移入 **Stage 18**
-
----
-
-## 十一、任務流程可視化（Pipeline View）
-
-### 背景
-
-當老闆交辦一個任務（例如新功能提案），該任務會經過多個 Agent 處理（Rosa → Petra → Demi → Petra → Cody → Vera → Quinn → Sage）。目前 Dashboard 任務中心只能看到各 TaskItem 的列表，無法直觀看出一個任務的完整流向與當前進度。
-
-### 期望行為
-
-在任務中心點擊任一 TaskGroup 時，展開 **Pipeline View**，以可視化方式呈現該任務的完整流程：
-
-```
- ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐
- │ Rosa │ ─→ │Petra │ ─→ │ Demi │ ─→ │Petra │ ─→ │ Cody │ ─→ │ Vera │ ...
- │  ✅  │    │  ✅  │    │  ✅  │    │  🔄  │    │ 待命 │    │ 待命 │
- └──────┘    └──────┘    └──────┘    └──────┘    └──────┘    └──────┘
-```
-
-### 設計方案
-
-**MudStepper 主流程概覽 + MudTimeline 詳細歷程**
-
-1. **MudStepper**（主視圖）：水平 Pipeline 顯示每個 Agent 節點
-   - 每個節點：Agent 名稱 + 頭像 + 狀態色
-   - 狀態色：灰（待命）/ 藍（執行中）/ 綠（完成）/ 橘（審核中）/ 紅（失敗）
-   - 特殊標示：Petra 打回（revise）→ 回退箭頭 + 次數 / Escalate → 紅色警示 / 老闆確認 → 菱形節點
-
-2. **MudTimeline**（點擊展開）：垂直時間線顯示該步驟詳細歷程
-   - 開始時間、結束時間、耗時
-   - Agent 產出摘要
-   - Petra 審核結果（approve / revise / escalate）
-   - 打回修正歷史（第幾次、修改指示、修正後結果）
-
-3. **未來可升級**：自製 SVG Pipeline，支援更精緻的回退箭頭和動畫效果
-
-### 前置條件
-
-- ✅ Stage 16 已完成（全 Agent 任務可見性 + Petra 審核 TaskItem）
-- TaskItem 資料完整，可渲染完整 Pipeline
-
-### 優先級
-
-🟡 中優先級 — ⇒ 已移入 **Stage 18**
-
----
-
-## 十二、API 餘額耗盡後的流程恢復機制
+## 十、API 餘額耗盡後的流程恢復機制
 
 ### 背景
 
@@ -358,7 +291,7 @@ CEO：好的，從上次中斷點繼續（Cody 重新開始實作）
 
 ---
 
-## 十三、Token 異常消耗保護機制
+## 十一、Token 異常消耗保護機制
 
 ### 背景
 
@@ -389,7 +322,7 @@ CEO：好的，從上次中斷點繼續（Cody 重新開始實作）
 
 ---
 
-## 十四、測試環境隔離（Docker Compose Test Stack）
+## 十二、測試環境隔離（Docker Compose Test Stack）
 
 ### 背景
 
@@ -453,6 +386,8 @@ feature branch CI 觸發時，自動在測試區部署並跑 Playwright，完全
 | 十八 | Agent 唯讀探索能力 | ✅ Stage 12（2026-04-06） |
 | 十九 | 提案流程重新設計 | ✅ Stage 12（2026-04-06） |
 | 二十 | Victoria 升級為技術顧問 | ✅ Stage 15（2026-04-07） |
+| 二十一 | Dashboard Agent 狀態卡即時更新 | ✅ Stage 18（2026-04-09） |
+| 二十二 | 任務流程可視化（Pipeline View） | ✅ Stage 18（2026-04-09） |
 
 ---
 
@@ -464,17 +399,17 @@ feature branch CI 觸發時，自動在測試區部署並跑 Playwright，完全
 | 2026-04-02 | 改版為 Future_Feature.md，與正式 Stage 7 分離 |
 | 2026-04-02 | 新增多項功能候選（QA Playwright、Ops CI/CD 等） |
 | 2026-04-03 | 多次整理：移除已移入 Stage 8/9 的項目、重新編號 |
-| 2026-04-04 | 大量新增：十二～��六（框架幻覺、技術債、Orchestrator、CEO 補強、文件記錄） |
+| 2026-04-04 | 大量新增：十二～十六（框架幻覺、技術債、Orchestrator、CEO 補強、文件記錄） |
 | 2026-04-04 | 新增十七（UI 規格存 DB）；第一條升為 🔴 排入 Stage 11 |
 | 2026-04-05 | 新增十八（唯讀探索）、十九（提案流程重設計）；十七/十八/十九 標記移入 Stage 12 |
-| 2026-04-06 | ��增二十（Victoria 技術顧問）、二十一（Dashboard Agent 狀態卡） |
+| 2026-04-06 | 新增二十（Victoria 技術顧問）、二十一（Dashboard Agent 狀態卡） |
 | 2026-04-06 | v2.0 大整理：移除 9 個已完成項目（一、十～十四、十七～十九），重新編號為一～十二 |
 | 2026-04-06 | v2.1：第九項（CEO 分類補強）移入 Stage 14 |
 | 2026-04-06 | v2.2：第九項標記 ✅ 已完成（Stage 14 驗收通過） |
-| 2026-04-07 | v3.1：新增十二（流程恢復機制）、十三（Token 異常消耗保護）|
 | 2026-04-06 | v2.3：第十項標記被 Stage 15 吸收；第十一項 Phase 1~2 移入 Stage 15 |
 | 2026-04-06 | v2.4：第十一項改為 Phase 1~3 全部移入 Stage 15；新增十三（CEO 長期記憶向量搜索版備案）；原十二改編號為十四 |
 | 2026-04-07 | v3.0：移除 3 個已完成項目（九/十/十一→Stage 14/15），重新編號為一～十；更新一（API 費用已部分優化）、四（顧問能力已整合）、八（補充 Claude Code 綁定限制） |
 | 2026-04-07 | v3.1：新增十一（任務流程可視化 Pipeline View — MudStepper + MudTimeline） |
 | 2026-04-07 | v3.2：新增十四（測試環境隔離 — Docker Compose Test Stack，解決 CI 打到 production 問題） |
-| 2026-04-08 | v3.3：十（Agent 狀態卡即時更新）和十一（Pipeline View）移入 Stage 18 |
+| 2026-04-08 | v3.3：十（Agent 狀態卡即時更新）和十一（Pipeline View）標記移入 Stage 18 |
+| 2026-04-11 | v4.0：移除十（Agent 狀態卡）和十一（Pipeline View）至已完成摘要；剩餘項目重新編號為一～十二 |

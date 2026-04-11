@@ -1,9 +1,14 @@
 # PM Agent — 專案經理（品質審核閘門）
 
-> 文件用途：定義 PM Agent 的角色、能力與整合方式
+> 文件用途：定義 PM Agent 的角色、背景與整合方式（行為細節詳見執行指引）
 > 建立日期：2026-03-31
-> 最後更新：2026-04-07
-> 狀態：📋 待排入 Stage 實作
+> 最後更新：2026-04-11
+> 狀態：✅ 已實作（Stage 16）
+
+## 執行指引
+
+> 實際行為、四個審核點的詳細規則、JSON 輸出格式，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Petra.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Petra.md)**
 
 ---
 
@@ -27,28 +32,16 @@ PM 審核產出（比對原始需求 + 探索 codebase 驗證）
 
 ## 核心能力
 
-### 1. Rosa 規格審核
+Petra 在串行流程中負責四個審核點（詳細審核規則見 `CLAUDE_Petra.md`）：
 
-Rosa 產出 Issues 後，PM 比對原始需求：
-- 需求是否完整？有沒有遺漏的使用情境？
-- Issue 粒度是否合理？太大需拆、太小需合併
-- 引用的檔案名稱是否正確存在？
-- 驗收條件是否具體可驗證？
+| 審核點 | 前一步 | 審核重點 |
+|--------|--------|---------|
+| 1. Rosa 規格審核 | Rosa（需求分析）| 原始需求是否都有對應 Issue |
+| 2. Demi 設計審核 | Demi（UI 規格）| 每個 Issue 是否都有對應畫面設計 |
+| 3. Cody 實作計畫審核 | Cody（Dev_plan）| 計畫是否涵蓋所有 Issue、架構方向是否合理 |
+| 4. Vera 審查結果判斷 | Vera（Code Review）| 判斷 critical / minor，決定是否打回 Cody |
 
-### 2. Demi 設計審核
-
-Demi 產出 UI 規格後，PM 比對 Rosa 的 Issues：
-- UI 規格是否涵蓋所有 Issue 的需求？
-- 元件選擇是否合理（對照現有頁面風格）？
-- 有沒有漏掉的互動情境（loading、error、empty state）？
-- 是否與現有頁面的設計風格一致？
-
-### 3. Vera 審查結果判斷
-
-Vera 完成 code review 後，PM 判斷：
-- 哪些問題是 **blocking**（必須修正才能繼續）？
-- 哪些問題是 **minor**（可以接受，後續再處理）？
-- 是否需要打回給 Cody 修正？
+每個審核點 decision 為 `approve / revise / escalate`，最多打回 2 次，超過自動 escalate。
 
 ---
 
@@ -56,9 +49,12 @@ Vera 完成 code review 後，PM 判斷：
 
 | 權限 | 說明 |
 |------|------|
-| Glob / Grep / Read | ✅ 唯讀探索整個 repo，驗證 Agent 產出的正確性 |
+| Glob / Grep / Read | ✅ 唯讀探索整個 repo（Rosa / Demi 審核時驗證現有架構）|
 | Edit / Write | ❌ 不可修改任何檔案 |
 | Git | ❌ 不可執行 git 操作 |
+
+> Dev_plan 審核時**不使用工具**（新功能檔案尚未建立，無法 Glob 驗證）。
+> Vera 審核時**無 codebase 存取**（只看 review 報告文字）。
 
 ---
 
@@ -87,10 +83,11 @@ PM 不是由老闆直接呼叫，而是由 WorkflowEngine 在以下時機自動�
 
 | 項目 | 建議 |
 |------|------|
-| 模型 | Claude Haiku（審核是比對性質，不需頂級推理） |
-| 工具 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read） |
+| 模型 | Claude Haiku（審核是比對性質，不需頂級推理）|
+| 執行模式 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read）|
 | Timeout | 10 分鐘 |
 | Max Turns | 10 |
+| System Prompt | `CLAUDE_Petra.md` |
 
 ---
 

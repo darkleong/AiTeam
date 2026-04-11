@@ -1,9 +1,14 @@
 # Dev Agent — 全端開發工程師
 
-> 文件用途：定義 Dev Agent 的角色、能力與整合方式
+> 文件用途：定義 Dev Agent 的角色、背景與整合方式（行為細節詳見執行指引）
 > 建立日期：2026-03-31
-> 最後更新：2026-04-07
+> 最後更新：2026-04-11
 > 狀態：✅ 已實作（Stage 3 建立，Stage 11 升級 Claude Code CLI 自主開發）
+
+## 執行指引
+
+> 實際行為、工具權限、技術棧規範、禁止使用的框架，詳見：
+> **[`src/AiTeam.Bot/Resources/CLAUDE_CODY.md`](../../src/AiTeam.Bot/Resources/CLAUDE_CODY.md)**
 
 ---
 
@@ -27,11 +32,8 @@ Reviewer Agent（Vera）→ QA Agent（Quinn）→ 通知老闆
 
 ### 1. Claude Code 自主開發（Stage 11）
 - 透過 `ClaudeCodeService.RunAsync` 啟動 Claude Code CLI
-- 自主探索 codebase（Glob / Grep / Read）
-- 自主修改程式碼（Edit / Write）
-- 自主執行 `dotnet restore`、`dotnet build` 驗證
-- CLAUDE_CODY.md 模板注入開發規範
-- 30 分鐘 timeout、最多 20 turns
+- 自主探索、修改、build 驗證，詳細規範見 `CLAUDE_CODY.md`
+- 30 分鐘 timeout、最多 40 turns（Stage 16 調整）
 
 ### 2. 支援的任務類型
 - **新功能**（NewFeature workflow）：接收 Issues + UI 規格 → 自主實作 → 開 PR
