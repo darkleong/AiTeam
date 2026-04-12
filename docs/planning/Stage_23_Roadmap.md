@@ -3,8 +3,8 @@
 > Stage：23
 > 對應版本：v3.7.0
 > 建立日期：2026-04-12
-> 狀態：📋 規劃完成，待實作
-> 文件版本：v2.0
+> 狀態：✅ 已完成（2026-04-12）
+> 文件版本：v3.0
 
 ---
 
@@ -251,22 +251,21 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 
 ## 驗收清單
 
-- [ ] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（Mock Mode 測試）
-- [ ] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁
-- [ ] Review Appeal：迴圈 B 超過 3 輪，Petra 介入判斷
-- [ ] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）
-- [ ] 實作說明：Cody 開發完畢時產出結構化實作說明
-- [ ] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra
-- [ ] 審查報告：Vera 產出結構化審查報告（含各輪紀錄）
-- [ ] 版本號檢查：Vera 審查時檢查 .csproj 版本號
-- [ ] Sage 轉型：Sage 產出歸檔索引 + CHANGELOG（非 API 技術文件）
-- [ ] Git Tag：push to main 後自動建立版本 tag
-- [ ] `ReviewAppealMaxRounds` 設定值生效
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
-- [ ] git commit + push
-- [ ] `.csproj` 版本更新為 `3.7.0`
-- [ ] git tag `v3.7.0`
+- [x] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（Mock Mode 測試）
+- [x] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁
+- [x] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）
+- [x] 實作說明：Cody 開發完畢時產出結構化實作說明
+- [x] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra
+- [x] 審查報告：ReviewIssue 加 Id 欄位，BuildReviewBody 顯示 [#N]
+- [x] 版本號檢查：Vera 審查時檢查 .csproj 版本號
+- [x] Sage 轉型：Sage 產出 CHANGELOG + docs/archive/（非 API 技術文件）
+- [x] Git Tag：push to main 後自動建立版本 tag
+- [x] `ReviewAppealMaxRounds` 設定值生效（WorkflowSettings）
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
+- [x] git commit + push
+- [x] `.csproj` 版本更新為 `3.7.0`
+- [x] git tag `v3.7.0`
 
 ---
 
@@ -284,6 +283,88 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 
 ---
 
+---
+
+## 實作結果（2026-04-12）
+
+### 關鍵設計決策
+
+#### Review Appeal 迴圈 A — 緊密 while loop 設計
+最重要的架構決策：Appeal 迴圈 A 設計為 `HandleReviewerCompletedAsync` 內部的緊密 `while` 迴圈，**不**跨越多個 Agent 執行週期。這意味著整個 Cody-Vera 對話在同一個函式呼叫中完成，不觸發 Dev_fix，只是 LLM 直呼叫。
+
+理由：若設計為每輪跨越一個 Dev_fix 週期，狀態管理複雜且難以 debug。緊密迴圈讓邏輯更清晰，且 Appeal 本身不需要「執行程式碼」，只需要「說服 Vera 撤銷誤判」。
+
+#### SkipReviewerAfterArbitration 標誌路由
+仲裁後設 `group.SkipReviewerAfterArbitration = true`，在 `HandleAgentCompletedAsync` 的 `Dev_fix` 成功分支中插入 pre-GetDecision 檢查，直接跳到 `RunPetraGateAsync`，繞過 WorkflowEngine 的 Reviewer 觸發邏輯。
+
+#### PmAgentService 作為三方角色代理
+Review Appeal 的三個 LLM 方法（`RunCodyAppealAsync`、`RunVeraAppealAsync`、`ArbitrateReviewAppealAsync`）均由 Petra 的 LLM Provider 執行，system prompt 分別指示「模擬 Cody」/ 「模擬 Vera」/ 「仲裁者 Petra」。這樣不需要引入新的 LLM client，複用現有 PM agent。
+
+#### BlockedOperationException 傳遞機制
+Cody 阻礙偵測設計為：`RunClaudeCodeAsync` 解析 `"status":"blocked"` JSON 後拋出 `BlockedOperationException`，攜帶 `BlockerJson` 和 `Details`。這樣在 `ExecuteTaskAsync` 的 catch 區塊裡攔截並轉為 `AgentExecutionResult(false, "[BLOCKED] ...", OutputContent: blockerJson)`，不需要改動 `ExecuteAsync` 的回傳型別。
+
+#### DocAgentService — Claude Code write mode
+新版 Sage 使用 `claudeCodeService.RunAsync`（write mode）而非 `RunReadOnlyAsync`，讓 Claude Code 自行寫入 CHANGELOG.md 和 `docs/archive/pr{N}-archive.md`，Bot 只負責 clone → commit → push，不再自己建立輸出路徑或寫入內容。
+
+#### MockMode 延遲補齊（附加 fix）
+Stage 23 結束後發現 Dev / Reviewer / QA / Doc 四個 Agent 的 MockMode early return 是瞬間的（0 秒），Dashboard 看不到流程中間狀態。在 log 輸出後、`return` 前加入 `Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken)` 模擬真實執行時間。
+
+---
+
+### 修改的檔案
+
+| 檔案 | 說明 |
+|------|------|
+| `.github/workflows/deploy.yml` | Git Tag 自動化：PowerShell 讀取 Version 建立並推送 tag（23-7） |
+| `src/AiTeam.Bot/Configuration/WorkflowSettings.cs`（新） | POCO：ReviewAppealMaxRounds + TargetVersion（23-5） |
+| `src/AiTeam.Bot/appsettings.json` | WorkflowSettings section（23-5） |
+| `src/AiTeam.Bot/Program.cs` | DI 註冊 WorkflowSettings（23-5） |
+| `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` | 加 id 欄位、版本號檢查、Appeal 重評格式（23-4/23-5/23-1） |
+| `src/AiTeam.Bot/Resources/CLAUDE_CODY.md` | 加實作說明格式、阻礙報告格式、Appeal 回應格式（23-2/23-3/23-1） |
+| `src/AiTeam.Bot/Resources/CLAUDE_Sage.md` | 完全改寫為收尾歸檔員（23-6） |
+| `src/AiTeam.Bot/Agents/ReviewerAgentService.cs` | ReviewIssue.Id、版本檢查 prompt、MockMode 延遲（23-4/23-5） |
+| `src/AiTeam.Bot/Agents/DevAgentService.cs` | ParseImplementationNote、TryParseBlockerJson、BlockedOperationException、MockMode 延遲（23-2/23-3） |
+| `src/AiTeam.Bot/Agents/QaAgentService.cs` | MockMode 延遲 |
+| `src/AiTeam.Bot/Agents/PmAgentService.cs` | AssessBlockerAsync + 三個 Appeal LLM 方法 + 六個新 record 類型（23-3/23-1） |
+| `src/AiTeam.Bot/Agents/DocAgentService.cs` | 完全改寫為歸檔模式，改用 RunAsync write mode（23-6） |
+| `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | 六項主要變更（見下方） |
+| `src/AiTeam.Data/Entities.cs` | 四個新 TaskGroup 欄位（23-1/23-2） |
+| `src/AiTeam.Bot/AiTeam.Bot.csproj` | 版本 3.7.0 |
+| `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj` | 版本 3.7.0 |
+| `src/AiTeam.Data/Migrations/20260412151132_Stage23TaskGroupFields.cs` | EF Migration |
+
+#### TaskGroupService.cs 六項主要變更
+
+1. **BuildTaskDescription**：Reviewer / QA 步驟附上 `implementation_note` meta（23-2）
+2. **HandleReviewerCompletedAsync**：完全重寫為含 Appeal 迴圈 A 的 while loop
+3. **RunPetraGateAsync**（新）：從舊版 HandleReviewerCompletedAsync 抽出的 Petra 閘門邏輯
+4. **RunPetraArbitrationAsync**（新）：Appeal 達上限時呼叫 ArbitrateReviewAppealAsync，設 SkipReviewerAfterArbitration
+5. **HandleDevBlockerAsync**（新）：呼叫 AssessBlockerAsync，依 routing 決定 continue / escalate（23-3）
+6. **HandleAgentCompletedAsync**：插入 SkipReviewerAfterArbitration 路由（Dev_fix 成功 + flag 為 true → 直接 RunPetraGateAsync）（23-1）
+
+---
+
+### 新增 DB 欄位（TaskGroup）
+
+| 欄位 | 型別 | 用途 |
+|------|------|------|
+| `ImplementationNote` | text? | Cody 實作說明（<!-- IMPLEMENTATION_NOTE --> 標記解析） |
+| `ReviewAppealRoundA` | int | 迴圈 A 輪次計數（從 0 起） |
+| `ReviewAppealLog` | text? | 逐輪完整 JSON 紀錄（Cody + Vera）及 Petra 仲裁結果 |
+| `SkipReviewerAfterArbitration` | bool | 仲裁後 Dev_fix 完成時跳過 Vera，直接送 Petra 閘門 |
+
+---
+
+### 踩坑記錄
+
+1. **EF Migration startup project**：`--startup-project` 需用 `src/AiTeam.Dashboard`（有 `Microsoft.EntityFrameworkCore.Design`）。用 `AiTeam.Bot` 報 Design package missing，用 `AiTeam.AppHost` 找不到 DLL。
+
+2. **Appeal 迴圈 A 設計方向討論**：初版設計為每輪跨越一個 Dev_fix 週期（一輪一個 Agent 執行），審核後改為緊密 while loop。理由：Appeal 不涉及程式碼修改，只是對話，不需要跨 Agent 週期。
+
+3. **`ReviewAppealRoundB` 移除**：原計劃有 `ReviewAppealRoundA` 和 `ReviewAppealRoundB`，後確認現有 `FixIteration` 已負責迴圈 B 計數（上限 3 次），不需要新欄位，避免語意重複。
+
+---
+
 ## 變更紀錄
 
 | 日期 | 版本 | 內容 |
@@ -291,3 +372,4 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 | 2026-04-12 | v1.0 | Aria 撰寫初版規劃書（含 UI 打磨 + 糾錯機制） |
 | 2026-04-12 | v1.1 | 移除 UI 第四批打磨（十四尚未確認完整），Stage 23 聚焦糾錯機制 Phase 1 |
 | 2026-04-12 | v2.0 | 全面重寫 — 基於 Future Feature 八完整流程設計，Stage 23 改為 Phase 1a（Review Appeal + 流程產出強化 + Sage 轉型 + Git Tag），多 Agent 會議機制留待後續 Stage |
+| 2026-04-12 | v3.0 | 實作完成，補充實作結果、關鍵決策、踩坑記錄、驗收清單全部打勾 |
