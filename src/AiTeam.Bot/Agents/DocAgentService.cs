@@ -62,8 +62,8 @@ public class DocAgentService(
 
             var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
 
-            // 從 DB 讀取 Cody 實作說明與 Vera 審查摘要（透過 GroupId）
-            var (implementationNote, lastReviewBody) = await GetGroupContextAsync(task, cancellationToken);
+            // 從 DB 讀取 Cody 實作說明、Vera 審查摘要與 Quinn 測試報告（透過 GroupId）
+            var (implementationNote, lastReviewBody, testReport) = await GetGroupContextAsync(task, cancellationToken);
 
             // Clone PR branch（write mode，Sage 會直接寫入檔案）
             writePath = gitHubService.CloneOrPull(owner, repo, $"saged-{task.Id:N}"[..8]);
@@ -73,7 +73,7 @@ public class DocAgentService(
 
             // 執行 Claude Code（write mode）讓 Sage 自行寫入 CHANGELOG + archive
             var success = await RunClaudeCodeArchiveAsync(
-                task, writePath, prNumber, headRef, implementationNote, lastReviewBody, cancellationToken);
+                task, writePath, prNumber, headRef, implementationNote, lastReviewBody, testReport, cancellationToken);
 
             if (!success)
                 return new AgentExecutionResult(true, $"PR #{prNumber} 歸檔無輸出，略過提交");
@@ -111,6 +111,7 @@ public class DocAgentService(
         string headRef,
         string? implementationNote,
         string? lastReviewBody,
+        string? testReport,
         CancellationToken cancellationToken)
     {
         var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
@@ -145,6 +146,14 @@ public class DocAgentService(
                 : lastReviewBody.Length > 2000 ? lastReviewBody[..2000] + "\n...（截斷）" : lastReviewBody;
             sb.AppendLine(reviewSummary);
             sb.AppendLine();
+
+            // Stage 24：附上 Quinn 的測試報告供 Sage 歸檔參考
+            if (!string.IsNullOrWhiteSpace(testReport))
+            {
+                sb.AppendLine("## test_report（Quinn 測試報告）");
+                sb.AppendLine(testReport);
+                sb.AppendLine();
+            }
 
             sb.AppendLine("## 你的任務");
             sb.AppendLine($"1. 更新 CHANGELOG.md（在最頂部插入新條目，保留所有舊內容）");
@@ -186,19 +195,19 @@ public class DocAgentService(
 
     // ────────────── 從 DB 讀取 TaskGroup 上下文 ──────────────
 
-    private async Task<(string? ImplementationNote, string? LastReviewBody)> GetGroupContextAsync(
+    private async Task<(string? ImplementationNote, string? LastReviewBody, string? TestReport)> GetGroupContextAsync(
         TaskItem task, CancellationToken cancellationToken)
     {
-        if (task.GroupId is null) return (null, null);
+        if (task.GroupId is null) return (null, null, null);
         try
         {
             var group = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
-            return (group?.ImplementationNote, group?.LastReviewBody);
+            return (group?.ImplementationNote, group?.LastReviewBody, group?.TestReport);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "GetGroupContextAsync 讀取失敗（GroupId={Id}）", task.GroupId);
-            return (null, null);
+            return (null, null, null);
         }
     }
 

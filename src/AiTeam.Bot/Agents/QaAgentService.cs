@@ -51,7 +51,9 @@ public class QaAgentService(
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
             await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
-            return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗");
+            var mockReport = new QaReport { Status = "passed", PassedTests = ["[MOCK] MockTest.cs"], Summary = "[MOCK] QA 完成，0 個失敗" };
+            return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗",
+                TestReport: JsonSerializer.Serialize(mockReport, JsonOptions));
         }
 
         AddLog(task, "QA Agent 開始執行", "running");
@@ -112,15 +114,16 @@ public class QaAgentService(
             if (report is null)
             {
                 logger.LogWarning("Quinn Claude Code JSON 解析失敗（exitCode={Code}）", ccResult.ExitCode);
-                report = new QaReport { Generated = [], Summary = "（無法解析 Quinn 輸出）" };
+                report = new QaReport { Status = "passed", Summary = "（無法解析 Quinn 輸出）" };
             }
 
-            var generatedCount = report.Generated.Count;
+            var passedCount  = report.PassedTests.Count;
+            var failedCount  = report.FailedTests.Count;
             var strategyDesc = hasUiChanges
                 ? $"xUnit {csFiles.Count} 個 + Playwright 1 個"
                 : $"xUnit {csFiles.Count} 個";
 
-            AddLog(task, $"測試檔案生成完成（共 {generatedCount} 個）：{report.Summary}", "done");
+            AddLog(task, $"測試報告：{report.Status}，通過 {passedCount} 個，失敗 {failedCount} 個。{report.Summary}", "done");
 
             // 7. Commit + Push（呼叫端負責）
             var commitMessage = $"test: QA Agent 自動產生測試（來自 PR #{prNumber}）";
@@ -130,9 +133,13 @@ public class QaAgentService(
             AddLog(task, $"測試已推送到 branch {headRef}（{strategyDesc}）", "done");
             await taskRepository.SaveAsync(cancellationToken);
 
+            // Stage 24：序列化完整測試報告，回傳給 TaskGroupService 存入 DB
+            var testReportJson = JsonSerializer.Serialize(report, JsonOptions);
+
             await PushStatus("idle");
             return new AgentExecutionResult(true,
-                $"QA 測試已推送到 Dev branch（{strategyDesc}，PR #{prNumber}）");
+                $"QA 測試已推送到 Dev branch（{strategyDesc}，PR #{prNumber}，{report.Status}）",
+                TestReport: testReportJson);
         }
         catch (Exception ex)
         {
@@ -291,8 +298,12 @@ public class QaAgentService(
 
 // ────────────── 資料模型 ──────────────
 
+/// <summary>Stage 24：Quinn 的結構化測試報告（CLAUDE_QA.md 輸出格式）。</summary>
 public class QaReport
 {
-    [JsonPropertyName("generated")] public List<string> Generated { get; set; } = [];
-    [JsonPropertyName("summary")]   public string Summary         { get; set; } = "";
+    [JsonPropertyName("status")]           public string Status        { get; set; } = "passed";
+    [JsonPropertyName("passed_tests")]     public List<string> PassedTests { get; set; } = [];
+    [JsonPropertyName("failed_tests")]     public List<string> FailedTests { get; set; } = [];
+    [JsonPropertyName("no_test_reason")]   public string? NoTestReason { get; set; }
+    [JsonPropertyName("summary")]          public string Summary       { get; set; } = "";
 }

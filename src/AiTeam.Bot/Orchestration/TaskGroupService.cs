@@ -141,6 +141,16 @@ public class TaskGroupService(
                 groupId, result.OutputContent.Length);
         }
 
+        // Stage 24：QA 完成時儲存測試報告
+        if (completedAgent.Equals(AgentNames.Qa, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(result.TestReport))
+        {
+            group.TestReport = result.TestReport;
+            needsSave = true;
+            logger.LogInformation("TaskGroup {Id} 已儲存 Quinn 測試報告（{Len} 字）",
+                groupId, result.TestReport.Length);
+        }
+
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
@@ -161,16 +171,25 @@ public class TaskGroupService(
                     break;
 
                 case "revise":
-                    if (group.DevPlanRevision >= 2) goto default; // 超過上限 → escalate
-                    group.DevPlanRevision++;
-                    // 將修正指示附加到 DevPlan，讓下一輪帶入 meta block
-                    if (!string.IsNullOrWhiteSpace(petraDevPlanReview.RevisionInstructions))
-                        group.DevPlan += "\n\n【Petra 修正指示】" + petraDevPlanReview.RevisionInstructions;
-                    await taskRepo.SaveAsync(cancellationToken);
-                    await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
-                    return; // 不走 GetDecision
+                    // Stage 24：Appeal loop（Cody 反駁 + Petra 重評，純 LLM 緊密迴圈）
+                    var appealApproved = await RunDevPlanAppealLoopAsync(group, petraDevPlanReview, taskRepo, cancellationToken);
+                    if (appealApproved)
+                    {
+                        // Appeal 說服成功，直接觸發 Dev（計畫書已在 group.DevPlan）
+                        logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
+                        await FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                    }
+                    else
+                    {
+                        // Appeal 耗盡，升級老闆
+                        logger.LogWarning("Dev_plan Appeal 耗盡，升級老闆（Group={Id}）", group.Id);
+                        taskRepo.UpdateGroupStatus(group, "failed");
+                        await taskRepo.SaveAsync(cancellationToken);
+                        await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                    }
+                    return;
 
-                default: // escalate 或超過上限
+                default: // escalate
                     taskRepo.UpdateGroupStatus(group, "failed");
                     await taskRepo.SaveAsync(cancellationToken);
                     await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
@@ -226,6 +245,17 @@ public class TaskGroupService(
             // 繼續走 GetDecision（completedAgent 仍為 Dev_fix，result 已更新）
         }
 
+        // ── Stage 24：QA 修復模式 → Dev_fix 完成後重新觸發 QA（不走 Reviewer）──
+        if (completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase)
+            && result.Success
+            && group.QaFixRound > 0)
+        {
+            logger.LogInformation("QA 修復後 Dev_fix 完成，重新觸發 QA（Group={Id}, Round={Round}）",
+                group.Id, group.QaFixRound);
+            await FireStepsAsync(group, [new WorkflowStep(AgentNames.Qa)], cancellationToken);
+            return;
+        }
+
         // ── Stage 16：Dev 初次開發失敗（非 fix loop）→ 停止流程，通知老闆介入 ──
         // （fix loop 失敗用 "Dev_fix" 為 completedAgent，不會被這裡攔截）
         if (completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase) && !result.Success)
@@ -235,6 +265,13 @@ public class TaskGroupService(
             taskRepo.UpdateGroupStatus(group, "failed");
             await taskRepo.SaveAsync(cancellationToken);
             await NotifyBossInterventionAsync(group, cancellationToken);
+            return;
+        }
+
+        // ── Stage 24：QA 完成 → Petra 判斷 TestReport，決定路由 ──
+        if (completedAgent.Equals(AgentNames.Qa, StringComparison.OrdinalIgnoreCase) && result.Success)
+        {
+            await HandleQaCompletedAsync(group, result, taskRepo, cancellationToken);
             return;
         }
 
@@ -762,6 +799,23 @@ public class TaskGroupService(
                 && !string.IsNullOrWhiteSpace(group.ImplementationNote))
                 meta.Add($"implementation_note:\n{group.ImplementationNote}");
 
+            // 24-4：Reviewer 步驟附上已審核的實作計畫書（供 Vera 驗證實作是否符合計畫）
+            if (step.AgentName == AgentNames.Reviewer && !string.IsNullOrWhiteSpace(group.DevPlan))
+                meta.Add($"dev_plan:\n{group.DevPlan}");
+
+            // 24-4：QA 步驟附上 Issues 清單（告訴 Quinn 要測什麼）與 Dev_plan（設計背景）
+            if (step.AgentName == AgentNames.Qa)
+            {
+                if (!string.IsNullOrWhiteSpace(group.IssueUrls))
+                    meta.Add($"issues_list: {group.IssueUrls}");
+                if (!string.IsNullOrWhiteSpace(group.DevPlan))
+                    meta.Add($"dev_plan:\n{group.DevPlan}");
+            }
+
+            // 24-4：Doc 步驟附上 Quinn 的測試報告（供 Sage 歸檔）
+            if (step.AgentName == AgentNames.Doc && !string.IsNullOrWhiteSpace(group.TestReport))
+                meta.Add($"test_report:\n{group.TestReport}");
+
             if (step.IsFixLoop)
             {
                 meta.Add("fix_loop: true");
@@ -798,6 +852,154 @@ public class TaskGroupService(
         if (projectId is null)
             logger.LogWarning("HandleAgentCompleted：找不到專案名稱 '{Project}'，Petra TaskItem.ProjectId 將為 null", group.Project);
         return projectId;
+    }
+
+    // ---- Stage 24：QA 流程改造 ----
+
+    /// <summary>
+    /// Stage 24：QA 完成後，Petra 評估 TestReport 決定路由。
+    /// - passed → 走正常流程（Doc 或 merge）
+    /// - failed → Petra 判斷 code_bug / back_to_reviewer / env_or_test_issue / escalate_boss
+    /// - no_applicable_tests → Petra 判斷是否放行
+    /// </summary>
+    private async Task HandleQaCompletedAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        var workflowType = group.WorkflowType switch
+        {
+            "new_feature"      => WorkflowType.NewFeature,
+            "tech_improvement" => WorkflowType.TechImprovement,
+            _                  => WorkflowType.BugFix
+        };
+
+        // 解析 TestReport JSON
+        QaReport? report = null;
+        if (!string.IsNullOrWhiteSpace(group.TestReport))
+        {
+            try
+            {
+                report = JsonSerializer.Deserialize<QaReport>(group.TestReport,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "HandleQaCompleted：TestReport 解析失敗，視同 passed（Group={Id}）", group.Id);
+            }
+        }
+
+        var status = report?.Status ?? "passed";
+        logger.LogInformation("HandleQaCompleted：Group={Id}, Status={Status}", group.Id, status);
+
+        // passed（或無法解析）→ 正常路由
+        if (status == "passed")
+        {
+            var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
+            if (decision.Action == NextAction.NotifyBossMerge)
+            {
+                taskRepo.UpdateGroupStatus(group, "done");
+                await taskRepo.SaveAsync(cancellationToken);
+                await NotifyBossMergeAsync(group, cancellationToken);
+            }
+            else if (decision.Action == NextAction.FireAgents)
+            {
+                await FireStepsAsync(group, decision.NextSteps, cancellationToken);
+            }
+            return;
+        }
+
+        // no_applicable_tests → Petra 評估理由
+        if (status == "no_applicable_tests")
+        {
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+            var noTestDecision = await pmService.AssessNoApplicableTestsAsync(group, report?.NoTestReason, cancellationToken);
+            logger.LogInformation("Petra QA 無測試評估：{Routing}（Group={Id}）", noTestDecision.Routing, group.Id);
+
+            if (noTestDecision.Routing == "approve")
+            {
+                // 視同 passed，走正常路由
+                var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
+                if (decision.Action == NextAction.NotifyBossMerge)
+                {
+                    taskRepo.UpdateGroupStatus(group, "done");
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await NotifyBossMergeAsync(group, cancellationToken);
+                }
+                else if (decision.Action == NextAction.FireAgents)
+                {
+                    await FireStepsAsync(group, decision.NextSteps, cancellationToken);
+                }
+            }
+            else
+            {
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(cancellationToken);
+                await NotifyBossInterventionAsync(group, cancellationToken);
+            }
+            return;
+        }
+
+        // failed → Petra 判斷根本原因
+        if (group.QaFixRound >= _workflowSettings.QaFixMaxRounds)
+        {
+            logger.LogWarning("QA 修復超過上限（Round={Round}），升級老闆（Group={Id}）",
+                group.QaFixRound, group.Id);
+            taskRepo.UpdateGroupStatus(group, "failed");
+            await taskRepo.SaveAsync(cancellationToken);
+            await NotifyBossInterventionAsync(group, cancellationToken);
+            return;
+        }
+
+        {
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+            var failureDecision = await pmService.AssessQaFailureAsync(
+                group, group.TestReport ?? "", cancellationToken);
+
+            logger.LogInformation("Petra QA 失敗評估：{Routing}（Group={Id}）", failureDecision.Routing, group.Id);
+
+            switch (failureDecision.Routing)
+            {
+                case "code_bug":
+                    // 小修正：Dev_fix 後直接重測（跳過 Vera）
+                    group.QaFixRound++;
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await FireStepsAsync(group, [new WorkflowStep("Dev_fix")], cancellationToken);
+                    break;
+
+                case "back_to_reviewer":
+                    // 大幅改動：Dev_fix 後回 Vera 正常審查路徑
+                    group.QaFixRound = 0;
+                    group.FixIteration++;
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await FireStepsAsync(group, [new WorkflowStep("Dev_fix", IsFixLoop: true)], cancellationToken);
+                    break;
+
+                case "env_or_test_issue":
+                    // 視同通過，走正常路由
+                    var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
+                    if (decision.Action == NextAction.NotifyBossMerge)
+                    {
+                        taskRepo.UpdateGroupStatus(group, "done");
+                        await taskRepo.SaveAsync(cancellationToken);
+                        await NotifyBossMergeAsync(group, cancellationToken);
+                    }
+                    else if (decision.Action == NextAction.FireAgents)
+                    {
+                        await FireStepsAsync(group, decision.NextSteps, cancellationToken);
+                    }
+                    break;
+
+                default: // escalate_boss
+                    taskRepo.UpdateGroupStatus(group, "failed");
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await NotifyBossInterventionAsync(group, cancellationToken);
+                    break;
+            }
+        }
     }
 
     /// <summary>
@@ -1030,6 +1232,76 @@ public class TaskGroupService(
     {
         var entry = $"\n\n### Appeal Round {round} — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n{content}";
         group.ReviewAppealLog = (group.ReviewAppealLog ?? "# Review Appeal 紀錄\n") + entry;
+    }
+
+    // ---- Stage 24：Dev_plan Appeal ----
+
+    private static void AppendDevPlanAppealLog(TaskGroup group, int round, string content)
+    {
+        var entry = $"\n\n### DevPlan Appeal Round {round} — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n{content}";
+        group.DevPlanAppealLog = (group.DevPlanAppealLog ?? "# Dev_plan Appeal 紀錄\n") + entry;
+    }
+
+    /// <summary>
+    /// Stage 24：Dev_plan Appeal 緊密迴圈（純 LLM，不跨 Agent 執行）。
+    /// Cody 反駁 → Petra 重評 → 迴圈上限 → 回傳 true（說服成功）或 false（耗盡）。
+    /// </summary>
+    private async Task<bool> RunDevPlanAppealLoopAsync(
+        TaskGroup group,
+        Agents.PetraReview initialReview,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        var maxRounds     = _workflowSettings.DevPlanAppealMaxRounds;
+        var currentReview = initialReview;
+        var priorContext  = $"Petra 初審意見：{initialReview.Summary}";
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var pmService = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+
+        while (group.DevPlanAppealRoundA < maxRounds)
+        {
+            group.DevPlanAppealRoundA++;
+
+            // Cody 反駁
+            var codyAppeal = await pmService.RunCodyDevPlanAppealAsync(
+                group, currentReview, priorContext, cancellationToken);
+            var codyJson = JsonSerializer.Serialize(codyAppeal);
+
+            if (codyAppeal.Position == "accept")
+            {
+                // Cody 接受修改意見，共識達成，放行
+                AppendDevPlanAppealLog(group, group.DevPlanAppealRoundA,
+                    $"**Cody 接受修改意見，Appeal 終止。**\n```json\n{codyJson}\n```");
+                await taskRepo.SaveAsync(cancellationToken);
+                logger.LogInformation("Dev_plan Appeal Round {Round}：Cody 接受，共識達成（Group={Id}）",
+                    group.DevPlanAppealRoundA, group.Id);
+                return true;
+            }
+
+            // Petra 重評
+            var newReview   = await pmService.ReassessDevPlanAsync(group, codyAppeal, currentReview, cancellationToken);
+            var petraJson   = JsonSerializer.Serialize(newReview);
+
+            // 完整記錄
+            AppendDevPlanAppealLog(group, group.DevPlanAppealRoundA,
+                $"**Cody 反駁（完整）：**\n```json\n{codyJson}\n```\n\n**Petra 重評（完整）：**\n```json\n{petraJson}\n```");
+            await taskRepo.SaveAsync(cancellationToken);
+
+            logger.LogInformation("Dev_plan Appeal Round {Round}：Petra 決定 {Decision}（Group={Id}）",
+                group.DevPlanAppealRoundA, newReview.Decision, group.Id);
+
+            if (newReview.Decision == "approve")
+                return true; // 說服成功
+
+            // 更新下輪 context
+            priorContext  = $"（已進行 {group.DevPlanAppealRoundA} 輪 Appeal，Petra 維持修改意見：{newReview.Summary}）";
+            currentReview = newReview;
+        }
+
+        // 耗盡輪次
+        logger.LogWarning("Dev_plan Appeal 耗盡 {MaxRounds} 輪，升級老闆（Group={Id}）", maxRounds, group.Id);
+        return false;
     }
 
     /// <summary>

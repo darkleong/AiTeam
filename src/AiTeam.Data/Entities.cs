@@ -69,6 +69,14 @@ public class TaskGroup
     public string? ReviewAppealLog { get; set; }
     /// <summary>Stage 23：仲裁後 Cody 修正應跳過 Vera，直接交 Petra 審核。</summary>
     public bool SkipReviewerAfterArbitration { get; set; } = false;
+    /// <summary>Stage 24：Quinn 的測試報告 JSON（Petra QA 判斷 + Sage 歸檔用）。</summary>
+    public string? TestReport { get; set; }
+    /// <summary>Stage 24：Dev_plan Appeal 輪次計數（Cody-Petra 純 LLM 對話迴圈）。</summary>
+    public int DevPlanAppealRoundA { get; set; } = 0;
+    /// <summary>Stage 24：Dev_plan Appeal 完整對話紀錄（Markdown，含各輪完整 JSON）。</summary>
+    public string? DevPlanAppealLog { get; set; }
+    /// <summary>Stage 24：QA 修復迴圈輪次計數（Petra 判斷 code_bug 後，Dev_fix 跳過 Vera 直接重測的次數）。</summary>
+    public int QaFixRound { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

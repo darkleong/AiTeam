@@ -24,6 +24,7 @@ public interface IAgentExecutor
 /// Agent 執行結果。
 /// Stage 10 新增：IsWaitingInput（暫停等待輸入）、QuestionType、Question（回報問題內容）、
 /// CriticalReviewCount（Vera 回傳，用於 Review 閉環判斷）。
+/// Stage 24 新增：TestReport（Quinn 的測試報告 JSON，存入 TaskGroup.TestReport）。
 /// </summary>
 /// <param name="Success">是否成功。</param>
 /// <param name="Summary">Discord embed 用的一行摘要。</param>
@@ -34,6 +35,7 @@ public interface IAgentExecutor
 /// <param name="CriticalReviewCount">Vera 審查出的 critical 問題數量，0 表示通過。</param>
 /// <param name="ReviewBody">Vera 的完整審查報告 markdown（fix loop 傳給 Dev 用）。</param>
 /// <param name="OutputContent">Demi 產出的 UI 規格 markdown 全文（Stage 12：存入 TaskGroup.UiSpecContent）。</param>
+/// <param name="TestReport">Quinn 的測試報告 JSON（Stage 24：存入 TaskGroup.TestReport，供 Petra QA 判斷）。</param>
 public record AgentExecutionResult(
     bool Success,
     string Summary,
@@ -44,7 +46,8 @@ public record AgentExecutionResult(
     int CriticalReviewCount = 0,
     string? ReviewBody = null,
     IReadOnlyList<string>? OutputUrls = null,
-    string? OutputContent = null)
+    string? OutputContent = null,
+    string? TestReport = null)
 {
     /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
     public static AgentExecutionResult PauseAndAsk(string questionType, string question)

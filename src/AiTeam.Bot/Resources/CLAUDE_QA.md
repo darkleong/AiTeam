@@ -59,6 +59,15 @@
 完成後**只輸出以下 JSON，不加任何說明文字、不加 markdown code block**：
 
 {
-  "generated": ["相對路徑1", "相對路徑2"],
+  "status": "passed|failed|no_applicable_tests",
+  "passed_tests": ["相對路徑1", "相對路徑2"],
+  "failed_tests": ["失敗原因1（例：FooTests.cs 第 23 行型別不相符）"],
+  "no_test_reason": "（只有 status=no_applicable_tests 時填寫，說明為何無法測試）",
   "summary": "生成摘要（繁體中文，說明產生了幾個測試、涵蓋哪些功能）"
 }
+
+### status 判斷規則
+
+- `passed`：所有產生的測試通過 `dotnet build`，無任何編譯錯誤
+- `failed`：有測試無法通過編譯，或有邏輯錯誤（列出 `failed_tests` 說明原因）
+- `no_applicable_tests`：無適合的測試點（例：只有設定檔、migration 或純資料變更），填寫 `no_test_reason`
