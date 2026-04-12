@@ -104,7 +104,7 @@ AiTeam.sln
 - `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj` — `<Version>` 標籤
 - Dashboard 頁腳會自動讀取 `<Version>` 顯示
 
-> 目前版本：**v3.4.0**（Stage 20 完成）。Stage 21 完成後進版至 **v3.5.0**。
+> 目前版本：**v3.5.0**（Stage 21 完成）。
 
 ---
 

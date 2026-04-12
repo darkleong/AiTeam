@@ -3,8 +3,9 @@
 > Stage：22
 > 對應版本：v3.6.0
 > 建立日期：2026-04-12
-> 狀態：📋 規劃完成，待實作
-> 文件版本：v1.0
+> 完成日期：2026-04-12
+> 狀態：✅ 已完成
+> 文件版本：v2.0
 
 ---
 
@@ -242,8 +243,154 @@ Token 監控頁面（已有）補充：
 
 ---
 
+## 實作紀錄
+
+### 項目三：#指令中心 移除
+
+完全按規劃執行，無意外：
+- `DiscordSettings.cs`：移除 `CommandCenter` 屬性
+- `DiscordBotService.cs`：移除 `EnsureChannelsAsync()` 中的頻道確認
+- `WebhookController.cs`：footer 改為「請至 #victoria-ceo 頻道確認」
+- `appsettings.json`：移除 `"CommandCenter": "指令中心"`
+- `docker-compose.prod.yml`：移除 `Discord__Channels__CommandCenter` 環境變數
+
+Discord 頻道實際刪除由 Christ 手動完成（Bot 無刪頻道權限）。
+
+---
+
+### 項目二：Token 異常消耗保護
+
+#### 新增設定
+
+`AgentSettings.cs` 加入 `SingleRequestTokenLimitK`（預設 50K），`appsettings.json` 與 `docker-compose.prod.yml` 同步更新。
+
+#### 踩坑一：`AgentConfig` 命名空間衝突
+
+`TokenTrackingProvider.cs` 和 `LlmProviderFactory.cs` 同時引用了：
+- `AiTeam.Bot.Configuration.AgentConfig`（per-agent 設定 POCO）
+- `AiTeam.Data.AgentConfig`（DB Entity）
+
+導致 `CS0104 ambiguous` 編譯錯誤。解法：在兩個檔案頂部加入 C# type alias：
+
+```csharp
+using BotAgentSettings = AiTeam.Bot.Configuration.AgentSettings;
+using BotAgentConfig = AiTeam.Bot.Configuration.AgentConfig;
+```
+
+#### 踩坑二：Dashboard 無法參照 Bot 的 AgentSettings
+
+Dashboard 沒有也不應該參照 `AiTeam.Bot` 專案（會拉入 Discord.Net、Anthropic.SDK 等大量依賴）。解法：在 Dashboard 建立輕量 POCO 類別：
+
+**`src/AiTeam.Dashboard/Configuration/AgentTokenLimits.cs`**
+```csharp
+public class AgentTokenLimits
+{
+    public int MonthlyTokenLimitK { get; set; } = 1000;
+    public Dictionary<string, AgentLimit> Agents { get; set; } = new();
+}
+
+public class AgentLimit
+{
+    public int DailyTokenLimitK { get; set; }
+    public int MonthlyTokenLimitK { get; set; }
+}
+```
+
+`Program.cs` 加入：
+```csharp
+builder.Services.Configure<AgentTokenLimits>(builder.Configuration.GetSection("AgentSettings"));
+```
+
+Dashboard 的 `appsettings.json` 另行維護一份 `AgentSettings` 區段（與 Bot 同步）。兩邊獨立維護，限額改動頻率極低，成本可接受。
+
+#### Token 守門架構
+
+`TokenTrackingProvider.CompleteAsync()` 在呼叫 `inner.CompleteAsync` 之前執行 4 道關卡（各自獨立檢查）：
+
+```
+估算 token = (systemPrompt.Length + userMessage.Length) / 4
+
+1. 單次請求上限：估算 > SingleRequestTokenLimitK × 1000
+2. Agent 日限：今日已用 + 估算 > AgentConfig.DailyTokenLimitK × 1000
+3. Agent 月限：本月已用 + 估算 > AgentConfig.MonthlyTokenLimitK × 1000
+4. 全域月限：全部 Agent 本月已用 + 估算 > global MonthlyTokenLimitK × 1000
+```
+
+每道關卡攔截時：`logger.LogWarning/Error` + Discord 警報（`DiscordAlertService`）+ 拋出 `InvalidOperationException`。
+
+`TokenRepository` 新增三個查詢方法：`GetAgentDailyTotalAsync`、`GetAgentMonthlyTotalAsync`、`GetGlobalMonthlyTotalAsync`（均使用 UTC 時間範圍計算）。
+
+`DiscordAlertService` 新建為 Singleton，透過 `DiscordSocketClient` 找到 Alerts 頻道發送警報訊息。
+
+#### Dashboard Token 頁面增強
+
+- 各 Agent 卡片：當 period = today 顯示日限進度條，period = month 顯示月限進度條，用量 ≥ 90% 時進度條改為紅色
+- 合計卡片：period = month 顯示全域月限進度條與百分比，≥ 90% 時出現 `MudAlert Severity.Error` 醒目警告
+
+---
+
+### 項目一：Dashboard 存取分層
+
+#### 踩坑三：Docker bridge IP 無法區分 localhost vs Tailscale Funnel
+
+**問題**：Docker 容器內收到的 `RemoteIpAddress` 是 Docker bridge gateway（`172.19.0.1`），而非原始客戶端 IP。問題在於：本機 `localhost:5051` 的請求和 Tailscale Funnel（`https://love-desktop.tailcd0255.ts.net` → proxy 到 `127.0.0.1:5051`）的請求，在容器端看到的 `RemoteIpAddress` 都是同一個 `172.19.0.1`。
+
+曾嘗試的解法：
+1. 檢查 `IPAddress.IsLoopback`（`127.0.0.1` / `::1`）→ 完全無效（容器看不到）
+2. 加入 `LocalhostBypass:TrustedIPs` 設定 + 允許 `172.19.0.1` → localhost bypass 生效，但 Tailscale Funnel 也一起繞過登入（安全漏洞）
+3. 允許 Docker CIDR（`172.16.0.0/12`）→ 同上問題
+
+**最終解法：改用 Host header 區分**
+
+Host header 由客戶端或 proxy 設定，不受 Docker NAT 影響：
+- `localhost:5051` 請求：`Host: localhost:5051`（或 `localhost`）
+- Tailscale Funnel 請求：`Host: love-desktop.tailcd0255.ts.net`
+
+```csharp
+var host = context.Request.Host.Host;
+var isLocalhost = string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+               || host == "127.0.0.1"
+               || host == "::1";
+```
+
+安全性：port binding 已收緊為 `127.0.0.1:5051:8080`，外部裝置無法直連 port 5051。能進到容器的唯一兩條路徑是：(1) 本機直連（Host: localhost），(2) Tailscale Funnel proxy（Host: love-desktop...）。Host header 可準確區分兩者。
+
+#### 最終存取矩陣
+
+| 來源 | Host Header | 結果 |
+|------|-------------|------|
+| 本機 `localhost:5051` | `localhost` | ✅ 自動通過（免登入）|
+| Tailscale Funnel | `love-desktop.tailcd0255.ts.net` | ✅ 需要登入 |
+| 同網段其他裝置 | — | ❌ port 不對外開放 |
+| Playwright（本機） | `localhost` | ✅ 自動通過 |
+
+Middleware 放置位置：`UseAuthentication()` 之後、`UseAuthorization()` 之前（Blazor AuthorizeRouteView 才能感知到已設定的 ClaimsPrincipal）。
+
+---
+
+### 版本更新
+
+`AiTeam.Bot.csproj` 與 `AiTeam.Dashboard.csproj` 版本號均更新為 `3.6.0`。
+
+---
+
+### 驗收結果
+
+- ✅ localhost:5051 直接進入 Dashboard，不出現登入頁面
+- ✅ Tailscale Funnel 存取仍需登入（Christ 確認）
+- ✅ Docker port binding 為 `127.0.0.1:5051:8080`
+- ✅ Bot 啟動不再確認 `#指令中心` 頻道
+- ✅ WebhookController footer 已更新
+- ✅ Token 守門：超限時 log + Discord 警報 + 拒絕請求
+- ✅ Dashboard Token 頁面顯示各 Agent 日/月限進度條與全域警告
+- ✅ `dotnet build` 零 error
+- ✅ `dotnet test` 通過
+
+---
+
 ## 變更紀錄
 
 | 日期 | 版本 | 內容 |
 |------|------|------|
 | 2026-04-12 | v1.0 | Aria 撰寫初版規劃書 |
+| 2026-04-12 | v2.0 | 實作完成，補充完整實作紀錄與踩坑記錄 |

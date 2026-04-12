@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v5.2
+> 版本：v6.0
 > 建立日期：2026-04-01
 > 最後更新：2026-04-12
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -14,7 +14,8 @@
 目前各 Agent 採用混合模型策略：
 - **核心 Agent**（CEO / Dev / Reviewer）：`claude-sonnet-4-6`（品質優先）
 - **唯讀探索 Agent**（Requirements / Designer / Doc）：`claude-haiku-4-5`（成本優先）
-- **QA / Release / Ops**：`claude-sonnet-4-6`（直接 API call，消耗低）
+- **QA**：`claude-sonnet-4-6`（Claude Code CLI）
+- **Release / Ops**：`claude-sonnet-4-6`（直接 API call，消耗低）
 
 **已執行的優化：** Rosa、Demi、Sage 從 Sonnet 降級為 Haiku，預估節省 25-30% 整體 API 費用（2026-04-07）。
 
@@ -83,26 +84,7 @@
 
 ---
 
-## 四、Discord #指令中心 頻道移除
-
-> 狀態：🔵 待執行（小型清理任務）
-
-### 背景
-
-`#指令中心` 是 Stage 2 設計時的遺留頻道。當時作為唯一的指令輸入口，但隨著 per-agent 個人頻道架構成形，老闆現在所有指令都在 `#victoria-ceo` 下達，雙層確認 Embed / 提案書 Embed 也都發在 victoria 頻道，`#指令中心` 已無實際用途。
-
-### 執行步驟
-
-1. 確認 Bot 程式碼中沒有寫死向 `#指令中心` 發送訊息的邏輯（若有，改為 `#victoria-ceo`）
-2. 刪除 Discord 上的 `#指令中心` 頻道
-
-### 優先級
-
-🔵 低優先級 — 不影響功能，擇機清理即可
-
----
-
-## 五、多 LLM 供應商支援（Gemini / OpenAI + Per-Agent 獨立設定）
+## 四、多 LLM 供應商支援（Gemini / OpenAI + Per-Agent 獨立設定）
 
 ### 背景
 
@@ -125,8 +107,8 @@
 透過 Claude Code CLI 運作的 Agent（Victoria / Cody / Rosa / Demi / Vera / Sage）**只能使用 Claude 模型**，因為 `claude -p` 是 Anthropic 的工具。
 
 多供應商支援僅適用於**直接 API 呼叫路徑**的 Agent：
-- ✅ 可換供應商：Quinn（QA）、Rena（Release）、Maya（Ops）
-- ❌ 綁定 Claude：Victoria、Cody、Rosa、Demi、Vera、Sage
+- ✅ 可換供應商：Rena（Release）、Maya（Ops）
+- ❌ 綁定 Claude：Victoria、Cody、Rosa、Demi、Vera、Quinn、Sage
 
 ### 實作重點
 
@@ -137,11 +119,11 @@
 
 ### 優先級
 
-🔵 低優先級 — 可換供應商的 Agent（Quinn/Rena/Maya）消耗量本就不高，投資報酬率有限
+🔵 低優先級 — 可換供應商的 Agent（Rena/Maya）消耗量本就不高，投資報酬率有限
 
 ---
 
-## 六、CEO 長期記憶升級（向量搜索版）
+## 五、CEO 長期記憶升級（向量搜索版）
 
 ### 背景
 
@@ -178,38 +160,7 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 
 ---
 
-## 七、Token 異常消耗保護機制
-
-### 背景
-
-曾發生過某個 Agent 忘記指定 context 範圍，將全系統檔案全部餵進 API，單次請求消耗 80 萬+ Token 的事故。
-此類「單次超大 request」不會被 round limit 或 retry 次數限制攔截，且若開啟 Anthropic 自動儲值，會不斷扣款直到發現問題。
-
-### 期望行為
-
-```
-單次 API 呼叫 token 數超過閾值（例如 50k）→ 立即中止並發出 Discord 警報
-月累計超過 X 美元 → 自動暫停所有 Agent 並通知老闆
-```
-
-### 設計方向
-
-- **請求前 token 估算**：對每個 LLM 呼叫，在送出前估算 prompt 長度（字元數 / 4 ≈ token 數），超過閾值直接拒絕並 log
-- **硬性月費上限**：`AppSettings` 加入 `MonthlyBudgetUsd` 欄位，Token 監控服務追蹤當月累計費用，超過則鎖定所有 LLM 呼叫
-- **現有 `DailyTokenLimitK` / `MonthlyTokenLimitK` 真正落實**：目前只存在 config 裡，並未實際 enforce
-
-### 注意事項
-
-- 這個功能比自動儲值更重要——有了硬性上限，即使有 bug 也不會無限燒錢
-- 閾值設計要合理：太低會誤殺正常大型任務（Dev Agent 有大量 codebase 需要讀）
-
-### 優先級
-
-🟠 中高優先級 — 有過實際事故，且自動儲值風險高；但目前以手動充值為保護手段，可在下個 Stage 一起評估
-
----
-
-## 八、測試環境隔離（Docker Compose Test Stack）
+## 六、測試環境隔離（Docker Compose Test Stack）
 
 ### 背景
 
@@ -251,71 +202,11 @@ feature branch CI 觸發時，自動在測試區部署並跑 Playwright，完全
 
 ### 優先級
 
-🔵 低優先級 — 九（Dashboard 存取分層）完成後，Playwright 直接打 localhost 免登入，CI 不再需要啟停容器，本項急迫性大幅降低。待客戶專案（十）需要完整隔離時再重新評估
+🔵 低優先級 — Dashboard 存取分層（Stage 22）完成後，Playwright 直接打 localhost 免登入，CI 不再需要啟停容器，本項急迫性大幅降低。待客戶專案（七）需要完整隔離時再重新評估
 
 ---
 
-## 九、Dashboard 存取分層（localhost 免登入 + 外部強制登入）
-
-### 背景
-
-目前 Dashboard 無論從哪裡存取都是相同的驗證行為。本機已有 Tailscale Funnel 提供公開 HTTPS 入口（`https://love-desktop.tailcd0255.ts.net`），但 Playwright 測試每次都卡在登入畫面，實作 Session 無法自行完成 UI 驗收。
-
-### 期望行為
-
-| 存取方式 | 需要登入 | 用途 |
-|---|---|---|
-| `localhost:5051` | ❌ 不需要 | Playwright 測試、本機開發、實作 Session 自行驗收 |
-| `https://love-desktop...ts.net` | ✅ 需要 | 外部驗收（手機/筆電）、Aria 遠端確認 |
-
-### 實作方向
-
-**1. ASP.NET Core Middleware — localhost 偵測**
-
-```csharp
-if (context.Connection.RemoteIpAddress?.IsLoopback == true)
-{
-    // 自動通過驗證，不需登入
-}
-// 其他來源 → 走正常登入流程
-```
-
-**2. Docker port binding 收緊**
-
-```yaml
-# docker-compose.prod.yml
-ports:
-  - "127.0.0.1:5051:8080"  # 只有本機能直連（免登入）
-```
-
-外部流量只能透過 Tailscale Funnel 進來（帶登入保護）。
-
-**3. 安全架構**
-
-```
-外部裝置 → Tailscale Funnel (HTTPS) → 需要登入 ✅
-本機      → 127.0.0.1:5051          → 免登入（Playwright / Claude Code）✅
-同網段裝置 → ❌ 連不進來（127.0.0.1 binding）
-```
-
-### 解鎖的能力
-
-- **實作 Session 自行驗收**：Playwright 不再卡登入，可完整執行截圖測試
-- **Aria 遠端協助**：實作 Session 遇到 UI 問題時，Aria 可透過 Tailscale URL 截圖確認
-- **手機驗收**：Christ 可在任何裝置上驗收 Dashboard 功能
-
-### 與現有 Future Feature 的關係
-
-- **八（測試環境隔離）**：九解決「測試時卡登入」，八解決「測試打到 production」——互補
-- **十（客戶專案交付）**：九是 AiTeam 自身的存取分層，十的客戶 Staging 環境可參考相同模式
-
-### 優先級
-
-🟠 中高優先級 — 完成後實作 Session 可自行驗收 UI，大幅減少 Christ 人工介入；也讓 Aria 能遠端協助診斷問題
-
----
-
-## 十、客戶專案交付流程與驗收閘門
+## 七、客戶專案交付流程與驗收閘門
 
 ### 背景
 
@@ -372,8 +263,8 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 ### 與現有 Future Feature 的關係
 
-- **八（測試環境隔離）**：八解決 AiTeam 自身的 CI 打到 production 問題；本項目解決客戶專案的完整交付流程，範圍更廣
-- **十一（Agent 對抗機制）**：驗收失敗的修正循環可能觸發申訴/熔斷機制
+- **六（測試環境隔離）**：六解決 AiTeam 自身的 CI 打到 production 問題；本項目解決客戶專案的完整交付流程，範圍更廣
+- **八（開發流程重構）**：驗收失敗的修正循環可能觸發糾錯機制
 
 ### 優先級
 
@@ -381,145 +272,430 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 ---
 
-## 十一、Agent 對抗與糾錯機制
+## 八、開發流程重構（多人會議制 + 糾錯機制）
 
 ### 背景
 
-已發生過兩次實際事故：
-1. **Vera 誤判事故**：Vera 持續報告 false critical，Cody 只能接受並反覆修改。因 Cody 無法反駁審查結果（單向權力結構），即使 Cody「知道」Vera 是錯的也只能執行，直到 Christ 手動介入才發現是 Vera 異常。
-2. **實作 Session 死循環事故**：驗收不斷失敗，Session 反覆修正但問題始終存在。因為沒有旁觀者偵測到循環模式，Session 一直做無效修正，直到 Christ 請 Aria 分析才找出根因。
+**已知事故：**
+1. **Vera 誤判事故**：Vera 持續報告 false critical，Cody 只能接受並反覆修改。因 Cody 無法反駁審查結果（單向權力結構），直到 Christ 手動介入才發現是 Vera 異常。
+2. **實作 Session 死循環事故**：驗收不斷失敗，Session 反覆做無效修正，沒有機制偵測循環模式，直到 Christ 請 Aria 分析才找出根因。
 
-兩個事故的共同根因：**系統缺乏糾錯回路**。當一個 Agent 出錯時，沒有機制讓其他 Agent 質疑、也沒有機制偵測重複失敗。
+**流程設計缺陷（2026-04-12 全盤討論後發現）：**
+- Agent 之間是單向串行，接收指令後只能執行，不能質疑上游輸入
+- 現實團隊有 Kick-off 會議讓所有人在開工前對齊認知，AiTeam 沒有
+- Code Review 是單向判決（Vera → Cody），現實中是雙向對話（開發可以反駁）
+- 問題在流程各階段逐一浮現，效率低且頻繁回溯
 
-### 四個機制（由簡到繁）
+### 設計方向演化
 
-#### 機制一：申訴機制（Appeal）— 解決事故一 + 預防錯誤前提
+| 原始設計 | 討論後結論 | 原因 |
+|---------|----------|------|
+| Pre-flight Objection（逐 handoff 質疑） | **→ 多人會議制**（Kick-off / Design Review） | 會議一次性解決所有問題，比逐一質疑更有效率 |
+| 熔斷機制（Circuit Breaker） | **→ 已存在，不需新增** | Petra（Stage 16）已有 3 次打回上限 + escalate |
+| Review Appeal（Cody 反駁 Vera） | **→ 保留** | 唯一的審查反駁機制，Petra 仲裁 |
+| 循環偵測 + 新鮮視角 | **→ Phase 2 保留** | Phase 1 跑穩後再加 |
 
-申訴不只是「審查結果反駁」，更包含「每個環節都可以質疑上游輸入」。分為兩種模式：
+### 核心設計原則
 
-**模式 A — Pre-flight Objection（執行前質疑輸入）**
-
-每個 Agent 接收輸入時，先做理解性檢查。發現矛盾/歧義/資訊不足時，輸出結構化 objection，由 WorkflowEngine 路由回上游修正：
-
-```
-Victoria 指派需求給 Rosa
-    ↓
-Rosa Pre-flight Check：
-    ├── 無問題 → 正常執行，產出規格書
-    └── 發現問題 → 輸出 objection
-         {
-           "status": "objection",
-           "type": "logical_conflict | ambiguity | missing_info | scope_concern",
-           "details": "第 2 點要求所有頁面加權限控制，但第 5 點說 Landing Page 不需登入，兩點矛盾",
-           "suggestion": "建議釐清 Landing Page 是否排除在權限控制範圍外"
-         }
-         ↓
-    WorkflowEngine 路由回 Victoria（或上呈老闆）
-```
-
-適用於所有 handoff 點：Victoria → Rosa、Rosa → Demi、Demi → Cody、Cody → Vera ... 每個 Agent 都有權在開始工作前說「等等，這裡有問題」。
-
-**模式 B — Review Appeal（執行後反駁審查）**
-
-讓 Cody 可以反駁 Vera 的 critical finding：
-
-```
-Vera 報告 critical
-    ↓
-Cody 對每個 critical 回應：
-    ├── "agree" → 接受，執行修正
-    └── "disagree + 理由" → 附上具體原因
-         ↓
-    Petra 仲裁：判斷 Vera 還是 Cody 是對的
-```
-
-**兩種模式的差異：**
-
-| | Pre-flight Objection | Review Appeal |
-|---|---|---|
-| **方向** | 質疑上游的輸入 | 反駁下游的審查 |
-| **時機** | Agent 開始前 | Agent 完成後 |
-| **目的** | 不在錯誤前提上蓋大樓 | 不因誤判做無效修正 |
-| **仲裁者** | 上游 Agent 或老闆 | Petra（PM） |
-
-**防乒乓球機制**：每個 handoff 最多 objection 2 次，超過自動上呈老闆。避免兩個 Agent 在同一問題反覆爭執。
-
-**成本**：低（Pre-flight 只需在 prompt 加入理解性檢查指令 + WorkflowEngine 處理 objection 路由；Review Appeal 多一輪 Cody 回應 + Petra 既有判斷能力）
-**對標現實**：Pre-flight = 開工前 kick-off meeting 上 developer 質疑需求；Review Appeal = PR comment 裡回覆「I disagree because...」，Tech Lead 仲裁。
-
-#### 機制二：熔斷機制（Circuit Breaker）— 解決事故二
-
-同一環節重試超過 N 次，自動停止並上報：
-
-```
-Cody 修正第 1 次 → Vera 仍報 critical
-Cody 修正第 2 次 → Vera 仍報 critical
-Cody 修正第 3 次 → 🔴 熔斷觸發！
-    → 停止迴圈
-    → Victoria 上報 Christ：「同一問題來回 3 次，疑似死循環」
-```
-
-**成本**：低（WorkflowEngine 加計數器 + escalation）
-**對標現實**：Escalation policy — 問題無法在當前層級解決，往上一層報。
-
-> Petra 已有「最多打回 2 次，超過自動 escalate」的雛形（Stage 16），但 Vera ↔ Cody 修正迴圈目前沒有此保護。
-
-#### 機制三：循環偵測（Loop Detection）— 進階版事故二
-
-比單純計數更聰明：追蹤每次修正的 diff，偵測是否在反覆修改同一段程式碼。
-
-```
-第 1 次修正：改了 A、B、C
-第 2 次修正：改了 A、B（C 改回去了）
-第 3 次修正：又改了 C ← 偵測到 C 被反覆修改（oscillation）
-    → 判定為「需求矛盾」或「Vera 判斷互相衝突」，非 Cody 的問題
-```
-
-**成本**：中（需要追蹤 diff 歷史並做比對）
-**對標現實**：CI/CD 中的 flapping test detection。
-
-#### 機制四：新鮮視角（Fresh Eyes）— 最後手段
-
-熔斷觸發後，不讓同一個 Agent 繼續嘗試，而是啟動一個全新的獨立 Session 來診斷：
-
-```
-🔴 熔斷觸發
-    ↓
-啟動獨立診斷 Session（不帶前面的對話歷史）
-    ↓
-獨立閱讀：原始需求、程式碼、每一輪 review、每次修正的 diff
-    ↓
-產出診斷報告：「問題出在 Vera 的第 2 點判斷有誤」或「Cody 第 1 次的修正方向就錯了」
-```
-
-**成本**：高（啟動全新 Claude Code Session）
-**對標現實**：叫一個不在脈絡中的同事過來看「你覺得問題在哪裡？」（正是 Christ 找 Aria 做的事）
-
-### 四個機制的遞進關係
-
-```
-                    ┌── Pre-flight Objection（執行前質疑）
-正常流程 → 申訴機制 ┤                          → 熔斷機制 → 新鮮視角 → 上報老闆
-                    └── Review Appeal（執行後反駁）  (停止)     (診斷)     (人類介入)
-
-成本：        低                                    低         中         高
-頻率：        每次 handoff 可觸發                    偶爾       極少       最後手段
-```
-
-### 建議實作順序
-
-| Phase | 包含機制 | 理由 |
-|-------|---------|------|
-| **Phase 1** | 申訴（Pre-flight + Review Appeal）+ 熔斷 | 成本最低、直接解決兩個已知事故 + 預防未來錯誤前提 |
-| **Phase 2** | 循環偵測 + 新鮮視角 | Phase 1 跑穩後再加，提升自動化程度 |
-
-### 優先級
-
-🟠 中高優先級 — 已有兩次實際事故，且未來大量使用 AiTeam 時風險會放大
+1. **Petra 是 PM 協調者**：主持會議、判斷流程走向、評估影響範圍，但不替 Christ 做需求決策、不覆蓋技術判斷
+2. **會議只對齊認知**：Agent 在會議中只提疑問與風險，不產出實際工作成果（Rosa 不拆 Issues、Cody 不寫程式碼）
+3. **Kick-off 全員參加**：成本低（只是提問），確保所有角色的視角都被考慮。後續階段再依需要精簡人員
+4. **每個階段都有「會議 → 確認」兩段式**：確保品質和 Christ 掌控
+5. **所有輪次上限預設 3 輪**：會議輪次、迴圈 A/B、QA 修正迴圈統一預設 3 輪。未來可在 Dashboard 動態調整（依賴 Future Feature 十二 的動態設定機制）
+6. **文件存入 DB**：各階段產出的文件統一存入資料庫。WorkflowEngine 啟動下游 Agent 前，從 DB 取出相關文件，以 prompt 或 workspace 檔案方式傳入
+7. **BugFix / TechImprovement 精簡路徑**：這兩種任務類型不一定走完全部七個階段，由 Petra 判斷可跳過哪些階段（例如跳過 Kick-off 直接開發、跳過收尾歸檔直接完成）
+8. **Petra 工作量待觀察**：Petra 幾乎參與每個階段，Token 消耗需持續監控。若過載，考慮將部分輕量判斷下放或簡化
 
 ---
 
-## 十二、Dashboard 雙向操作中心（Discord + Dashboard 雙通道）
+### 第一階段：需求計劃（✅ 已確認）
+
+#### 會議流程
+
+```
+Victoria 跟 Christ 確認提案
+    ↓
+交給 Petra 主導
+    ↓
+Petra 召開 Kick-off 會議（Rosa / Demi / Cody / Quinn 全員參加）
+    ↓
+收集大家的意見，Petra 進行判斷後回應（最多 3 輪）
+    ↓
+狀況一：全部沒問題 → 進入確認流程
+狀況二：未達成共識 → Victoria 上呈 Christ
+    ↓
+Christ 回覆 → Victoria 交給 Petra → 再次進入會議流程
+```
+
+#### 確認流程
+
+```
+Kick-off 會議完成
+    ↓
+Petra 整合討論結果，產出「任務計劃書」
+    ↓
+Victoria 上呈 Christ 確認（Discord + Dashboard）
+    ↓
+Christ 選擇：
+    ├── 繼續 → 進入第二階段
+    ├── 停止 → 流程結束
+    └── 修改 → Victoria 把修改後的計劃書交給 Petra
+                    ↓
+               Petra 評估影響範圍：
+                 ├── 小 → 直接進入第二階段
+                 └── 大 → 退回重新開 Kick-off
+```
+
+**產出：任務計劃書**（Petra 負責）— 後續所有 Agent 的單一真相來源。計劃書中記錄每位參加者在 Kick-off 提出的意見與結論，包含是否需要 Demi 參與設計規劃。
+
+---
+
+### 第二階段：設計規劃（✅ 已確認）
+
+#### 作業流程
+
+```
+Petra 收到計劃書
+    ↓
+Petra 把計劃書交給 Rosa → Rosa 產出 GitHub Issues
+    ↓
+Petra 判斷是否需要 Demi（依計劃書中的記錄）：
+    ├── 不需要 → 直接進入設計會議
+    └── 需要 → Petra 把 Issues + 計劃書交給 Demi
+                    ↓
+               Demi 產出 UI/UX 規格
+                    ↓
+               進入設計會議
+```
+
+> Rosa → Demi 維持串行（避免並行產出不一致的風險）。
+
+#### 設計會議
+
+```
+Petra 召開設計會議（Rosa / Demi* / Cody / Quinn）
+   *Demi 視需要參加
+    ↓
+收集意見，Petra 回應（最多 3 輪）
+    ↓
+狀況一：全部沒問題 → 進入確認流程
+狀況二：需要調整 Issues / UI 規格
+    ↓
+    Petra 把會議記錄交給 Rosa / Demi 修改
+    （Petra 給指示，Rosa/Demi 執行修改。Petra 不直接改 Issues。）
+    ↓
+    Petra 依修改幅度判斷：
+        ├── 小修 → Petra 自己審核 → 確認流程
+        └── 大改 → 再開一次設計會議
+狀況三：發現計劃書本身有問題
+    ↓
+    Petra 判斷影響範圍：
+        ├── 小問題 → 會議上討論解決
+        └── 根本性問題 → 退回第一階段
+```
+
+#### 確認流程
+
+```
+Petra 判斷是否需要 Christ 確認：
+    ├── 不需要 → 直接進入第三階段
+    └── 需要 → 走與第一階段相同的確認流程
+               （Victoria 上呈 → Christ 繼續/停止/修改 → Petra 評估影響）
+```
+
+**產出：**
+- **GitHub Issues**（Rosa 負責）
+- **UI/UX 規格**（Demi 負責，如需要）
+- **設計規劃書**（Petra 負責）— 整合設計會議結論、決策理由、對 Issues / UI 規格的補充說明
+
+Cody 開發時同時讀取三份文件。
+
+---
+
+### 第三階段：開發（✅ 已確認）
+
+#### 流程
+
+```
+Cody 收到：計劃書 + Issues + UI 規格（如有）
+    ↓
+Petra 判斷是否需要 Dev_plan：
+    ├── 不需要（簡單功能）→ Cody 直接開發
+    └── 需要（複雜功能）→ Cody 撰寫 Dev_plan
+                    ↓
+               Petra 審核 Dev_plan：
+                 ├── 通過 → Cody 開始開發
+                 ├── 打回 → Cody 可反駁（Review Appeal）
+                 │           ├── 共識達成 → Cody 修改後通過
+                 │           └── 超過討論次數限制
+                 │                    → Petra 請 Victoria 上呈 Christ
+                 │                    → Christ 下指示
+                 │                    → Victoria 傳給 Petra
+                 └── 上呈 → Victoria → Christ
+    ↓
+Cody 開發實作 → 提交 PR
+    ↓
+進入第四階段
+```
+
+#### 設計決策
+
+- **Dev_plan 是否需要由 Petra 判斷**：複雜功能（跨多模組、新架構）需要計劃；簡單功能（單一檔案、明確修改）可跳過直接開發
+- **Review Appeal 適用於 Dev_plan 審核**：Cody 可反駁 Petra 的打回意見，超過討論次數上呈 Christ
+- **Cody 的輸入比現行流程更完整**：經過 Kick-off + 設計會議，Cody 對需求的理解已充分
+- **阻礙回報機制**：Cody 開發中遇到無法解決的阻礙（架構不支援、依賴缺失、需求矛盾），可輸出「阻礙報告」，WorkflowEngine 交給 Petra 判斷：技術問題給建議繼續開發 / 需求問題退回上游 / 無法判斷上呈 Christ
+- **實作說明**：Cody 開發完畢時產出一份實作說明，隨 PR 一起交出。內容包含：實作了哪些 Issues、關鍵技術決策與理由、與 Dev_plan 不同的地方及原因、開發中遇到的問題與解決方式、修改的檔案清單與用途。Vera 審查時可參考
+
+**產出：**
+- **PR（Pull Request）**（Cody 負責）
+- **Dev_plan**（Cody 負責，如需要）
+- **實作說明**（Cody 負責）
+
+---
+
+### 第四階段：程式碼審查（✅ 已確認）
+
+#### 流程
+
+```
+Cody 提交 PR + 實作說明
+    ↓
+Vera 審查 PR → 產出 Review 報告
+    ↓
+Vera 把審查結果回饋給 Cody
+    ↓
+Cody 逐條回應（agree 為預設）：
+    ├── 全部 agree → 一次性修正 → 重新提交 PR → Vera 再審（迴圈 B）
+    ├── 部分 disagree → 先討論反駁項目（迴圈 A）
+    │       ↓
+    │   Cody 說明反駁理由給 Vera
+    │       ↓
+    │   Vera 基於程式碼事實重新評估：
+    │       ├── 修改報告（接受反駁）
+    │       └── 維持原判（增加說明）
+    │       ↓
+    │   回到 Cody 回應（迴圈 A，上限 3 輪）
+    │       ↓
+    │   所有項目有結論 → Cody 一次性修正 → 重新提交 PR
+    └── 全部 disagree → 同上走迴圈 A
+
+迴圈 A（意見分歧）超過限制：
+    → Petra 仲裁（收到 Vera 報告 + Cody 反駁 + 完整討論記錄）
+    → Petra 判斷每個爭議項目：支持 Vera / 支持 Cody
+    → Cody 依仲裁結果修正 → 交 Petra 直接審核（不回 Vera）
+
+迴圈 B（接受修正）超過限制：
+    → Petra 介入（檢視所有歷史審查報告）
+    → Petra 判斷：
+        ├── Vera 過度挑剔 → 要求放行
+        ├── Cody 修正品質不佳 → 上呈 Christ
+        └── 需求本身有問題 → 退回上游
+
+Petra 無法仲裁 → Victoria → Christ
+```
+
+#### 設計決策
+
+- **Vera 和 Cody 直接對話**：對標真實 PR review，Petra 不在默認路徑上，只在需要仲裁時介入
+- **部分同意部分反駁**：先討論完反駁項目達成共識，再一次性修正（選項 A）
+- **修正引入新問題**：統一計入迴圈 B 總輪次，不另外區分
+- **Petra 仲裁後**：Cody 修正完交 Petra 直接審核，不回 Vera（避免重新進入迴圈）
+- **Vera prompt 規範**：收到反駁時基於程式碼事實重新評估，不被話術說服；如果反駁指出漏看的程式碼則修改報告，如果只是「我覺得也可以」但無事實支撐則維持原判
+- **Vera 收到 Issues 清單 + 實作說明**：可交叉比對程式碼是否符合需求（如持續發生漏做問題再強化）
+- **Vera 審查加入版本號檢查**：比對 `.csproj` 版本號是否與 Stage Roadmap 目標版本一致
+
+#### 審查報告格式
+
+Vera 負責產出，記錄完整的審查過程：
+
+```
+# 審查報告
+
+## 基本資訊
+- PR: #{編號}
+- 審查者: Vera
+- 總輪次: {N}
+- 最終結果: 通過 / 仲裁後通過
+
+## 各輪紀錄
+
+### 第 1 輪
+| # | 嚴重度 | 檔案 | 說明 | Cody 回應 | 結論 |
+|---|--------|------|------|-----------|------|
+| 1 | Critical | path/file.cs:42 | ... | agree | 已修正 |
+| 2 | Warning  | path/file.cs:87 | ... | disagree: {理由} | Vera 接受反駁 |
+
+### 第 2 輪
+（同上格式，只列出新發現或未解決項目）
+
+## 仲裁紀錄（如有）
+- 觸發原因: 迴圈 A/B 超限
+- Petra 判斷:
+  | # | 爭議項目 | 判斷 | 理由 |
+  |---|---------|------|------|
+  | 1 | ... | 支持 Vera | ... |
+  | 2 | ... | 支持 Cody | ... |
+```
+
+**產出：**
+- **通過審查的 PR**
+- **審查報告**（Vera 負責，含每輪紀錄 + Cody 回應 + 仲裁紀錄）
+
+---
+
+### 第五階段：QA 測試（✅ 已確認）
+
+#### 流程
+
+```
+Vera 審查通過的 PR
+    ↓
+Quinn 執行測試（Playwright E2E + 截圖比對）
+    ↓
+Quinn 產出測試報告（結構化：通過項目 / 失敗項目 / 失敗截圖）：
+    ├── 全部通過 → 進入下一階段
+    ├── 無適用測試 → 輸出 "no_applicable_tests" + 理由 → Petra 輕量判斷
+    │       ├── 理由合理 → 放行，進入下一階段
+    │       └── 理由不合理 → 要求 Quinn 補寫測試
+    └── 有失敗 → 報告 Petra
+            ↓
+        Petra 判斷：
+            ├── 明確是功能 bug → 派 Cody 修正
+            ├── 疑似環境 / 測試本身問題 → Petra 自行判斷或上呈
+            └── 不確定 → 派 Cody 調查，Cody 可回報「測試有問題」
+            ↓
+        Cody 修正完 → 回報 Petra
+            ↓
+        Petra 決定：
+            ├── 小修正 → Quinn 重測（完整測試套件）
+            ├── 大幅改動 → 退回 Vera 重新審查
+            └── 反覆失敗（超過輪次上限）→ 上呈 Christ
+```
+
+#### 設計決策
+
+- **Petra 始終在 QA 迴圈中**：與第四階段不同，QA 問題量較少且較客觀（通過/失敗），Petra 在迴圈中的開銷很小，但能確保大幅修正退回 Vera、環境問題不空轉
+- **Cody 保有質疑權利**：Cody 可向 Petra 表達「測試本身有問題」，由 Petra 判斷
+- **Quinn 的輸入**：除了 PR diff（現有），還應包含 Issues 清單 + Cody 的實作說明，讓 Quinn 能交叉比對「需求 vs 實作 vs 測試覆蓋」
+- **`no_applicable_tests` 需附理由**：防止 LLM 走捷徑，Petra 做輕量把關
+- **重測範圍**：預設跑完整測試套件。Quinn 在報告中區分「原問題重測結果」與「新發現的問題」，Petra 可分開處理
+- **輪次上限**：QA 修正迴圈上限 3 次，超過由 Petra 上呈 Christ
+- **BugFix / TechImprovement**：QA 通過後直接跳到完成，不走收尾歸檔階段
+
+**產出：**
+- **通過測試的 PR**
+- **測試報告**（Quinn 負責）
+
+---
+
+### 第六階段：收尾歸檔（✅ 已確認）
+
+#### 背景：Sage 角色轉型
+
+新流程中，每個階段都已產出對應文件（需求計劃書、設計規劃書、實作計劃書、實作說明書、審查報告書、測試報告書），一個功能從頭到尾已有六份文件完整覆蓋「為什麼→怎麼設計→怎麼做→做得好不好→測試結果」。
+
+Sage 原本的工作（讀 .cs 產生 API 技術文件）在此脈絡下價值很低——API 資訊看程式碼本身就能得到，且每次 PR 的快照會迅速過時。
+
+因此 Sage 從「技術文件撰寫員」轉型為**收尾歸檔員**，定位為 pipeline 中的輕量收尾步驟。
+
+#### 流程
+
+```
+QA 通過（或第四階段通過，若為 BugFix / TechImprovement 則跳過本階段）
+    ↓
+Sage 收到該任務所有階段產出：
+    - 需求計劃書（第一階段）
+    - 設計規劃書（第二階段）
+    - 實作計劃書（第三階段，如有）
+    - 實作說明書（第三階段）
+    - 審查報告書（第四階段）
+    - 測試報告書（第五階段）
+    ↓
+Sage 執行收尾工作：
+    1. 將所有文件歸檔整理（統一格式、建索引）
+    2. 更新 CHANGELOG
+    ↓
+進入完成階段
+```
+
+#### 設計決策
+
+- **輕量收尾**：Sage 不再產生技術文件，改為歸檔整理 + CHANGELOG 更新，pipeline 中最輕量的步驟
+- **不設 review 迴圈**：歸檔工作不阻擋上線
+- **不再讀 .cs 產生 API 文件**：六份流程文件已充分覆蓋，API 資訊由程式碼本身承載
+- **BugFix / TechImprovement 跳過本階段**：這兩種任務不走收尾歸檔，直接完成
+
+#### 待觀察事項
+
+- ⚠️ **定期檢閱 Sage 歸檔品質**：觀察整理結果和 CHANGELOG 是否符合預期
+- ⚠️ **全系統文件健康檢查**：更強大的功能（掃描程式碼與文件差異、主動補更新），已記錄於 Future Feature 另案，不在 Phase 1 範圍
+
+**產出：**
+- **歸檔文件索引**（Sage 負責）
+- **CHANGELOG 更新**（Sage 負責）
+
+---
+
+### 第七階段：完成 / 上線（✅ 已確認）
+
+#### 流程
+
+```
+Sage 收尾歸檔完成
+    ↓
+Victoria 整理交付通知：
+    - 摘要（任務標題、完成的 Issues、關鍵變更）
+    - Dashboard 連結（可查看所有階段產出的完整內容）
+    - PR 連結
+    ↓
+通知 Christ（Discord + Dashboard 雙通道）
+    ↓
+Christ 確認 merge PR
+    ↓
+GitHub Actions 自動執行：
+    1. docker compose build + up（現有）
+    2. 部署成功後，從 .csproj 讀取版本號，自動建立 git tag
+```
+
+#### 設計決策
+
+- **版本號由 Cody 在開發階段更新**：Stage Roadmap 指定目標版本，Cody 開發時更新 `.csproj`，Vera 審查時檢查版本號是否正確
+- **Git tag 自動化**：部署成功後自動從 `.csproj` 讀取版本號建立 tag，檢查是否重複以避免覆蓋
+- **Auto-tag 在部署成功之後**：確保 tag 只指向成功部署的程式碼
+- **Discord 通知輕量化**：Discord 只放摘要 + Dashboard 連結 + PR 連結，��整的階段文件在 Dashboard 查閱
+- **雙通道通知**：Discord + Dashboard（Dashboard 通知依賴 Future Feature 十二實作）
+- **Vera 審查加入版本號檢查**：防止 Cody 忘記更新或填錯版本號
+
+**產出：**
+- **交付通知**（Victoria 負責）
+- **部署完成 + git tag**（GitHub Actions 自動）
+
+---
+
+### Phase 2（待後續 Stage）
+
+以下機制在 Phase 1 跑穩後再評估：
+
+**循環偵測（Loop Detection）**：追蹤每次修正的 diff，偵測是否在反覆修改同一段程式碼（oscillation），比單純計數更聰明。
+
+**新鮮視角（Fresh Eyes）**：熔斷觸發後，啟動全新獨立 Session 診斷問題根因（不帶前面的對話歷史）。對標現實：叫一個不在脈絡中的同事過來看問題。
+
+---
+
+### 實作分期
+
+| Phase | 包含內容 | 狀態 |
+|-------|---------|------|
+| **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 設計完成，待排入 Stage 實作 |
+| **Phase 2** | 循環偵測 + 新鮮視角 | 🔵 待後續 Stage |
+
+### 優先級
+
+🟠 中高優先級 — 已有實際事故，且流程缺陷會隨使用量放大
+
+---
+
+## 九、Dashboard 雙向操作中心（Discord + Dashboard 雙通道）
 
 ### 背景
 
@@ -586,9 +762,9 @@ Agent 需要老闆介入（確認 / 上報 / 申訴 / 通知）
 
 ### 與現有 Future Feature 的關係
 
-- **十一（Agent 對抗機制）**：申訴上呈老闆時，Dashboard 成為仲裁介面
-- **十（客戶專案交付）**：驗收確認可透過 Dashboard 處理
-- **九（存取分層）**：外部透過 Tailscale + 登入存取 Dashboard 操作中心
+- **八（開發流程重構）**：申訴上呈老闆時，Dashboard 成為仲裁介面
+- **七（客戶專案交付）**：驗收確認可透過 Dashboard 處理
+- **存取分層（Stage 22 已完成）**：外部透過 Tailscale + 登入存取 Dashboard 操作中心
 
 ### 優先級
 
@@ -596,7 +772,7 @@ Agent 需要老闆介入（確認 / 上報 / 申訴 / 通知）
 
 ---
 
-## 十三、Agent 任務序列（Per-Agent Task Queue）
+## 十、Agent 任務序列（Per-Agent Task Queue）
 
 ### 背景
 
@@ -782,8 +958,8 @@ Dashboard 顯示每個 Agent 目前的任務序列：
 
 ### 與現有 Future Feature 的關係
 
-- **十一（Agent 對抗機制）**：熔斷機制需要知道 Agent 正在處理什麼，queue 提供這個資訊
-- **十二（Dashboard 雙向操作中心）**：Dashboard 顯示 queue 讓 Christ 掌握全局；Victoria queue 解決「討論需求時 Petra 上報被卡住」的問題；Error 任務的重試/取消也透過 Dashboard 操作
+- **八（開發流程重構）**：流程中需要知道 Agent 正在處理什麼，queue 提供這個資訊
+- **九（Dashboard 雙向操作中心）**：Dashboard 顯示 queue 讓 Christ 掌握全局；Victoria queue 解決「討論需求時 Petra 上報被卡住」的問題；Error 任務的重試/取消也透過 Dashboard 操作
 
 ### 優先級
 
@@ -791,9 +967,9 @@ Dashboard 顯示每個 Agent 目前的任務序列：
 
 ---
 
-## 十四、Dashboard UI 細節打磨（第四批）
+## 十一、Dashboard UI 細節打磨（第四批）
 
-> 狀態：🔵 低優先級 — UI 組織與使用便利性優化，待 Stage 22 完成後擇機處理
+> 狀態：🔵 低優先級 — UI 組織與使用便利性優化，待 Christ 確認完整清單後排入 Stage
 
 ### 背景
 
@@ -845,7 +1021,7 @@ PR 欄位顯示優化：
 
 ---
 
-## 十五、Dashboard 可調整 Token 守門全域限額
+## 十二、Dashboard 可調整 Token 守門全域限額
 
 > 狀態：🔵 低優先級 — 目前只能改設定檔後重新部署
 
@@ -861,7 +1037,7 @@ Stage 22 實作了 Token 守門機制，包含：
 
 ### 需求
 
-在 Dashboard 「系統設定」頁面（配合十四、系統設定獨立頁面規劃）加入 Token 守門設定區塊：
+在 Dashboard 「系統設定」頁面（配合十一、系統設定獨立頁面規劃）加入 Token 守門設定區塊：
 
 - **全域月費上限**（MonthlyTokenLimitK）— 數字輸入框，單位 K tokens
 - **單次請求上限**（SingleRequestTokenLimitK）— 數字輸入框，單位 K tokens
@@ -878,6 +1054,56 @@ Stage 22 實作了 Token 守門機制，包含：
 ### 優先級
 
 🔵 低優先級 — 目前繞道修改 docker-compose.prod.yml 可解決問題，UI 入口是便利性需求
+
+---
+
+## 十三、Sage 全系統文件健康檢查
+
+### 背景
+
+Stage 23 流程重構中，Sage 從「技術文件撰寫員」轉型為「收尾歸檔員」，pipeline 中的工作改為輕量的文件整理 + CHANGELOG 更新。
+
+但長期而言，BugFix / TechImprovement 跳過 Doc 階段，加上程式碼持續演進，系統文件會逐漸與實際程式碼脫節。需要一個機制定期檢查並修補差異。
+
+### 期望行為
+
+Sage 作為獨立定期任務（非 pipeline 內），掃描整個專案：
+- 比對程式碼與現有文件的差異（API 變更、新增模組、移除功能）
+- 識別過時或缺漏的文件
+- 自動補寫或更新，產出健康檢查報告
+
+### 觸發方式
+
+- 定期排程（例如每週 / 每月）
+- 或手動指令觸發（Discord / Dashboard）
+
+### 優先級
+
+🔵 低優先級 — Phase 1 先觀察流程文件是否足夠，有實際過時問題再啟動
+
+---
+
+## 十四、UAT 驗收階段（待觀察）
+
+### 背景
+
+目前流程在 QA 通過 + 收尾歸檔後直接完成，沒有 Christ 親自驗收「做出來的是不是我要的」的正式步驟。Christ 目前是上線後才發現問題，等於非正式的 UAT。
+
+新流程已有多層品質把關（Kick-off 會議、設計會議、Vera 審查、Quinn 測試），需求走偏的機率比以前低。但 AI 經過多次轉手，仍有可能「技術上正確但需求上不符」。
+
+### 期望行為（若啟用）
+
+Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + 截圖），Christ 確認後才 merge。BugFix / TechImprovement 可跳過。
+
+### 待觀察
+
+- 觀察新流程上線後，是否頻繁出現「做出來不是我要的」的情況
+- 若頻繁發生 → 加入 UAT 階段
+- 若很少發生 → 維持現狀，不加入
+
+### 優先級
+
+⚪ 待觀察 — 目前先不加入，視新流程實際運作結果決定
 
 ---
 
@@ -903,8 +1129,11 @@ Stage 22 實作了 Token 守門機制，包含：
 | 二十二 | 任務流程可視化（Pipeline View） | ✅ Stage 18（2026-04-09） |
 | ~~MCP 整合~~ | MCP 標準化工具協議 | 移除 — Agent 透過 Claude Code CLI 操作，已有成熟直接串接，MCP 多一層抽象無實際好處 |
 | ~~顧問 Agent 設計~~ | Victoria 顧問能力強化 | 移除 — Stage 15 Victoria 已具備顧問能力，Aria 負責深度架構討論，剩餘強化項目不值得獨立 Feature |
-| ~~Doc Agent 品質控管~~ | Documentation Agent 審查機制 | 移除 — 被十一（Agent 對抗機制）Pre-flight Objection + Stage 16 Petra 審核閘門吸收 |
-| ~~API 餘額恢復~~ | API 餘額耗盡後的流程恢復 | 移除 — 被十三（Agent 任務序列）Error 狀態 + Dashboard 手動重試機制完全吸收 |
+| ~~Doc Agent 品質控管~~ | Documentation Agent 審查機制 | 移除 — 被八（開發流程重構）+ Stage 16 Petra 審核閘門吸收 |
+| ~~API 餘額恢復~~ | API 餘額耗盡後的流程恢復 | 移除 — 被十（Agent 任務序列）Error 狀態 + Dashboard 手動重試機制完全吸收 |
+| 四 | Discord #指令中心 頻道移除 | ✅ Stage 22（2026-04-12）— 程式碼已清除，Christ 需手動刪除 Discord 頻道 |
+| 七 | Token 異常消耗保護機制 | ✅ Stage 22（2026-04-12）— TokenTrackingProvider 四道關卡（單次/日/月/全域） |
+| 九 | Dashboard 存取分層（localhost 免登入） | ✅ Stage 22（2026-04-12）— LocalhostBypassMiddleware + Docker port 收緊 |
 
 ---
 
@@ -936,3 +1165,11 @@ Stage 22 實作了 Token 守門機制，包含：
 | 2026-04-12 | v5.0：全盤整理 — 移除 4 項（MCP 整合、顧問 Agent、Doc 品質控管、API 餘額恢復），重新編號為一～十三 |
 | 2026-04-12 | v5.1：新增十四（Dashboard UI 第四批細節打磨 — 系統設定獨立頁面 + 任務列表/流程追蹤篩選增強 + PR 連結顯示 + 專案管理/規則管理 Switch 精簡 + 規則管理操作欄改圖示按鈕） |
 | 2026-04-12 | v5.2：新增十五（Dashboard 可調整 Token 守門全域限額 — 系統設定 UI 入口 + AppSettings 動態存取，不需重啟容器） |
+| 2026-04-12 | v5.3：十一全面重構 — 從「Agent 對抗與糾錯機制」升級為「開發流程重構（多人會議制 + 糾錯機制）」；Pre-flight Objection 被 Kick-off 會議取代；熔斷確認已由 Petra 覆蓋；新增第一階段（需求計劃）和第二階段（設計規劃）完整流程；Review Appeal 保留；Phase 2 不變 |
+| 2026-04-12 | v5.4：新增第五階段（QA 測試）— Petra 始終在 QA 迴圈中、Quinn 輸入增加 Issues + 實作說明、no_applicable_tests 需附理由由 Petra 把關、重測跑完整套件並區分新舊問題 |
+| 2026-04-12 | v5.5：新增第六階段（文件）— Sage 收到所有前置階段產出、產出執行報告、不設 review 迴圈、新增三項待觀察事項（定期檢閱品質、評估 Review 機制、文件過時風險） |
+| 2026-04-12 | v5.6：第六階段重構 — Sage 從「技術文件撰寫員」轉型為「收尾歸檔員」（歸檔整理 + CHANGELOG），不再產生 API 技術文件；新增十六（Sage 全系統文件健康檢查）作為獨立定期任務 |
+| 2026-04-12 | v5.7：新增十七（UAT 驗收階段）— 待觀察項目，目前先不加入 pipeline，視新流程運作結果決定 |
+| 2026-04-12 | v5.8：新增第七階段（完成/上線）— Victoria 交付通知（Discord 摘要 + Dashboard 連結）、git tag 自動化（部署成功後建立）、Vera 審查加入版本號檢查 |
+| 2026-04-12 | v5.9：全盤回顧更新 — 核心原則新增 4 條（輪次上限 3 輪 / 文件存 DB / BugFix 精簡路徑由 Petra 判斷 / Petra 工作量待觀察）；所有階段補齊文件負責人；第二階段新增 Petra 產出設計規劃書；第四階段新增審查報告格式定義 + 版本號檢查；Kick-off 記錄每位參加者意見 |
+| 2026-04-12 | v6.0：大整理 — 移除 3 個已完成項目（四 #指令中心 / 七 Token 保護 / 九 存取分層 → Stage 22），重新編號為一～十四；修正 Quinn 為 Claude Code（非 API call）；八（開發流程重構）Phase 1 標記設計完成；修正所有跨項目引用 |

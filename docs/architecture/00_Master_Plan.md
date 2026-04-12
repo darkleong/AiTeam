@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v5.0
+> 版本：v5.3
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -33,6 +33,8 @@
 | [Stage_19_Roadmap.md](../planning/Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | v3.3.0 | ✅ 已完成（Pt.1 2026-04-10、Pt.2/Pt.3 2026-04-11） |
 | [Stage_20_Roadmap.md](../planning/Stage_20_Roadmap.md) | Stage 20：Dashboard 全面換 MudBlazor Layout | v3.4.0 | ✅ 已完成（2026-04-11） |
 | [Stage_21_Roadmap.md](../planning/Stage_21_Roadmap.md) | Stage 21：文件整理與 SemVer 導入 | v3.5.0 | ✅ 已完成（2026-04-11） |
+| [Stage_22_Roadmap.md](../planning/Stage_22_Roadmap.md) | Stage 22：Dashboard 存取分層 + Token 保護 + 頻道清理 | v3.6.0 | ✅ 已完成（2026-04-12） |
+| [Stage_23_Roadmap.md](../planning/Stage_23_Roadmap.md) | Stage 23：開發流程重構 Phase 1a（Review Appeal + 流程產出強化） | v3.7.0 | 📋 規劃完成，待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -86,6 +88,11 @@
 | v4.11 | 2026-04-11 | docs/agents/ 全面重整：8 個有對應 Resources/ 的 Agent 文件加入「執行指引」指標，移除與 CLAUDE_*.md 重疊的行為細節，修正所有錯誤（Notion、PM 狀態、Reviewer 輸出格式、QA/Doc/Rosa 流程描述）|
 | v4.12 | 2026-04-11 | CLAUDE.md 全面更新：修正 Blazor Server → Web App、補齊 Stage 11~21 文件清單、新增 mudblazor.md、修正 dotnet ef 指令、新增「版本號管理（SemVer）」章節 |
 | v5.0 | 2026-04-11 | Stage 21 完成：docs/ 資料夾重整（planning/ + architecture/ 子資料夾）、telerik.md 刪除、SemVer 導入（Bot + Dashboard 版本號升至 v3.5.0）、索引表加入版本欄 |
+| v5.1 | 2026-04-12 | Future_Feature.md v5.0 全盤整理：移除 4 項（MCP/顧問/Doc 品質/API 餘額恢復），新增十一～十三（對抗機制/雙向操作/任務序列），重新編號為一～十三 |
+| v5.2 | 2026-04-12 | 新增 Stage_22_Roadmap.md（Dashboard 存取分層 + Token 保護 + 頻道清理，對應 FF 九/七/四） |
+| v5.3 | 2026-04-12 | Stage 22 驗收完成：localhost bypass（Host header 方案）、Token 守門 4 層攔截、Reviewer 超月限警示確認、#指令中心 頻道刪除；Future_Feature.md v5.2 新增十五（Dashboard 調整 Token 守門限額）|
+| v5.4 | 2026-04-12 | Future_Feature.md 整理至 v5.2（十四/十五合併為 UI 第四批打磨，加入規則管理 Switch 精簡 + 圖示按鈕）；新增 Stage_23_Roadmap.md（Agent 糾錯機制 Phase 1 — 申訴 + 熔斷，對應 FF 十一）|
+| v5.5 | 2026-04-12 | Future_Feature.md v6.0：全面流程重構討論完成（七個階段），移除 3 個已完成項目（#指令中心/Token 保護/存取分層→Stage 22），重新編號為一～十四；Stage_23_Roadmap.md v2.0 全面重寫為 Phase 1a（Review Appeal + 流程產出強化 + Sage 轉型 + Git Tag） |
 
 ---
 
