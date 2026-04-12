@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v5.3
+> 版本：v5.7
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -35,6 +35,7 @@
 | [Stage_21_Roadmap.md](../planning/Stage_21_Roadmap.md) | Stage 21：文件整理與 SemVer 導入 | v3.5.0 | ✅ 已完成（2026-04-11） |
 | [Stage_22_Roadmap.md](../planning/Stage_22_Roadmap.md) | Stage 22：Dashboard 存取分層 + Token 保護 + 頻道清理 | v3.6.0 | ✅ 已完成（2026-04-12） |
 | [Stage_23_Roadmap.md](../planning/Stage_23_Roadmap.md) | Stage 23：開發流程重構 Phase 1a（Review Appeal + 流程產出強化） | v3.7.0 | ✅ 已完成（2026-04-12） |
+| [Stage_24_Roadmap.md](../planning/Stage_24_Roadmap.md) | Stage 24：開發流程重構 Phase 1b（QA 改造 + Dev_plan 審核強化 + 文件基礎設施） | v3.8.0 | 📋 規劃完成 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -94,6 +95,7 @@
 | v5.4 | 2026-04-12 | Future_Feature.md 整理至 v5.2（十四/十五合併為 UI 第四批打磨，加入規則管理 Switch 精簡 + 圖示按鈕）；新增 Stage_23_Roadmap.md（Agent 糾錯機制 Phase 1 — 申訴 + 熔斷，對應 FF 十一）|
 | v5.5 | 2026-04-12 | Future_Feature.md v6.0：全面流程重構討論完成（七個階段），移除 3 個已完成項目（#指令中心/Token 保護/存取分層→Stage 22），重新編號為一～十四；Stage_23_Roadmap.md v2.0 全面重寫為 Phase 1a（Review Appeal + 流程產出強化 + Sage 轉型 + Git Tag） |
 | v5.6 | 2026-04-12 | Stage 23 實作完成：Review Appeal 迴圈 A（Cody-Vera 純對話 while loop，最多 3 輪）、Petra 仲裁（ArbitrateReviewAppealAsync）、SkipReviewerAfterArbitration 仲裁後路由、Cody 實作說明（ImplementationNote）解析儲存、阻礙報告（BlockedOperationException + AssessBlockerAsync 路由）、Sage 轉型為收尾歸檔員（CHANGELOG + archive）、Git Tag 自動化、ReviewIssue.Id、WorkflowSettings、版本號檢查；MockMode 四個 Agent 加 30–60 秒隨機延遲；v3.7.0 tag 驗收通過 |
+| v5.7 | 2026-04-12 | 新增 Stage_24_Roadmap.md（開發流程重構 Phase 1b — QA Petra 介入 + Dev_plan 審核強化 + 測試報告結構化 + 文件存 DB 基礎設施） |
 
 ---
 
