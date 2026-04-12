@@ -4,6 +4,8 @@ public class AgentSettings
 {
     public int RulesCacheTtlMinutes { get; set; } = 60;
     public int MonthlyTokenLimitK { get; set; } = 1000;
+    /// <summary>單次請求估算 Token 上限（千 token）。超過時拒絕送出並發出警報。</summary>
+    public int SingleRequestTokenLimitK { get; set; } = 50;
     public string DailyReportCron { get; set; } = "0 0 9,21 * * ?";
     public string HealthCheckCron { get; set; } = "0 */30 * * * ?";
     public string InternalApiKey { get; set; } = "";

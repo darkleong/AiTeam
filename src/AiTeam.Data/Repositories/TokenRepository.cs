@@ -21,6 +21,45 @@ public class TokenRepository(AppDbContext db)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
 
+    /// <summary>查詢指定 Agent 今日（UTC）已用總 token（input + output）。</summary>
+    public async Task<int> GetAgentDailyTotalAsync(
+        string agentName,
+        CancellationToken cancellationToken = default)
+    {
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
+        return await db.TokenLogs
+            .AsNoTracking()
+            .Where(t => t.AgentName == agentName && t.CreatedAt >= today && t.CreatedAt < tomorrow)
+            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+    }
+
+    /// <summary>查詢指定 Agent 本月（UTC）已用總 token（input + output）。</summary>
+    public async Task<int> GetAgentMonthlyTotalAsync(
+        string agentName,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+        return await db.TokenLogs
+            .AsNoTracking()
+            .Where(t => t.AgentName == agentName && t.CreatedAt >= monthStart && t.CreatedAt < monthEnd)
+            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+    }
+
+    /// <summary>查詢所有 Agent 本月（UTC）已用總 token（全域月限判斷用）。</summary>
+    public async Task<int> GetGlobalMonthlyTotalAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+        return await db.TokenLogs
+            .AsNoTracking()
+            .Where(t => t.CreatedAt >= monthStart && t.CreatedAt < monthEnd)
+            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+    }
+
     public async Task SaveAsync(CancellationToken cancellationToken = default)
         => await db.SaveChangesAsync(cancellationToken);
 }

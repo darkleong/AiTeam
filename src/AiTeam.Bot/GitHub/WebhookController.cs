@@ -140,7 +140,7 @@ public class WebhookController(
             .AddField("Issue", $"[{issueTitle}]({issueUrl})")
             .AddField("Repo", repoName, inline: true)
             .AddField("CEO 回應", ceoResponse.Reply)
-            .WithFooter("請到 #指令中心 使用 /task 指令確認執行")
+            .WithFooter("請至 #victoria-ceo 頻道確認")
             .Build();
 
         await channel.SendMessageAsync(embed: embed);

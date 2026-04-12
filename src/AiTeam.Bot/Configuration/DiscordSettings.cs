@@ -9,7 +9,6 @@ public class DiscordSettings
 
 public class DiscordChannelSettings
 {
-    public string CommandCenter { get; set; } = "指令中心";
     public string TaskUpdates { get; set; } = "任務動態";
     public string Alerts { get; set; } = "警報";
     public string DailySummary { get; set; } = "每日摘要";

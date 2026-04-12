@@ -61,7 +61,6 @@ public class DiscordBotService(
 
         var required = new[]
         {
-            _settings.Channels.CommandCenter,
             _settings.Channels.TaskUpdates,
             _settings.Channels.Alerts,
             _settings.Channels.DailySummary,

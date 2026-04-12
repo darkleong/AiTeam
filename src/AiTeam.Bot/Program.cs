@@ -68,6 +68,9 @@ builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames
 
 builder.Services.AddScoped<PmAgentService>();
 
+// Discord 警報服務（向 #警報 頻道發送 Token 異常等警報）
+builder.Services.AddSingleton<DiscordAlertService>();
+
 // Dashboard 推送（本機 Aspire 用 http+dashboard://，Docker 用 Dashboard:PushUrl 設定）
 var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashboard://aiteam-dashboard";
 builder.Services.AddHttpClient("aiteam-dashboard", client =>

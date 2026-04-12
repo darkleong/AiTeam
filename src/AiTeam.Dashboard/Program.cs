@@ -1,3 +1,4 @@
+using AiTeam.Dashboard.Configuration;
 using AiTeam.Dashboard.Identity;
 using MudBlazor.Services;
 using AiTeam.Dashboard.Services;
@@ -51,6 +52,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 // AddControllersWithViews 而非 AddControllers，才能使用 [ValidateAntiForgeryToken]
 builder.Services.AddControllersWithViews();
 
+// AgentTokenLimits（供 Token 監控頁面讀取各 Agent 日限/月限；繫結自 AgentSettings section）
+builder.Services.Configure<AgentTokenLimits>(builder.Configuration.GetSection("AgentSettings"));
+
 // Dashboard Services
 builder.Services.AddScoped<DashboardTaskService>();
 builder.Services.AddScoped<DashboardProjectService>();
@@ -65,6 +69,7 @@ var app = builder.Build();
 
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseMiddleware<LocalhostBypassMiddleware>(); // Stage 22：localhost 免登入 bypass
 app.UseAuthorization();
 app.UseAntiforgery();
 

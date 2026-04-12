@@ -25,7 +25,6 @@ services:
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Discord__BotToken: "${DISCORD_BOT_TOKEN}"
       Discord__GuildId: "${DISCORD_GUILD_ID}"
-      Discord__Channels__CommandCenter: "指令中心"
       Discord__Channels__TaskUpdates: "任務動態"
       Discord__Channels__Alerts: "警報"
       Discord__Channels__DailySummary: "每日摘要"
@@ -47,6 +46,7 @@ services:
       Dashboard__PushUrl: "http://aiteam-dashboard:8080"
       AgentSettings__RulesCacheTtlMinutes: "60"
       AgentSettings__MonthlyTokenLimitK: "1000"
+      AgentSettings__SingleRequestTokenLimitK: "50"
       AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
       AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
       AgentSettings__SkipCeoConfirm: "false"
@@ -60,7 +60,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "5051:8080"
+      - "127.0.0.1:5051:8080"   # Stage 22：只綁定 localhost，外部裝置無法直連
     environment:
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
@@ -69,6 +69,28 @@ services:
       Bot__InternalUrl: "http://aiteam-bot:8080"
       Bot__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
       ASPNETCORE_HTTP_PORTS: "8080"
+      AgentSettings__MonthlyTokenLimitK: "1000"
+      AgentSettings__SingleRequestTokenLimitK: "50"
+      AgentSettings__Agents__CEO__DailyTokenLimitK: "10"
+      AgentSettings__Agents__CEO__MonthlyTokenLimitK: "200"
+      AgentSettings__Agents__Dev__DailyTokenLimitK: "20"
+      AgentSettings__Agents__Dev__MonthlyTokenLimitK: "400"
+      AgentSettings__Agents__Ops__DailyTokenLimitK: "5"
+      AgentSettings__Agents__Ops__MonthlyTokenLimitK: "100"
+      AgentSettings__Agents__QA__DailyTokenLimitK: "15"
+      AgentSettings__Agents__QA__MonthlyTokenLimitK: "300"
+      AgentSettings__Agents__Doc__DailyTokenLimitK: "10"
+      AgentSettings__Agents__Doc__MonthlyTokenLimitK: "200"
+      AgentSettings__Agents__Requirements__DailyTokenLimitK: "8"
+      AgentSettings__Agents__Requirements__MonthlyTokenLimitK: "150"
+      AgentSettings__Agents__Reviewer__DailyTokenLimitK: "15"
+      AgentSettings__Agents__Reviewer__MonthlyTokenLimitK: "300"
+      AgentSettings__Agents__Release__DailyTokenLimitK: "5"
+      AgentSettings__Agents__Release__MonthlyTokenLimitK: "100"
+      AgentSettings__Agents__Designer__DailyTokenLimitK: "10"
+      AgentSettings__Agents__Designer__MonthlyTokenLimitK: "200"
+      AgentSettings__Agents__PM__DailyTokenLimitK: "10"
+      AgentSettings__Agents__PM__MonthlyTokenLimitK: "200"
 
 volumes:
   postgres_data:

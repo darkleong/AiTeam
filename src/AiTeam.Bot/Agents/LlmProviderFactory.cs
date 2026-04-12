@@ -1,29 +1,34 @@
 using Anthropic.SDK;
-using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using BotAgentSettings = AiTeam.Bot.Configuration.AgentSettings;
+using BotAgentConfig   = AiTeam.Bot.Configuration.AgentConfig;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// 根據 Agent 設定建立對應的 ILlmProvider 實作。
 /// 新增供應商只需在此加一個 case，不需動 Agent 核心邏輯。
-/// 自動包裝 TokenTrackingProvider，透明地記錄每次呼叫的 Token 用量並推送即時通知。
+/// 自動包裝 TokenTrackingProvider，透明地記錄每次呼叫的 Token 用量並推送即時通知，
+/// 並在呼叫前進行 Token 守門（單次/日限/月限/全域月限）。
 /// Stage 17：支援 MockMode，啟用時直接回傳 MockLlmProvider（有意跳過 TokenTrackingProvider，
 /// 避免假的 Token 統計資料污染 Dashboard 監控頁）。
 /// </summary>
 public class LlmProviderFactory(
     AnthropicClient anthropicClient,
-    IOptions<AgentSettings> settings,
+    IOptions<BotAgentSettings> settings,
     TokenRepository tokenRepository,
     DashboardPushService dashboardPush,
+    DiscordAlertService discordAlert,
+    ILogger<TokenTrackingProvider> tokenLogger,
     AppSettingsService appSettings)
 {
-    private readonly AgentSettings _settings = settings.Value;
+    private readonly BotAgentSettings _settings = settings.Value;
 
     /// <summary>
-    /// 依 Agent 名稱（CEO / Dev / Ops）建立對應的 Provider，並自動包裝 Token 追蹤。
+    /// 依 Agent 名稱（CEO / Dev / Ops）建立對應的 Provider，並自動包裝 Token 追蹤與守門。
     /// MockMode 啟用時回傳 MockLlmProvider（不包裝 TokenTrackingProvider）。
     /// </summary>
     public ILlmProvider Create(string agentName)
@@ -41,6 +46,15 @@ public class LlmProviderFactory(
             _ => throw new NotSupportedException($"不支援的 LLM Provider：{config.Provider}")
         };
 
-        return new TokenTrackingProvider(inner, tokenRepository, dashboardPush, agentName, config.Model);
+        return new TokenTrackingProvider(
+            inner,
+            tokenRepository,
+            dashboardPush,
+            discordAlert,
+            _settings,
+            config,
+            tokenLogger,
+            agentName,
+            config.Model);
     }
 }

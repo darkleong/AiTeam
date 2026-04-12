@@ -1,6 +1,8 @@
+using AiTeam.Dashboard.Configuration;
 using AiTeam.Data.Hubs;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tokens;
@@ -20,6 +22,11 @@ public partial class TokenMonitoring : IAsyncDisposable
 
     [Inject]
     private IConfiguration Configuration { get; set; } = null!;
+
+    [Inject]
+    private IOptions<AgentTokenLimits> AgentLimitsOptions { get; set; } = null!;
+
+    private AgentTokenLimits AgentLimits => AgentLimitsOptions.Value;
 
     #endregion
 
