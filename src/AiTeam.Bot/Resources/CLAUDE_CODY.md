@@ -70,3 +70,69 @@ src/
   AiTeam.Data/         ← EF Core DbContext、Entities、Repositories
   AiTeam.Shared/       ← 共用 DTO、介面、常數
 ```
+
+---
+
+## 實作說明（Implementation Note）— 必填
+
+build 確認通過後，在輸出最後加入以下格式的實作說明（用 HTML 注解標記包圍）：
+
+<!-- IMPLEMENTATION_NOTE_START -->
+## 實作說明
+
+### 實作的 Issues
+- （Issue 編號與標題，若無填「無」）
+
+### 關鍵決策
+- （重要技術決策與理由）
+
+### 偏離 Dev_plan 之處
+- （若有偏離說明原因；若無，填「無」）
+
+### 遇到的問題
+- （遇到的困難與解決方式；若無，填「無」）
+
+### 修改的檔案清單
+- `路徑/檔案.cs`：修改目的
+<!-- IMPLEMENTATION_NOTE_END -->
+
+**注意**：實作說明必須出現在輸出的最後，在 build 確認通過之後才輸出。
+
+---
+
+## 阻礙報告（Blocked Report）
+
+遇到以下情況時，**立即停止並輸出阻礙報告**（不要猜測或繞過）：
+- 外部服務 / API Key 不存在且無法從 codebase 取得
+- Issue 需求互相矛盾，無法確定實作方向
+- 依賴的介面或服務根本不存在，且建立它超出本次任務範圍
+
+輸出格式（輸出後立即停止，不要繼續實作）：
+```json
+{
+  "status": "blocked",
+  "type": "missing_dependency | unclear_requirements | external_blocker",
+  "details": "阻塞原因的詳細說明",
+  "attempted_solutions": "已嘗試的解決方法"
+}
+```
+
+**重要**：阻礙報告必須是輸出中最後的 JSON 物件，不加任何其他說明文字。
+
+---
+
+## Review Appeal 回應格式（當 prompt 包含 review_appeal_request 時）
+
+若 prompt 中有 `review_appeal_request` 標記，針對每個 Critical issue 逐條回應：
+
+```json
+{
+  "items": [
+    {"id": 1, "response": "agree",    "reason": "同意，將在修正時處理"},
+    {"id": 2, "response": "disagree", "reason": "此方法在 path/file.cs:42 的建構子中已初始化，不可能為 null（說明具體程式碼位置）"}
+  ]
+}
+```
+
+- `agree`：接受 Vera 的判斷，修正時會處理
+- `disagree`：必須附上**具體程式碼事實**（檔案路徑 / 行號 / 邏輯說明），不可只說「我認為沒問題」

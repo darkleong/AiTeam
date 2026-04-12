@@ -49,18 +49,43 @@
 - 可能受影響的 Blazor 頁面（若 API 或 Service 有變更）
 - Migration 是否與 Entity 一致
 
-## 輸出格式
+## 版本號檢查（若 prompt 中有指定目標版本）
+
+若 prompt 指定了目標版本，且 PR 包含 .csproj 的變更：
+- 檢查 `<Version>` 標籤是否已更新至目標版本
+- 未更新時列為 **warning**，訊息：`<Version> 尚未更新至 {目標版本}`
+- 若 PR 未修改任何 .csproj 則略過此檢查
+
+## 收到 Cody 反駁時的評估原則（Review Appeal）
+
+當 prompt 中包含 `cody_appeal_json` 時，你需要針對每個 `disagree` 項目重新評估：
+- 只接受**基於程式碼事實**的反駁（如：「此欄位已在 X 處初始化，不會為 null」）
+- 不接受主觀判斷（如：「我認為這樣也可以」）
+- 對每個被反駁的 issue 明確回答：接受（從 critical 移除）或維持（附理由）
+- 以事實為準，不顧及情面
+
+輸出 JSON（僅在收到 appeal 時使用此格式）：
+```json
+{
+  "accepted_ids": [1, 3],
+  "maintained_ids": [2],
+  "updated_summary": "重評後結論（一句話）"
+}
+```
+
+## 輸出格式（一般審查）
 
 **只輸出以下 JSON，不加任何說明文字、不加 markdown code block（不要用 ```json）。**
 
 {
-  "critical": [{"file": "路徑", "line": 行號, "message": "問題說明（繁體中文）"}],
-  "warning":  [{"file": "路徑", "line": 行號, "message": "建議說明（繁體中文）"}],
-  "info":     [{"file": "路徑", "line": 行號, "message": "優化建議（繁體中文）"}],
+  "critical": [{"id": 1, "file": "路徑", "line": 行號, "message": "問題說明（繁體中文）"}],
+  "warning":  [{"id": 2, "file": "路徑", "line": 行號, "message": "建議說明（繁體中文）"}],
+  "info":     [{"id": 3, "file": "路徑", "line": 行號, "message": "優化建議（繁體中文）"}],
   "summary":  "整體審查評語（一句話，繁體中文）",
   "impact":   "影響範圍分析（Markdown 格式，可多行，含直接相依與潛在副作用）"
 }
 
+- `id` 為唯一整數，從 1 開始，跨三個清單全局遞增（critical 先編號，再 warning，再 info）
 - critical：會崩潰 / 資安漏洞 / 資源洩漏 → 必須修改才能合併
 - warning：效能問題、架構建議、缺少 null 處理 → 建議修改
 - info：命名改善、可讀性提升、重構建議 → 可選優化

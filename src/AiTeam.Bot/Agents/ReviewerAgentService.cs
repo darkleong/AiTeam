@@ -2,12 +2,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Octokit;
 
 namespace AiTeam.Bot.Agents;
@@ -18,6 +20,7 @@ namespace AiTeam.Bot.Agents;
 /// Stage 16 重構：從「LLM 逐檔呼叫 + 獨立 Claude Code 影響分析」改為
 /// 單一 Claude Code session（RunReviewAsync），只帶 patch 不帶完整檔案內容，
 /// 根本解決 LLM 混淆 diff 舊/新程式碼造成 Critical 誤判的問題。
+/// Stage 23：加入 WorkflowSettings 注入（版本號檢查）。
 /// </summary>
 public class ReviewerAgentService(
     GitHubService gitHubService,
@@ -26,6 +29,7 @@ public class ReviewerAgentService(
     IClaudeCodeService claudeCodeService,
     AppSettingsService appSettings,
     IConfiguration configuration,
+    IOptions<WorkflowSettings> workflowSettings,
     ILogger<ReviewerAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Reviewer";
@@ -212,8 +216,9 @@ public class ReviewerAgentService(
     /// <summary>
     /// 只帶 patch（diff），不帶完整檔案內容。
     /// Claude Code 在需要時會自行用 Read 工具讀取完整檔案。
+    /// Stage 23：加入版本號檢查指示（若 WorkflowSettings.TargetVersion 有設定）。
     /// </summary>
-    private static string BuildClaudeCodeReviewPrompt(
+    private string BuildClaudeCodeReviewPrompt(
         IReadOnlyList<PullRequestFile> csFiles,
         IReadOnlyList<string> rules)
     {
@@ -242,6 +247,17 @@ public class ReviewerAgentService(
         sb.AppendLine("2. 可用 Read / Grep 探索 codebase 確認上下文，可用 Bash 執行 git log / dotnet build 等診斷指令");
         sb.AppendLine("3. 探索影響範圍，找出可能受影響的其他模組");
         sb.AppendLine("4. 只輸出 JSON 結果（格式見 CLAUDE.md）");
+
+        // 23-5：若設定了目標版本，追加版本號檢查指示
+        var targetVersion = workflowSettings.Value.TargetVersion;
+        if (!string.IsNullOrWhiteSpace(targetVersion))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## 版本號檢查（目標版本：{targetVersion}）");
+            sb.AppendLine($"若 PR 修改了任何 .csproj 檔案，確認其 <Version> 是否已更新至 {targetVersion}。");
+            sb.AppendLine("未更新時列為 warning（不是 critical）。若 PR 未修改 .csproj 則略過。");
+        }
+
         return sb.ToString();
     }
 
@@ -275,7 +291,7 @@ public class ReviewerAgentService(
             {
                 lines.AppendLine("### 🔴 必須修改（Critical）");
                 foreach (var i in criticals)
-                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                    lines.AppendLine($"- [#{i.Id}] **`{i.File}`** (line ~{i.Line}): {i.Message}");
                 lines.AppendLine();
             }
 
@@ -283,7 +299,7 @@ public class ReviewerAgentService(
             {
                 lines.AppendLine("### 🟡 建議修改（Warning）");
                 foreach (var i in warnings)
-                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                    lines.AppendLine($"- [#{i.Id}] **`{i.File}`** (line ~{i.Line}): {i.Message}");
                 lines.AppendLine();
             }
 
@@ -291,7 +307,7 @@ public class ReviewerAgentService(
             {
                 lines.AppendLine("### 🟢 優化建議（Info）");
                 foreach (var i in infos)
-                    lines.AppendLine($"- **`{i.File}`** (line ~{i.Line}): {i.Message}");
+                    lines.AppendLine($"- [#{i.Id}] **`{i.File}`** (line ~{i.Line}): {i.Message}");
                 lines.AppendLine();
             }
 
@@ -383,6 +399,7 @@ public class ReviewReport
 
 public record ReviewIssue
 {
+    [JsonPropertyName("id")]       public int    Id       { get; init; }   // 23-4：全局唯一編號（1 起遞增）
     [JsonPropertyName("file")]     public string File     { get; init; } = "";
     [JsonPropertyName("line")]     public int    Line     { get; init; }
     [JsonPropertyName("message")]  public string Message  { get; init; } = "";

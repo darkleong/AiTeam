@@ -61,6 +61,14 @@ public class TaskGroup
     public string? DevPlan { get; set; }
     /// <summary>Stage 16：Dev_plan 修正次數（獨立於 FixIteration，避免與 Vera fix loop 互相干擾）。</summary>
     public int DevPlanRevision { get; set; } = 0;
+    /// <summary>Stage 23：Cody 產出的結構化實作說明（Vera 審查與 QA 測試參考）。</summary>
+    public string? ImplementationNote { get; set; }
+    /// <summary>Stage 23：Cody-Vera Review Appeal 討論輪次計數（迴圈 A）。</summary>
+    public int ReviewAppealRoundA { get; set; } = 0;
+    /// <summary>Stage 23：Review Appeal 逐輪完整紀錄（Markdown，含 Cody/Vera 完整回應 JSON）。</summary>
+    public string? ReviewAppealLog { get; set; }
+    /// <summary>Stage 23：仲裁後 Cody 修正應跳過 Vera，直接交 Petra 審核。</summary>
+    public bool SkipReviewerAfterArbitration { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

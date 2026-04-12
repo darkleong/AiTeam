@@ -10,11 +10,11 @@ using Microsoft.Extensions.Configuration;
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Documentation Agent（Sage）：讀取 PR 變更檔案，產生 Markdown 文件，開 PR 提交文件。
-/// Stage 12：改用 Claude Code 唯讀模式直接讀取 PR changed files，刪除 ExtractPathPrefix 猜路徑邏輯。
+/// Documentation Agent（Sage）：收尾歸檔員。
+/// Stage 23 重構：不再讀取 .cs 原始碼，改用 Cody 實作說明 + Vera 審查摘要做歸檔。
+/// 建立 docs/archive/pr{N}-archive.md + 更新 CHANGELOG.md。
 /// </summary>
 public class DocAgentService(
-    LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
@@ -33,21 +33,20 @@ public class DocAgentService(
         IReadOnlyList<string> rules,
         CancellationToken cancellationToken = default)
     {
-        // Stage 17：MockMode early return — 跳過 GitHub API 呼叫，回傳模擬文件生成結果
+        // Stage 17：MockMode early return
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
             logger.LogInformation("[MockMode] DocAgentService 跳過 GitHub 操作，回傳模擬結果");
-            AddLog(task, "[MOCK] Sage 模擬文件生成完成", "done");
+            AddLog(task, "[MOCK] Sage 模擬歸檔完成", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            return new AgentExecutionResult(true, "[MOCK] 文件生成完成");
+            return new AgentExecutionResult(true, "[MOCK] 歸檔完成（CHANGELOG + archive）");
         }
 
         AddLog(task, "Doc Agent 開始執行", "running");
         await taskRepository.SaveAsync(cancellationToken);
         await PushStatus("running", task.Title);
 
-        var readPath = "";
         var writePath = "";
 
         try
@@ -58,56 +57,35 @@ public class DocAgentService(
                 prNumber = await gitHubService.GetLatestOpenPullRequestNumberAsync(owner, repo);
 
             if (prNumber <= 0)
-                return new AgentExecutionResult(true, "找不到 PR 編號，略過文件生成");
+                return new AgentExecutionResult(true, "找不到 PR 編號，略過歸檔");
 
             var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
-            var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
-            var csFiles = prFiles
-                .Where(f => f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-                .Select(f => f.FileName)
-                .ToList();
 
-            if (csFiles.Count == 0)
-            {
-                AddLog(task, $"PR #{prNumber} 無 .cs 檔案，略過文件生成", "done");
-                await taskRepository.SaveAsync(cancellationToken);
-                await PushStatus("idle");
-                return new AgentExecutionResult(true, $"PR #{prNumber} 無 .cs 檔案，略過文件生成");
-            }
+            // 從 DB 讀取 Cody 實作說明與 Vera 審查摘要（透過 GroupId）
+            var (implementationNote, lastReviewBody) = await GetGroupContextAsync(task, cancellationToken);
 
-            // 1. Clone PR branch 供 Claude Code 唯讀探索
-            readPath = gitHubService.CloneOrPull(owner, repo, $"sager-{task.Id:N}"[..8]);
-            gitHubService.CreateAndCheckoutBranch(readPath, headRef);
-            AddLog(task, $"PR #{prNumber} branch checkout 完成（{csFiles.Count} 個 .cs 檔）", "done");
-
-            var docContent = await RunClaudeCodeDocAsync(
-                task, readPath, csFiles, prNumber, headRef, cancellationToken);
-
-            gitHubService.CleanupLocalRepo(readPath);
-            readPath = "";
-
-            if (string.IsNullOrWhiteSpace(docContent))
-                return new AgentExecutionResult(true, $"PR #{prNumber} 文件生成無輸出，略過提交");
-
-            // Stage 13：Clone，checkout Dev 的 branch，直接推送文件（不建新 branch，不開 PR）
+            // Clone PR branch（write mode，Sage 會直接寫入檔案）
             writePath = gitHubService.CloneOrPull(owner, repo, $"saged-{task.Id:N}"[..8]);
             gitHubService.CreateAndCheckoutBranch(writePath, headRef);
+            AddLog(task, $"PR #{prNumber} branch checkout 完成，開始歸檔", "running");
+            await taskRepository.SaveAsync(cancellationToken);
 
-            var outputPath = Path.Combine(writePath, "docs", "generated", $"pr{prNumber}-doc.md");
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            await File.WriteAllTextAsync(outputPath, docContent, cancellationToken);
-            AddLog(task, "文件檔案已寫入", "done");
+            // 執行 Claude Code（write mode）讓 Sage 自行寫入 CHANGELOG + archive
+            var success = await RunClaudeCodeArchiveAsync(
+                task, writePath, prNumber, headRef, implementationNote, lastReviewBody, cancellationToken);
 
-            gitHubService.CommitAll(writePath, $"docs: Sage 自動產生 PR #{prNumber} 技術文件");
-            // Stage 13：推到 Dev 的 branch（單一 PR 整合）
+            if (!success)
+                return new AgentExecutionResult(true, $"PR #{prNumber} 歸檔無輸出，略過提交");
+
+            gitHubService.CommitAll(writePath, $"docs: Sage 歸檔 PR #{prNumber} 任務");
             gitHubService.Push(writePath, headRef);
 
-            AddLog(task, $"文件已推送到 branch {headRef}（{csFiles.Count} 個檔案）", "done");
+            AddLog(task, $"歸檔已推送到 branch {headRef}（PR #{prNumber}）", "done");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("idle");
 
             return new AgentExecutionResult(true,
-                $"文件已推送到 Dev branch（PR #{prNumber}，{csFiles.Count} 個檔案）");
+                $"歸檔完成（PR #{prNumber}）：CHANGELOG + docs/archive/pr{prNumber}-archive.md");
         }
         catch (Exception ex)
         {
@@ -119,19 +97,19 @@ public class DocAgentService(
         }
         finally
         {
-            if (!string.IsNullOrEmpty(readPath))  gitHubService.CleanupLocalRepo(readPath);
             if (!string.IsNullOrEmpty(writePath)) gitHubService.CleanupLocalRepo(writePath);
         }
     }
 
-    // ────────────── Claude Code 唯讀文件生成 ──────────────
+    // ────────────── Claude Code 歸檔執行 ──────────────
 
-    private async Task<string> RunClaudeCodeDocAsync(
+    private async Task<bool> RunClaudeCodeArchiveAsync(
         TaskItem task,
         string repoLocalPath,
-        IReadOnlyList<string> csFiles,
         int prNumber,
         string headRef,
+        string? implementationNote,
+        string? lastReviewBody,
         CancellationToken cancellationToken)
     {
         var claudeMdPath     = Path.Combine(repoLocalPath, "CLAUDE.md");
@@ -147,28 +125,54 @@ public class DocAgentService(
                     await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"## PR #{prNumber}（branch: {headRef}）變更的 .cs 檔案");
-            foreach (var f in csFiles)
-                sb.AppendLine($"- {f}");
+            sb.AppendLine($"## PR #{prNumber}（branch: {headRef}）");
+            sb.AppendLine($"**任務標題**：{task.Title.Replace($"（{AgentName}）", "").Trim()}");
+            sb.AppendLine($"**PR 連結**：https://github.com/{headRef.Replace("refs/heads/", "")}（PR #{prNumber}）");
+            sb.AppendLine($"**日期**：{DateTime.UtcNow:yyyy-MM-dd}");
             sb.AppendLine();
+
+            sb.AppendLine("## implementation_note（Cody 實作說明）");
+            sb.AppendLine(string.IsNullOrWhiteSpace(implementationNote)
+                ? "（無實作說明）"
+                : implementationNote);
+            sb.AppendLine();
+
+            sb.AppendLine("## vera_review_summary（Vera 審查摘要）");
+            // 只帶審查報告摘要（截斷至 2000 字避免過長）
+            var reviewSummary = string.IsNullOrWhiteSpace(lastReviewBody)
+                ? "（無審查摘要）"
+                : lastReviewBody.Length > 2000 ? lastReviewBody[..2000] + "\n...（截斷）" : lastReviewBody;
+            sb.AppendLine(reviewSummary);
+            sb.AppendLine();
+
             sb.AppendLine("## 你的任務");
-            sb.AppendLine("讀取上述每個 .cs 檔案的完整內容，然後輸出一份完整的 Markdown 技術文件（涵蓋所有檔案）。直接輸出 Markdown，不加額外說明。");
+            sb.AppendLine($"1. 更新 CHANGELOG.md（在最頂部插入新條目，保留所有舊內容）");
+            sb.AppendLine($"2. 建立 docs/archive/pr{prNumber}-archive.md（若目錄不存在先建立）");
+            sb.AppendLine("直接寫入檔案，不需要輸出到 stdout。");
 
             var model  = configuration["Agents:Doc:Model"]
                       ?? configuration["Anthropic:DefaultModel"]
                       ?? "claude-sonnet-4-6";
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
-            var result = await claudeCodeService.RunReadOnlyAsync(
+            var result = await claudeCodeService.RunAsync(
                 repoLocalPath, sb.ToString(), model, apiKey, cancellationToken);
 
             if (!result.Success)
             {
-                logger.LogWarning("Sage Claude Code 執行未成功，fallback LLM（exitCode={Code}）", result.ExitCode);
-                return await GenerateDocWithLlmFallbackAsync(task, csFiles, repoLocalPath, prNumber, cancellationToken);
+                logger.LogWarning("Sage Claude Code 執行未成功（exitCode={Code}）", result.ExitCode);
+                return false;
             }
 
-            return result.Output.Trim();
+            // 確認目標檔案是否存在
+            var archivePath = Path.Combine(repoLocalPath, "docs", "archive", $"pr{prNumber}-archive.md");
+            if (!File.Exists(archivePath))
+            {
+                logger.LogWarning("Sage 未建立 archive 檔案，嘗試手動建立：{Path}", archivePath);
+                return false;
+            }
+
+            return true;
         }
         finally
         {
@@ -179,56 +183,25 @@ public class DocAgentService(
         }
     }
 
-    // ────────────── LLM Fallback ──────────────
+    // ────────────── 從 DB 讀取 TaskGroup 上下文 ──────────────
 
-    private async Task<string> GenerateDocWithLlmFallbackAsync(
-        TaskItem task,
-        IReadOnlyList<string> csFiles,
-        string localPath,
-        int prNumber,
-        CancellationToken cancellationToken)
+    private async Task<(string? ImplementationNote, string? LastReviewBody)> GetGroupContextAsync(
+        TaskItem task, CancellationToken cancellationToken)
     {
-        var provider = providerFactory.Create(AgentName);
-        var sb = new StringBuilder();
-
-        foreach (var filePath in csFiles.Take(5)) // fallback 最多 5 個檔案
+        if (task.GroupId is null) return (null, null);
+        try
         {
-            try
-            {
-                var fullPath = Path.Combine(localPath, filePath.Replace('/', Path.DirectorySeparatorChar));
-                if (!File.Exists(fullPath)) continue;
-                var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
-                if (string.IsNullOrWhiteSpace(content)) continue;
-
-                sb.AppendLine($"## {filePath}");
-                sb.AppendLine("```csharp");
-                sb.AppendLine(content.Length > 3000 ? content[..3000] + "\n...(截斷)" : content);
-                sb.AppendLine("```");
-                sb.AppendLine();
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "讀取檔案失敗：{File}", filePath);
-            }
+            var group = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
+            return (group?.ImplementationNote, group?.LastReviewBody);
         }
-
-        if (sb.Length == 0) return "";
-
-        var systemPrompt = BuildMarkdownSystemPrompt();
-        var userMessage  = $"PR #{prNumber} 的變更檔案如下，請產生 Markdown 技術文件：\n\n{sb}";
-        var response     = await provider.CompleteAsync(systemPrompt, userMessage, cancellationToken);
-        return response.Content.Trim();
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "GetGroupContextAsync 讀取失敗（GroupId={Id}）", task.GroupId);
+            return (null, null);
+        }
     }
 
-    private static string BuildMarkdownSystemPrompt() => """
-        你是技術文件撰寫專家，使用繁體中文撰寫。
-        根據提供的 C# 原始碼，產生清晰的 Markdown 文件，包含：
-        1. 類別概覽與用途說明
-        2. 所有 public 方法的說明、參數、回傳值
-        3. 使用範例（若適用）
-
-        直接回傳 Markdown 內容，不加任何前言或說明。
-        """;
+    // ────────────── 輔助 ──────────────
 
     private static int ExtractPrNumber(string text)
     {
@@ -242,17 +215,17 @@ public class DocAgentService(
         => taskRepository.AddLog(new TaskLog
         {
             TaskId = task.Id,
-            Agent = AgentName,
-            Step = step,
+            Agent  = AgentName,
+            Step   = step,
             Status = status
         });
 
     private async Task PushStatus(string status, string? taskTitle = null)
         => await dashboardPush.PushAgentStatusAsync(new AgentStatusViewModel
         {
-            AgentName = AgentName,
-            Status = status,
+            AgentName        = AgentName,
+            Status           = status,
             CurrentTaskTitle = taskTitle ?? "",
-            LastUpdated = DateTime.UtcNow
+            LastUpdated      = DateTime.UtcNow
         });
 }

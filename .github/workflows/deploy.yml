@@ -88,6 +88,8 @@ jobs:
     name: Deploy
     needs: build-and-push
     runs-on: self-hosted
+    permissions:
+      contents: write  # 允許建立和推送 git tag
     steps:
       - uses: actions/checkout@v4
 
@@ -98,6 +100,29 @@ jobs:
       - name: Restart services
         shell: powershell
         run: docker compose -f "$env:GITHUB_WORKSPACE\docker-compose.prod.yml" --env-file "$env:USERPROFILE\aiteam\.env" up -d --force-recreate
+
+      - name: Tag release version
+        shell: powershell
+        run: |
+          # 從 AiTeam.Bot.csproj 讀取版本號
+          [xml]$csproj = Get-Content "$env:GITHUB_WORKSPACE\src\AiTeam.Bot\AiTeam.Bot.csproj"
+          $VERSION = $csproj.Project.PropertyGroup.Version
+          if (-not $VERSION) {
+            Write-Warning "找不到 <Version> 標籤，略過建立 git tag"
+            exit 0
+          }
+          $TAG = "v$VERSION"
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+          # 若 tag 不存在才建立（冪等操作）
+          $exists = git tag -l $TAG
+          if ($exists) {
+            Write-Host "Tag $TAG 已存在，略過"
+          } else {
+            git tag $TAG
+            git push origin $TAG
+            Write-Host "已建立並推送 tag: $TAG"
+          }
 
       - name: Clean up old images
         shell: powershell

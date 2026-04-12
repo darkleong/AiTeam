@@ -98,8 +98,9 @@ public class DevAgentService(
     /// 執行任務：Clone repo、建立 branch、驅動 Claude Code 自主實作並確認 build 通過、
     /// 然後 Commit、Push、開 PR。
     /// Stage 11：核心程式碼產出改由 Claude Code CLI 負責，取代原本的 LLM 一次性輸出。
+    /// Stage 23：回傳 (PrUrl, ImplementationNote) 二元組。
     /// </summary>
-    public async Task<string> ExecuteAsync(
+    public async Task<(string PrUrl, string? ImplementationNote)> ExecuteAsync(
         TaskItem task,
         DevPlan plan,
         string owner,
@@ -129,7 +130,7 @@ public class DevAgentService(
         try
         {
             if (plan.TaskType == "code_review")
-                return await ExecuteCodeReviewAsync(task, plan, owner, repo, cancellationToken);
+                return (await ExecuteCodeReviewAsync(task, plan, owner, repo, cancellationToken), null);
 
             // Clone / Pull
             localPath = gitHubService.CloneOrPull(owner, repo, task.Id.ToString("N")[..8]);
@@ -140,7 +141,8 @@ public class DevAgentService(
             AddLog(task, $"Branch {plan.BranchName} 已建立", "done");
 
             // 驅動 Claude Code 自主實作（探索 repo → 寫碼 → dotnet restore → dotnet build → 修錯）
-            await RunClaudeCodeAsync(task, plan, localPath, cancellationToken);
+            // 23-2：RunClaudeCodeAsync 回傳 Cody 實作說明（若有）
+            var implementationNote = await RunClaudeCodeAsync(task, plan, localPath, cancellationToken);
             AddLog(task, "Claude Code 程式碼實作完成（build 通過）", "done");
 
             // Commit + Push
@@ -186,7 +188,7 @@ public class DevAgentService(
                 AgentName = "Dev"
             });
 
-            return prUrl;
+            return (prUrl, implementationNote);
         }
         catch (Exception ex)
         {
@@ -224,8 +226,10 @@ public class DevAgentService(
     /// <summary>
     /// 驅動 Claude Code CLI 自主完成程式碼實作，並確認 dotnet build 通過。
     /// Stage 11 核心：取代原本的 ApplyCodeChangesAsync（LLM 一次性輸出）。
+    /// Stage 23：回傳 Cody 實作說明（若有）；偵測阻礙報告時拋出 BlockedOperationException。
     /// </summary>
-    private async Task RunClaudeCodeAsync(
+    /// <returns>Cody 實作說明（若 Claude Code 輸出中有 IMPLEMENTATION_NOTE_START 區塊）；否則回傳 null。</returns>
+    private async Task<string?> RunClaudeCodeAsync(
         TaskItem task,
         DevPlan plan,
         string localPath,
@@ -279,6 +283,25 @@ public class DevAgentService(
                 File.Delete(claudeMdPath);
         }
 
+        // 23-3：偵測阻礙報告（優先於 success 檢查，因為 Cody 輸出阻礙報告後可能仍回傳 exit 0）
+        var blockerJson = TryParseBlockerJson(result.Output);
+        if (blockerJson is not null)
+        {
+            string details;
+            try
+            {
+                using var doc = JsonDocument.Parse(blockerJson);
+                details = doc.RootElement.TryGetProperty("details", out var d) ? d.GetString() ?? "" : "";
+            }
+            catch { details = "（阻礙報告解析失敗）"; }
+
+            logger.LogWarning("Cody 回報阻礙：{Details}", details);
+            AddLog(task, $"[BLOCKED] {details}", "failed");
+            taskRepository.UpdateStatus(task, "failed");
+            await taskRepository.SaveAsync(cancellationToken);
+            throw new BlockedOperationException(blockerJson, details);
+        }
+
         if (!result.Success)
         {
             // 將 Claude Code 完整輸出尾段存進 TaskLog（Dashboard / DB 永久可查）
@@ -298,6 +321,42 @@ public class DevAgentService(
 
         logger.LogInformation("Claude Code 執行完成：{Summary}", result.Output);
         AddLog(task, $"Claude Code 完成：{result.Output[..Math.Min(200, result.Output.Length)]}", "done");
+
+        // 23-2：解析 Cody 實作說明
+        return ParseImplementationNote(result.Output);
+    }
+
+    /// <summary>23-2：從 Claude Code 輸出解析 Cody 實作說明區塊。</summary>
+    private static string? ParseImplementationNote(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        const string start = "<!-- IMPLEMENTATION_NOTE_START -->";
+        const string end   = "<!-- IMPLEMENTATION_NOTE_END -->";
+        var si = output.IndexOf(start, StringComparison.Ordinal);
+        var ei = output.IndexOf(end,   StringComparison.Ordinal);
+        if (si < 0 || ei < 0 || ei <= si) return null;
+        return output[(si + start.Length)..ei].Trim();
+    }
+
+    /// <summary>23-3：從 Claude Code 輸出偵測 Cody 阻礙報告 JSON。</summary>
+    private static string? TryParseBlockerJson(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        if (!output.Contains("\"status\"", StringComparison.Ordinal) ||
+            !output.Contains("\"blocked\"", StringComparison.Ordinal)) return null;
+        try
+        {
+            var si = output.IndexOf('{');
+            var ei = output.LastIndexOf('}');
+            if (si < 0 || ei < 0 || ei <= si) return null;
+            var json = output[si..(ei + 1)];
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("status", out var statusEl)
+                && statusEl.GetString() == "blocked")
+                return json;
+            return null;
+        }
+        catch { return null; }
     }
 
     private static string BuildClaudeCodePrompt(
@@ -629,8 +688,14 @@ public class DevAgentService(
         try
         {
             var plan = await BuildPlanAsync(task, owner, repo, rules, cancellationToken);
-            var prUrl = await ExecuteAsync(task, plan, owner, repo, cancellationToken);
-            return new AgentExecutionResult(true, $"PR 已開啟：{prUrl}", prUrl);
+            // 23-2：ExecuteAsync 回傳 (PrUrl, ImplementationNote) 二元組
+            var (prUrl, implNote) = await ExecuteAsync(task, plan, owner, repo, cancellationToken);
+            return new AgentExecutionResult(true, $"PR 已開啟：{prUrl}", prUrl, OutputContent: implNote);
+        }
+        catch (BlockedOperationException bex)
+        {
+            // 23-3：Cody 回報阻礙，回傳特殊結果供 TaskGroupService 路由到 Petra
+            return new AgentExecutionResult(false, $"[BLOCKED] {bex.Details}", OutputContent: bex.BlockerJson);
         }
         catch (Exception ex)
         {
@@ -863,6 +928,13 @@ public class DevAgentService(
 
         return closes.Count == 0 ? "" : "\n" + string.Join("\n", closes) + "\n";
     }
+}
+
+/// <summary>Stage 23：Cody 輸出阻礙報告時拋出，供 TaskGroupService 路由到 Petra 仲裁。</summary>
+public class BlockedOperationException(string blockerJson, string details) : Exception($"[BLOCKED] {details}")
+{
+    public string BlockerJson { get; } = blockerJson;
+    public string Details { get; } = details;
 }
 
 /// <summary>

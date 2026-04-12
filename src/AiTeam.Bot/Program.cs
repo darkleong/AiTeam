@@ -28,6 +28,7 @@ builder.Services.Configure<AgentSettings>(o =>
     builder.Configuration.GetSection("Agents").Bind(o.Agents));
 builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection("GitHub"));
 builder.Services.Configure<OpsSettings>(builder.Configuration.GetSection("OpsSettings"));
+builder.Services.Configure<WorkflowSettings>(builder.Configuration.GetSection("WorkflowSettings"));
 
 // Anthropic
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";

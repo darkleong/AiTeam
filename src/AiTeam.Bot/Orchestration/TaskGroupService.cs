@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
@@ -25,13 +27,15 @@ public class TaskGroupService(
     DiscordSocketClient discordClient,
     IOptions<DiscordSettings> discordSettings,
     IOptions<GitHubSettings> gitHubSettings,
+    IOptions<WorkflowSettings> workflowSettings,
     RulesService rulesService,
     WorkflowEngine workflowEngine,
     IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
-    private readonly DiscordSettings _discord    = discordSettings.Value;
-    private readonly GitHubSettings  _gitHub     = gitHubSettings.Value;
+    private readonly DiscordSettings  _discord          = discordSettings.Value;
+    private readonly GitHubSettings   _gitHub           = gitHubSettings.Value;
+    private readonly WorkflowSettings _workflowSettings = workflowSettings.Value;
 
     // Stage 14：記錄每個執行中 TaskItem 的 CTS，供取消時 kill subprocess
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _runningCts = new();
@@ -125,6 +129,18 @@ public class TaskGroupService(
                 groupId, result.ReviewBody.Length);
         }
 
+        // 23-2：Dev 完成時儲存 Cody 實作說明
+        if ((completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase)
+             || completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase))
+            && result.Success
+            && !string.IsNullOrWhiteSpace(result.OutputContent))
+        {
+            group.ImplementationNote = result.OutputContent;
+            needsSave = true;
+            logger.LogInformation("TaskGroup {Id} 已儲存 Cody 實作說明（{Len} 字）",
+                groupId, result.OutputContent.Length);
+        }
+
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
@@ -180,6 +196,34 @@ public class TaskGroupService(
                 if (reviewResult is null) return; // escalate，已更新狀態並通知老闆
                 result = reviewResult;
             }
+        }
+
+        // ── Stage 23：Dev / Dev_fix 阻礙報告 → Petra 仲裁路由 ──
+        if ((completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase)
+             || completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase))
+            && !result.Success
+            && result.Summary.StartsWith("[BLOCKED]", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(result.OutputContent))
+        {
+            logger.LogWarning("Dev 回報阻礙，啟動 Petra 評估：Group={Id}", groupId);
+            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
+            await HandleDevBlockerAsync(group, result, taskRepo, groupProjectId, cancellationToken);
+            return;
+        }
+
+        // ── Stage 23：仲裁後 Dev_fix 完成 → 跳過 Vera，直接交 Petra 閘門 ──
+        if (completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase)
+            && result.Success
+            && group.SkipReviewerAfterArbitration)
+        {
+            logger.LogInformation("仲裁後 Dev_fix 完成，跳過 Vera，直接交 Petra 閘門（Group={Id}）", group.Id);
+            group.SkipReviewerAfterArbitration = false;
+            await taskRepo.SaveAsync(cancellationToken);
+            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
+            var petraResult = await RunPetraGateAsync(group, result, taskRepo, groupProjectId, cancellationToken);
+            if (petraResult is null) return;
+            result = petraResult;
+            // 繼續走 GetDecision（completedAgent 仍為 Dev_fix，result 已更新）
         }
 
         // ── Stage 16：Dev 初次開發失敗（非 fix loop）→ 停止流程，通知老闆介入 ──
@@ -713,6 +757,11 @@ public class TaskGroupService(
             if (step.AgentName == AgentNames.Dev && !string.IsNullOrWhiteSpace(group.DevPlan))
                 meta.Add($"dev_plan:\n{group.DevPlan}");
 
+            // 23-2：Reviewer 和 QA 步驟附上 Cody 實作說明（供 Vera 精確審查、QA 精確測試）
+            if ((step.AgentName == AgentNames.Reviewer || step.AgentName == AgentNames.Qa)
+                && !string.IsNullOrWhiteSpace(group.ImplementationNote))
+                meta.Add($"implementation_note:\n{group.ImplementationNote}");
+
             if (step.IsFixLoop)
             {
                 meta.Add("fix_loop: true");
@@ -752,10 +801,106 @@ public class TaskGroupService(
     }
 
     /// <summary>
-    /// Vera 執行成功後，送 Petra 審核並依決策回傳更新後的 result。
+    /// Vera 執行成功後：
+    /// 1. 若無 Critical → 直接走 Petra 閘門（RunPetraGateAsync）
+    /// 2. 若有 Critical → 進入 Review Appeal 迴圈 A（Cody-Vera 純對話，最多 maxRounds 輪）
+    ///    - 迴圈後無 Critical → Petra 閘門放行
+    ///    - 達上限仍有 Critical → Petra 仲裁（RunPetraArbitrationAsync）
+    ///    - Cody 全 agree → Petra 閘門（維持 criticals → Dev_fix）
     /// 回傳 null 表示已 escalate（呼叫方應直接 return）。
     /// </summary>
     private async Task<AgentExecutionResult?> HandleReviewerCompletedAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        // 無 Critical → 跳過 Appeal，直接走 Petra 閘門
+        if (result.CriticalReviewCount == 0)
+            return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+
+        var maxRounds  = _workflowSettings.ReviewAppealMaxRounds;
+        var reviewBody = group.LastReviewBody ?? result.ReviewBody ?? "";
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+
+        var currentCriticalIds = ExtractCriticalIdsFromReviewBody(reviewBody);
+        if (currentCriticalIds.Count == 0)
+        {
+            // 有 CriticalReviewCount 但解析不到 IDs（格式問題）→ 直接走 Petra 閘門
+            logger.LogWarning("有 Critical 但無法解析 ID，直接走 Petra 閘門（Group={Id}）", group.Id);
+            return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+        }
+
+        var indentedOptions = new JsonSerializerOptions { WriteIndented = true };
+
+        // ── 迴圈 A：Cody-Vera 純對話，最多 maxRounds 輪，不涉及程式碼修改 ──
+        while (group.ReviewAppealRoundA < maxRounds && currentCriticalIds.Count > 0)
+        {
+            var round = group.ReviewAppealRoundA + 1;
+            logger.LogInformation("Appeal Round A {Round}（Group={Id}）", round, group.Id);
+
+            // Cody 逐條回應（第二輪起帶入累計紀錄，讓 Cody 只針對剩餘 criticals 回應）
+            var priorContext = group.ReviewAppealRoundA > 0 ? group.ReviewAppealLog : null;
+            var codyAppeal   = await pmService.RunCodyAppealAsync(
+                reviewBody, group.Title, currentCriticalIds, priorContext, cancellationToken);
+            var codyJson     = JsonSerializer.Serialize(codyAppeal, indentedOptions);
+
+            var disagrees = codyAppeal.Items.Where(i => i.Response == "disagree").ToList();
+
+            if (disagrees.Count == 0)
+            {
+                // Cody 全部 agree → 停止迴圈，進修正流程
+                AppendAppealLog(group, round,
+                    $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n→ Cody 同意所有 Critical，進入修正流程。");
+                group.ReviewAppealRoundA++;
+                await taskRepo.SaveAsync(cancellationToken);
+                break;
+            }
+
+            // Vera 基於程式碼事實重新評估 disagree 項目
+            var veraResponse = await pmService.RunVeraAppealAsync(reviewBody, codyJson, cancellationToken);
+            var veraJson     = JsonSerializer.Serialize(veraResponse, indentedOptions);
+
+            // 更新剩餘 critical 清單（移除 Vera 接受的）
+            currentCriticalIds = currentCriticalIds
+                .Where(id => !veraResponse.AcceptedIds.Contains(id))
+                .ToList();
+
+            AppendAppealLog(group, round,
+                $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n" +
+                $"**Vera 重評（完整）：**\n```json\n{veraJson}\n```\n\n" +
+                $"→ Vera 接受 {veraResponse.AcceptedIds.Count} 項，維持 {veraResponse.MaintainedIds.Count} 項，" +
+                $"剩餘 Critical：{currentCriticalIds.Count}");
+            group.ReviewAppealRoundA++;
+            await taskRepo.SaveAsync(cancellationToken);
+        }
+
+        // 迴圈 A 結束：無剩餘 criticals → Petra 閘門放行
+        if (currentCriticalIds.Count == 0)
+        {
+            result = result with { CriticalReviewCount = 0 };
+            return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+        }
+
+        // 仍有 criticals 且輪次達上限 → Petra 仲裁
+        if (group.ReviewAppealRoundA >= maxRounds)
+            return await RunPetraArbitrationAsync(group,
+                result with { CriticalReviewCount = currentCriticalIds.Count },
+                taskRepo, projectId, cancellationToken);
+
+        // 仍有 criticals 但未達上限（Cody 全 agree 跳出 while）→ Petra 閘門（維持 criticals → Dev_fix）
+        result = result with { CriticalReviewCount = currentCriticalIds.Count };
+        return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Petra 審核閘門：送 ReviewVeraAsync 並依 approve/revise/escalate 決策。
+    /// 等同舊版 HandleReviewerCompletedAsync 的核心邏輯。
+    /// </summary>
+    private async Task<AgentExecutionResult?> RunPetraGateAsync(
         TaskGroup group,
         AgentExecutionResult result,
         TaskRepository taskRepo,
@@ -785,6 +930,133 @@ public class TaskGroupService(
                 await NotifyBossInterventionAsync(group, cancellationToken);
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Appeal 達輪次上限後，由 Petra 仲裁最終決定。
+    /// 仲裁後設 SkipReviewerAfterArbitration = true，Dev_fix 完成後跳過 Vera 直交 Petra。
+    /// </summary>
+    private async Task<AgentExecutionResult?> RunPetraArbitrationAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+
+        logger.LogInformation("Appeal 達上限，啟動 Petra 仲裁（Group={Id}）", group.Id);
+        var arbitration = await pmService.ArbitrateReviewAppealAsync(
+            group.LastReviewBody ?? "", group.ReviewAppealLog ?? "", cancellationToken);
+        var arbitrationJson = JsonSerializer.Serialize(arbitration,
+            new JsonSerializerOptions { WriteIndented = true });
+
+        AppendAppealLog(group, group.ReviewAppealRoundA,
+            $"**Petra 仲裁（完整）：**\n```json\n{arbitrationJson}\n```\n\n" +
+            $"→ 最終 Critical：{arbitration.FinalCriticals.Count} 項，決定：{arbitration.Decision}");
+
+        // 仲裁後 Dev_fix 完成 → 跳過 Vera，直接交 Petra 閘門
+        group.SkipReviewerAfterArbitration = true;
+        await taskRepo.SaveAsync(cancellationToken);
+
+        result = result with { CriticalReviewCount = arbitration.FinalCriticals.Count };
+        return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Dev / Dev_fix 回報阻礙（[BLOCKED] 格式）時，由 Petra 評估路由。
+    /// </summary>
+    private async Task HandleDevBlockerAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var pmService   = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+        var ceoChannel  = FindChannel(_discord.Channels.CeoChannel);
+
+        BlockerDecision decision;
+        try
+        {
+            decision = await pmService.AssessBlockerAsync(result.OutputContent!, group.Title, cancellationToken);
+            logger.LogInformation("Petra Blocker 評估：Group={Id}，routing={Routing}", group.Id, decision.Routing);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "HandleDevBlockerAsync Petra 評估失敗，fallback escalate_boss");
+            decision = new BlockerDecision("escalate_boss", "Blocker 評估失敗，升級給老闆");
+        }
+
+        switch (decision.Routing)
+        {
+            case "continue":
+                // 重觸發 Dev（重試）
+                logger.LogInformation("Petra 決定重試 Dev：Group={Id}", group.Id);
+                if (ceoChannel is not null)
+                    await ceoChannel.SendMessageAsync(
+                        $"⚠️ **{group.Title}** — Cody 回報阻礙，Petra 判定可重試，自動重新觸發 Dev。\n" +
+                        $"原因：{decision.Instructions}");
+                await FireStepsAsync(group, [new WorkflowStep("Dev")], cancellationToken);
+                break;
+
+            case "escalate_victoria":
+                logger.LogWarning("Blocker 升級給 Victoria：Group={Id}", group.Id);
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(cancellationToken);
+                if (ceoChannel is not null)
+                    await ceoChannel.SendMessageAsync(
+                        $"🚫 **{group.Title}** — Cody 開發阻礙，需要 Victoria CEO 決策。\n" +
+                        $"阻礙詳情：{result.Summary}\nPetra 建議：{decision.Instructions}");
+                break;
+
+            default: // escalate_boss
+                logger.LogWarning("Blocker 升級給老闆：Group={Id}", group.Id);
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(cancellationToken);
+                if (ceoChannel is not null)
+                    await ceoChannel.SendMessageAsync(
+                        $"🚫 **{group.Title}** — Cody 開發阻礙，需要您介入。\n" +
+                        $"阻礙詳情：{result.Summary}\nPetra 分析：{decision.Instructions}");
+                break;
+        }
+    }
+
+    // ── Appeal 輔助方法 ──
+
+    private static void AppendAppealLog(TaskGroup group, int round, string content)
+    {
+        var entry = $"\n\n### Appeal Round {round} — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n{content}";
+        group.ReviewAppealLog = (group.ReviewAppealLog ?? "# Review Appeal 紀錄\n") + entry;
+    }
+
+    /// <summary>
+    /// 從審查報告中解析 Critical 段落內的 Issue IDs（格式：[#N]）。
+    /// </summary>
+    private static IReadOnlyList<int> ExtractCriticalIdsFromReviewBody(string reviewBody)
+    {
+        if (string.IsNullOrWhiteSpace(reviewBody)) return [];
+
+        // 找到 Critical 段落開頭
+        var criticalIdx = reviewBody.IndexOf("必須修改（Critical）", StringComparison.Ordinal);
+        if (criticalIdx < 0) return [];
+
+        // 找到下一個段落標頭（### 或 ---）作為結束邊界
+        var nextHeaderIdx = reviewBody.IndexOf("\n###", criticalIdx + 10);
+        var nextSepIdx    = reviewBody.IndexOf("\n---", criticalIdx + 10);
+        var sectionEnd    = (nextHeaderIdx, nextSepIdx) switch
+        {
+            (>= 0, >= 0) => Math.Min(nextHeaderIdx, nextSepIdx),
+            (>= 0, < 0)  => nextHeaderIdx,
+            (< 0,  >= 0) => nextSepIdx,
+            _             => reviewBody.Length
+        };
+
+        var sectionText = reviewBody[criticalIdx..sectionEnd];
+        var matches     = Regex.Matches(sectionText, @"\[#(\d+)\]");
+        return matches.Select(m => int.Parse(m.Groups[1].Value)).Distinct().ToList();
     }
 
     /// <summary>
