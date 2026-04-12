@@ -678,6 +678,7 @@ public class DevAgentService(
             AddLog(task, "[MOCK] Dev Agent 模擬執行完成，PR: " + mockPrUrl, "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] PR 已開啟：" + mockPrUrl, mockPrUrl);
         }
 

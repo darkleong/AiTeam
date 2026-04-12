@@ -40,6 +40,7 @@ public class DocAgentService(
             AddLog(task, "[MOCK] Sage 模擬歸檔完成", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] 歸檔完成（CHANGELOG + archive）");
         }
 

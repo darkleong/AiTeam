@@ -50,6 +50,7 @@ public class QaAgentService(
             AddLog(task, "[MOCK] Quinn 模擬 QA 完成，已生成測試案例，0 個失敗", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗");
         }
 
