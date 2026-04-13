@@ -3,14 +3,15 @@
 > Stage：24
 > 對應版本：v3.8.0
 > 建立日期：2026-04-12
-> 狀態：📋 規劃完成，待實作
-> 文件版本：v1.0
+> 狀態：✅ 實作完成（2026-04-13）
+> 文件版本：v1.1
 
 ---
 
 ## 目標
 
 實作 **開發流程重構 Phase 1b**（Future Feature 八 的子集）：
+
 - 補完 Stage 23 未涵蓋的**非會議制**流程改善
 - 聚焦第三階段（Dev_plan 審核強化）、第五階段（QA Petra 介入）
 - 建立文件存 DB 基礎設施，為後續會議制做準備
@@ -25,20 +26,20 @@
 
 ### Stage 23 已完成
 
-| 階段 | Phase 1a 完成項目 |
-|------|-----------------|
-| 第三（開發） | 實作說明、阻礙報告 |
+| 階段         | Phase 1a 完成項目                                               |
+| ------------ | --------------------------------------------------------------- |
+| 第三（開發） | 實作說明、阻礙報告                                              |
 | 第四（審查） | Review Appeal 迴圈 A + Petra 仲裁 + 版本號檢查 + ReviewIssue.Id |
-| 第六（歸檔） | Sage 轉型為收尾歸檔員 |
-| 第七（上線） | Git Tag 自動化 |
+| 第六（歸檔） | Sage 轉型為收尾歸檔員                                           |
+| 第七（上線） | Git Tag 自動化                                                  |
 
 ### Phase 1b 要完成的
 
-| 階段 | Phase 1b 項目 | 現狀問題 |
-|------|-------------|---------|
-| 第三（開發） | Dev_plan 審核 + Cody 可反駁 | Petra 已能審核 Dev_plan（Stage 16），但 Cody 無法反駁打回 |
-| 第五（QA） | Petra 介入 QA 迴圈 | Quinn 測試失敗直接給 Cody，缺乏分類判斷（bug / 環境 / 測試本身問題） |
-| 跨階段 | 文件存 DB + 傳遞 | 流程產出文件分散，下游 Agent 無法完整參考上游資料 |
+| 階段         | Phase 1b 項目               | 現狀問題                                                             |
+| ------------ | --------------------------- | -------------------------------------------------------------------- |
+| 第三（開發） | Dev_plan 審核 + Cody 可反駁 | Petra 已能審核 Dev_plan（Stage 16），但 Cody 無法反駁打回            |
+| 第五（QA）   | Petra 介入 QA 迴圈          | Quinn 測試失敗直接給 Cody，缺乏分類判斷（bug / 環境 / 測試本身問題） |
+| 跨階段       | 文件存 DB + 傳遞            | 流程產出文件分散，下游 Agent 無法完整參考上游資料                    |
 
 ---
 
@@ -79,14 +80,14 @@ Petra 決定：
 **實作位置**
 
 - `TaskGroupService.cs`：QA 完成後的路由邏輯改造
-  - 現有：QA 失敗 → 直接觸發 Dev_fix → Reviewer → QA（迴圈）
-  - 新增：QA 失敗 → Petra 評估 → 依判斷決定路由
+    - 現有：QA 失敗 → 直接觸發 Dev_fix → Reviewer → QA（迴圈）
+    - 新增：QA 失敗 → Petra 評估 → 依判斷決定路由
 - `PmAgentService.cs`：新增 `AssessQaFailureAsync` 方法
-  - 輸入：Quinn 的測試報告 + 任務上下文
-  - 輸出：routing（`fix_cody` / `back_to_vera` / `escalate` / `test_issue`）+ instructions
+    - 輸入：Quinn 的測試報告 + 任務上下文
+    - 輸出：routing（`fix_cody` / `back_to_vera` / `escalate` / `test_issue`）+ instructions
 - `PmAgentService.cs`：新增 `AssessNoApplicableTestsAsync` 方法
-  - 輸入：Quinn 的 no_applicable_tests 理由
-  - 輸出：`pass` / `require_tests`
+    - 輸入：Quinn 的 no_applicable_tests 理由
+    - 輸出：`pass` / `require_tests`
 - `CLAUDE_QA.md`：加入 `no_applicable_tests` 輸出格式規範
 - `QaAgentService.cs`：解析 Quinn 的 `no_applicable_tests` 輸出
 
@@ -126,9 +127,9 @@ Petra 審核：
 **實作位置**
 
 - `PmAgentService.cs`：新增 `RunCodyDevPlanAppealAsync` 和 `ReassessDevPlanAsync` 方法
-  - 復用 Stage 23 的 appeal 模式（LLM 直呼叫，非 Claude Code）
+    - 復用 Stage 23 的 appeal 模式（LLM 直呼叫，非 Claude Code）
 - `TaskGroupService.cs`：`RunPetraDevPlanReviewAsync` 回傳 revise 時，進入 appeal 迴圈
-  - 復用 `HandleReviewerCompletedAsync` 的 while loop 模式
+    - 復用 `HandleReviewerCompletedAsync` 的 while loop 模式
 - `CLAUDE_CODY.md`：加入 Dev_plan 被打回時的回應格式（agree / disagree + 理由）
 - `TaskGroup` 新增欄位：`DevPlanAppealRoundA`（int，計數器）、`DevPlanAppealLog`（string，對話紀錄）
 
@@ -144,17 +145,17 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 
 ```json
 {
-  "status": "passed | failed | no_applicable_tests",
-  "passed_tests": ["測試名稱 1", "測試名稱 2"],
-  "failed_tests": [
-    {
-      "name": "測試名稱",
-      "error": "錯誤訊息",
-      "file": "test/path.cs:行號"
-    }
-  ],
-  "no_test_reason": "（僅 no_applicable_tests 時填寫）",
-  "summary": "一段話總結"
+    "status": "passed | failed | no_applicable_tests",
+    "passed_tests": ["測試名稱 1", "測試名稱 2"],
+    "failed_tests": [
+        {
+            "name": "測試名稱",
+            "error": "錯誤訊息",
+            "file": "test/path.cs:行號"
+        }
+    ],
+    "no_test_reason": "（僅 no_applicable_tests 時填寫）",
+    "summary": "一段話總結"
 }
 ```
 
@@ -175,22 +176,22 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 
 **TaskGroup 新增欄位**
 
-| 欄位 | 型別 | 來源 | 用途 |
-|------|------|------|------|
-| `DevPlan` | text nullable | Cody（RunPetraDevPlanReviewAsync 時儲存） | Vera 審查參考、QA 測試參考 |
-| `TestReport` | text nullable | Quinn（24-3） | Petra QA 判斷、Sage 歸檔 |
-| `DevPlanAppealRoundA` | int, default 0 | 24-2 | Dev_plan appeal 計數 |
-| `DevPlanAppealLog` | text nullable | 24-2 | Dev_plan appeal 對話紀錄 |
+| 欄位                  | 型別           | 來源                                      | 用途                       |
+| --------------------- | -------------- | ----------------------------------------- | -------------------------- |
+| `DevPlan`             | text nullable  | Cody（RunPetraDevPlanReviewAsync 時儲存） | Vera 審查參考、QA 測試參考 |
+| `TestReport`          | text nullable  | Quinn（24-3）                             | Petra QA 判斷、Sage 歸檔   |
+| `DevPlanAppealRoundA` | int, default 0 | 24-2                                      | Dev_plan appeal 計數       |
+| `DevPlanAppealLog`    | text nullable  | 24-2                                      | Dev_plan appeal 對話紀錄   |
 
 > `ImplementationNote`、`ReviewAppealLog`、`ReviewAppealRoundA` 已在 Stage 23 加入
 
 **文件傳遞矩陣**
 
-| 下游 Agent | 收到的文件 |
-|-----------|----------|
-| Cody（開發） | Issues 清單（現有）、UI 規格（現有）、Dev_plan（如有） |
-| Vera（審查） | ImplementationNote（Stage 23 已傳）、Dev_plan（新增） |
-| Quinn（QA） | ImplementationNote（Stage 23 已傳）、Issues 清單（新增） |
+| 下游 Agent   | 收到的文件                                                                  |
+| ------------ | --------------------------------------------------------------------------- |
+| Cody（開發） | Issues 清單（現有）、UI 規格（現有）、Dev_plan（如有）                      |
+| Vera（審查） | ImplementationNote（Stage 23 已傳）、Dev_plan（新增）                       |
+| Quinn（QA）  | ImplementationNote（Stage 23 已傳）、Issues 清單（新增）                    |
 | Sage（歸檔） | ImplementationNote（Stage 23 已傳）、TestReport（新增）、ReviewBody（現有） |
 
 **實作位置**
@@ -215,13 +216,13 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 
 ## 不在 Stage 24 範圍（留待後續 Stage）
 
-| 項目 | 原因 |
-|------|------|
-| Kick-off 會議（第一階段） | 需要 WorkflowEngine 支援多 Agent 會議機制 |
-| 設計會議（第二階段） | 同上 |
+| 項目                       | 原因                                           |
+| -------------------------- | ---------------------------------------------- |
+| Kick-off 會議（第一階段）  | 需要 WorkflowEngine 支援多 Agent 會議機制      |
+| 設計會議（第二階段）       | 同上                                           |
 | Dashboard 輪次上限動態設定 | 依賴 Future Feature 十二（Dashboard 雙向操作） |
-| Victoria 交付通知改造 | 依賴 Future Feature 九（Dashboard 雙向操作） |
-| 迴圈 B 上限機制 | 現有 FixIteration 已有上限，待觀察是否需要強化 |
+| Victoria 交付通知改造      | 依賴 Future Feature 九（Dashboard 雙向操作）   |
+| 迴圈 B 上限機制            | 現有 FixIteration 已有上限，待觀察是否需要強化 |
 
 ---
 
@@ -236,12 +237,12 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 - [ ] Dev_plan：appeal 對話完整記錄到 `DevPlanAppealLog`
 - [ ] 測試報告：Quinn 產出結構化 JSON 測試報告
 - [ ] 測試報告：報告存入 `TaskGroup.TestReport`
-- [ ] 文件傳遞：Vera 收到 Dev_plan、Quinn 收到 Issues 清單
-- [ ] 文件傳遞：Sage 收到 TestReport
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
-- [ ] git commit + push
-- [ ] `.csproj` 版本更新為 `3.8.0`
+- [x] 文件傳遞：Vera 收到 Dev_plan、Quinn 收到 Issues 清單
+- [x] 文件傳遞：Sage 收到 TestReport
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
+- [x] git commit + push
+- [x] `.csproj` 版本更新為 `3.8.0`
 
 ---
 
@@ -259,8 +260,36 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 
 ---
 
+## 實作紀錄
+
+### 關鍵設計決策
+
+1. **QA 四路由設計**：Petra `AssessQaFailureAsync` 回傳四種路由：`code_bug`（小修正，Dev_fix 後跳 Vera 直接重測）、`back_to_reviewer`（大幅改動，Dev_fix 後走完整 Reviewer → Petra → QA 路徑）、`env_or_test_issue`（環境或測試本身問題，視同通過）、`escalate_boss`（上呈）。
+
+2. **QaFixRound 狀態管理**：`code_bug` 路由會遞增 `QaFixRound`（>0 表示 QA 修復模式），Dev_fix 完成時偵測 `QaFixRound > 0` 則跳過 Vera 直接重測。`back_to_reviewer` 路由必須**主動重置 `QaFixRound = 0`**，否則下一輪 Dev_fix 完成時仍會被 QA 快速路徑攔截。
+
+3. **Dev_plan appeal 取代重交**：原 `revise` 分支會重新觸發 Dev_plan（Cody 從頭重寫）。Stage 24 改為觸發 `RunDevPlanAppealLoopAsync` 緊密 while loop（純 LLM，最多 3 輪）。Cody 接受（`accept`）或 Petra 改為 `approve` → 直接 fire Dev；耗盡輪次 → escalate 老闆。`DevPlanRevision` 欄位保留但不再遞增。
+
+4. **DevPlanAppealLog 完整 JSON 記錄**：每輪同時序列化 `codyAppeal`（完整 JSON）和 `newReview`（完整 JSON）存入 log，而非摘要文字。`codyJson` 序列化必須在 `accept` 判斷**之前**，因為 accept 分支的 AppendLog 也需要 codyJson。
+
+5. **MockMode 相容性**：四個新 Petra LLM 方法（AssessQaFailureAsync、AssessNoApplicableTestsAsync、RunCodyDevPlanAppealAsync、ReassessDevPlanAsync）全部設有 fallback（分別為 env_or_test_issue、approve、accept、approve）。MockLlmProvider 回傳的 mock JSON 解析失敗時自動走 fallback，不需改動 MockMode 相關程式碼。
+
+6. **FireStepsAsync 僅三個參數**：`(group, steps, cancellationToken)`，無 projectId 版本。
+
+### 踩坑記錄
+
+| 問題                                    | 原因                                                              | 修正                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `back_to_reviewer` 後 Dev_fix 仍跳到 QA | `QaFixRound` 未重置為 0                                           | `back_to_reviewer` 分支明確 `group.QaFixRound = 0`                            |
+| Dev_plan appeal `accept` 後上呈老闆     | `break` 跳出 while loop 後落入 `return false`                     | 改為 `return true`（共識達成，放行）                                          |
+| `codyJson` 在 `accept` 分支內未宣告     | 序列化寫在 `accept` 判斷後面，但 `accept` 分支的 AppendLog 需要它 | 將 `var codyJson = JsonSerializer.Serialize(codyAppeal)` 移到 `accept` 判斷前 |
+| DevPlanAppealLog 只記摘要               | 初版用 `codyAppeal.Reasoning` 和 `newReview.Summary` 文字段       | 改為 `JsonSerializer.Serialize()` 輸出完整 JSON                               |
+
+---
+
 ## 變更紀錄
 
-| 日期 | 版本 | 內容 |
-|------|------|------|
-| 2026-04-12 | v1.0 | Aria 撰寫初版規劃書 |
+| 日期       | 版本 | 內容                                       |
+| ---------- | ---- | ------------------------------------------ |
+| 2026-04-12 | v1.0 | Aria 撰寫初版規劃書                        |
+| 2026-04-13 | v1.1 | 實作完成；補充驗收清單、實作紀錄、踩坑記錄 |

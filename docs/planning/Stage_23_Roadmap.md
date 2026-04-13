@@ -11,6 +11,7 @@
 ## 目標
 
 實作 **開發流程重構 Phase 1a**（Future Feature 八 的子集）：
+
 - 聚焦「改善現有流程中能立即生效的部分」
 - 不需要大幅改造 WorkflowEngine 架構
 - 直接解決已知事故的根因（Vera 誤判、缺乏糾錯回路）
@@ -30,6 +31,7 @@
 ### 完整流程重構計劃
 
 經過全盤討論，Future Feature 八已完成七個階段的完整設計：
+
 1. 需求計劃（Kick-off 會議）
 2. 設計規劃（設計會議）
 3. 開發（Dev_plan + 阻礙報告 + 實作說明）
@@ -92,6 +94,7 @@ Cody 逐條回應（agree 為預設）：
 **設計概念**
 
 Cody 開發完畢提交 PR 時，同時產出一份「實作說明」，記錄：
+
 - 實作了哪些 Issues
 - 關鍵技術決策與理由
 - 與 Dev_plan 不同的地方及原因（如有 Dev_plan）
@@ -114,10 +117,10 @@ Cody 開發中遇到無法解決的阻礙（架構不支援、依賴缺失、需
 
 ```json
 {
-  "status": "blocked",
-  "type": "architecture_limitation | dependency_missing | requirement_conflict | other",
-  "details": "...",
-  "attempted_solutions": "..."
+    "status": "blocked",
+    "type": "architecture_limitation | dependency_missing | requirement_conflict | other",
+    "details": "...",
+    "attempted_solutions": "..."
 }
 ```
 
@@ -125,9 +128,9 @@ Cody 開發中遇到無法解決的阻礙（架構不支援、依賴缺失、需
 
 - Cody 的 `CLAUDE_Cody.md` 加入阻礙報告指令
 - `WorkflowEngine` 偵測 `"status": "blocked"` 後，交給 Petra 判斷：
-  - 技術問題 → 給建議讓 Cody 繼續
-  - 需求問題 → 退回上游
-  - 無法判斷 → Victoria 上呈 Christ
+    - 技術問題 → 給建議讓 Cody 繼續
+    - 需求問題 → 退回上游
+    - 無法判斷 → Victoria 上呈 Christ
 
 ---
 
@@ -141,6 +144,7 @@ Vera 產出結構化的審查報告，記錄每輪審查結果和 Cody 的回應
 # 審查報告
 
 ## 基本資訊
+
 - PR: #{編號}
 - 審查者: Vera
 - 總輪次: {N}
@@ -149,12 +153,14 @@ Vera 產出結構化的審查報告，記錄每輪審查結果和 Cody 的回應
 ## 各輪紀錄
 
 ### 第 1 輪
-| # | 嚴重度 | 檔案 | 說明 | Cody 回應 | 結論 |
-|---|--------|------|------|-----------|------|
-| 1 | Critical | path/file.cs:42 | ... | agree | 已修正 |
-| 2 | Warning  | path/file.cs:87 | ... | disagree: {理由} | Vera 接受反駁 |
+
+| #   | 嚴重度   | 檔案            | 說明 | Cody 回應        | 結論          |
+| --- | -------- | --------------- | ---- | ---------------- | ------------- |
+| 1   | Critical | path/file.cs:42 | ...  | agree            | 已修正        |
+| 2   | Warning  | path/file.cs:87 | ...  | disagree: {理由} | Vera 接受反駁 |
 
 ## 仲裁紀錄（如有）
+
 - 觸發原因: 迴圈 A/B 超限
 - Petra 判斷: 支持 Vera / 支持 Cody（逐項）
 ```
@@ -184,6 +190,7 @@ Vera 審查時額外檢查 `.csproj` 的 `<Version>` 標籤是否已更新為 St
 **設計概念**
 
 Sage 從「技術文件撰寫員」轉型為「收尾歸檔員」：
+
 - 不再讀 .cs 檔產生 API 技術文件
 - 改為將任務的所有階段文件歸檔整理（統一格式、建索引）
 - 更新 CHANGELOG
@@ -209,11 +216,11 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 ```yaml
 - name: Auto tag version
   run: |
-    VERSION=$(grep -oP '<Version>\K[^<]+' src/AiTeam.Bot/AiTeam.Bot.csproj)
-    if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
-      git tag "v$VERSION"
-      git push origin "v$VERSION"
-    fi
+      VERSION=$(grep -oP '<Version>\K[^<]+' src/AiTeam.Bot/AiTeam.Bot.csproj)
+      if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
+        git tag "v$VERSION"
+        git push origin "v$VERSION"
+      fi
 ```
 
 - 放在 `docker compose up` 成功之後（確保 tag 只指向成功部署的程式碼）
@@ -237,30 +244,30 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 
 ## 不在 Stage 23 範圍（留待後續 Stage）
 
-| 項目 | 原因 |
-|------|------|
-| Kick-off 會議（第一階段） | 需要 WorkflowEngine 支援多 Agent 互動，複雜度最高 |
-| 設計會議（第二階段） | 同上 |
-| Dev_plan 審核（第三階段） | 依賴 Petra 會議協調能力建立後 |
-| QA 流程改造（第五階段 Petra 介入） | 依賴會議機制經驗 |
-| 文件存 DB + WorkflowEngine 傳遞 | 跨階段基礎設施，範圍大 |
-| Dashboard 輪次上限設定 | 依賴 Future Feature 十二 |
-| Victoria 交付通知改造（第七階段） | 依賴 Future Feature 九（Dashboard 雙向） |
+| 項目                               | 原因                                              |
+| ---------------------------------- | ------------------------------------------------- |
+| Kick-off 會議（第一階段）          | 需要 WorkflowEngine 支援多 Agent 互動，複雜度最高 |
+| 設計會議（第二階段）               | 同上                                              |
+| Dev_plan 審核（第三階段）          | 依賴 Petra 會議協調能力建立後                     |
+| QA 流程改造（第五階段 Petra 介入） | 依賴會議機制經驗                                  |
+| 文件存 DB + WorkflowEngine 傳遞    | 跨階段基礎設施，範圍大                            |
+| Dashboard 輪次上限設定             | 依賴 Future Feature 十二                          |
+| Victoria 交付通知改造（第七階段）  | 依賴 Future Feature 九（Dashboard 雙向）          |
 
 ---
 
 ## 驗收清單
 
-- [x] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（Mock Mode 測試）
-- [x] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁
-- [x] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）
-- [x] 實作說明：Cody 開發完畢時產出結構化實作說明
-- [x] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra
-- [x] 審查報告：ReviewIssue 加 Id 欄位，BuildReviewBody 顯示 [#N]
-- [x] 版本號檢查：Vera 審查時檢查 .csproj 版本號
-- [x] Sage 轉型：Sage 產出 CHANGELOG + docs/archive/（非 API 技術文件）
+- [ ] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（Mock Mode 測試）
+- [ ] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁
+- [ ] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）
+- [ ] 實作說明：Cody 開發完畢時產出結構化實作說明
+- [ ] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra
+- [ ] 審查報告：ReviewIssue 加 Id 欄位，BuildReviewBody 顯示 [#N]
+- [ ] 版本號檢查：Vera 審查時檢查 .csproj 版本號
+- [ ] Sage 轉型：Sage 產出 CHANGELOG + docs/archive/（非 API 技術文件）
 - [x] Git Tag：push to main 後自動建立版本 tag
-- [x] `ReviewAppealMaxRounds` 設定值生效（WorkflowSettings）
+- [ ] `ReviewAppealMaxRounds` 設定值生效（WorkflowSettings）
 - [x] `dotnet build` 零 error
 - [x] `dotnet test` 通過
 - [x] git commit + push
@@ -290,48 +297,54 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 ### 關鍵設計決策
 
 #### Review Appeal 迴圈 A — 緊密 while loop 設計
+
 最重要的架構決策：Appeal 迴圈 A 設計為 `HandleReviewerCompletedAsync` 內部的緊密 `while` 迴圈，**不**跨越多個 Agent 執行週期。這意味著整個 Cody-Vera 對話在同一個函式呼叫中完成，不觸發 Dev_fix，只是 LLM 直呼叫。
 
 理由：若設計為每輪跨越一個 Dev_fix 週期，狀態管理複雜且難以 debug。緊密迴圈讓邏輯更清晰，且 Appeal 本身不需要「執行程式碼」，只需要「說服 Vera 撤銷誤判」。
 
 #### SkipReviewerAfterArbitration 標誌路由
+
 仲裁後設 `group.SkipReviewerAfterArbitration = true`，在 `HandleAgentCompletedAsync` 的 `Dev_fix` 成功分支中插入 pre-GetDecision 檢查，直接跳到 `RunPetraGateAsync`，繞過 WorkflowEngine 的 Reviewer 觸發邏輯。
 
 #### PmAgentService 作為三方角色代理
+
 Review Appeal 的三個 LLM 方法（`RunCodyAppealAsync`、`RunVeraAppealAsync`、`ArbitrateReviewAppealAsync`）均由 Petra 的 LLM Provider 執行，system prompt 分別指示「模擬 Cody」/ 「模擬 Vera」/ 「仲裁者 Petra」。這樣不需要引入新的 LLM client，複用現有 PM agent。
 
 #### BlockedOperationException 傳遞機制
+
 Cody 阻礙偵測設計為：`RunClaudeCodeAsync` 解析 `"status":"blocked"` JSON 後拋出 `BlockedOperationException`，攜帶 `BlockerJson` 和 `Details`。這樣在 `ExecuteTaskAsync` 的 catch 區塊裡攔截並轉為 `AgentExecutionResult(false, "[BLOCKED] ...", OutputContent: blockerJson)`，不需要改動 `ExecuteAsync` 的回傳型別。
 
 #### DocAgentService — Claude Code write mode
+
 新版 Sage 使用 `claudeCodeService.RunAsync`（write mode）而非 `RunReadOnlyAsync`，讓 Claude Code 自行寫入 CHANGELOG.md 和 `docs/archive/pr{N}-archive.md`，Bot 只負責 clone → commit → push，不再自己建立輸出路徑或寫入內容。
 
 #### MockMode 延遲補齊（附加 fix）
+
 Stage 23 結束後發現 Dev / Reviewer / QA / Doc 四個 Agent 的 MockMode early return 是瞬間的（0 秒），Dashboard 看不到流程中間狀態。在 log 輸出後、`return` 前加入 `Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken)` 模擬真實執行時間。
 
 ---
 
 ### 修改的檔案
 
-| 檔案 | 說明 |
-|------|------|
-| `.github/workflows/deploy.yml` | Git Tag 自動化：PowerShell 讀取 Version 建立並推送 tag（23-7） |
-| `src/AiTeam.Bot/Configuration/WorkflowSettings.cs`（新） | POCO：ReviewAppealMaxRounds + TargetVersion（23-5） |
-| `src/AiTeam.Bot/appsettings.json` | WorkflowSettings section（23-5） |
-| `src/AiTeam.Bot/Program.cs` | DI 註冊 WorkflowSettings（23-5） |
-| `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` | 加 id 欄位、版本號檢查、Appeal 重評格式（23-4/23-5/23-1） |
-| `src/AiTeam.Bot/Resources/CLAUDE_CODY.md` | 加實作說明格式、阻礙報告格式、Appeal 回應格式（23-2/23-3/23-1） |
-| `src/AiTeam.Bot/Resources/CLAUDE_Sage.md` | 完全改寫為收尾歸檔員（23-6） |
-| `src/AiTeam.Bot/Agents/ReviewerAgentService.cs` | ReviewIssue.Id、版本檢查 prompt、MockMode 延遲（23-4/23-5） |
-| `src/AiTeam.Bot/Agents/DevAgentService.cs` | ParseImplementationNote、TryParseBlockerJson、BlockedOperationException、MockMode 延遲（23-2/23-3） |
-| `src/AiTeam.Bot/Agents/QaAgentService.cs` | MockMode 延遲 |
-| `src/AiTeam.Bot/Agents/PmAgentService.cs` | AssessBlockerAsync + 三個 Appeal LLM 方法 + 六個新 record 類型（23-3/23-1） |
-| `src/AiTeam.Bot/Agents/DocAgentService.cs` | 完全改寫為歸檔模式，改用 RunAsync write mode（23-6） |
-| `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | 六項主要變更（見下方） |
-| `src/AiTeam.Data/Entities.cs` | 四個新 TaskGroup 欄位（23-1/23-2） |
-| `src/AiTeam.Bot/AiTeam.Bot.csproj` | 版本 3.7.0 |
-| `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj` | 版本 3.7.0 |
-| `src/AiTeam.Data/Migrations/20260412151132_Stage23TaskGroupFields.cs` | EF Migration |
+| 檔案                                                                  | 說明                                                                                                |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `.github/workflows/deploy.yml`                                        | Git Tag 自動化：PowerShell 讀取 Version 建立並推送 tag（23-7）                                      |
+| `src/AiTeam.Bot/Configuration/WorkflowSettings.cs`（新）              | POCO：ReviewAppealMaxRounds + TargetVersion（23-5）                                                 |
+| `src/AiTeam.Bot/appsettings.json`                                     | WorkflowSettings section（23-5）                                                                    |
+| `src/AiTeam.Bot/Program.cs`                                           | DI 註冊 WorkflowSettings（23-5）                                                                    |
+| `src/AiTeam.Bot/Resources/CLAUDE_Vera.md`                             | 加 id 欄位、版本號檢查、Appeal 重評格式（23-4/23-5/23-1）                                           |
+| `src/AiTeam.Bot/Resources/CLAUDE_CODY.md`                             | 加實作說明格式、阻礙報告格式、Appeal 回應格式（23-2/23-3/23-1）                                     |
+| `src/AiTeam.Bot/Resources/CLAUDE_Sage.md`                             | 完全改寫為收尾歸檔員（23-6）                                                                        |
+| `src/AiTeam.Bot/Agents/ReviewerAgentService.cs`                       | ReviewIssue.Id、版本檢查 prompt、MockMode 延遲（23-4/23-5）                                         |
+| `src/AiTeam.Bot/Agents/DevAgentService.cs`                            | ParseImplementationNote、TryParseBlockerJson、BlockedOperationException、MockMode 延遲（23-2/23-3） |
+| `src/AiTeam.Bot/Agents/QaAgentService.cs`                             | MockMode 延遲                                                                                       |
+| `src/AiTeam.Bot/Agents/PmAgentService.cs`                             | AssessBlockerAsync + 三個 Appeal LLM 方法 + 六個新 record 類型（23-3/23-1）                         |
+| `src/AiTeam.Bot/Agents/DocAgentService.cs`                            | 完全改寫為歸檔模式，改用 RunAsync write mode（23-6）                                                |
+| `src/AiTeam.Bot/Orchestration/TaskGroupService.cs`                    | 六項主要變更（見下方）                                                                              |
+| `src/AiTeam.Data/Entities.cs`                                         | 四個新 TaskGroup 欄位（23-1/23-2）                                                                  |
+| `src/AiTeam.Bot/AiTeam.Bot.csproj`                                    | 版本 3.7.0                                                                                          |
+| `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj`                        | 版本 3.7.0                                                                                          |
+| `src/AiTeam.Data/Migrations/20260412151132_Stage23TaskGroupFields.cs` | EF Migration                                                                                        |
 
 #### TaskGroupService.cs 六項主要變更
 
@@ -346,12 +359,12 @@ Stage 23 結束後發現 Dev / Reviewer / QA / Doc 四個 Agent 的 MockMode ear
 
 ### 新增 DB 欄位（TaskGroup）
 
-| 欄位 | 型別 | 用途 |
-|------|------|------|
-| `ImplementationNote` | text? | Cody 實作說明（<!-- IMPLEMENTATION_NOTE --> 標記解析） |
-| `ReviewAppealRoundA` | int | 迴圈 A 輪次計數（從 0 起） |
-| `ReviewAppealLog` | text? | 逐輪完整 JSON 紀錄（Cody + Vera）及 Petra 仲裁結果 |
-| `SkipReviewerAfterArbitration` | bool | 仲裁後 Dev_fix 完成時跳過 Vera，直接送 Petra 閘門 |
+| 欄位                           | 型別  | 用途                                                   |
+| ------------------------------ | ----- | ------------------------------------------------------ |
+| `ImplementationNote`           | text? | Cody 實作說明（<!-- IMPLEMENTATION_NOTE --> 標記解析） |
+| `ReviewAppealRoundA`           | int   | 迴圈 A 輪次計數（從 0 起）                             |
+| `ReviewAppealLog`              | text? | 逐輪完整 JSON 紀錄（Cody + Vera）及 Petra 仲裁結果     |
+| `SkipReviewerAfterArbitration` | bool  | 仲裁後 Dev_fix 完成時跳過 Vera，直接送 Petra 閘門      |
 
 ---
 
@@ -367,9 +380,9 @@ Stage 23 結束後發現 Dev / Reviewer / QA / Doc 四個 Agent 的 MockMode ear
 
 ## 變更紀錄
 
-| 日期 | 版本 | 內容 |
-|------|------|------|
-| 2026-04-12 | v1.0 | Aria 撰寫初版規劃書（含 UI 打磨 + 糾錯機制） |
-| 2026-04-12 | v1.1 | 移除 UI 第四批打磨（十四尚未確認完整），Stage 23 聚焦糾錯機制 Phase 1 |
+| 日期       | 版本 | 內容                                                                                                                                                         |
+| ---------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-04-12 | v1.0 | Aria 撰寫初版規劃書（含 UI 打磨 + 糾錯機制）                                                                                                                 |
+| 2026-04-12 | v1.1 | 移除 UI 第四批打磨（十四尚未確認完整），Stage 23 聚焦糾錯機制 Phase 1                                                                                        |
 | 2026-04-12 | v2.0 | 全面重寫 — 基於 Future Feature 八完整流程設計，Stage 23 改為 Phase 1a（Review Appeal + 流程產出強化 + Sage 轉型 + Git Tag），多 Agent 會議機制留待後續 Stage |
-| 2026-04-12 | v3.0 | 實作完成，補充實作結果、關鍵決策、踩坑記錄、驗收清單全部打勾 |
+| 2026-04-12 | v3.0 | 實作完成，補充實作結果、關鍵決策、踩坑記錄、驗收清單全部打勾                                                                                                 |
