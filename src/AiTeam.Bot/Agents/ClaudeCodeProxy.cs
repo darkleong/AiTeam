@@ -70,4 +70,18 @@ public class ClaudeCodeProxy(
         }
         return await real.RunReviewAsync(workingDir, prompt, model, anthropicApiKey, ct);
     }
+
+    public async Task<ClaudeCodeResult> RunMeetingSessionAsync(
+        string workingDir, string sessionId, string prompt, string model, string anthropicApiKey,
+        bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
+    {
+        if (await IsMockModeAsync(ct))
+        {
+            logger.LogInformation("[MockMode] ClaudeCodeProxy → RunMeetingSessionAsync（sessionId={Id}）", sessionId);
+            return await mock.RunMeetingSessionAsync(
+                workingDir, sessionId, prompt, model, anthropicApiKey, isFirstMessage, maxTurns, allowedTools, ct);
+        }
+        return await real.RunMeetingSessionAsync(
+            workingDir, sessionId, prompt, model, anthropicApiKey, isFirstMessage, maxTurns, allowedTools, ct);
+    }
 }

@@ -5,8 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-AiTeam.Bot-b4e4354d-444a-4fbc-b955-ce3297debbc1</UserSecretsId>
-    <Version>3.8.0</Version>
-    <AssemblyVersion>3.8.0</AssemblyVersion>
+    <Version>3.9.0</Version>
+    <AssemblyVersion>3.9.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>

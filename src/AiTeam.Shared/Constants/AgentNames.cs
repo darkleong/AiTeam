@@ -13,4 +13,6 @@ public static class AgentNames
     public const string Release      = "Release";
     public const string Designer     = "Designer";
     public const string Pm           = "PM";
+    /// <summary>Stage 25a：Kick-off 會議步驟（非一般 Agent，由 MeetingService 協調執行）。</summary>
+    public const string Kickoff      = "Kickoff";
 }

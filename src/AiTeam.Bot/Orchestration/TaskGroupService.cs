@@ -30,6 +30,7 @@ public class TaskGroupService(
     IOptions<WorkflowSettings> workflowSettings,
     RulesService rulesService,
     WorkflowEngine workflowEngine,
+    MeetingService meetingService,
     IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
@@ -421,6 +422,20 @@ public class TaskGroupService(
         WorkflowStep step,
         CancellationToken cancellationToken)
     {
+        // Stage 25a：Kickoff 步驟由 MeetingService 協調執行，不走一般 IAgentExecutor 流程
+        if (step.AgentName.Equals(AgentNames.Kickoff, StringComparison.OrdinalIgnoreCase))
+        {
+            _ = Task.Run(async () =>
+            {
+                try { await RunKickoffMeetingAndWaitAsync(group, appLifetime.ApplicationStopping); }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "TaskGroupService：Kickoff 會議執行失敗（Group={Id}）", group.Id);
+                }
+            }, appLifetime.ApplicationStopping);
+            return;
+        }
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService       = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
@@ -770,6 +785,10 @@ public class TaskGroupService(
             if (!string.IsNullOrWhiteSpace(group.DevPlan))
                 meta.Add($"prev_dev_plan:\n{group.DevPlan}");
 
+            // Stage 25a：附上 Kick-off 任務計劃書（供 Cody 了解需求共識與技術方向）
+            if (!string.IsNullOrWhiteSpace(group.TaskPlan))
+                meta.Add($"kickoff_task_plan:\n{group.TaskPlan}");
+
             parts.Add("---");
             parts.AddRange(meta);
             parts.Add("---");
@@ -793,6 +812,10 @@ public class TaskGroupService(
             // Stage 16：Dev 模式時帶入已審核的實作計畫書
             if (step.AgentName == AgentNames.Dev && !string.IsNullOrWhiteSpace(group.DevPlan))
                 meta.Add($"dev_plan:\n{group.DevPlan}");
+
+            // Stage 25a：附上 Kick-off 任務計劃書（Dev_plan / Dev / Reviewer / QA 步驟參考用）
+            if (!string.IsNullOrWhiteSpace(group.TaskPlan))
+                meta.Add($"kickoff_task_plan:\n{group.TaskPlan}");
 
             // 23-2：Reviewer 和 QA 步驟附上 Cody 實作說明（供 Vera 精確審查、QA 精確測試）
             if ((step.AgentName == AgentNames.Reviewer || step.AgentName == AgentNames.Qa)
@@ -1530,6 +1553,272 @@ public class TaskGroupService(
 
         logger.LogInformation("Petra Vera 審核：Group={Id}，decision={Decision}", group.Id, petraReview.Decision);
         return petraReview;
+    }
+
+    // ────────────── Stage 25a：Kick-off 會議 ──────────────
+
+    /// <summary>
+    /// Stage 25a：執行 Kick-off 會議並進入 Christ 確認等待狀態。
+    /// 由 FireOneStepAsync 偵測到 Kickoff 步驟時，在背景 Task.Run 中呼叫。
+    /// </summary>
+    private async Task RunKickoffMeetingAndWaitAsync(TaskGroup group, CancellationToken ct)
+    {
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        logger.LogInformation("TaskGroupService：Kick-off 會議開始（Group={Id}）", group.Id);
+
+        // 推送 Kickoff 進行中狀態到 Dashboard
+        await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = "running",
+            CurrentTaskTitle = $"Kick-off 會議：{group.Title}"
+        });
+
+        try
+        {
+            // 取得提案內容（從 group.Title 加 IssueUrls/UiSpec 組合，同 BuildTaskDescription）
+            var proposalContent = BuildKickoffProposalContent(group);
+
+            var meetingResult = await meetingService.RunKickoffMeetingAsync(
+                group, proposalContent, owner, repo, ct);
+
+            // 重新載入 group（meeting 執行期間 group 物件可能過時）
+            await using var scope2   = serviceProvider.CreateAsyncScope();
+            var taskRepo2            = scope2.ServiceProvider.GetRequiredService<TaskRepository>();
+            var freshGroup           = await taskRepo2.GetGroupByIdAsync(group.Id, ct);
+            if (freshGroup is null)
+            {
+                logger.LogError("TaskGroupService：Kick-off 完成後找不到 Group={Id}", group.Id);
+                return;
+            }
+
+            // 儲存會議紀錄與計劃書
+            freshGroup.KickoffMeetingLog = meetingResult.MeetingLog;
+            freshGroup.TaskPlan          = meetingResult.TaskPlan;
+            freshGroup.KickoffRound      = meetingResult.TotalRounds;
+            await taskRepo2.SaveAsync(ct);
+
+            logger.LogInformation("TaskGroupService：Kick-off 會議記錄已存入 DB（Group={Id}）", group.Id);
+
+            // 通知 CEO 頻道，進入 Christ 確認等待
+            var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+            if (ceoChannel is null)
+            {
+                logger.LogError("TaskGroupService：找不到 CEO 頻道，無法上呈 Kick-off 結果");
+                return;
+            }
+
+            // 計劃書摘要（前 500 字）
+            var planPreview = string.IsNullOrWhiteSpace(freshGroup.TaskPlan)
+                ? "（無計劃書）"
+                : freshGroup.TaskPlan.Length > 500
+                    ? freshGroup.TaskPlan[..500] + "\n...\n（完整內容請查看 Dashboard）"
+                    : freshGroup.TaskPlan;
+
+            var embed = new EmbedBuilder()
+                .WithTitle("🚀 Kick-off 會議完成")
+                .WithColor(Color.Blue)
+                .AddField("任務", freshGroup.Title)
+                .AddField("會議輪次", meetingResult.TotalRounds.ToString())
+                .AddField("任務計劃書摘要", planPreview)
+                .WithFooter("▶️ 繼續 = 進入 Dev_plan；⏹️ 停止 = 取消任務；✏️ 修改 = 調整計劃書")
+                .WithTimestamp(DateTimeOffset.UtcNow)
+                .Build();
+
+            var buttons = new ComponentBuilder()
+                .WithButton("▶️ 繼續開發",  $"kickoff_continue_{freshGroup.Id}", ButtonStyle.Success)
+                .WithButton("⏹️ 停止任務",  $"kickoff_stop_{freshGroup.Id}",     ButtonStyle.Danger)
+                .WithButton("✏️ 修改計劃書", $"kickoff_modify_{freshGroup.Id}",  ButtonStyle.Secondary)
+                .Build();
+
+            var msg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+
+            // 登記 CommandHandler，供按鈕回調路由
+            var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+            commandHandler.RegisterKickoffConfirmation(msg.Id, freshGroup.Id, planPreview);
+
+            await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+            {
+                AgentName        = AgentNames.Pm,
+                Status           = "idle",
+                CurrentTaskTitle = null
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "TaskGroupService：Kick-off 會議失敗（Group={Id}）", group.Id);
+            await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+            {
+                AgentName = AgentNames.Pm,
+                Status    = "error",
+                CurrentTaskTitle = $"Kick-off 失敗：{ex.Message}"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Stage 25a：Christ 確認 Kick-off 計劃書後的路由處理。
+    /// 由 CommandHandler 按鈕回調呼叫。
+    /// </summary>
+    public async Task HandleKickoffConfirmedAsync(
+        Guid groupId,
+        string decision,        // "continue" | "stop" | "modify"
+        string? modifyContent = null,
+        CancellationToken ct = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService       = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var group = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null)
+        {
+            logger.LogError("TaskGroupService：HandleKickoffConfirmed 找不到 Group={Id}", groupId);
+            return;
+        }
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        switch (decision.ToLower())
+        {
+            case "continue":
+                logger.LogInformation("TaskGroupService：Kick-off 確認繼續（Group={Id}）", groupId);
+                await meetingService.CloseAllSessionsAsync(groupId);
+                // 觸發 Dev_plan
+                await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                break;
+
+            case "stop":
+                logger.LogInformation("TaskGroupService：Kick-off 確認停止（Group={Id}）", groupId);
+                await meetingService.CloseAllSessionsAsync(groupId);
+                taskRepo.UpdateGroupStatus(group, "cancelled");
+                await taskRepo.SaveAsync(ct);
+
+                var ceoChannelStop = FindChannel(_discord.Channels.CeoChannel);
+                if (ceoChannelStop is not null)
+                    await ceoChannelStop.SendMessageAsync(
+                        $"⏹️ 任務《{group.Title}》已停止，Kick-off 會議後由老闆決定取消。");
+                break;
+
+            case "modify":
+                if (string.IsNullOrWhiteSpace(modifyContent))
+                {
+                    logger.LogWarning("TaskGroupService：Kick-off 修改意見為空（Group={Id}）", groupId);
+                    return;
+                }
+
+                logger.LogInformation("TaskGroupService：Kick-off 計劃書修改（Group={Id}）", groupId);
+
+                var modifyResult = await meetingService.ModifyTaskPlanAsync(
+                    group, modifyContent, owner, repo, ct);
+
+                // 記錄修改過程（追加至 KickoffMeetingLog）
+                var modifyLogEntry =
+                    $"\n## Christ 修改 Round {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n" +
+                    $"### Christ 修改意見\n{modifyContent}\n\n" +
+                    $"### Petra 回應（完整）\n{modifyResult.PetraFullOutput}\n";
+
+                group.KickoffMeetingLog = (group.KickoffMeetingLog ?? "") + modifyLogEntry;
+
+                if (modifyResult.Impact == "small" && !string.IsNullOrWhiteSpace(modifyResult.RevisedPlan))
+                    group.TaskPlan = modifyResult.RevisedPlan;
+
+                await taskRepo.SaveAsync(ct);
+
+                // 依修改影響大小回應 Christ
+                var ceoChannelModify = FindChannel(_discord.Channels.CeoChannel);
+                if (ceoChannelModify is null) return;
+
+                if (modifyResult.Impact == "large")
+                {
+                    // 大修改：建議重新召開 Kick-off
+                    var embed = new EmbedBuilder()
+                        .WithTitle("⚠️ Petra 評估：建議重新召開 Kick-off")
+                        .WithColor(Color.Orange)
+                        .AddField("任務", group.Title)
+                        .AddField("Petra 評估", modifyResult.PetraFullOutput.Length > 800
+                            ? modifyResult.PetraFullOutput[..800] + "..." : modifyResult.PetraFullOutput)
+                        .WithFooter("請選擇：重新開會 或 取消任務")
+                        .WithTimestamp(DateTimeOffset.UtcNow)
+                        .Build();
+
+                    var buttons = new ComponentBuilder()
+                        .WithButton("🔄 重新召開 Kick-off", $"kickoff_restart_{group.Id}", ButtonStyle.Primary)
+                        .WithButton("⏹️ 取消任務",          $"kickoff_stop_{group.Id}",    ButtonStyle.Danger)
+                        .Build();
+
+                    var reMsg = await ceoChannelModify.SendMessageAsync(embed: embed, components: buttons);
+                    var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+                    commandHandler.RegisterKickoffConfirmation(reMsg.Id, group.Id,
+                        modifyResult.RevisedPlan ?? group.TaskPlan ?? "");
+                }
+                else
+                {
+                    // 小修改：直接展示修改後計劃書，再次請 Christ 確認
+                    var planPreview = (modifyResult.RevisedPlan ?? group.TaskPlan ?? "").Length > 500
+                        ? (modifyResult.RevisedPlan ?? group.TaskPlan ?? "")[..500] + "\n..."
+                        : (modifyResult.RevisedPlan ?? group.TaskPlan ?? "");
+
+                    var embed = new EmbedBuilder()
+                        .WithTitle("✏️ 任務計劃書已更新")
+                        .WithColor(Color.Green)
+                        .AddField("任務", group.Title)
+                        .AddField("更新後計劃書摘要", planPreview)
+                        .WithFooter("▶️ 繼續 = 進入開發；⏹️ 停止 = 取消；✏️ 修改 = 繼續調整")
+                        .WithTimestamp(DateTimeOffset.UtcNow)
+                        .Build();
+
+                    var buttons = new ComponentBuilder()
+                        .WithButton("▶️ 繼續開發",  $"kickoff_continue_{group.Id}", ButtonStyle.Success)
+                        .WithButton("⏹️ 停止任務",  $"kickoff_stop_{group.Id}",     ButtonStyle.Danger)
+                        .WithButton("✏️ 修改計劃書", $"kickoff_modify_{group.Id}",  ButtonStyle.Secondary)
+                        .Build();
+
+                    var reMsg = await ceoChannelModify.SendMessageAsync(embed: embed, components: buttons);
+                    var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+                    commandHandler.RegisterKickoffConfirmation(reMsg.Id, group.Id, planPreview);
+                }
+                break;
+
+            case "restart":
+                // 重新召開 Kick-off（大修改後 Christ 確認重開）
+                logger.LogInformation("TaskGroupService：Kick-off 重新召開（Group={Id}）", groupId);
+                await meetingService.CloseAllSessionsAsync(groupId);
+                // 重置輪次計數，重觸發 Kickoff 步驟
+                group.KickoffRound = 0;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)], ct);
+                break;
+
+            default:
+                logger.LogWarning("TaskGroupService：未知的 Kickoff 決策：{Decision}（Group={Id}）", decision, groupId);
+                break;
+        }
+    }
+
+    /// <summary>Stage 25a：組建 Kick-off 會議的提案說明內容。</summary>
+    private static string BuildKickoffProposalContent(TaskGroup group)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(group.Title);
+
+        if (!string.IsNullOrWhiteSpace(group.IssueUrls))
+            sb.AppendLine($"\nIssue URLs：{group.IssueUrls}");
+
+        if (!string.IsNullOrWhiteSpace(group.UiSpecContent))
+        {
+            sb.AppendLine("\nUI 規格說明：");
+            sb.AppendLine(group.UiSpecContent);
+        }
+
+        return sb.ToString();
     }
 
     private string GetAgentChannelName(string agentName) => agentName switch

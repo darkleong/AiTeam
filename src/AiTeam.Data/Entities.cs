@@ -77,6 +77,12 @@ public class TaskGroup
     public string? DevPlanAppealLog { get; set; }
     /// <summary>Stage 24：QA 修復迴圈輪次計數（Petra 判斷 code_bug 後，Dev_fix 跳過 Vera 直接重測的次數）。</summary>
     public int QaFixRound { get; set; } = 0;
+    /// <summary>Stage 25a：Kick-off 會議完整紀錄（Markdown，含各 Agent 完整回應 + Christ 修改歷史）。</summary>
+    public string? KickoffMeetingLog { get; set; }
+    /// <summary>Stage 25a：Petra 在 Kick-off 會議結束後產出的任務計劃書。</summary>
+    public string? TaskPlan { get; set; }
+    /// <summary>Stage 25a：Kick-off 會議輪次計數。</summary>
+    public int KickoffRound { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

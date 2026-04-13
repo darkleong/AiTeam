@@ -81,4 +81,41 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
             "{\"critical\":[],\"warning\":[],\"info\":[],\"summary\":\"[MOCK] 模擬審查通過，程式碼品質符合要求\",\"impact\":\"[MOCK] 無影響範圍\"}";
         return new ClaudeCodeResult(true, output, 0, "");
     }
+
+    /// <summary>
+    /// Stage 25a：模擬持續對話 session（RunMeetingSessionAsync）。
+    /// 依 sessionId 後綴判斷 Agent 角色，回傳對應的 mock 意見。
+    /// Petra 的回應結尾含合法 JSON，確保 MockMode 下自動達成 consensus，不卡流程。
+    /// </summary>
+    public async Task<ClaudeCodeResult> RunMeetingSessionAsync(
+        string workingDir, string sessionId, string prompt, string model, string anthropicApiKey,
+        bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
+    {
+        logger.LogInformation(
+            "[MockMode] MockClaudeCodeService.RunMeetingSessionAsync（sessionId={Id}，isFirst={IsFirst}）",
+            sessionId, isFirstMessage);
+        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+
+        // 從 sessionId 後綴判斷角色（格式：{groupId}-{agentName}）
+        var agentName = sessionId.Contains('-') ? sessionId.Split('-').Last() : "unknown";
+
+        var output = agentName.ToLower() switch
+        {
+            "petra" =>
+                "[MOCK] Petra 整理完成，所有 Agent 意見已彙整，沒有重大分歧。\n" +
+                "{\"decision\":\"consensus\",\"summary\":\"[MOCK] Kick-off 順利完成，各角色無重大疑慮。\",\"discussion_points\":[]}",
+            "rosa" =>
+                "[MOCK] Rosa 需求分析完成。需求描述清晰，無模糊之處。建議在實作前確認 API 設計細節。",
+            "demi" =>
+                "[MOCK] Demi UI/UX 評估完成。現有 Dashboard 結構可容納此功能，無需大規模 Layout 調整。",
+            "cody" =>
+                "[MOCK] Cody 技術可行性評估完成。技術上可行，現有架構支援此功能，預計 2 天完成。",
+            "quinn" =>
+                "[MOCK] Quinn 測試規劃完成。此功能可自動化測試，建議加入 E2E 截圖驗證。",
+            _ =>
+                "[MOCK] 會議發言完成。"
+        };
+
+        return new ClaudeCodeResult(true, output, 0, "");
+    }
 }

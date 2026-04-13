@@ -45,4 +45,29 @@ public interface IClaudeCodeService
         string model,
         string anthropicApiKey,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Stage 25a：以持續對話 session 模式執行 Claude Code，支援跨輪次 context 累積（Kick-off 會議使用）。
+    /// 第一輪使用 --session-id 建立 session；後續輪使用 --resume {sessionId} 繼續對話。
+    /// 不帶 --no-session-persistence，session 資料保留於本機供後續輪使用。
+    /// </summary>
+    /// <param name="workingDir">repo 本地路徑。</param>
+    /// <param name="sessionId">UUID 格式的 session ID（由呼叫端生成並管理）。</param>
+    /// <param name="prompt">本輪要傳給 Agent 的訊息。</param>
+    /// <param name="model">Claude 模型 ID。</param>
+    /// <param name="anthropicApiKey">Anthropic API Key。</param>
+    /// <param name="isFirstMessage">true 時建立新 session；false 時 resume 既有 session。</param>
+    /// <param name="maxTurns">本輪最大 turn 數（建議 10~15）。</param>
+    /// <param name="allowedTools">允許的工具集；null 表示開放全部工具（Cody 使用）。</param>
+    /// <param name="ct">CancellationToken。</param>
+    Task<ClaudeCodeResult> RunMeetingSessionAsync(
+        string workingDir,
+        string sessionId,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        bool isFirstMessage,
+        int maxTurns,
+        string[]? allowedTools = null,
+        CancellationToken ct = default);
 }

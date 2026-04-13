@@ -13,6 +13,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     private static readonly TimeSpan DefaultTimeout     = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan ReadOnlyTimeout    = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan VictoriaTimeout    = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan MeetingTimeout     = TimeSpan.FromMinutes(20);
 
     /// <summary>
     /// 在指定的 repo 工作目錄內執行 Claude Code 完成開發任務。
@@ -106,6 +107,24 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         CancellationToken ct = default)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
             ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read", "Bash"], maxTurns: 15, ct);
+
+    /// <summary>
+    /// Stage 25a：以持續對話 session 模式執行 Claude Code，供 Kick-off 會議的多輪討論使用。
+    /// 第一輪：--session-id {uuid}；後續輪：--resume {uuid}。
+    /// 不帶 --no-session-persistence，session 資料保留於本機。
+    /// </summary>
+    public Task<ClaudeCodeResult> RunMeetingSessionAsync(
+        string workingDir,
+        string sessionId,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        bool isFirstMessage,
+        int maxTurns,
+        string[]? allowedTools = null,
+        CancellationToken ct = default)
+        => RunMeetingCoreAsync(workingDir, sessionId, prompt, model, anthropicApiKey,
+            isFirstMessage, maxTurns, allowedTools, ct);
 
     // ────────────── Private ──────────────
 
@@ -207,6 +226,127 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             exitCode, success);
 
         return new ClaudeCodeResult(success, output, exitCode, stdout);
+    }
+
+    private async Task<ClaudeCodeResult> RunMeetingCoreAsync(
+        string workingDir,
+        string sessionId,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        bool isFirstMessage,
+        int maxTurns,
+        string[]? allowedTools,
+        CancellationToken ct)
+    {
+        var args = BuildMeetingArgs(prompt, model, sessionId, isFirstMessage, maxTurns, allowedTools);
+
+        logger.LogInformation(
+            "ClaudeCodeService 啟動會議 session subprocess（dir={Dir}，sessionId={SessionId}，isFirst={IsFirst}）",
+            workingDir, sessionId, isFirstMessage);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(MeetingTimeout);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName               = "claude",
+            Arguments              = args,
+            WorkingDirectory       = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        psi.Environment["ANTHROPIC_API_KEY"] = anthropicApiKey;
+
+        using var process = new Process { StartInfo = psi };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) stdoutBuilder.AppendLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) stderrBuilder.AppendLine(e.Data);
+        };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            throw new TimeoutException(
+                $"Claude Code 會議 session subprocess 超過 {MeetingTimeout.TotalMinutes} 分鐘逾時");
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            throw;
+        }
+
+        var stdout  = stdoutBuilder.ToString();
+        var stderr  = stderrBuilder.ToString();
+        var exitCode = process.ExitCode;
+        var (success, output) = ParseJsonOutput(stdout, exitCode);
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            if (!success || exitCode != 0)
+                logger.LogError("Claude Code 會議 session stderr（sessionId={Id}，exitCode={Code}）：{Stderr}",
+                    sessionId, exitCode, stderr);
+            else
+                logger.LogDebug("Claude Code 會議 session stderr：{Stderr}", stderr);
+        }
+
+        if (!success || exitCode != 0)
+        {
+            var rawTail = stdout.Length > 3000 ? "…" + stdout[^3000..] : stdout;
+            logger.LogError(
+                "Claude Code 會議 session 失敗（sessionId={Id}，exitCode={Code}）：\n{Raw}",
+                sessionId, exitCode, rawTail);
+        }
+
+        logger.LogInformation(
+            "Claude Code 會議 session 結束（sessionId={Id}，exitCode={Code}，success={Success}）",
+            sessionId, exitCode, success);
+
+        return new ClaudeCodeResult(success, output, exitCode, stdout);
+    }
+
+    /// <summary>
+    /// Stage 25a：組合會議 session 的 CLI 參數。
+    /// 第一輪：--session-id {uuid}；後續輪：--resume {uuid}。
+    /// 不帶 --no-session-persistence。
+    /// </summary>
+    private static string BuildMeetingArgs(
+        string prompt, string model, string sessionId, bool isFirstMessage, int maxTurns, string[]? allowedTools)
+    {
+        var escapedPrompt = prompt.Replace("\"", "\\\"");
+        // 第一輪建立 session；後續輪 resume（UUID 直接傳給 --resume）
+        var sessionArg = isFirstMessage
+            ? $"--session-id {sessionId} "
+            : $"--resume {sessionId} ";
+        var toolsArg = allowedTools?.Length > 0
+            ? $"--allowedTools \"{string.Join(",", allowedTools)}\" "
+            : "";
+
+        return $"-p \"{escapedPrompt}\" " +
+               $"--dangerously-skip-permissions " +
+               $"{toolsArg}" +
+               $"--output-format json " +
+               $"--max-turns {maxTurns} " +
+               $"{sessionArg}" +
+               $"--model {model}";
+        // 注意：不帶 --no-session-persistence，session 資料保留於本機
     }
 
     private static string BuildArgs(string prompt, string model, string[]? allowedTools, int maxTurns)

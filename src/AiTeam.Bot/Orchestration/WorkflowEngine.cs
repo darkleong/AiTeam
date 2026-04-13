@@ -79,11 +79,13 @@ public class WorkflowEngine
 {
     private const int MaxFixIterations = 3;
 
-    // ---- 新功能流程表（Stage 16：加入 Dev_plan 步驟）----
+    // ---- 新功能流程表（Stage 16：加入 Dev_plan 步驟；Stage 25a：加入 Kickoff 步驟）----
     private static readonly Dictionary<string, WorkflowStep[]> NewFeatureTable = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Stage 16：proposal_approved 後先產出計畫書，Petra 審核通過後才 coding
-        ["proposal_approved"] = [new WorkflowStep("Dev_plan")],
+        // Stage 25a：proposal_approved 後先進行 Kick-off 會議（NewFeature 必要，由 MeetingService 協調）
+        ["proposal_approved"] = [new WorkflowStep(AiTeam.Shared.Constants.AgentNames.Kickoff)],
+        // Kickoff 完成後（Christ 確認後）才進入 Dev_plan（由 TaskGroupService 處理 Christ 確認邏輯）
+        [AiTeam.Shared.Constants.AgentNames.Kickoff] = [new WorkflowStep("Dev_plan")],
         ["Dev_plan"]          = [new WorkflowStep("Dev")],     // Petra 審核在 TaskGroupService 攔截（HandleAgentCompletedAsync）
         // Stage 13：Dev 後只觸發 Reviewer（Vera ✅ 後 Petra 攔截再觸發 QA）
         ["Dev"]               = [new WorkflowStep("Reviewer")],

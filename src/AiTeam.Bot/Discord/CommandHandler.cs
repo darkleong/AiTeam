@@ -36,6 +36,12 @@ public class CommandHandler(
     // Stage 10：等待「✏️ 需調整」的修改說明輸入（userId → PendingConfirmation）
     private readonly Dictionary<ulong, PendingConfirmation> _pendingAdjustments = [];
 
+    // Stage 25a：Kick-off 確認等待（messageId → groupId，供 kickoff_ 按鈕識別）
+    private readonly Dictionary<ulong, Guid> _pendingKickoffConfirmations = [];
+
+    // Stage 25a：等待 Christ 輸入修改意見（userId → groupId）
+    private readonly Dictionary<ulong, Guid> _pendingKickoffModify = [];
+
     // Stage 12：已處理訊息 ID 去重快取，防止 Discord gateway 阻塞時重複派送（messageId → 處理時間）
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
     private const int ProcessedMessageTtlSeconds = 60;
@@ -124,6 +130,17 @@ public class CommandHandler(
             EscalateStage: "devplan");
     }
 
+    /// <summary>
+    /// Stage 25a：供 TaskGroupService 呼叫，登記 Kick-off 確認訊息的 groupId。
+    /// 後續按鈕回調會以 messageId 查詢 groupId，再呼叫 HandleKickoffConfirmedAsync。
+    /// </summary>
+    public void RegisterKickoffConfirmation(ulong messageId, Guid groupId, string taskPlanSummary)
+    {
+        _pendingKickoffConfirmations[messageId] = groupId;
+        logger.LogInformation("CommandHandler：Kick-off 確認已登記（messageId={MsgId}，groupId={GroupId}）",
+            messageId, groupId);
+    }
+
     #region 自然語言訊息路由（Stage 7）
 
     /// <summary>
@@ -188,6 +205,32 @@ public class CommandHandler(
         {
             _pendingCancelSelections.Remove(msg.Author.Id);
             await HandleCancelSelectionAsync(msg, cancelGroups);
+            return;
+        }
+
+        // Stage 25a：若使用者剛按了「✏️ 修改計劃書」按鈕，將本訊息視為 Kick-off 修改意見
+        if (_pendingKickoffModify.TryGetValue(msg.Author.Id, out var kickoffGroupId))
+        {
+            _pendingKickoffModify.Remove(msg.Author.Id);
+            var modifyText = msg.CleanContent;
+            logger.LogInformation("收到 Kick-off 修改意見（UserId={UserId}，GroupId={GroupId}）", msg.Author.Id, kickoffGroupId);
+
+            await msg.Channel.SendMessageAsync(
+                "✏️ 收到修改意見，Petra 正在評估影響並調整計劃書，請稍候...");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await taskGroupService.HandleKickoffConfirmedAsync(
+                        kickoffGroupId, "modify", modifyText, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Kick-off 修改計劃書失敗（GroupId={Id}）", kickoffGroupId);
+                    await msg.Channel.SendMessageAsync("❌ 修改計劃書時發生錯誤，請查看 log。");
+                }
+            }, CancellationToken.None);
             return;
         }
 
@@ -850,8 +893,70 @@ public class CommandHandler(
 
     #region 雙層確認機制
 
+    // ────────────── Stage 25a：Kickoff 確認按鈕處理 ──────────────
+
+    /// <summary>
+    /// Stage 25a：處理 Kick-off 確認按鈕（kickoff_continue / kickoff_stop / kickoff_modify / kickoff_restart）。
+    /// CustomId 格式：kickoff_{action}_{groupId}。
+    /// </summary>
+    private async Task HandleKickoffButtonAsync(SocketMessageComponent interaction)
+    {
+        // 解析 CustomId：kickoff_{action}_{groupId}
+        var parts = interaction.Data.CustomId.Split('_', 3);
+        if (parts.Length < 3 || !Guid.TryParse(parts[2], out var groupId))
+        {
+            await interaction.RespondAsync("⚠️ 無法解析 Kick-off 確認按鈕資訊。", ephemeral: true);
+            return;
+        }
+
+        var action = parts[1]; // continue / stop / modify / restart
+
+        _pendingKickoffConfirmations.Remove(interaction.Message.Id);
+
+        if (action == "modify")
+        {
+            // 進入等待修改意見輸入狀態
+            _pendingKickoffModify[interaction.User.Id] = groupId;
+            await interaction.RespondAsync(
+                "✏️ 請直接輸入你的修改意見，Petra 將基於完整的會議 context 評估並調整計劃書。",
+                ephemeral: true);
+            return;
+        }
+
+        await interaction.DeferAsync();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await taskGroupService.HandleKickoffConfirmedAsync(groupId, action, ct: CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "HandleKickoffButtonAsync：{Action} 失敗（groupId={Id}）", action, groupId);
+                try { await interaction.FollowupAsync($"❌ 執行 Kickoff {action} 時發生錯誤，請查看 log。"); } catch { /* ignore */ }
+            }
+        }, CancellationToken.None);
+
+        var actionText = action switch
+        {
+            "continue" => "▶️ 繼續開發，Cody 即將開始規劃實作計畫書...",
+            "stop"     => "⏹️ 任務已停止。",
+            "restart"  => "🔄 重新召開 Kick-off 會議...",
+            _          => $"✅ 已執行 {action}。"
+        };
+        await interaction.FollowupAsync(actionText);
+    }
+
     private async Task OnButtonExecutedAsync(SocketMessageComponent interaction)
     {
+        // Stage 25a：Kickoff 確認按鈕（CustomId 以 kickoff_ 開頭，不依賴 _pendingConfirmations）
+        if (interaction.Data.CustomId.StartsWith("kickoff_", StringComparison.Ordinal))
+        {
+            await HandleKickoffButtonAsync(interaction);
+            return;
+        }
+
         if (!_pendingConfirmations.TryGetValue(interaction.Message.Id, out var pending))
         {
             await interaction.RespondAsync("此確認已過期或不存在。", ephemeral: true);
