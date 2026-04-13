@@ -3,8 +3,8 @@
 > Stage：25a
 > 對應版本：v3.9.0
 > 建立日期：2026-04-13
-> 狀態：📋 規劃完成
-> 文件版本：v1.1
+> 狀態：✅ 已完成（2026-04-14）
+> 文件版本：v2.0
 
 ---
 
@@ -462,9 +462,128 @@ Petra 在 Kick-off 會議結束後產出，作為後續所有 Agent 的參考依
 
 ---
 
+## 實作完成紀錄
+
+### 架構決策（實作階段確認）
+
+**Session ID 設計（最終實作）**
+
+| Session 對象 | ID 來源 | 原因 |
+|---|---|---|
+| Petra | `group.Id.ToString()` | 固定可推導，Christ 修改輪不需額外儲存 |
+| Rosa/Demi/Cody/Quinn | `Guid.NewGuid()` | 臨時 session，會議後廢棄 |
+
+Session ID 必須是**合法 UUID 格式**（`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`），CLI 會拒絕非 UUID 格式（例如 `meeting-test-001` 會報錯 `Invalid session ID. Must be a valid UUID`）。
+
+**CLI 用法（已驗證）**
+
+```bash
+# 第一輪（建立新 session）
+claude -p "prompt" --session-id <uuid> --output-format json --dangerously-skip-permissions
+
+# 後續輪（resume 既有 session）
+# 注意：--resume 直接帶 UUID，不可同時帶 --session-id
+claude -p "prompt" --resume <uuid> --output-format json --dangerously-skip-permissions
+```
+
+❌ 錯誤用法：`--resume --session-id <uuid>`（會報 "can only be used with --continue or --resume if --fork-session is also specified"）
+
+**AllowedTools 策略（最終實作）**
+
+| Agent | allowedTools | 說明 |
+|---|---|---|
+| Petra | `["Glob","Grep","Read"]` | 讀取驗證，不需寫入 |
+| Rosa | `["Glob","Grep","Read"]` | 需求分析只需讀 |
+| Demi | `["Glob","Grep","Read"]` | UI/UX 評估只需讀 |
+| Cody | `null`（全工具） | 技術可行性需深入探索 |
+| Quinn | `["Glob","Grep","Read"]` | 測試規劃只需讀 |
+
+**Kickoff 分支路由（TaskGroupService）**
+
+`FireOneStepAsync` 開頭偵測 `step.AgentName == "Kickoff"` → 直接 `Task.Run` 非同步執行 `RunKickoffMeetingAndWaitAsync`，不走一般 IAgentExecutor 路徑。
+
+**Christ 確認機制（Discord 按鈕）**
+
+Discord 訊息帶三個按鈕，CustomId 格式：
+```
+kickoff_continue_{groupId}
+kickoff_stop_{groupId}
+kickoff_modify_{groupId}
+```
+
+`CommandHandler.OnButtonExecutedAsync` 前端攔截 `kickoff_` 前綴，直接路由，不透過 `_pendingConfirmations`（傳統 message-ID 鍵值查找）。
+
+**修改記錄格式**（追加至 `KickoffMeetingLog`）
+
+```markdown
+## Christ 修改 Round {N} — {yyyy-MM-dd HH:mm} UTC
+
+### Christ 修改意見
+{Christ 的原始回覆}
+
+### Petra 回應（完整）
+{Petra 的完整輸出，含 impact JSON}
+```
+
+### 踩坑三件組
+
+**1. Session ID 格式錯誤**
+
+CLI 要求 `--session-id` 的值必須是合法 UUID（如 `3f4d2b1a-...`），任何非 UUID 格式（如 `meeting-abc-petra`）都會報錯。解決：Petra 用 `group.Id.ToString()`，其他 Agent 用 `Guid.NewGuid().ToString()`。
+
+**2. `--resume` 用法錯誤**
+
+規劃書寫 `--resume --session-id <uuid>`，但實際 CLI 的正確用法是 `--resume <uuid>`（UUID 直接作為 `--resume` 的值）。同時帶 `--session-id` 會報錯。`BuildMeetingArgs` 中用 `isFirstMessage` 切換：
+- `isFirstMessage = true` → `--session-id <uuid>`
+- `isFirstMessage = false` → `--resume <uuid>`
+
+**3. C# `file` record 不可出現在非 file-local 型別的方法簽名**
+
+`MeetingService.cs` 底部的 `PetraDecision` / `ModifyDecision` 用 `file record` 宣告，但這兩個型別被 `MeetingService`（非 file-local 類別）的私有方法用作回傳型別，導致 CS9051 編譯錯誤。解決：改成 `internal record`（頂層型別）。
+
+**4. TaskRepository 方法名稱**
+
+新增的 `HandleKickoffConfirmedAsync` 呼叫了不存在的 `GetGroupAsync()`，正確方法名是 `GetGroupByIdAsync()`。
+
+### 關鍵檔案清單
+
+| 角色 | 路徑 |
+|---|---|
+| 會議引擎 | `src/AiTeam.Bot/Orchestration/MeetingService.cs`（新增） |
+| Session 介面 | `src/AiTeam.Bot/Agents/IClaudeCodeService.cs` |
+| Session 實作 | `src/AiTeam.Bot/Agents/ClaudeCodeService.cs` |
+| Mock 實作 | `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs` |
+| Proxy | `src/AiTeam.Bot/Agents/ClaudeCodeProxy.cs` |
+| 流程路由 | `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` |
+| 流程表 | `src/AiTeam.Bot/Orchestration/WorkflowEngine.cs` |
+| Discord 按鈕 | `src/AiTeam.Bot/Discord/CommandHandler.cs` |
+| DB 欄位 | `src/AiTeam.Data/Entities.cs` |
+| Migration | `src/AiTeam.Data/Migrations/20260413160554_Stage25aKickoffFields.cs` |
+| Agent 名稱常數 | `src/AiTeam.Shared/Constants/AgentNames.cs` |
+
+---
+
+## 驗收清單
+
+- [ ] Claude Code CLI `-p` + `--resume <uuid>` 行為驗證通過（透過實際 Discord 流程觀察）
+- [ ] Kick-off 會議：NewFeature 流程觸發 Kick-off，BugFix/TechImprovement 跳過
+- [ ] Kick-off 會議：4 位 Agent（Rosa/Demi/Cody/Quinn）各自開啟 Claude Code session
+- [ ] Kick-off 會議：Petra 也使用 Claude Code session，可讀取 codebase 驗證意見
+- [ ] Kick-off 會議：Petra 整理意見，最多 3 輪
+- [ ] 完整會議紀錄存入 `KickoffMeetingLog`
+- [ ] 任務計劃書：Petra 產出存入 `TaskPlan`
+- [ ] Christ 確認：Victoria 上呈計劃書，Discord 按鈕出現
+- [ ] Christ 確認：繼續 → 觸發 Dev_plan
+- [ ] Christ 確認：停止 → 任務取消
+- [ ] Christ 確認：修改 → 餵入 Petra session → 調整計劃書
+- [ ] MockMode：30~60 秒內完成 + 自動 consensus → 進入 Dev_plan
+
+---
+
 ## 變更紀錄
 
 | 日期       | 版本 | 內容                |
 | ---------- | ---- | ------------------- |
 | 2026-04-13 | v1.0 | Aria 撰寫初版規劃書 |
-| 2026-04-13 | v1.1 | Christ 回饋：Petra 改用 Claude Code Session（可驗證意見 + 統一架構）；Christ 修改計劃書時餵入 Petra 既有 session（保留完整會議 context）；移除 AssessKickoffModificationAsync 獨立方法 |
+| 2026-04-13 | v1.1 | Christ 回饋：Petra 改用 Claude Code Session；Christ 修改計劃書時餵入 Petra 既有 session；移除 AssessKickoffModificationAsync 獨立方法 |
+| 2026-04-14 | v2.0 | 實作完成：補充實作架構決策、踩坑三件組（UUID 格式、--resume 用法、file record 限制）、關鍵檔案清單、驗收清單；狀態更新為已完成 |
