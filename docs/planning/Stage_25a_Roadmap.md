@@ -28,15 +28,15 @@
 
 ### Feature 八 完成狀況
 
-| 階段             | 內容                                   | 狀態                 |
-| ---------------- | -------------------------------------- | -------------------- |
-| 第一（需求計劃） | Kick-off 會議 + 任務計劃書 + Christ 確認 | ❌ → **本次實作**    |
-| 第二（設計規劃） | Rosa Issues + Demi UI + 設計會議       | ❌ → Stage 25b       |
-| 第三（開發）     | ImplementationNote、阻礙報告、Dev_plan | ✅ Stage 23 + 24     |
-| 第四（審查）     | Review Appeal + Petra 仲裁             | ✅ Stage 23          |
-| 第五（QA）       | Petra 四路由判斷                       | ✅ Stage 24          |
-| 第六（歸檔）     | Sage 轉型收尾歸檔                      | ✅ Stage 23          |
-| 第七（上線）     | Git Tag 自動化                         | ✅ Stage 23          |
+| 階段             | 內容                                     | 狀態              |
+| ---------------- | ---------------------------------------- | ----------------- |
+| 第一（需求計劃） | Kick-off 會議 + 任務計劃書 + Christ 確認 | ❌ → **本次實作** |
+| 第二（設計規劃） | Rosa Issues + Demi UI + 設計會議         | ❌ → Stage 25b    |
+| 第三（開發）     | ImplementationNote、阻礙報告、Dev_plan   | ✅ Stage 23 + 24  |
+| 第四（審查）     | Review Appeal + Petra 仲裁               | ✅ Stage 23       |
+| 第五（QA）       | Petra 四路由判斷                         | ✅ Stage 24       |
+| 第六（歸檔）     | Sage 轉型收尾歸檔                        | ✅ Stage 23       |
+| 第七（上線）     | Git Tag 自動化                           | ✅ Stage 23       |
 
 ### 為什麼需要 Kick-off 會議
 
@@ -57,13 +57,13 @@ Kick-off 會議讓所有角色在**開工前**同時看到需求，提前暴露�
 
 ### 會議使用 Claude Code Session（非 LLM API）
 
-| 考量             | LLM API                          | Claude Code Session（持續對話）         |
-| ---------------- | -------------------------------- | --------------------------------------- |
-| 能否看 code      | ❌ 只能基於 prompt 想像           | ✅ 可以讀檔、搜索，意見有 code 佐證     |
-| 多輪 context     | 手動傳入，每輪越來越大            | 自然累積，Agent 記得之前說過什麼        |
-| 多輪 token 消耗  | 遞增（每輪要重傳全部歷史）        | 可能遞減（Agent 已有 context，不需重讀） |
-| 意見品質         | 可能脫離實際 code 現狀            | 有 code 佐證，更接地氣                  |
-| 輸出格式控制     | 好（JSON）                       | 較自由（需解析文字）                    |
+| 考量            | LLM API                    | Claude Code Session（持續對話）          |
+| --------------- | -------------------------- | ---------------------------------------- |
+| 能否看 code     | ❌ 只能基於 prompt 想像    | ✅ 可以讀檔、搜索，意見有 code 佐證      |
+| 多輪 context    | 手動傳入，每輪越來越大     | 自然累積，Agent 記得之前說過什麼         |
+| 多輪 token 消耗 | 遞增（每輪要重傳全部歷史） | 可能遞減（Agent 已有 context，不需重讀） |
+| 意見品質        | 可能脫離實際 code 現狀     | 有 code 佐證，更接地氣                   |
+| 輸出格式控制    | 好（JSON）                 | 較自由（需解析文字）                     |
 
 **決定：全部 5 位會議參與者（Petra/Rosa/Demi/Cody/Quinn）使用 Claude Code 持續對話 session。** 多輪討論時不重開 session，而是持續餵入新訊息，如同 Christ 與 Aria / 實作 Session 的工作方式。
 
@@ -75,11 +75,11 @@ Kick-off 會議讓所有角色在**開工前**同時看到需求，提前暴露�
 
 ### 會議適用範圍
 
-| WorkflowType    | 是否需要 Kick-off | 原因                                      |
-| --------------- | ----------------- | ----------------------------------------- |
-| NewFeature      | ✅ 必要            | 新功能最容易出現認知落差                  |
-| TechImprovement | ❌ 跳過            | 技術改善通常範圍明確，直接進入 Dev_plan   |
-| BugFix          | ❌ 跳過            | Bug 修正範圍最小，直接開發                |
+| WorkflowType    | 是否需要 Kick-off | 原因                                    |
+| --------------- | ----------------- | --------------------------------------- |
+| NewFeature      | ✅ 必要           | 新功能最容易出現認知落差                |
+| TechImprovement | ❌ 跳過           | 技術改善通常範圍明確，直接進入 Dev_plan |
+| BugFix          | ❌ 跳過           | Bug 修正範圍最小，直接開發              |
 
 > Stage 25a 先以 WorkflowType 硬判斷。未來如需動態判斷（由 Petra 評估是否需要 Kick-off），可在後續 Stage 擴展。
 
@@ -100,6 +100,7 @@ Kick-off 會議讓所有角色在**開工前**同時看到需求，提前暴露�
 **設計**
 
 Claude Code CLI 本身支援 session persistence：
+
 - `-p "prompt"` 搭配 `--session-id <id>` 可指定 session
 - `-p "prompt" --resume` 可繼續既有 session
 - 不帶 `--no-session-persistence` 時，session 資料會保留在本地
@@ -120,6 +121,7 @@ IClaudeCodeService.RunMeetingSessionAsync(
 ```
 
 實作重點：
+
 - `isFirstMessage = true`：不帶 `--resume`，帶 `--session-id <id>`
 - `isFirstMessage = false`：帶 `--resume --session-id <id>`（繼續對話）
 - 兩者都**不帶** `--no-session-persistence`
@@ -177,15 +179,16 @@ claude -p "我剛才告訴你我的名字是什麼？" --resume --session-id mee
 
 **會議角色指引（傳入各 session 的第一輪 prompt）**
 
-| 角色  | 指引重點                                                              |
-| ----- | --------------------------------------------------------------------- |
-| Petra | PM 視角，主持會議，整理意見，判斷共識，產出計劃書                      |
-| Rosa  | 從需求分析師角度，評估需求完整性，指出模糊或矛盾之處                  |
-| Demi  | 從 UI/UX 角度，評估對現有 Dashboard 的影響，提出設計疑慮              |
-| Cody  | 從開發角度，評估技術可行性，可**讀取 codebase** 驗證假設              |
-| Quinn | 從 QA 角度，評估可測試性，指出測試困難點                              |
+| 角色  | 指引重點                                                 |
+| ----- | -------------------------------------------------------- |
+| Petra | PM 視角，主持會議，整理意見，判斷共識，產出計劃書        |
+| Rosa  | 從需求分析師角度，評估需求完整性，指出模糊或矛盾之處     |
+| Demi  | 從 UI/UX 角度，評估對現有 Dashboard 的影響，提出設計疑慮 |
+| Cody  | 從開發角度，評估技術可行性，可**讀取 codebase** 驗證假設 |
+| Quinn | 從 QA 角度，評估可測試性，指出測試困難點                 |
 
 每位 Agent 的 prompt 包含：
+
 1. 角色說明（你在 Kick-off 會議中的職責）
 2. 需求說明（Victoria 提案內容）
 3. 任務上下文（TaskGroup 基本資訊、WorkflowType）
@@ -197,9 +200,9 @@ Petra 的 session 收到所有 Agent 的意見後，系統要求 Petra 在回應
 
 ```json
 {
-  "decision": "consensus | needs_discussion | escalate",
-  "summary": "整理摘要",
-  "discussion_points": ["需要進一步討論的點"]
+    "decision": "consensus | needs_discussion | escalate",
+    "summary": "整理摘要",
+    "discussion_points": ["需要進一步討論的點"]
 }
 ```
 
@@ -215,26 +218,33 @@ Petra 在 Claude Code session 中可以自行讀取 codebase 來驗證 Agent 的
 # Kick-off 會議紀錄
 
 ## 需求說明
+
 {Victoria 提案內容}
 
 ## Round 1
 
 ### Rosa（需求分析）
+
 {Rosa 的完整回應}
 
 ### Demi（UI/UX 設計）
+
 {Demi 的完整回應}
 
 ### Cody（技術可行性）
+
 {Cody 的完整回應}
 
 ### Quinn（測試規劃）
+
 {Quinn 的完整回應}
 
 ### Petra（綜合整理）
+
 {Petra 的完整判斷 JSON}
 
 ## Round 2（如有）
+
 ...
 ```
 
@@ -315,8 +325,8 @@ Christ 回覆：
 
 ```json
 {
-  "impact": "small | large",
-  "revised_plan": "（小修改時包含調整後的計劃書）"
+    "impact": "small | large",
+    "revised_plan": "（小修改時包含調整後的計劃書）"
 }
 ```
 
@@ -326,6 +336,7 @@ Christ 回覆：
 **實作方式**
 
 復用 Victoria 現有的「等待 Christ 回覆」機制：
+
 - `TaskGroup` 設定等待狀態（類似提案確認的等待模式）
 - Christ 在 Discord 回覆後，系統解析回覆內容
 - 依回覆類型路由到對應處理（繼續/停止/餵入 Petra session）
@@ -336,10 +347,10 @@ Christ 回覆：
 
 **TaskGroup 新增欄位**
 
-| 欄位               | 型別           | 說明                                          |
-| ------------------ | -------------- | --------------------------------------------- |
-| `KickoffMeetingLog` | text nullable | 完整會議紀錄（Markdown，含各 Agent 完整回應） |
-| `TaskPlan`          | text nullable | Petra 產出的任務計劃書                        |
+| 欄位                | 型別           | 說明                                          |
+| ------------------- | -------------- | --------------------------------------------- |
+| `KickoffMeetingLog` | text nullable  | 完整會議紀錄（Markdown，含各 Agent 完整回應） |
+| `TaskPlan`          | text nullable  | Petra 產出的任務計劃書                        |
 | `KickoffRound`      | int, default 0 | 會議輪次計數                                  |
 
 > Stage 25b 將新增 DesignMeetingLog、DesignPlan 等欄位
@@ -368,24 +379,29 @@ Petra 在 Kick-off 會議結束後產出，作為後續所有 Agent 的參考依
 # 任務計劃書
 
 ## 任務摘要
+
 {一段話描述要做什麼}
 
 ## 關鍵決策
+
 - {Kick-off 中達成的共識}
 - {解決的疑慮}
 
 ## 各角色意見摘要
-| 角色 | 主要意見 | 結論 |
-|------|---------|------|
-| Rosa | ... | 已確認 / 待 Christ 決定 |
-| Demi | ... | ... |
-| Cody | ... | ... |
-| Quinn | ... | ... |
+
+| 角色  | 主要意見 | 結論                    |
+| ----- | -------- | ----------------------- |
+| Rosa  | ...      | 已確認 / 待 Christ 決定 |
+| Demi  | ...      | ...                     |
+| Cody  | ...      | ...                     |
+| Quinn | ...      | ...                     |
 
 ## 風險與注意事項
+
 - {Kick-off 中提出但未完全解決的項目}
 
 ## 建議實作方向
+
 {基於討論結果的技術方向建議}
 ```
 
@@ -416,11 +432,11 @@ Petra 在 Kick-off 會議結束後產出，作為後續所有 Agent 的參考依
 
 ## 不在 Stage 25a 範圍
 
-| 項目                     | 原因                                            |
-| ------------------------ | ----------------------------------------------- |
-| 設計會議（第二階段）     | Stage 25b，復用 25a 的會議引擎                  |
-| Rosa Issues 流程調整     | Stage 25b 處理（Kick-off 後 Rosa 才執行）       |
-| TechImprovement Kick-off | 先觀察 NewFeature Kick-off 效果，後續可擴展     |
+| 項目                     | 原因                                             |
+| ------------------------ | ------------------------------------------------ |
+| 設計會議（第二階段）     | Stage 25b，復用 25a 的會議引擎                   |
+| Rosa Issues 流程調整     | Stage 25b 處理（Kick-off 後 Rosa 才執行）        |
+| TechImprovement Kick-off | 先觀察 NewFeature Kick-off 效果，後續可擴展      |
 | Dashboard 會議紀錄頁面   | 會議紀錄已存 DB，Dashboard 顯示可在後續 Stage 做 |
 
 ---
@@ -442,9 +458,9 @@ Petra 在 Kick-off 會議結束後產出，作為後續所有 Agent 的參考依
 - [ ] Christ 確認：修改多輪 → Petra session 持續累積 context，直到 Christ 滿意
 - [ ] MockMode：會議 session 使用 MockClaudeCodeService（延遲 + mock 回應）
 - [ ] MockMode：Petra 判斷走 fallback（consensus → 直接繼續）
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
-- [ ] `.csproj` 版本更新為 `3.9.0`
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
+- [x] `.csproj` 版本更新為 `3.9.0`
 
 ---
 
@@ -468,10 +484,10 @@ Petra 在 Kick-off 會議結束後產出，作為後續所有 Agent 的參考依
 
 **Session ID 設計（最終實作）**
 
-| Session 對象 | ID 來源 | 原因 |
-|---|---|---|
-| Petra | `group.Id.ToString()` | 固定可推導，Christ 修改輪不需額外儲存 |
-| Rosa/Demi/Cody/Quinn | `Guid.NewGuid()` | 臨時 session，會議後廢棄 |
+| Session 對象         | ID 來源               | 原因                                  |
+| -------------------- | --------------------- | ------------------------------------- |
+| Petra                | `group.Id.ToString()` | 固定可推導，Christ 修改輪不需額外儲存 |
+| Rosa/Demi/Cody/Quinn | `Guid.NewGuid()`      | 臨時 session，會議後廢棄              |
 
 Session ID 必須是**合法 UUID 格式**（`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`），CLI 會拒絕非 UUID 格式（例如 `meeting-test-001` 會報錯 `Invalid session ID. Must be a valid UUID`）。
 
@@ -490,13 +506,13 @@ claude -p "prompt" --resume <uuid> --output-format json --dangerously-skip-permi
 
 **AllowedTools 策略（最終實作）**
 
-| Agent | allowedTools | 說明 |
-|---|---|---|
-| Petra | `["Glob","Grep","Read"]` | 讀取驗證，不需寫入 |
-| Rosa | `["Glob","Grep","Read"]` | 需求分析只需讀 |
-| Demi | `["Glob","Grep","Read"]` | UI/UX 評估只需讀 |
-| Cody | `null`（全工具） | 技術可行性需深入探索 |
-| Quinn | `["Glob","Grep","Read"]` | 測試規劃只需讀 |
+| Agent | allowedTools             | 說明                 |
+| ----- | ------------------------ | -------------------- |
+| Petra | `["Glob","Grep","Read"]` | 讀取驗證，不需寫入   |
+| Rosa  | `["Glob","Grep","Read"]` | 需求分析只需讀       |
+| Demi  | `["Glob","Grep","Read"]` | UI/UX 評估只需讀     |
+| Cody  | `null`（全工具）         | 技術可行性需深入探索 |
+| Quinn | `["Glob","Grep","Read"]` | 測試規劃只需讀       |
 
 **Kickoff 分支路由（TaskGroupService）**
 
@@ -505,6 +521,7 @@ claude -p "prompt" --resume <uuid> --output-format json --dangerously-skip-permi
 **Christ 確認機制（Discord 按鈕）**
 
 Discord 訊息帶三個按鈕，CustomId 格式：
+
 ```
 kickoff_continue_{groupId}
 kickoff_stop_{groupId}
@@ -519,9 +536,11 @@ kickoff_modify_{groupId}
 ## Christ 修改 Round {N} — {yyyy-MM-dd HH:mm} UTC
 
 ### Christ 修改意見
+
 {Christ 的原始回覆}
 
 ### Petra 回應（完整）
+
 {Petra 的完整輸出，含 impact JSON}
 ```
 
@@ -534,6 +553,7 @@ CLI 要求 `--session-id` 的值必須是合法 UUID（如 `3f4d2b1a-...`），�
 **2. `--resume` 用法錯誤**
 
 規劃書寫 `--resume --session-id <uuid>`，但實際 CLI 的正確用法是 `--resume <uuid>`（UUID 直接作為 `--resume` 的值）。同時帶 `--session-id` 會報錯。`BuildMeetingArgs` 中用 `isFirstMessage` 切換：
+
 - `isFirstMessage = true` → `--session-id <uuid>`
 - `isFirstMessage = false` → `--resume <uuid>`
 
@@ -547,19 +567,19 @@ CLI 要求 `--session-id` 的值必須是合法 UUID（如 `3f4d2b1a-...`），�
 
 ### 關鍵檔案清單
 
-| 角色 | 路徑 |
-|---|---|
-| 會議引擎 | `src/AiTeam.Bot/Orchestration/MeetingService.cs`（新增） |
-| Session 介面 | `src/AiTeam.Bot/Agents/IClaudeCodeService.cs` |
-| Session 實作 | `src/AiTeam.Bot/Agents/ClaudeCodeService.cs` |
-| Mock 實作 | `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs` |
-| Proxy | `src/AiTeam.Bot/Agents/ClaudeCodeProxy.cs` |
-| 流程路由 | `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` |
-| 流程表 | `src/AiTeam.Bot/Orchestration/WorkflowEngine.cs` |
-| Discord 按鈕 | `src/AiTeam.Bot/Discord/CommandHandler.cs` |
-| DB 欄位 | `src/AiTeam.Data/Entities.cs` |
-| Migration | `src/AiTeam.Data/Migrations/20260413160554_Stage25aKickoffFields.cs` |
-| Agent 名稱常數 | `src/AiTeam.Shared/Constants/AgentNames.cs` |
+| 角色           | 路徑                                                                 |
+| -------------- | -------------------------------------------------------------------- |
+| 會議引擎       | `src/AiTeam.Bot/Orchestration/MeetingService.cs`（新增）             |
+| Session 介面   | `src/AiTeam.Bot/Agents/IClaudeCodeService.cs`                        |
+| Session 實作   | `src/AiTeam.Bot/Agents/ClaudeCodeService.cs`                         |
+| Mock 實作      | `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs`                     |
+| Proxy          | `src/AiTeam.Bot/Agents/ClaudeCodeProxy.cs`                           |
+| 流程路由       | `src/AiTeam.Bot/Orchestration/TaskGroupService.cs`                   |
+| 流程表         | `src/AiTeam.Bot/Orchestration/WorkflowEngine.cs`                     |
+| Discord 按鈕   | `src/AiTeam.Bot/Discord/CommandHandler.cs`                           |
+| DB 欄位        | `src/AiTeam.Data/Entities.cs`                                        |
+| Migration      | `src/AiTeam.Data/Migrations/20260413160554_Stage25aKickoffFields.cs` |
+| Agent 名稱常數 | `src/AiTeam.Shared/Constants/AgentNames.cs`                          |
 
 ---
 
@@ -582,8 +602,8 @@ CLI 要求 `--session-id` 的值必須是合法 UUID（如 `3f4d2b1a-...`），�
 
 ## 變更紀錄
 
-| 日期       | 版本 | 內容                |
-| ---------- | ---- | ------------------- |
-| 2026-04-13 | v1.0 | Aria 撰寫初版規劃書 |
+| 日期       | 版本 | 內容                                                                                                                                  |
+| ---------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-04-13 | v1.0 | Aria 撰寫初版規劃書                                                                                                                   |
 | 2026-04-13 | v1.1 | Christ 回饋：Petra 改用 Claude Code Session；Christ 修改計劃書時餵入 Petra 既有 session；移除 AssessKickoffModificationAsync 獨立方法 |
-| 2026-04-14 | v2.0 | 實作完成：補充實作架構決策、踩坑三件組（UUID 格式、--resume 用法、file record 限制）、關鍵檔案清單、驗收清單；狀態更新為已完成 |
+| 2026-04-14 | v2.0 | 實作完成：補充實作架構決策、踩坑三件組（UUID 格式、--resume 用法、file record 限制）、關鍵檔案清單、驗收清單；狀態更新為已完成        |

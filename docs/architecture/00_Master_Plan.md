@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v6.0
+> 版本：v6.1
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -37,6 +37,7 @@
 | [Stage_23_Roadmap.md](../planning/Stage_23_Roadmap.md) | Stage 23：開發流程重構 Phase 1a（Review Appeal + 流程產出強化） | v3.7.0 | ✅ 已完成（2026-04-12） |
 | [Stage_24_Roadmap.md](../planning/Stage_24_Roadmap.md) | Stage 24：開發流程重構 Phase 1b（QA 改造 + Dev_plan 審核強化 + 文件基礎設施） | v3.8.0 | ✅ 已完成（2026-04-13） |
 | [Stage_25a_Roadmap.md](../planning/Stage_25a_Roadmap.md) | Stage 25a：開發流程重構 Phase 1c（Kick-off 會議機制） | v3.9.0 | ✅ 已完成（2026-04-14） |
+| [Stage_25b_Roadmap.md](../planning/Stage_25b_Roadmap.md) | Stage 25b：開發流程重構 Phase 1d（設計規劃階段） | v3.10.0 | 📋 規劃中 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -100,6 +101,7 @@
 | v5.8 | 2026-04-13 | Stage 24 實作完成（v3.8.0）：QA 四路由（code_bug / back_to_reviewer / env_or_test_issue / escalate_boss）、Dev_plan Appeal while loop（Cody 可反駁）、TestReport 結構化存 DB、文件傳遞矩陣（Vera ← dev_plan、Quinn ← issues + dev_plan、Sage ← test_report）；踩坑四件組：QaFixRound 重置、codyJson 提前序列化、accept → return true、DevPlanAppealLog 完整 JSON |
 | v5.9 | 2026-04-13 | 新增 Stage_25a_Roadmap.md（開發流程重構 Phase 1c — Kick-off 會議機制：Claude Code 持續對話 session 基礎設施 + 多 Agent 會議引擎 + Petra 主持 Rosa/Demi/Cody/Quinn 全員討論 + Christ 確認任務計劃書） |
 | v6.0 | 2026-04-14 | Stage 25a 實作完成（v3.9.0）：MeetingService 多 Agent 會議引擎、RunMeetingSessionAsync（持續對話 session）、Kickoff 步驟插入 NewFeature 流程、Christ 確認機制（Discord 按鈕）、Petra session 保留供修改流程使用、KickoffMeetingLog/TaskPlan/KickoffRound 欄位、EF Migration、TaskPlan 傳遞給後續 Agent；踩坑三件組：UUID session-id 格式要求、--resume 直接帶 UUID（不可搭配 --session-id）、file record 不可出現在非 file-local 型別的方法簽名 |
+| v6.1 | 2026-04-14 | 新增 Stage_25b_Roadmap.md（開發流程重構 Phase 1d — 設計規劃階段：移除提案 Rosa/Demi、Rosa Issues + 條件式 Demi、設計會議 + 調整機制、條件式 Christ 確認） |
 
 ---
 
