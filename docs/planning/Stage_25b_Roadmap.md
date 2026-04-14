@@ -3,8 +3,8 @@
 > Stage：25b
 > 對應版本：v3.10.0
 > 建立日期：2026-04-14
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-14）
+> 文件版本：v2.0
 
 ---
 
@@ -53,6 +53,7 @@ Stage 25b 將 Rosa/Demi 的工作移到 **Kickoff 之後**，基於任務計劃�
 ### 流程對比
 
 **現有流程：**
+
 ```
 Victoria 收到需求 → Rosa 拆 Issues → Demi 畫 UI → 打包提案
 → Christ 確認提案
@@ -61,6 +62,7 @@ Victoria 收到需求 → Rosa 拆 Issues → Demi 畫 UI → 打包提案
 ```
 
 **Stage 25b 之後：**
+
 ```
 Victoria 收到需求 → 打包提案（僅需求描述）
 → Christ 確認提案
@@ -90,10 +92,10 @@ Petra 在設計階段開始時判斷「這個功能是否需要 UI/UX 設計」�
 
 Christ 確認：`escalate` 的才需要 Christ，`consensus` 直接進 Dev_plan。
 
-| 會議結果 | 路由 |
-|---------|------|
-| consensus | Petra 產出設計規劃書 → 直接進入 Dev_plan |
-| escalate | Christ 確認（Discord 按鈕，與 Kickoff 相同機制） |
+| 會議結果  | 路由                                             |
+| --------- | ------------------------------------------------ |
+| consensus | Petra 產出設計規劃書 → 直接進入 Dev_plan         |
+| escalate  | Christ 確認（Discord 按鈕，與 Kickoff 相同機制） |
 
 ### Session 復用策略
 
@@ -113,11 +115,11 @@ session 關閉
 
 ### 設計會議適用範圍
 
-| WorkflowType    | 是否需要設計階段 | 原因                                    |
-| --------------- | ---------------- | --------------------------------------- |
-| NewFeature      | ✅ 必要          | 新功能需要 Issues 拆分和設計審查        |
-| TechImprovement | ❌ 跳過          | 技術改善範圍明確，直接進入 Dev_plan     |
-| BugFix          | ❌ 跳過          | Bug 修正範圍最小，直接開發              |
+| WorkflowType    | 是否需要設計階段 | 原因                                |
+| --------------- | ---------------- | ----------------------------------- |
+| NewFeature      | ✅ 必要          | 新功能需要 Issues 拆分和設計審查    |
+| TechImprovement | ❌ 跳過          | 技術改善範圍明確，直接進入 Dev_plan |
+| BugFix          | ❌ 跳過          | Bug 修正範圍最小，直接開發          |
 
 ---
 
@@ -132,19 +134,19 @@ session 關閉
 **影響範圍**
 
 1. **`CommandHandler.ShowProposalAsync()`**（主要修改點）
-   - 移除 Rosa 分析迴圈（`AnalyzeOnlyAsync` + Petra `ReviewRosaAsync` + 修改迴圈，約 150 行）
-   - 移除 Demi 設計迴圈（`GenerateDraftAsync` + Petra `ReviewDemiAsync` + 修改迴圈，約 150 行）
-   - 保留：Victoria 提案建立 + Christ 確認流程
+    - 移除 Rosa 分析迴圈（`AnalyzeOnlyAsync` + Petra `ReviewRosaAsync` + 修改迴圈，約 150 行）
+    - 移除 Demi 設計迴圈（`GenerateDraftAsync` + Petra `ReviewDemiAsync` + 修改迴圈，約 150 行）
+    - 保留：Victoria 提案建立 + Christ 確認流程
 
 2. **`CommandHandler.ExecuteProposalApprovedAsync()`**
-   - 移除 `reqService.CreateIssuesFromPreviewAsync()`（Issues 改在設計階段創建）
-   - TaskGroup 創建時不再傳入 `uiSpecContent` 和 `issueUrlsJson`（設計階段再填入）
+    - 移除 `reqService.CreateIssuesFromPreviewAsync()`（Issues 改在設計階段創建）
+    - TaskGroup 創建時不再傳入 `uiSpecContent` 和 `issueUrlsJson`（設計階段再填入）
 
 3. **`CommandHandler.BuildProposalEmbed()`**
-   - 簡化提案 Embed（移除 Issues 預覽和 UI 規格摘要）
+    - 簡化提案 Embed（移除 Issues 預覽和 UI 規格摘要）
 
 4. **`TaskGroupService.FireMockProposalAndContinueAsync()`**
-   - 移除 Rosa/Demi/Petra-review 的 mock tasks
+    - 移除 Rosa/Demi/Petra-review 的 mock tasks
 
 **不移除的東西**
 
@@ -188,21 +190,21 @@ Rosa session（新建）：
 
 **AllowedTools 策略**
 
-| Agent | 階段 | allowedTools |
-|-------|------|-------------|
-| Petra | 判斷 | `["Glob","Grep","Read"]`（唯讀） |
-| Rosa | Issues 創建 | `["Glob","Grep","Read"]`（唯讀，輸出交由系統創建 Issues） |
-| Demi | UI 規格 | `["Glob","Grep","Read"]`（唯讀） |
+| Agent | 階段        | allowedTools                                              |
+| ----- | ----------- | --------------------------------------------------------- |
+| Petra | 判斷        | `["Glob","Grep","Read"]`（唯讀）                          |
+| Rosa  | Issues 創建 | `["Glob","Grep","Read"]`（唯讀，輸出交由系統創建 Issues） |
+| Demi  | UI 規格     | `["Glob","Grep","Read"]`（唯讀）                          |
 
 **Session ID 設計**
 
-| Session | ID 來源 | 說明 |
-|---------|---------|------|
-| Petra | `group.Id.ToString()` | 固定，跨設計階段全程使用 |
-| Rosa | `Guid.NewGuid().ToString()` | 新建，跨前置+會議+調整使用 |
-| Demi | `Guid.NewGuid().ToString()` | 新建（如需要），跨前置+會議+調整使用 |
-| Cody | `Guid.NewGuid().ToString()` | 新建，僅會議使用 |
-| Quinn | `Guid.NewGuid().ToString()` | 新建，僅會議使用 |
+| Session | ID 來源                     | 說明                                 |
+| ------- | --------------------------- | ------------------------------------ |
+| Petra   | `group.Id.ToString()`       | 固定，跨設計階段全程使用             |
+| Rosa    | `Guid.NewGuid().ToString()` | 新建，跨前置+會議+調整使用           |
+| Demi    | `Guid.NewGuid().ToString()` | 新建（如需要），跨前置+會議+調整使用 |
+| Cody    | `Guid.NewGuid().ToString()` | 新建，僅會議使用                     |
+| Quinn   | `Guid.NewGuid().ToString()` | 新建，僅會議使用                     |
 
 ---
 
@@ -237,13 +239,13 @@ Rosa session（新建）：
 
 **與 Kickoff 會議的差異**
 
-| 差異點 | Kickoff | 設計會議 |
-|--------|---------|---------|
-| 討論對象 | 需求說明（文字） | Issues + UI 規格（具體產出） |
-| Rosa/Demi session | 全新 | 復用前置作業 session |
-| Demi 參與 | 必定參加 | 條件式 |
-| 會議後 | 只有 Christ 確認 | 有調整流程 + 條件式 Christ 確認 |
-| Petra 判斷選項 | consensus / needs_discussion / escalate | + needs_adjustment |
+| 差異點            | Kickoff                                 | 設計會議                        |
+| ----------------- | --------------------------------------- | ------------------------------- |
+| 討論對象          | 需求說明（文字）                        | Issues + UI 規格（具體產出）    |
+| Rosa/Demi session | 全新                                    | 復用前置作業 session            |
+| Demi 參與         | 必定參加                                | 條件式                          |
+| 會議後            | 只有 Christ 確認                        | 有調整流程 + 條件式 Christ 確認 |
+| Petra 判斷選項    | consensus / needs_discussion / escalate | + needs_adjustment              |
 
 **Petra 判斷輸出格式**
 
@@ -268,13 +270,13 @@ Rosa session（新建）：
 
 **會議角色 prompt 重點**
 
-| 角色  | 指引重點 |
-|-------|---------|
+| 角色  | 指引重點                                                                  |
+| ----- | ------------------------------------------------------------------------- |
 | Petra | 主持設計審查，評估 Issues 拆分是否合理、UI 規格是否完整、整體設計是否可行 |
-| Rosa  | 回應其他 Agent 對 Issues 的疑問，說明需求拆分的理由 |
-| Demi  | 回應其他 Agent 對 UI 規格的疑問，說明設計決策的考量 |
-| Cody  | 評估技術可行性，指出 Issues 間的依賴關係、潛在技術風險、實作困難點 |
-| Quinn | 評估可測試性，指出哪些 Issues 難以自動化測試、測試策略建議 |
+| Rosa  | 回應其他 Agent 對 Issues 的疑問，說明需求拆分的理由                       |
+| Demi  | 回應其他 Agent 對 UI 規格的疑問，說明設計決策的考量                       |
+| Cody  | 評估技術可行性，指出 Issues 間的依賴關係、潛在技術風險、實作困難點        |
+| Quinn | 評估可測試性，指出哪些 Issues 難以自動化測試、測試策略建議                |
 
 ---
 
@@ -319,6 +321,7 @@ Petra 回應（末尾 JSON）：
 **邊界情況：會議中才發現需要 Demi**
 
 如果 Petra 初始判斷「不需要 Demi」，但設計會議中 Cody 或 Quinn 指出需要 UI 變更：
+
 - Petra 的 needs_adjustment 判斷中包含 Demi → 系統為 Demi 開新 session → Demi 補做 UI 規格
 
 ---
@@ -378,11 +381,11 @@ Christ 選擇：
 
 **TaskGroup 新增欄位**
 
-| 欄位               | 型別           | 說明                                          |
-| ------------------ | -------------- | --------------------------------------------- |
-| `DesignMeetingLog` | text nullable  | 完整設計會議紀錄（Markdown，含調整紀錄）      |
-| `DesignPlan`       | text nullable  | Petra 產出的設計規劃書                        |
-| `DesignRound`      | int, default 0 | 設計會議輪次計數（含調整重開）                |
+| 欄位               | 型別           | 說明                                     |
+| ------------------ | -------------- | ---------------------------------------- |
+| `DesignMeetingLog` | text nullable  | 完整設計會議紀錄（Markdown，含調整紀錄） |
+| `DesignPlan`       | text nullable  | Petra 產出的設計規劃書                   |
+| `DesignRound`      | int, default 0 | 設計會議輪次計數（含調整重開）           |
 
 > 現有欄位 `IssueUrls` 和 `UiSpecContent` 將改為在設計階段填入（原在提案階段填入）。
 
@@ -425,32 +428,39 @@ Petra 在設計會議結束後（consensus 或 Christ 確認後）產出：
 # 設計規劃書
 
 ## 需求摘要
+
 {來自 TaskPlan}
 
 ## GitHub Issues 清單
-| # | Issue | 標題 | 負責 | 說明 |
-|---|-------|------|------|------|
-| 1 | #XX   | ...  | Cody | ...  |
+
+| #   | Issue | 標題 | 負責 | 說明 |
+| --- | ----- | ---- | ---- | ---- |
+| 1   | #XX   | ...  | Cody | ...  |
 
 ## UI/UX 規格摘要（如適用）
+
 {Demi 的 UI 規格重點}
 
 ## 設計決策
+
 - {設計會議中達成的共識}
 - {解決的技術疑慮}
 
 ## 各角色意見摘要
+
 | 角色  | 主要意見 | 結論 |
-|-------|---------|------|
-| Rosa  | ...     | ...  |
-| Demi  | ...     | ...  |
-| Cody  | ...     | ...  |
-| Quinn | ...     | ...  |
+| ----- | -------- | ---- |
+| Rosa  | ...      | ...  |
+| Demi  | ...      | ...  |
+| Cody  | ...      | ...  |
+| Quinn | ...      | ...  |
 
 ## 風險與注意事項
+
 - {設計會議中提出但未完全解決的項目}
 
 ## 開發建議
+
 {基於設計審查的技術方向建議}
 ```
 
@@ -460,13 +470,13 @@ Petra 在設計會議結束後（consensus 或 Christ 確認後）產出：
 
 Stage 25b 完成後，後續 Agent 收到的文件：
 
-| Agent     | 收到的文件                                                |
-| --------- | --------------------------------------------------------- |
-| Dev_plan  | TaskPlan + DesignPlan + Issues + UiSpec（如有）           |
-| Dev       | TaskPlan + DesignPlan + Issues + UiSpec + Dev_plan        |
-| Reviewer  | TaskPlan + Issues + UiSpec + ImplementationNote           |
-| QA        | TaskPlan + Issues + UiSpec + Dev_plan + ImplementationNote |
-| Doc       | TaskPlan + TestReport                                     |
+| Agent    | 收到的文件                                                 |
+| -------- | ---------------------------------------------------------- |
+| Dev_plan | TaskPlan + DesignPlan + Issues + UiSpec（如有）            |
+| Dev      | TaskPlan + DesignPlan + Issues + UiSpec + Dev_plan         |
+| Reviewer | TaskPlan + Issues + UiSpec + ImplementationNote            |
+| QA       | TaskPlan + Issues + UiSpec + Dev_plan + ImplementationNote |
+| Doc      | TaskPlan + TestReport                                      |
 
 > BuildTaskDescription 需對應更新，加入 DesignPlan。
 
@@ -480,47 +490,60 @@ Stage 25b 完成後，後續 Agent 收到的文件：
 ## 前置作業
 
 ### Rosa — GitHub Issues
+
 {Rosa 的完整 Issues 產出}
 
 ### Demi — UI/UX 規格（如適用）
+
 {Demi 的完整 UI 規格}
 
 ### Petra — 設計需求判斷
+
 需要 Demi：是/否
 判斷依據：{reason}
 
 ## Round 1
 
 ### Rosa（需求分析）
+
 {Rosa 的完整回應}
 
 ### Demi（UI/UX 設計）（如適用）
+
 {Demi 的完整回應}
 
 ### Cody（技術可行性）
+
 {Cody 的完整回應}
 
 ### Quinn（測試規劃）
+
 {Quinn 的完整回應}
 
 ### Petra（綜合整理）
+
 {Petra 的完整判斷 JSON}
 
 ## 調整紀錄（如有）
 
 ### Petra 修改指示
+
 {修改指示內容}
 
 ### Rosa 調整結果
+
 {調整後的 Issues}
 
 ### Demi 調整結果（如適用）
+
 {調整後的 UI 規格}
 
 ### Petra 評估
+
 {approved / needs_meeting JSON}
 
 ## Round 2（如有）
+
 ...
 ```
 
@@ -553,12 +576,12 @@ Stage 25b 完成後，後續 Agent 收到的文件：
 
 ## 不在 Stage 25b 範圍
 
-| 項目                       | 原因                                               |
-| -------------------------- | -------------------------------------------------- |
-| Dashboard 設計會議紀錄頁面 | 會議紀錄已存 DB，Dashboard 顯示可在後續 Stage 做   |
-| TechImprovement 設計階段   | 先觀察 NewFeature 效果，後續可擴展                 |
-| 設計會議後自動 merge Issues | Rosa 的 Issues 已由系統創建，不需要額外 merge 步驟 |
-| Phase 2（循環偵測 + 新鮮視角）| Feature 八 Phase 2，待 Phase 1 跑穩後再加         |
+| 項目                           | 原因                                               |
+| ------------------------------ | -------------------------------------------------- |
+| Dashboard 設計會議紀錄頁面     | 會議紀錄已存 DB，Dashboard 顯示可在後續 Stage 做   |
+| TechImprovement 設計階段       | 先觀察 NewFeature 效果，後續可擴展                 |
+| 設計會議後自動 merge Issues    | Rosa 的 Issues 已由系統創建，不需要額外 merge 步驟 |
+| Phase 2（循環偵測 + 新鮮視角） | Feature 八 Phase 2，待 Phase 1 跑穩後再加          |
 
 ---
 
@@ -584,9 +607,13 @@ Stage 25b 完成後，後續 Agent 收到的文件：
 - [ ] MockMode：前置作業 + 會議 session 使用 MockClaudeCodeService
 - [ ] MockMode：Petra 判斷走 consensus fallback → 直接進 Dev_plan
 - [ ] BugFix / TechImprovement 跳過 Design 步驟
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
-- [ ] `.csproj` 版本更新為 `3.10.0`
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
+- [x] `.csproj` 版本更新為 `3.10.0`
+- [x] EF Migration `Stage25bDesignFields` 建立完成
+- [x] Commit `803ba5a` 推送至 main（2026-04-14）
+
+> **驗收待辦**：待自動部署後，在 Discord 用 `/mock proposal + approve` 驗收端到端流程（Kickoff → Design → Dev_plan）。
 
 ---
 
@@ -606,8 +633,69 @@ Stage 25b 完成後，後續 Agent 收到的文件：
 
 ---
 
+## 實作紀錄
+
+### 實作完成（2026-04-14，commit 803ba5a）
+
+**整體架構決策**
+
+1. **Petra Design session ID**：規劃書原定用 `group.Id.ToString()`，但這與 Kickoff Petra 衝突（恢復舊 session）且格式可能不是合法 UUID。實作改為 `Guid.NewGuid().ToString()`，跨方法靠 `_pendingDesignConfirmations` 傳遞（不存 DB）。
+
+2. **ModifyDesignPlanAsync 接收外部 sessionId**：避免在方法內部構造 session ID（會產生全新 session 無法恢復設計階段 context），改為由 `HandleDesignConfirmedAsync` 從 `_pendingDesignConfirmations` 取出後作為參數傳入。
+
+3. **MockMode Rosa Issue 解析失敗**：`TryParseDesignIssues` 回傳 null 時不中斷流程，跳過 GitHub Issue 創建，繼續進入設計會議（`issuesJson` 以空字串繼續）。
+
+4. **Demi 動態加入**：`demiSessionId` 初始為 null，調整流程發現 `adjustment_targets` 包含 "demi" 但 `demiSessionId is null` 時，補建新 session（`isFirstMessage: true`）。
+
+5. **MockMode Petra consensus fallback**：`TryParseDesignPetraDecision` 回傳 null → 視同 consensus（break），同 Kickoff 模式。
+
+**新增/修改的主要方法**
+
+| 方法 | 所在檔案 | 說明 |
+|------|---------|------|
+| `RunDesignMeetingAsync` | MeetingService.cs | 設計會議主流程（前置+會議輪次+調整） |
+| `RunDesignAdjustmentAsync` | MeetingService.cs | 調整流程（Rosa/Demi 修改 + Petra 評估） |
+| `ModifyDesignPlanAsync` | MeetingService.cs | Christ 修改指引後 Petra 調整（接收外部 sessionId） |
+| `GenerateDesignPlanAsync` | MeetingService.cs | Petra 產出設計規劃書 |
+| `RunDesignPhaseAsync` | TaskGroupService.cs | 背景執行設計階段，consensus/escalate 路由 |
+| `HandleDesignConfirmedAsync` | TaskGroupService.cs | Christ 按鈕確認路由（continue/stop/modify） |
+| `HandleDesignButtonAsync` | CommandHandler.cs | Discord 按鈕解析（design_continue/stop/modify） |
+| `RegisterDesignConfirmation` | CommandHandler.cs | 登記 Design 確認 messageId |
+| `UpdateIssueAsync` | GitHubService.cs | 更新 GitHub Issue body（調整流程使用） |
+
+**新增的 Records / DTOs**
+
+```csharp
+public record DesignMeetingResult(bool Success, string MeetingLog, string? DesignPlan,
+    string? IssueUrls, string? UiSpecContent, int TotalRounds, string FinalDecision,
+    string PetraSessionId, string? EscalateReason);
+
+internal record DesignPetraDecision(string Decision, string Summary,
+    string[] AdjustmentTargets,
+    Dictionary<string, string> AdjustmentInstructions, string? EscalateReason);
+
+internal record DesignAdjustmentEvaluation(string Evaluation, string? DesignPlan, string? Reason);
+
+internal class DesignSessionState { ... }  // 持有 5 個 sessionId
+internal record DesignAdjustmentResult(...);
+internal class DesignIssueDto { ... }
+```
+
+**Session ID 實際實作（與規劃書差異）**
+
+| Session | 規劃書 ID 方案 | 實際實作 | 原因 |
+|---------|-------------|---------|------|
+| Petra   | `group.Id.ToString()` | `Guid.NewGuid()` | 避免與 Kickoff Petra session 衝突 |
+| Rosa    | `Guid.NewGuid()` | `Guid.NewGuid()` | 同規劃 |
+| Demi    | `Guid.NewGuid()` | `Guid.NewGuid()`（條件建立）| 同規劃 |
+| Cody    | `Guid.NewGuid()` | `Guid.NewGuid()` | 同規劃 |
+| Quinn   | `Guid.NewGuid()` | `Guid.NewGuid()` | 同規劃 |
+
+---
+
 ## 變更紀錄
 
-| 日期       | 版本 | 內容                                   |
-| ---------- | ---- | -------------------------------------- |
+| 日期       | 版本 | 內容                                             |
+| ---------- | ---- | ------------------------------------------------ |
 | 2026-04-14 | v1.0 | Aria 撰寫初版規劃書（Christ 確認三項設計決策後） |
+| 2026-04-14 | v2.0 | 實作完成，更新狀態、驗收清單、補充實作紀錄 |
