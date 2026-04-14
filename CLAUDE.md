@@ -100,11 +100,10 @@ AiTeam.sln
 | **major** | 架構層面重大改變（如 Claude Code 引入、PM 閘門等等級）| v2.x → v3.0.0 |
 
 **需要修改的地方：**
-- `src/AiTeam.Bot/AiTeam.Bot.csproj` — `<Version>` 標籤
-- `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj` — `<Version>` 標籤
-- Dashboard 頁腳會自動讀取 `<Version>` 顯示
+- `src/Directory.Build.props` — `<Version>` 標籤（Stage 26 起集中管理，改版只需改此一個檔案）
+- Dashboard 頁腳會自動讀取 assembly version 顯示
 
-> 目前版本：**v3.5.0**（Stage 21 完成）。
+> 目前版本：**v3.11.0**（Stage 26 完成）。
 
 ---
 

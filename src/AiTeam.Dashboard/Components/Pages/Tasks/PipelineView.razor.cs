@@ -1,3 +1,4 @@
+using AiTeam.Shared.Constants;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.Components;
@@ -139,7 +140,13 @@ public partial class PipelineView : IAsyncDisposable
             if (Group.FixIteration > 0)
                 return $"Petra（打回 ×{Group.FixIteration}）";
         }
-        return agent;
+        // Stage 26：Kickoff / Design 步驟顯示中文名
+        return agent switch
+        {
+            AgentNames.Kickoff => "Kick-off 會議",
+            AgentNames.Design  => "設計規劃",
+            _                  => agent
+        };
     }
 
     private static string FormatDuration(TaskItemDto task)

@@ -1550,12 +1550,38 @@ public class TaskGroupService(
 
         logger.LogInformation("TaskGroupService：Kick-off 會議開始（Group={Id}）", group.Id);
 
+        // Stage 26：建立 Kickoff TaskItem，讓 PipelineView 顯示此步驟
+        var projectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, ct);
+
+        var kickoffTask = new TaskItem
+        {
+            Title         = $"[Kickoff] {group.Title}",
+            Description   = "Kick-off 多 Agent 會議",
+            TriggeredBy   = "Orchestrator",
+            AssignedAgent = AgentNames.Kickoff,
+            Status        = "running",
+            GroupId       = group.Id,
+            ProjectId     = projectId,
+        };
+        taskRepo.Add(kickoffTask);
+        await taskRepo.SaveAsync(ct);
+
         // 推送 Kickoff 進行中狀態到 Dashboard
         await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
         {
             AgentName        = AgentNames.Pm,
             Status           = "running",
             CurrentTaskTitle = $"Kick-off 會議：{group.Title}"
+        });
+        await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+        {
+            TaskId    = kickoffTask.Id,
+            GroupId   = group.Id,
+            Title     = kickoffTask.Title,
+            AgentName = AgentNames.Kickoff,
+            Status    = "running"
         });
 
         try
@@ -1621,6 +1647,18 @@ public class TaskGroupService(
             var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
             commandHandler.RegisterKickoffConfirmation(msg.Id, freshGroup.Id, planPreview);
 
+            // Stage 26：Kickoff TaskItem 標記完成
+            taskRepo.UpdateStatus(kickoffTask, "done");
+            await taskRepo.SaveAsync(ct);
+            await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+            {
+                TaskId    = kickoffTask.Id,
+                GroupId   = group.Id,
+                Title     = kickoffTask.Title,
+                AgentName = AgentNames.Kickoff,
+                Status    = "done"
+            });
+
             await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
             {
                 AgentName        = AgentNames.Pm,
@@ -1631,6 +1669,19 @@ public class TaskGroupService(
         catch (Exception ex)
         {
             logger.LogError(ex, "TaskGroupService：Kick-off 會議失敗（Group={Id}）", group.Id);
+
+            // Stage 26：Kickoff TaskItem 標記失敗
+            taskRepo.UpdateStatus(kickoffTask, "failed");
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+            {
+                TaskId    = kickoffTask.Id,
+                GroupId   = group.Id,
+                Title     = kickoffTask.Title,
+                AgentName = AgentNames.Kickoff,
+                Status    = "failed"
+            });
+
             await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
             {
                 AgentName = AgentNames.Pm,
@@ -1800,11 +1851,37 @@ public class TaskGroupService(
 
         logger.LogInformation("TaskGroupService：設計規劃會議開始（Group={Id}）", group.Id);
 
+        // Stage 26：建立 Design TaskItem，讓 PipelineView 顯示此步驟
+        var designProjectId = string.IsNullOrWhiteSpace(group.Project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(group.Project, ct);
+
+        var designTask = new TaskItem
+        {
+            Title         = $"[Design] {group.Title}",
+            Description   = "設計規劃多 Agent 會議",
+            TriggeredBy   = "Orchestrator",
+            AssignedAgent = AgentNames.Design,
+            Status        = "running",
+            GroupId       = group.Id,
+            ProjectId     = designProjectId,
+        };
+        taskRepo.Add(designTask);
+        await taskRepo.SaveAsync(ct);
+
         await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
         {
             AgentName        = AgentNames.Pm,
             Status           = "running",
             CurrentTaskTitle = $"設計規劃會議：{group.Title}"
+        });
+        await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+        {
+            TaskId    = designTask.Id,
+            GroupId   = group.Id,
+            Title     = designTask.Title,
+            AgentName = AgentNames.Design,
+            Status    = "running"
         });
 
         try
@@ -1832,6 +1909,18 @@ public class TaskGroupService(
             await taskRepo2.SaveAsync(ct);
 
             logger.LogInformation("TaskGroupService：設計規劃會議記錄已存入 DB（Group={Id}）", group.Id);
+
+            // Stage 26：Design TaskItem 標記完成（無論 consensus 或 escalate，設計階段本身已結束）
+            taskRepo.UpdateStatus(designTask, "done");
+            await taskRepo.SaveAsync(ct);
+            await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+            {
+                TaskId    = designTask.Id,
+                GroupId   = group.Id,
+                Title     = designTask.Title,
+                AgentName = AgentNames.Design,
+                Status    = "done"
+            });
 
             if (designResult.FinalDecision == "consensus")
             {
@@ -1881,6 +1970,18 @@ public class TaskGroupService(
         catch (Exception ex)
         {
             logger.LogError(ex, "TaskGroupService：設計規劃會議失敗（Group={Id}）", group.Id);
+
+            // Stage 26：Design TaskItem 標記失敗
+            taskRepo.UpdateStatus(designTask, "failed");
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
+            {
+                TaskId    = designTask.Id,
+                GroupId   = group.Id,
+                Title     = designTask.Title,
+                AgentName = AgentNames.Design,
+                Status    = "failed"
+            });
         }
         finally
         {

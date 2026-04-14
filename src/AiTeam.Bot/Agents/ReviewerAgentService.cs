@@ -48,13 +48,17 @@ public class ReviewerAgentService(
         CancellationToken cancellationToken = default)
     {
         // Stage 17：MockMode early return — 跳過 CloneOrPull 與 GitHub API 呼叫，回傳模擬審查結果
+        // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
             logger.LogInformation("[MockMode] ReviewerAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Vera 模擬審查中...", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("running", task.Id, task.Title);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             AddLog(task, "[MOCK] Vera 模擬審查完成，0 個必修問題", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             const string mockBody = "[MOCK] 程式碼審查通過，無 Critical 問題。這是模擬模式產生的審查報告。";
             return new AgentExecutionResult(true, "[MOCK] Vera 審查完成：0 個必修", ReviewBody: mockBody);
         }

@@ -44,13 +44,17 @@ public class QaAgentService(
         CancellationToken cancellationToken = default)
     {
         // Stage 17：MockMode early return — 跳過 GitHub API 呼叫，回傳模擬 QA 結果
+        // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
             logger.LogInformation("[MockMode] QaAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Quinn 模擬 QA 執行中...", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("running", task.Title);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             AddLog(task, "[MOCK] Quinn 模擬 QA 完成，已生成測試案例，0 個失敗", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             var mockReport = new QaReport { Status = "passed", PassedTests = ["[MOCK] MockTest.cs"], Summary = "[MOCK] QA 完成，0 個失敗" };
             return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗",
                 TestReport: JsonSerializer.Serialize(mockReport, JsonOptions));

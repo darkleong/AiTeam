@@ -11,5 +11,13 @@ public class TaskGroupDto
     public int      FixIteration    { get; set; }
     public int      DevPlanRevision { get; set; }
     public string?  DevPrUrl        { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt       { get; set; }
+
+    // Stage 26：Kickoff / Design 會議紀錄與計劃書（供 PipelineView 折疊面板顯示）
+    public string?  KickoffMeetingLog { get; set; }
+    public string?  TaskPlan          { get; set; }
+    public int      KickoffRound      { get; set; }
+    public string?  DesignMeetingLog  { get; set; }
+    public string?  DesignPlan        { get; set; }
+    public int      DesignRound       { get; set; }
 }

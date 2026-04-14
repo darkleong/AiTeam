@@ -5,8 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-AiTeam.Dashboard-stage4</UserSecretsId>
-    <Version>3.10.0</Version>
-    <AssemblyVersion>3.10.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>

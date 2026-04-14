@@ -38,6 +38,38 @@ else if (_steps.Count == 0)
 }
 else
 {
+    @* Stage 26：Kickoff / Design 會議紀錄與計劃書折疊面板（預設收合，有內容才顯示） *@
+    @if (!string.IsNullOrEmpty(Group.TaskPlan) || !string.IsNullOrEmpty(Group.KickoffMeetingLog)
+         || !string.IsNullOrEmpty(Group.DesignPlan) || !string.IsNullOrEmpty(Group.DesignMeetingLog))
+    {
+        <MudExpansionPanels Class="mb-3" MultiExpansion="true">
+            @if (!string.IsNullOrEmpty(Group.TaskPlan))
+            {
+                <MudExpansionPanel Text="@($"Kick-off 任務計劃書（{Group.KickoffRound} 輪）")">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.TaskPlan</MudText>
+                </MudExpansionPanel>
+            }
+            @if (!string.IsNullOrEmpty(Group.KickoffMeetingLog))
+            {
+                <MudExpansionPanel Text="Kick-off 會議紀錄">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.KickoffMeetingLog</MudText>
+                </MudExpansionPanel>
+            }
+            @if (!string.IsNullOrEmpty(Group.DesignPlan))
+            {
+                <MudExpansionPanel Text="@($"設計規劃書（{Group.DesignRound} 輪）")">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.DesignPlan</MudText>
+                </MudExpansionPanel>
+            }
+            @if (!string.IsNullOrEmpty(Group.DesignMeetingLog))
+            {
+                <MudExpansionPanel Text="設計會議紀錄">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.DesignMeetingLog</MudText>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+    }
+
     <MudStepper @bind-ActiveIndex="_activeStepIndex"
                 NonLinear="true"
                 Vertical="true"

@@ -34,13 +34,17 @@ public class DocAgentService(
         CancellationToken cancellationToken = default)
     {
         // Stage 17：MockMode early return
+        // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
             logger.LogInformation("[MockMode] DocAgentService 跳過 GitHub 操作，回傳模擬結果");
+            AddLog(task, "[MOCK] Sage 模擬歸檔中...", "running");
+            await taskRepository.SaveAsync(cancellationToken);
+            await PushStatus("running", task.Title);
+            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             AddLog(task, "[MOCK] Sage 模擬歸檔完成", "done");
             taskRepository.UpdateStatus(task, "done");
             await taskRepository.SaveAsync(cancellationToken);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] 歸檔完成（CHANGELOG + archive）");
         }
 

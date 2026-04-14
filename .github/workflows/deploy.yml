@@ -104,9 +104,9 @@ jobs:
       - name: Tag release version
         shell: powershell
         run: |
-          # 從 AiTeam.Bot.csproj 讀取版本號
-          [xml]$csproj = Get-Content "$env:GITHUB_WORKSPACE\src\AiTeam.Bot\AiTeam.Bot.csproj"
-          $VERSION = $csproj.Project.PropertyGroup.Version
+          # 從 Directory.Build.props 讀取版本號（集中管理，Stage 26）
+          [xml]$props = Get-Content "$env:GITHUB_WORKSPACE\src\Directory.Build.props"
+          $VERSION = $props.Project.PropertyGroup.Version
           if (-not $VERSION) {
             Write-Warning "找不到 <Version> 標籤，略過建立 git tag"
             exit 0

@@ -96,14 +96,20 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
             sessionId, isFirstMessage);
         await Task.Delay(Random.Shared.Next(30000, 60000), ct);
 
-        // 從 sessionId 後綴判斷角色（格式：{groupId}-{agentName}）
-        var agentName = sessionId.Contains('-') ? sessionId.Split('-').Last() : "unknown";
+        // Stage 26：改用 prompt 內容判斷角色（各 prompt builder 均以「你是 {Name}，」開頭）
+        // 原本用 sessionId.Split('-').Last() 無法正確匹配純 UUID 格式的 session ID
+        var agentName = prompt.Contains("你是 Petra") ? "petra"
+                      : prompt.Contains("你是 Rosa")  ? "rosa"
+                      : prompt.Contains("你是 Demi")  ? "demi"
+                      : prompt.Contains("你是 Cody")  ? "cody"
+                      : prompt.Contains("你是 Quinn") ? "quinn"
+                      : "unknown";
 
-        var output = agentName.ToLower() switch
+        var output = agentName switch
         {
             "petra" =>
                 "[MOCK] Petra 整理完成，所有 Agent 意見已彙整，沒有重大分歧。\n" +
-                "{\"decision\":\"consensus\",\"summary\":\"[MOCK] Kick-off 順利完成，各角色無重大疑慮。\",\"discussion_points\":[]}",
+                "{\"decision\":\"consensus\",\"summary\":\"[MOCK] 會議順利完成，各角色無重大疑慮。\",\"discussion_points\":[]}",
             "rosa" =>
                 "[MOCK] Rosa 需求分析完成。需求描述清晰，無模糊之處。建議在實作前確認 API 設計細節。",
             "demi" =>

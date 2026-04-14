@@ -80,15 +80,21 @@ public class DashboardTaskService(AppDbContext db)
             .Take(limit)
             .Select(g => new TaskGroupDto
             {
-                Id              = g.Id,
-                Title           = g.Title,
-                Status          = g.Status,
-                WorkflowType    = g.WorkflowType,
-                Project         = g.Project,
-                FixIteration    = g.FixIteration,
-                DevPlanRevision = g.DevPlanRevision,
-                DevPrUrl        = g.DevPrUrl,
-                CreatedAt       = g.CreatedAt
+                Id                = g.Id,
+                Title             = g.Title,
+                Status            = g.Status,
+                WorkflowType      = g.WorkflowType,
+                Project           = g.Project,
+                FixIteration      = g.FixIteration,
+                DevPlanRevision   = g.DevPlanRevision,
+                DevPrUrl          = g.DevPrUrl,
+                CreatedAt         = g.CreatedAt,
+                KickoffMeetingLog = g.KickoffMeetingLog,
+                TaskPlan          = g.TaskPlan,
+                KickoffRound      = g.KickoffRound,
+                DesignMeetingLog  = g.DesignMeetingLog,
+                DesignPlan        = g.DesignPlan,
+                DesignRound       = g.DesignRound,
             })
             .ToListAsync(cancellationToken);
 
@@ -110,15 +116,21 @@ public class DashboardTaskService(AppDbContext db)
             .Take(pageSize)
             .Select(g => new TaskGroupDto
             {
-                Id              = g.Id,
-                Title           = g.Title,
-                Status          = g.Status,
-                WorkflowType    = g.WorkflowType,
-                Project         = g.Project,
-                FixIteration    = g.FixIteration,
-                DevPlanRevision = g.DevPlanRevision,
-                DevPrUrl        = g.DevPrUrl,
-                CreatedAt       = g.CreatedAt
+                Id                = g.Id,
+                Title             = g.Title,
+                Status            = g.Status,
+                WorkflowType      = g.WorkflowType,
+                Project           = g.Project,
+                FixIteration      = g.FixIteration,
+                DevPlanRevision   = g.DevPlanRevision,
+                DevPrUrl          = g.DevPrUrl,
+                CreatedAt         = g.CreatedAt,
+                KickoffMeetingLog = g.KickoffMeetingLog,
+                TaskPlan          = g.TaskPlan,
+                KickoffRound      = g.KickoffRound,
+                DesignMeetingLog  = g.DesignMeetingLog,
+                DesignPlan        = g.DesignPlan,
+                DesignRound       = g.DesignRound,
             })
             .ToListAsync(cancellationToken);
 
