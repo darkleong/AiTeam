@@ -50,9 +50,10 @@ public record WorkflowDecision(
 ///
 /// Stage 13 修正後流程（保留）：
 /// Stage 16 新流程（Dev_plan 計畫書 + Petra 審核閘門）：
+/// Stage 25b 新流程（Design 設計規劃階段）：
 ///
 /// 新功能流程：
-///   proposal_approved → Dev_plan（計畫書，Petra 審核後才 coding）
+///   proposal_approved → Kickoff → Design（設計規劃）→ Dev_plan（計畫書，Petra 審核後才 coding）
 ///   Dev_plan          → Dev（Petra 在 TaskGroupService 攔截審核）
 ///   Dev               → Reviewer
 ///   Reviewer ✅       → Petra 審核 → QA（TaskGroupService 攔截）
@@ -84,8 +85,10 @@ public class WorkflowEngine
     {
         // Stage 25a：proposal_approved 後先進行 Kick-off 會議（NewFeature 必要，由 MeetingService 協調）
         ["proposal_approved"] = [new WorkflowStep(AiTeam.Shared.Constants.AgentNames.Kickoff)],
-        // Kickoff 完成後（Christ 確認後）才進入 Dev_plan（由 TaskGroupService 處理 Christ 確認邏輯）
-        [AiTeam.Shared.Constants.AgentNames.Kickoff] = [new WorkflowStep("Dev_plan")],
+        // Kickoff 完成後（Christ 確認後）進入設計規劃階段（Stage 25b）
+        [AiTeam.Shared.Constants.AgentNames.Kickoff] = [new WorkflowStep(AiTeam.Shared.Constants.AgentNames.Design)],
+        // Stage 25b：設計會議完成後（consensus 直接進 Dev_plan，escalate 等 Christ 確認後進）
+        [AiTeam.Shared.Constants.AgentNames.Design]  = [new WorkflowStep("Dev_plan")],
         ["Dev_plan"]          = [new WorkflowStep("Dev")],     // Petra 審核在 TaskGroupService 攔截（HandleAgentCompletedAsync）
         // Stage 13：Dev 後只觸發 Reviewer（Vera ✅ 後 Petra 攔截再觸發 QA）
         ["Dev"]               = [new WorkflowStep("Reviewer")],

@@ -322,6 +322,19 @@ public class GitHubService(
     }
 
     /// <summary>
+    /// 更新已存在的 GitHub Issue（title / body）。Stage 25b 設計調整流程使用。
+    /// </summary>
+    public async Task UpdateIssueAsync(
+        string owner, string repo,
+        int issueNumber, string title, string body)
+    {
+        var client = CreateClient();
+        var update = new IssueUpdate { Title = title, Body = body };
+        await client.Issue.Update(owner, repo, issueNumber, update);
+        logger.LogInformation("Issue #{Number} 已更新（{Owner}/{Repo}）", issueNumber, owner, repo);
+    }
+
+    /// <summary>
     /// 清除本地 clone（任務完成後釋放磁碟空間）。
     /// </summary>
     public void CleanupLocalRepo(string localPath)

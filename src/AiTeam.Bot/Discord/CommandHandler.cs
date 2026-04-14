@@ -42,6 +42,12 @@ public class CommandHandler(
     // Stage 25a：等待 Christ 輸入修改意見（userId → groupId）
     private readonly Dictionary<ulong, Guid> _pendingKickoffModify = [];
 
+    // Stage 25b：Design 確認等待（messageId → (groupId, petraSessionId)）
+    private readonly Dictionary<ulong, (Guid GroupId, string PetraSessionId)> _pendingDesignConfirmations = [];
+
+    // Stage 25b：等待 Christ 輸入設計修改意見（userId → (groupId, petraSessionId)）
+    private readonly Dictionary<ulong, (Guid GroupId, string PetraSessionId)> _pendingDesignModify = [];
+
     // Stage 12：已處理訊息 ID 去重快取，防止 Discord gateway 阻塞時重複派送（messageId → 處理時間）
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
     private const int ProcessedMessageTtlSeconds = 60;
@@ -141,6 +147,16 @@ public class CommandHandler(
             messageId, groupId);
     }
 
+    /// <summary>
+    /// Stage 25b：供 TaskGroupService 呼叫，登記 Design 確認訊息的 groupId 與 Petra session ID。
+    /// </summary>
+    public void RegisterDesignConfirmation(ulong messageId, Guid groupId, string petraSessionId, string? escalateReason)
+    {
+        _pendingDesignConfirmations[messageId] = (groupId, petraSessionId);
+        logger.LogInformation("CommandHandler：Design 確認已登記（messageId={MsgId}，groupId={GroupId}）",
+            messageId, groupId);
+    }
+
     #region 自然語言訊息路由（Stage 7）
 
     /// <summary>
@@ -234,6 +250,32 @@ public class CommandHandler(
             return;
         }
 
+        // Stage 25b：若使用者剛按了「✏️ 修改設計」按鈕，將本訊息視為 Design 修改意見
+        if (_pendingDesignModify.TryGetValue(msg.Author.Id, out var designModifyInfo))
+        {
+            _pendingDesignModify.Remove(msg.Author.Id);
+            var designModifyText = msg.CleanContent;
+            logger.LogInformation("收到 Design 修改意見（UserId={UserId}，GroupId={GroupId}）", msg.Author.Id, designModifyInfo.GroupId);
+
+            await msg.Channel.SendMessageAsync(
+                "✏️ 收到設計修改指引，Petra 正在調整設計規劃書，請稍候...");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await taskGroupService.HandleDesignConfirmedAsync(
+                        designModifyInfo.GroupId, "modify", designModifyInfo.PetraSessionId, designModifyText, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Design 修改設計規劃書失敗（GroupId={Id}）", designModifyInfo.GroupId);
+                    await msg.Channel.SendMessageAsync("❌ 修改設計規劃書時發生錯誤，請查看 log。");
+                }
+            }, CancellationToken.None);
+            return;
+        }
+
         // Stage 10：若使用者剛按了 ✏️「需調整」按鈕，將本訊息視為調整指示
         if (_pendingAdjustments.TryGetValue(msg.Author.Id, out var adjustPending))
         {
@@ -242,18 +284,16 @@ public class CommandHandler(
             logger.LogInformation("收到提案調整指示（UserId={UserId}）：{Text}", msg.Author.Id, adjustmentText);
 
             await msg.Channel.SendMessageAsync(
-                $"✏️ 收到調整意見，CEO 正在重新協調 Demi 修改規格，請稍候...");
+                $"✏️ 收到調整意見，CEO 正在重新產出提案書，請稍候...");
 
-            // 重新進入提案流程（帶入原有資訊 + 調整意見 + 第一版產出）
+            // 重新進入提案流程（帶入原有資訊 + 調整意見）
             var augmentedDescription = $"{adjustPending.Description}\n\n【老闆調整意見】{adjustmentText}";
             await ShowProposalAsync(
                 async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
                 adjustPending.CeoResponse,
                 adjustPending.Project,
                 augmentedDescription,
-                images: adjustPending.Images,
-                previousIssues: adjustPending.PreviewIssues,
-                previousUiSpec: adjustPending.UiSpecMarkdown);
+                images: adjustPending.Images);
             return;
         }
 
@@ -642,12 +682,8 @@ public class CommandHandler(
     }
 
     /// <summary>
-    /// Stage 17：/mock workflow:new_feature_with_proposal 的提案流程模擬。
-    /// 與真實 ShowProposalAsync 行為一致：
-    ///   1. Dashboard 顯示 Rosa / Petra / Demi / Petra 四個完成任務
-    ///   2. #victoria-ceo 發出與真實流程相同的提案 Embed + 確認按鈕
-    ///   3. 附上 [MOCK] UI 規格附件
-    ///   4. 倒數 30~60 秒後自動確認，繼續 Dev_plan → Dev → … 流程
+    /// Stage 25b：/mock workflow:new_feature_with_proposal 的提案流程模擬（簡化版）。
+    /// 提案階段已移除 Rosa/Demi，直接建立提案 Embed 並自動確認後觸發 Kickoff 會議。
     /// </summary>
     private async Task HandleMockProposalFlowAsync(
         SocketSlashCommand command,
@@ -662,28 +698,8 @@ public class CommandHandler(
             return;
         }
 
-        // ── 1. Mock 提案資料（Rosa Issues + Demi UI 規格）──
-        var mockIssues = new List<RequirementIssuePreview>
-        {
-            new("[MOCK] 模擬新功能需求 A（主要流程）",
-                "## 背景\n此為 Mock Mode 模擬需求，代表主要功能流程。\n\n## 驗收條件\n- [ ] [MOCK] 點擊按鈕後顯示結果\n- [ ] [MOCK] 輸入無效值時顯示錯誤\n- [ ] [MOCK] API 回傳 200 且包含預期欄位",
-                ["feature", "P1"]),
-            new("[MOCK] 模擬新功能需求 B（邊界處理）",
-                "## 背景\n此為 Mock Mode 模擬需求，代表邊界情境處理。\n\n## 驗收條件\n- [ ] [MOCK] 空白輸入有適當提示\n- [ ] [MOCK] 超過上限時截斷並顯示警告\n- [ ] [MOCK] 重試三次後停止並通知使用者",
-                ["feature", "P2"]),
-        };
-        var mockUiSpec =
-            "# [MOCK] UI 規格文件\n\n" +
-            "## 頁面結構\n此為 Mock Mode 模擬 UI 規格，供 Mock Mode 測試流程使用。\n\n" +
-            "## 元件清單\n- `MudCard`：主要資訊卡片\n- `MudButton`：操作按鈕\n- `MudDataGrid`：列表顯示\n- `MudTextField`：輸入欄位\n\n" +
-            "## 互動說明\n使用者點擊按鈕後，MudDataGrid 動態更新顯示結果。";
-        var mockIssueUrls = "[\"https://github.com/mock/repo/issues/1\",\"https://github.com/mock/repo/issues/2\"]";
-
-        // ── 2. 先建立 TaskGroup，讓提案步驟能掛上 GroupId，Pipeline View 才能顯示──
-        var group = await taskGroupService.CreateGroupAsync(
-            title, project, workflowType,
-            issueUrlsJson: mockIssueUrls,
-            uiSpecContent: mockUiSpec);
+        // ── 1. 建立 TaskGroup（無 issueUrls/uiSpec，設計階段再填入）──
+        var group = await taskGroupService.CreateGroupAsync(title, project, workflowType);
 
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo     = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -693,7 +709,7 @@ public class CommandHandler(
             ? (Guid?)null
             : await taskRepo.GetProjectIdByNameAsync(project);
 
-        // ── 3. 建立 CEO 主任務（pending，掛 GroupId）──
+        // ── 2. 建立 CEO 主任務（pending，掛 GroupId）──
         var ceoTask = new TaskItem
         {
             Title         = title,
@@ -717,73 +733,23 @@ public class CommandHandler(
             Status    = "pending"
         });
 
-        await ceoChannel.SendMessageAsync("🔍 **[MOCK]** CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...");
-
-        // ── 4. 建立提案流程四個 mock 任務（直接 done，掛 GroupId，Pipeline View 才能顯示）──
-        (string ItemTitle, string Agent, string LogMsg)[] proposalSteps =
-        [
-            ($"[Rosa] {title}",                    AgentNames.Requirements, "[MOCK] Rosa 需求分析完成，產出 2 個 Issue"),
-            ($"[Petra→Rosa] {title}（第 1 輪）",   AgentNames.Pm,           "[MOCK] Petra 審核 Rosa：approve"),
-            ($"[Demi] {title}",                    AgentNames.Designer,     "[MOCK] Demi UI 規格文件產出完成"),
-            ($"[Petra→Demi] {title}（第 1 輪）",   AgentNames.Pm,           "[MOCK] Petra 審核 Demi：approve"),
-        ];
-
-        foreach (var (itemTitle, agent, logMsg) in proposalSteps)
-        {
-            var proposalTask = new TaskItem
-            {
-                Title         = itemTitle,
-                Description   = "[MOCK] 模擬提案步驟",
-                TriggeredBy   = "Proposal",
-                AssignedAgent = agent,
-                Status        = "done",
-                GroupId       = group.Id,
-                ProjectId     = projectId,
-                CompletedAt   = DateTime.UtcNow,  // 直接 done，需手動設定完成時間
-            };
-            taskRepo.Add(proposalTask);
-            await taskRepo.SaveAsync();
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId    = proposalTask.Id,
-                Agent     = agent,
-                Step      = logMsg,
-                Status    = "done",
-                CreatedAt = DateTime.UtcNow
-            });
-            await taskRepo.SaveAsync();
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = proposalTask.Id,
-                GroupId   = group.Id,
-                Title     = proposalTask.Title,
-                AgentName = agent,
-                Status    = "done"
-            });
-        }
-
-        // ── 5. 傳送與真實流程完全相同的提案 Embed + 按鈕 ──
-        var proposalEmbed = BuildProposalEmbed(title, mockIssues, mockUiSpec);
+        // ── 3. 傳送與真實流程相同的提案 Embed + 確認按鈕 ──
+        var proposalEmbed = BuildProposalEmbed(title, "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。");
         await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: BuildProposalConfirmButtons());
 
-        // ── 6. 傳送 [MOCK] UI 規格附件（與真實流程一致）──
-        var uiSpecBytes = System.Text.Encoding.UTF8.GetBytes(mockUiSpec);
-        using var uiStream = new System.IO.MemoryStream(uiSpecBytes);
-        await ceoChannel.SendFileAsync(uiStream, "ui-spec.md", "📄 **[MOCK]** UI 規格文件（提案附件）");
-
-        // ── 7. 自動確認說明訊息 ──
+        // ── 4. 自動確認說明訊息 ──
         var autoConfirmDelaySec = Random.Shared.Next(30, 60);
         await ceoChannel.SendMessageAsync(
             $"🤖 **【Mock Mode】** 上方提案書將在 **{autoConfirmDelaySec} 秒後**自動確認，無需手動操作。\n" +
-            $"（按鈕不需點擊，自動確認後流程將繼續至 Dev_plan → Dev → Reviewer → QA → Doc）");
+            $"（確認後流程繼續至 Kickoff → Design → Dev_plan → Dev → …）");
 
-        // ── 8. 回應 /mock 指令 ──
+        // ── 5. 回應 /mock 指令 ──
         await command.FollowupAsync(
             $"📋 **[MOCK] 新功能（含提案）流程已啟動**\n" +
             $"任務：`{title}`\n" +
             $"請至 <#{ceoChannel.Id}> 觀察提案書確認流程（**{autoConfirmDelaySec} 秒後自動確認**）。");
 
-        // ── 9. 背景倒數，自動確認後繼續工作流程（TaskGroup 已建立，直接 FireStepsAsync）──
+        // ── 6. 背景倒數，自動確認後觸發 Kickoff 會議 ──
         _ = Task.Run(async () =>
         {
             try
@@ -791,7 +757,7 @@ public class CommandHandler(
                 await Task.Delay(autoConfirmDelaySec * 1000);
 
                 await ceoChannel.SendMessageAsync(
-                    "✅ **【Mock Mode】** 提案書已自動確認，開始執行開發流程...");
+                    "✅ **【Mock Mode】** 提案書已自動確認，即將召開 Kick-off 會議...");
 
                 // 更新 CEO 主任務狀態為 done
                 await using var confirmScope = serviceProvider.CreateAsyncScope();
@@ -813,8 +779,8 @@ public class CommandHandler(
                     });
                 }
 
-                // TaskGroup 已在流程開始時建立，直接從 Dev_plan 啟動正式工作流程
-                await taskGroupService.FireStepsAsync(group, [new WorkflowStep("Dev_plan")]);
+                // 觸發 Kickoff 會議（MockClaudeCodeService 會自動 consensus，流程繼續）
+                await taskGroupService.FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)]);
             }
             catch (Exception ex)
             {
@@ -948,8 +914,69 @@ public class CommandHandler(
         await interaction.FollowupAsync(actionText);
     }
 
+    // ────────────── Stage 25b：Design 確認按鈕處理 ──────────────
+
+    /// <summary>
+    /// Stage 25b：處理設計規劃確認按鈕（design_continue / design_stop / design_modify）。
+    /// CustomId 格式：design_{action}_{groupId}。
+    /// </summary>
+    private async Task HandleDesignButtonAsync(SocketMessageComponent interaction)
+    {
+        var parts = interaction.Data.CustomId.Split('_', 3);
+        if (parts.Length < 3 || !Guid.TryParse(parts[2], out var groupId))
+        {
+            await interaction.RespondAsync("⚠️ 無法解析 Design 確認按鈕資訊。", ephemeral: true);
+            return;
+        }
+
+        var action = parts[1]; // continue / stop / modify
+
+        _pendingDesignConfirmations.TryGetValue(interaction.Message.Id, out var designInfo);
+        _pendingDesignConfirmations.Remove(interaction.Message.Id);
+        var petraSessionId = designInfo.PetraSessionId ?? "";
+
+        if (action == "modify")
+        {
+            _pendingDesignModify[interaction.User.Id] = (groupId, petraSessionId);
+            await interaction.RespondAsync(
+                "✏️ 請直接輸入你的設計指引，Petra 將基於完整設計會議 context 調整設計規劃書。",
+                ephemeral: true);
+            return;
+        }
+
+        await interaction.DeferAsync();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await taskGroupService.HandleDesignConfirmedAsync(groupId, action, petraSessionId, ct: CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "HandleDesignButtonAsync：{Action} 失敗（groupId={Id}）", action, groupId);
+                try { await interaction.FollowupAsync($"❌ 執行 Design {action} 時發生錯誤，請查看 log。"); } catch { /* ignore */ }
+            }
+        }, CancellationToken.None);
+
+        var actionText = action switch
+        {
+            "continue" => "▶️ 繼續開發，Cody 即將開始規劃實作計畫書...",
+            "stop"     => "⏹️ 任務已停止。",
+            _          => $"✅ 已執行 {action}。"
+        };
+        await interaction.FollowupAsync(actionText);
+    }
+
     private async Task OnButtonExecutedAsync(SocketMessageComponent interaction)
     {
+        // Stage 25b：Design 確認按鈕（CustomId 以 design_ 開頭）
+        if (interaction.Data.CustomId.StartsWith("design_", StringComparison.Ordinal))
+        {
+            await HandleDesignButtonAsync(interaction);
+            return;
+        }
+
         // Stage 25a：Kickoff 確認按鈕（CustomId 以 kickoff_ 開頭，不依賴 _pendingConfirmations）
         if (interaction.Data.CustomId.StartsWith("kickoff_", StringComparison.Ordinal))
         {
@@ -1016,10 +1043,10 @@ public class CommandHandler(
         }
         else if (interaction.Data.CustomId == "propose_yes")
         {
-            // 提案書核准：建立 GitHub Issues（從 Rosa 分析結果）
+            // 提案書核准：建立 TaskGroup 並觸發 Kick-off 會議
             await interaction.DeferAsync();
             await interaction.FollowupAsync(
-                $"✅ 提案已核准！Rosa 開始建立 {pending.PreviewIssues?.Count ?? 0} 個 GitHub Issues...");
+                $"✅ 提案已核准！即將召開 Kick-off 會議，請稍候...");
 
             _ = Task.Run(async () =>
             {
@@ -1130,63 +1157,8 @@ public class CommandHandler(
         }
         else if (interaction.Data.CustomId == "escalate_skip")
         {
-            // Petra escalate 後老闆選擇跳過審核，沿用當前產出繼續流程
-            await interaction.DeferAsync();
-
-            if (pending.EscalateStage == "rosa")
-            {
-                await interaction.FollowupAsync("⏭️ 已跳過 Rosa 規格審核，繼續進行 Demi UI 規格設計...");
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await ShowProposalAsync(
-                            async (embed, components) =>
-                                await interaction.Channel.SendMessageAsync(embed: embed, components: components),
-                            pending.CeoResponse, pending.Project, pending.Description,
-                            images: pending.Images,
-                            previousIssues: pending.PreviewIssues,
-                            skipRosaReview: true);
-                    }
-                    catch (Exception ex) { logger.LogError(ex, "escalate_skip (rosa) 失敗"); }
-                }, CancellationToken.None);
-            }
-            else if (pending.EscalateStage == "demi")
-            {
-                await interaction.FollowupAsync("⏭️ 已跳過 Demi 審核，直接發送提案書...");
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-                        if (ceoChannel is null) return;
-
-                        var issues  = pending.PreviewIssues ?? [];
-                        var uiSpec  = pending.UiSpecMarkdown ?? "";
-                        var proposalEmbed = BuildProposalEmbed(pending.Description, issues, uiSpec);
-                        var confirmMsg    = await ceoChannel.SendMessageAsync(
-                            embed: proposalEmbed, components: BuildProposalConfirmButtons());
-
-                        _pendingConfirmations[confirmMsg.Id] = pending with
-                        {
-                            IsProposal    = true,
-                            EscalateStage = ""
-                        };
-
-                        if (!string.IsNullOrWhiteSpace(uiSpec))
-                        {
-                            var bytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
-                            using var stream = new System.IO.MemoryStream(bytes);
-                            await ceoChannel.SendFileAsync(stream, "ui-spec.md", "📄 UI 規格文件（提案附件）");
-                        }
-                    }
-                    catch (Exception ex) { logger.LogError(ex, "escalate_skip (demi) 失敗"); }
-                }, CancellationToken.None);
-            }
-            else
-            {
-                await interaction.FollowupAsync("⚠️ 無法判斷跳過的位置，請重新下指令。");
-            }
+            // Stage 25b：提案階段已移除 Rosa/Demi，此按鈕不再適用
+            await interaction.RespondAsync("⚠️ 此操作在目前版本已不適用（提案階段已簡化）。", ephemeral: true);
         }
         else if (interaction.Data.CustomId == "escalate_abort")
         {
@@ -1389,27 +1361,20 @@ public class CommandHandler(
     /// CEO 判定為新功能時，先呼叫 Rosa（需求分析），再呼叫 Demi（UI 規格），產出提案書讓老闆確認。
     /// Stage 12：串行化（Rosa 先 → Demi 後）、圖片傳遞、UI 規格改存 DB（不 commit 到 GitHub）。
     /// </summary>
+    /// <summary>
+    /// Stage 25b：Victoria 提案流程簡化（移除 Rosa/Demi 提案階段）。
+    /// 直接以需求描述建立提案書，Rosa/Demi 的工作移至 Kickoff 之後的設計階段。
+    /// </summary>
     private async Task ShowProposalAsync(
         Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
         CeoResponse ceoResponse,
         string project,
         string description,
-        IReadOnlyList<ImageAttachment>? images = null,
-        IReadOnlyList<RequirementIssuePreview>? previousIssues = null,
-        string? previousUiSpec = null,
-        bool skipRosaReview = false)  // true = 老闆 Skip Rosa escalate，直接以 previousIssues 進 Demi
+        IReadOnlyList<ImageAttachment>? images = null)
     {
-        var notifyMessage = "🔍 CEO 正在協調 Rosa 和 Demi 產出提案書，請稍候...";
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
-        await using var scope   = serviceProvider.CreateAsyncScope();
-        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var reqService          = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
-        var designerService     = scope.ServiceProvider.GetRequiredService<DesignerAgentService>();
-        var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
-        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
-
-        // 建立提案任務（狀態 pending，後續核准再執行）
         var projectId = string.IsNullOrWhiteSpace(project)
             ? (Guid?)null
             : await taskRepo.GetProjectIdByNameAsync(project);
@@ -1426,378 +1391,34 @@ public class CommandHandler(
         taskRepo.Add(task);
         await taskRepo.SaveAsync();
 
-        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-        if (ceoChannel is not null)
-            await ceoChannel.SendMessageAsync(notifyMessage);
-
-        var readonlyWorkspace = "";
         try
         {
-            var owner         = _gitHubSettings.Owner;
-            var defaultRepo   = _gitHubSettings.DefaultRepo;
-            var designerRules = await rulesService.GetRulesAsync(AgentNames.Designer);
-
-            // 統一 clone 一次唯讀 workspace，Rosa / Demi 共用，減少 clone 次數
-            readonlyWorkspace = gitHubService.CloneOrPull(owner, defaultRepo,
-                $"ro-{task.Id:N}"[..10]);
-
-            var petraChannel  = FindChannel(_settings.Channels.PmChannel);
-            var rosaChannel   = FindChannel(_settings.Channels.RequirementsChannel);
-            var demiChannel   = FindChannel(_settings.Channels.DesignerChannel);
-            var updateChannel = FindChannel(_settings.Channels.TaskUpdates);
-
-            // ── Stage 16：Rosa 迴圈（首次 + 最多 2 次 revise）──
-            List<RequirementIssuePreview> issues        = [];
-            var rosaRevCount                            = 0;
-            string? rosaRevisionContext                 = null;
-            IReadOnlyList<RequirementIssuePreview>? rosaPreviousIssues = previousIssues;
-
-            // 老闆跳過 Rosa 審核：直接用 previousIssues，不再跑 Rosa + Petra
-            if (skipRosaReview && previousIssues is { Count: > 0 })
-            {
-                issues = previousIssues.ToList();
-                if (ceoChannel is not null)
-                    await ceoChannel.SendMessageAsync(
-                        $"⏭️ 已跳過 Rosa 規格審核，沿用現有 Issues（共 {issues.Count} 條），繼續進行 Demi UI 規格設計...");
-            }
-            else for (var rosaRound = 0; rosaRound <= 2; rosaRound++)
-            {
-                // 建立 Rosa TaskItem
-                var rosaTask = new TaskItem
-                {
-                    Title         = $"[Rosa] {task.Title}",
-                    Description   = task.Description,
-                    TriggeredBy   = "Proposal",
-                    AssignedAgent = AgentNames.Requirements,
-                    Status        = "running",
-                    ProjectId     = task.ProjectId,
-                };
-                taskRepo.Add(rosaTask);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = rosaTask.Id,
-                    Title     = rosaTask.Title,
-                    AgentName = rosaTask.AssignedAgent,
-                    Status    = rosaTask.Status
-                });
-
-                var rosaRoundLabel = rosaRound == 0 ? "開始分析需求" : $"Petra 修正後重新分析（第 {rosaRound} 次）";
-                if (rosaChannel is not null)
-                    await rosaChannel.SendMessageAsync($"🔍 **Rosa** 正在分析需求（{rosaRoundLabel}）\n任務：{task.Title}");
-                if (updateChannel is not null)
-                    await updateChannel.SendMessageAsync($"🔍 **Rosa** 需求分析中（{rosaRoundLabel}）— {task.Title}");
-
-                issues = await reqService.AnalyzeOnlyAsync(
-                    task,
-                    repoLocalPath: readonlyWorkspace,
-                    images: images,
-                    previousIssues: rosaPreviousIssues,
-                    revisionContext: rosaRevisionContext);
-
-                var rosaStatus = issues.Count > 0 ? "done" : "failed";
-                taskRepo.UpdateStatus(rosaTask, rosaStatus);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = rosaTask.Id,
-                    Title     = rosaTask.Title,
-                    AgentName = rosaTask.AssignedAgent,
-                    Status    = rosaStatus
-                });
-
-                if (issues.Count == 0) break; // 分析失敗，直接離開迴圈
-
-                // 建立 Petra TaskItem（審核 Rosa）
-                var petraRosaTask = new TaskItem
-                {
-                    Title         = $"[Petra→Rosa] {task.Title}（第 {rosaRound + 1} 輪）",
-                    Description   = "審核 Rosa Issues 規格",
-                    TriggeredBy   = "Proposal",
-                    AssignedAgent = AgentNames.Pm,
-                    Status        = "running",
-                    ProjectId     = task.ProjectId,
-                };
-                taskRepo.Add(petraRosaTask);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = petraRosaTask.Id,
-                    Title     = petraRosaTask.Title,
-                    AgentName = petraRosaTask.AssignedAgent,
-                    Status    = petraRosaTask.Status
-                });
-
-                if (petraChannel is not null)
-                    await petraChannel.SendMessageAsync(
-                        $"🔍 **Petra 審核 Rosa Issues**（第 {rosaRound + 1} 輪）\n任務：{task.Title}");
-
-                var rosaReview = await pmService.ReviewRosaAsync(task, issues, readonlyWorkspace);
-
-                var petraRosaStatus = rosaReview.Decision == "revise" ? "revision" : rosaReview.Decision == "escalate" ? "failed" : "done";
-                taskRepo.UpdateStatus(petraRosaTask, petraRosaStatus);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = petraRosaTask.Id,
-                    Title     = petraRosaTask.Title,
-                    AgentName = petraRosaTask.AssignedAgent,
-                    Status    = petraRosaStatus
-                });
-
-                if (petraChannel is not null)
-                    await petraChannel.SendMessageAsync(
-                        $"📋 **Petra 審核結果**（Rosa，第 {rosaRound + 1} 輪）：**{rosaReview.Decision.ToUpper()}**\n{rosaReview.Summary}");
-
-                if (rosaReview.Decision == "approve") break;
-
-                if (rosaReview.Decision == "escalate" || rosaRevCount >= 2)
-                {
-                    taskRepo.UpdateStatus(task, "failed");
-                    await taskRepo.SaveAsync();
-                    if (ceoChannel is not null)
-                    {
-                        // 列出 Rosa 產出的 Issues 標題供老闆評估
-                        var issueListText = issues.Count > 0
-                            ? string.Join("\n", issues.Select((iss, i) => $"{i + 1}. {iss.Title}"))
-                            : "（無）";
-                        if (issueListText.Length > 1000) issueListText = issueListText[..1000] + "\n...（更多）";
-
-                        // 列出 Petra 的 blocking 問題
-                        var blockingText = rosaReview.Issues.Where(i => i.Severity == "blocking").ToList();
-                        var blockingField = blockingText.Count > 0
-                            ? string.Join("\n", blockingText.Select(i => $"• {i.Description}"))
-                            : rosaReview.Summary;
-                        if (blockingField.Length > 1000) blockingField = blockingField[..1000] + "...";
-
-                        var escalateEmbed = new EmbedBuilder()
-                            .WithTitle("⚠️ Petra 升級通知：需要您介入")
-                            .WithColor(Color.Orange)
-                            .AddField("任務", task.Title)
-                            .AddField("問題", $"Rosa Issues 規格經過 {rosaRevCount + 1} 輪審核仍未通過")
-                            .AddField("Petra 發現的問題", blockingField)
-                            .AddField($"Rosa 目前產出（共 {issues.Count} 條 Issue）", issueListText)
-                            .WithTimestamp(DateTimeOffset.UtcNow)
-                            .Build();
-                        var escalateMsg = await ceoChannel.SendMessageAsync(
-                            embed: escalateEmbed,
-                            components: BuildEscalateButtons());
-                        _pendingConfirmations[escalateMsg.Id] = new PendingConfirmation(
-                            ceoResponse, project, description,
-                            TaskId: task.Id,
-                            IsProposal: false,
-                            Images: images,
-                            PreviewIssues: issues,
-                            EscalateStage: "rosa");
-                    }
-                    return;
-                }
-
-                // revise：更新下一輪參數
-                rosaRevCount++;
-                rosaRevisionContext  = rosaReview.RevisionInstructions;
-                rosaPreviousIssues   = issues; // 讓 Rosa 對照上版修改
-            }
-
-            // ── Stage 16：Demi 迴圈（首次 + 最多 2 次 revise）──
-            var uiSpec               = "";
-            var demiRevCount         = 0;
-            string? demiRevisionContext = null;
-            string? demiPreviousUiSpec  = previousUiSpec;
-
-            for (var demiRound = 0; demiRound <= 2; demiRound++)
-            {
-                // 建立 Demi TaskItem
-                var demiTask = new TaskItem
-                {
-                    Title         = $"[Demi] {task.Title}",
-                    Description   = task.Description,
-                    TriggeredBy   = "Proposal",
-                    AssignedAgent = AgentNames.Designer,
-                    Status        = "running",
-                    ProjectId     = task.ProjectId,
-                };
-                taskRepo.Add(demiTask);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = demiTask.Id,
-                    Title     = demiTask.Title,
-                    AgentName = demiTask.AssignedAgent,
-                    Status    = demiTask.Status
-                });
-
-                var demiRoundLabel = demiRound == 0 ? "開始設計 UI 規格" : $"Petra 修正後重新設計（第 {demiRound} 次）";
-                if (demiChannel is not null)
-                    await demiChannel.SendMessageAsync($"🎨 **Demi** 正在設計 UI 規格（{demiRoundLabel}）\n任務：{task.Title}");
-                if (updateChannel is not null)
-                    await updateChannel.SendMessageAsync($"🎨 **Demi** UI 規格設計中（{demiRoundLabel}）— {task.Title}");
-
-                uiSpec = await designerService.GenerateDraftAsync(
-                    task.Title,
-                    task.Description ?? task.Title,
-                    designerRules,
-                    repoLocalPath: readonlyWorkspace,
-                    rosaIssues: issues,
-                    images: images,
-                    previousUiSpec: demiPreviousUiSpec,
-                    revisionContext: demiRevisionContext);
-
-                taskRepo.UpdateStatus(demiTask, "done");
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = demiTask.Id,
-                    Title     = demiTask.Title,
-                    AgentName = demiTask.AssignedAgent,
-                    Status    = "done"
-                });
-
-                // 建立 Petra TaskItem（審核 Demi）
-                var petraDemiTask = new TaskItem
-                {
-                    Title         = $"[Petra→Demi] {task.Title}（第 {demiRound + 1} 輪）",
-                    Description   = "審核 Demi UI 規格",
-                    TriggeredBy   = "Proposal",
-                    AssignedAgent = AgentNames.Pm,
-                    Status        = "running",
-                    ProjectId     = task.ProjectId,
-                };
-                taskRepo.Add(petraDemiTask);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = petraDemiTask.Id,
-                    Title     = petraDemiTask.Title,
-                    AgentName = petraDemiTask.AssignedAgent,
-                    Status    = petraDemiTask.Status
-                });
-
-                if (petraChannel is not null)
-                    await petraChannel.SendMessageAsync(
-                        $"🔍 **Petra 審核 Demi UI 規格**（第 {demiRound + 1} 輪）\n任務：{task.Title}");
-
-                var demiReview = await pmService.ReviewDemiAsync(task, issues, uiSpec, readonlyWorkspace);
-
-                var petraDemiStatus = demiReview.Decision == "revise" ? "revision" : demiReview.Decision == "escalate" ? "failed" : "done";
-                taskRepo.UpdateStatus(petraDemiTask, petraDemiStatus);
-                await taskRepo.SaveAsync();
-                await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-                {
-                    TaskId    = petraDemiTask.Id,
-                    Title     = petraDemiTask.Title,
-                    AgentName = petraDemiTask.AssignedAgent,
-                    Status    = petraDemiStatus
-                });
-
-                if (petraChannel is not null)
-                    await petraChannel.SendMessageAsync(
-                        $"📋 **Petra 審核結果**（Demi，第 {demiRound + 1} 輪）：**{demiReview.Decision.ToUpper()}**\n{demiReview.Summary}");
-
-                if (demiReview.Decision == "approve") break;
-
-                if (demiReview.Decision == "escalate" || demiRevCount >= 2)
-                {
-                    taskRepo.UpdateStatus(task, "failed");
-                    await taskRepo.SaveAsync();
-                    if (ceoChannel is not null)
-                    {
-                        // 列出 Petra 的 blocking 問題
-                        var blockingText = demiReview.Issues.Where(i => i.Severity == "blocking").ToList();
-                        var blockingField = blockingText.Count > 0
-                            ? string.Join("\n", blockingText.Select(i => $"• {i.Description}"))
-                            : demiReview.Summary;
-                        if (blockingField.Length > 1000) blockingField = blockingField[..1000] + "...";
-
-                        var escalateEmbed = new EmbedBuilder()
-                            .WithTitle("⚠️ Petra 升級通知：需要您介入")
-                            .WithColor(Color.Orange)
-                            .AddField("任務", task.Title)
-                            .AddField("問題", $"Demi UI 規格經過 {demiRevCount + 1} 輪審核仍未通過")
-                            .AddField("Petra 發現的問題", blockingField)
-                            .WithFooter("UI 規格全文見下方附件")
-                            .WithTimestamp(DateTimeOffset.UtcNow)
-                            .Build();
-                        var escalateMsg = await ceoChannel.SendMessageAsync(
-                            embed: escalateEmbed,
-                            components: BuildEscalateButtons());
-                        _pendingConfirmations[escalateMsg.Id] = new PendingConfirmation(
-                            ceoResponse, project, description,
-                            TaskId: task.Id,
-                            IsProposal: false,
-                            Images: images,
-                            PreviewIssues: issues,
-                            UiSpecMarkdown: uiSpec,
-                            EscalateStage: "demi");
-
-                        // 附上 Demi UI 規格全文供老闆評估
-                        if (!string.IsNullOrWhiteSpace(uiSpec))
-                        {
-                            var uiBytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
-                            using var uiStream = new System.IO.MemoryStream(uiBytes);
-                            await ceoChannel.SendFileAsync(uiStream, "demi-ui-spec.md", "📄 Demi UI 規格全文（供評估是否 Skip）");
-                        }
-                    }
-                    return;
-                }
-
-                // revise：更新下一輪參數
-                demiRevCount++;
-                demiRevisionContext = demiReview.RevisionInstructions;
-                demiPreviousUiSpec  = uiSpec; // 讓 Demi 對照上版修改
-            }
-
-            // 全部成功，清理 workspace
-            gitHubService.CleanupLocalRepo(readonlyWorkspace);
-            readonlyWorkspace = "";
-
-            // Stage 12：UI 規格不再 commit 到 GitHub，改以 Discord 附件傳送
-            var proposalEmbed = BuildProposalEmbed(task.Title, issues, uiSpec);
+            var proposalEmbed = BuildProposalEmbed(task.Title, task.Description ?? description);
             var confirmMsg    = await sendAsync(proposalEmbed, BuildProposalConfirmButtons());
 
             _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
                 ceoResponse, project, description,
                 TaskId: task.Id,
-                PreviewIssues: issues,
-                UiSpecMarkdown: uiSpec,
                 IsProposal: true,
                 Images: images);
-
-            // 另發一則訊息帶 UI 規格附件（若有內容）
-            if (!string.IsNullOrWhiteSpace(uiSpec) && ceoChannel is not null)
-            {
-                var uiSpecBytes = System.Text.Encoding.UTF8.GetBytes(uiSpec);
-                using var stream = new System.IO.MemoryStream(uiSpecBytes);
-                await ceoChannel.SendFileAsync(stream, "ui-spec.md", "📄 UI 規格文件（提案附件）");
-            }
         }
         catch (Exception ex)
         {
-            // 失敗時保留 workspace 供 debug，僅 log
-            if (!string.IsNullOrEmpty(readonlyWorkspace))
-                logger.LogWarning("唯讀 workspace 保留供 debug：{Path}", readonlyWorkspace);
-
             logger.LogError(ex, "CEO 提案模式失敗");
+            var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
             if (ceoChannel is not null)
                 await ceoChannel.SendMessageAsync("❌ 提案書產出失敗，請查看 log 或重新下指令。");
         }
     }
 
     /// <summary>
-    /// 提案核准後：建立 GitHub Issues，然後建立 TaskGroup 並透過 Orchestrator 自動派工 Dev。
+    /// Stage 25b：提案核准後建立 TaskGroup，觸發 Kick-off 會議。
+    /// Issues 和 UI 規格改在 Kick-off 後的設計階段由 Rosa/Demi 產出。
     /// </summary>
     private async Task ExecuteProposalApprovedAsync(PendingConfirmation pending)
     {
-        if (pending.PreviewIssues is null or { Count: 0 }) return;
-
-        var owner = _gitHubSettings.Owner;
-        var repo  = string.IsNullOrWhiteSpace(pending.Project)
-            ? _gitHubSettings.DefaultRepo
-            : pending.Project;
-
         await using var scope  = serviceProvider.CreateAsyncScope();
         var taskRepo           = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var reqService         = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
         var pushService        = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
 
         var task = await taskRepo.GetByIdAsync(pending.TaskId);
@@ -1807,14 +1428,7 @@ public class CommandHandler(
             return;
         }
 
-        taskRepo.UpdateStatus(task, "running");
-        await taskRepo.SaveAsync();
-
-        var result = await reqService.CreateIssuesFromPreviewAsync(
-            task, owner, repo, pending.PreviewIssues);
-
-        var finalStatus = result.Success ? "done" : "failed";
-        taskRepo.UpdateStatus(task, finalStatus);
+        taskRepo.UpdateStatus(task, "done");
         await taskRepo.SaveAsync();
 
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
@@ -1822,77 +1436,54 @@ public class CommandHandler(
             TaskId    = task.Id,
             Title     = task.Title,
             AgentName = task.AssignedAgent,
-            Status    = finalStatus
+            Status    = "done"
         });
 
         var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
         var embed = new EmbedBuilder()
-            .WithTitle(result.Success ? "✅ 提案已執行 — Issues 建立完成" : "❌ Issues 建立失敗")
-            .WithColor(result.Success ? Color.Green : Color.Red)
+            .WithTitle("✅ 提案已核准 — 即將召開 Kick-off 會議")
+            .WithColor(Color.Green)
             .AddField("任務", task.Title)
-            .AddField("摘要", result.Summary)
             .WithTimestamp(DateTimeOffset.UtcNow);
-
-        if (!string.IsNullOrEmpty(result.OutputUrl))
-            embed.AddField("第一個 Issue", result.OutputUrl);
 
         if (notifyChannel is not null)
             await notifyChannel.SendMessageAsync(embed: embed.Build());
 
-        // Stage 10：提案核准後建立 TaskGroup，透過 Orchestrator 自動派工 Dev
-        if (result.Success)
+        // Stage 25b：提案核准後建立 TaskGroup，觸發 Kick-off 會議（Issues/UI 規格由設計階段產出）
+        try
         {
-            try
-            {
-                // 將 Issue URLs 序列化為 JSON（存入 TaskGroup.IssueUrls）
-                // 優先使用 OutputUrls（所有 Issue URL），fallback 到 OutputUrl（第一個）
-                var issueUrlsList = (result.OutputUrls is { Count: > 0 }
-                    ? result.OutputUrls
-                    : (result.OutputUrl is not null ? [result.OutputUrl] : Array.Empty<string>()))
-                    .Where(u => !string.IsNullOrEmpty(u))
-                    .ToList();
-                var issueUrlsJson = System.Text.Json.JsonSerializer.Serialize(issueUrlsList);
+            var group = await taskGroupService.CreateGroupAsync(
+                task.Title,
+                pending.Project,
+                Orchestration.WorkflowType.NewFeature);
 
-                // Stage 12：UI 規格改存 DB（UiSpecContent），不再用 UiSpecPath
-                var group = await taskGroupService.CreateGroupAsync(
-                    task.Title,
-                    pending.Project,
-                    Orchestration.WorkflowType.NewFeature,
-                    issueUrlsJson,
-                    uiSpecContent: pending.UiSpecMarkdown);
-
-                // Stage 16：proposal_approved → Dev_plan（計畫書），Petra 審核通過後才 coding
-                var steps = new[] { new Orchestration.WorkflowStep("Dev_plan") };
-                await taskGroupService.FireStepsAsync(group, steps);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Orchestrator 派工 Dev 失敗（TaskId={Id}）", task.Id);
-                var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-                if (ceoChannel is not null)
-                    await ceoChannel.SendMessageAsync("⚠️ Issues 已建立，但 CEO Orchestrator 派工 Dev 失敗，請手動下指令。");
-            }
+            await taskGroupService.FireStepsAsync(group,
+                [new Orchestration.WorkflowStep(AgentNames.Kickoff)]);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "提案核准後觸發 Kick-off 失敗（TaskId={Id}）", task.Id);
+            var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
+            if (ceoChannel is not null)
+                await ceoChannel.SendMessageAsync("⚠️ 提案已核准，但 Kick-off 會議觸發失敗，請手動下指令。");
         }
     }
 
-    private static Embed BuildProposalEmbed(
-        string title,
-        IReadOnlyList<RequirementIssuePreview> issues,
-        string uiSpec)
+    /// <summary>
+    /// Stage 25b：提案書 Embed（簡化版，僅顯示需求描述，不含 Issues/UI 規格）。
+    /// Issues 和 UI 規格由設計階段產出。
+    /// </summary>
+    private static Embed BuildProposalEmbed(string title, string? description)
     {
-        var issueLines = issues.Count > 0
-            ? string.Join("\n", issues.Take(10).Select((i, idx) => $"{idx + 1}. **{i.Title}**"))
-            : "（無需求分析結果）";
-
-        // UI Spec 截斷避免超過 Discord embed 上限（完整版見附件 ui-spec.md）
-        var specPreview = uiSpec.Length > 500 ? uiSpec[..500] + "\n…（已截斷，完整版見附件 ui-spec.md）" : uiSpec;
+        var descPreview = string.IsNullOrWhiteSpace(description)
+            ? "（無描述）"
+            : description.Length > 800 ? description[..800] + "\n…（已截斷）" : description;
 
         return new EmbedBuilder()
             .WithTitle("📋 CEO 提案書 — 請確認")
             .WithColor(Color.Purple)
             .AddField("功能名稱", title)
-            .AddField($"需求清單（共 {issues.Count} 項）", issueLines)
-            .AddField("UI 規格摘要", string.IsNullOrWhiteSpace(specPreview) ? "（無）" : specPreview)
+            .AddField("需求說明", descPreview)
             .WithFooter("✅ 核准開始開發 ｜ ✏️ 需調整 ｜ ❌ 取消")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();

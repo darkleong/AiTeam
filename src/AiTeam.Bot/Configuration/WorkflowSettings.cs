@@ -15,6 +15,9 @@ public class WorkflowSettings
     /// <summary>Stage 25a：Kick-off 會議最大輪次（超過後直接請 Petra 產出計劃書）。</summary>
     public int KickoffMaxRounds { get; set; } = 3;
 
+    /// <summary>Stage 25b：設計會議最大輪次（含調整重開的次數，超過後 escalate 給 Christ）。</summary>
+    public int DesignMeetingMaxRounds { get; set; } = 3;
+
     /// <summary>期望的版本號（Vera 版本檢查用）。空白時略過版本檢查。</summary>
     public string TargetVersion { get; set; } = "";
 }

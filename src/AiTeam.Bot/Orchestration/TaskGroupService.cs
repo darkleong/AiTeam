@@ -339,54 +339,10 @@ public class TaskGroupService(
             ? (Guid?)null
             : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
 
-        // 模擬提案流程四個步驟（直接建立為 "done" 狀態，不呼叫任何 GitHub / LLM）
-        var proposalSteps = new[]
-        {
-            (Agent: AgentNames.Requirements, Step: "Requirements",      Log: "[MOCK] Rosa 需求分析完成，已產出 1 個模擬 Issue"),
-            (Agent: AgentNames.Pm,           Step: "PM（Rosa 審核）",   Log: "[MOCK] Petra 審核 Rosa 完成：approve"),
-            (Agent: AgentNames.Designer,     Step: "Designer",          Log: "[MOCK] Demi UI 規格文件產出完成"),
-            (Agent: AgentNames.Pm,           Step: "PM（Demi 審核）",   Log: "[MOCK] Petra 審核 Demi 完成：approve"),
-        };
-
-        foreach (var (agent, stepName, logMessage) in proposalSteps)
-        {
-            var taskItem = new TaskItem
-            {
-                Title         = $"{group.Title}（{stepName}）",
-                Description   = "[MOCK] 模擬提案流程步驟",
-                TriggeredBy   = "Orchestrator",
-                AssignedAgent = agent,
-                Status        = "done",
-                GroupId       = group.Id,
-                ProjectId     = projectId,
-            };
-            taskRepo.Add(taskItem);
-            await taskRepo.SaveAsync(cancellationToken);
-
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId    = taskItem.Id,
-                Agent     = agent,
-                Step      = logMessage,
-                Status    = "done",
-                CreatedAt = DateTime.UtcNow
-            });
-            await taskRepo.SaveAsync(cancellationToken);
-
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = taskItem.Id,
-                GroupId   = group.Id,
-                Title     = taskItem.Title,
-                AgentName = agent,
-                Status    = "done"
-            });
-
-            logger.LogInformation("[MockMode] 模擬提案步驟完成：{Step}", stepName);
-        }
-
-        // 從 proposal_approved 啟動正式工作流程（Dev_plan → Dev → Reviewer → Petra → QA → Doc）
-        await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+        // Stage 25b：提案階段已簡化（移除 Rosa/Demi），MockMode 直接觸發 Kickoff 流程
+        // （Kickoff / Design 的 mock 行為由 MockClaudeCodeService.RunMeetingSessionAsync 處理）
+        logger.LogInformation("[MockMode] 模擬提案核准完成，觸發 Kickoff 流程");
+        await FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)], cancellationToken);
     }
 
     // ---- 觸發 Agent 執行 ----
@@ -431,6 +387,20 @@ public class TaskGroupService(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "TaskGroupService：Kickoff 會議執行失敗（Group={Id}）", group.Id);
+                }
+            }, appLifetime.ApplicationStopping);
+            return;
+        }
+
+        // Stage 25b：Design 步驟由 MeetingService 協調執行設計規劃階段
+        if (step.AgentName.Equals(AgentNames.Design, StringComparison.OrdinalIgnoreCase))
+        {
+            _ = Task.Run(async () =>
+            {
+                try { await RunDesignPhaseAsync(group, appLifetime.ApplicationStopping); }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "TaskGroupService：Design 會議執行失敗（Group={Id}）", group.Id);
                 }
             }, appLifetime.ApplicationStopping);
             return;
@@ -789,6 +759,10 @@ public class TaskGroupService(
             if (!string.IsNullOrWhiteSpace(group.TaskPlan))
                 meta.Add($"kickoff_task_plan:\n{group.TaskPlan}");
 
+            // Stage 25b：附上設計規劃書（供 Cody 了解 Issues 分解與 UI 規格）
+            if (!string.IsNullOrWhiteSpace(group.DesignPlan))
+                meta.Add($"design_plan:\n{group.DesignPlan}");
+
             parts.Add("---");
             parts.AddRange(meta);
             parts.Add("---");
@@ -816,6 +790,10 @@ public class TaskGroupService(
             // Stage 25a：附上 Kick-off 任務計劃書（Dev_plan / Dev / Reviewer / QA 步驟參考用）
             if (!string.IsNullOrWhiteSpace(group.TaskPlan))
                 meta.Add($"kickoff_task_plan:\n{group.TaskPlan}");
+
+            // Stage 25b：附上設計規劃書（Dev / Reviewer / QA 步驟參考用）
+            if (!string.IsNullOrWhiteSpace(group.DesignPlan))
+                meta.Add($"design_plan:\n{group.DesignPlan}");
 
             // 23-2：Reviewer 和 QA 步驟附上 Cody 實作說明（供 Vera 精確審查、QA 精確測試）
             if ((step.AgentName == AgentNames.Reviewer || step.AgentName == AgentNames.Qa)
@@ -1691,8 +1669,8 @@ public class TaskGroupService(
             case "continue":
                 logger.LogInformation("TaskGroupService：Kick-off 確認繼續（Group={Id}）", groupId);
                 await meetingService.CloseAllSessionsAsync(groupId);
-                // 觸發 Dev_plan
-                await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                // Stage 25b：Kickoff 確認後進入設計規劃階段（Design），不直接進 Dev_plan
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Design)], ct);
                 break;
 
             case "stop":
@@ -1799,6 +1777,238 @@ public class TaskGroupService(
 
             default:
                 logger.LogWarning("TaskGroupService：未知的 Kickoff 決策：{Decision}（Group={Id}）", decision, groupId);
+                break;
+        }
+    }
+
+    // ────────────── Stage 25b：設計規劃階段 ──────────────
+
+    /// <summary>
+    /// Stage 25b：執行設計規劃會議。
+    /// 由 FireOneStepAsync 偵測到 Design 步驟時，在背景 Task.Run 中呼叫。
+    /// consensus → 直接 FireStepsAsync Dev_plan（不需 Christ 確認）
+    /// escalate  → 發送 Discord embed，等待 Christ 確認（design_continue/stop/modify）
+    /// </summary>
+    private async Task RunDesignPhaseAsync(TaskGroup group, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        logger.LogInformation("TaskGroupService：設計規劃會議開始（Group={Id}）", group.Id);
+
+        await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+        {
+            AgentName        = AgentNames.Pm,
+            Status           = "running",
+            CurrentTaskTitle = $"設計規劃會議：{group.Title}"
+        });
+
+        try
+        {
+            var designResult = await meetingService.RunDesignMeetingAsync(group, owner, repo, ct);
+
+            // 重新載入 group
+            await using var scope2 = serviceProvider.CreateAsyncScope();
+            var taskRepo2  = scope2.ServiceProvider.GetRequiredService<TaskRepository>();
+            var freshGroup = await taskRepo2.GetGroupByIdAsync(group.Id, ct);
+            if (freshGroup is null)
+            {
+                logger.LogError("TaskGroupService：Design 完成後找不到 Group={Id}", group.Id);
+                return;
+            }
+
+            // 儲存設計結果
+            freshGroup.DesignMeetingLog = designResult.MeetingLog;
+            freshGroup.DesignPlan       = designResult.DesignPlan;
+            freshGroup.DesignRound      = designResult.TotalRounds;
+            if (!string.IsNullOrWhiteSpace(designResult.IssueUrls))
+                freshGroup.IssueUrls = designResult.IssueUrls;
+            if (!string.IsNullOrWhiteSpace(designResult.UiSpecContent))
+                freshGroup.UiSpecContent = designResult.UiSpecContent;
+            await taskRepo2.SaveAsync(ct);
+
+            logger.LogInformation("TaskGroupService：設計規劃會議記錄已存入 DB（Group={Id}）", group.Id);
+
+            if (designResult.FinalDecision == "consensus")
+            {
+                // consensus：直接進入 Dev_plan（不需 Christ 確認）
+                logger.LogInformation("TaskGroupService：設計規劃 consensus，直接進入 Dev_plan（Group={Id}）", group.Id);
+                await FireStepsAsync(freshGroup, [new WorkflowStep("Dev_plan")], ct);
+            }
+            else
+            {
+                // escalate：通知 Christ 確認
+                var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+                if (ceoChannel is null)
+                {
+                    logger.LogError("TaskGroupService：找不到 CEO 頻道，無法上呈設計規劃結果");
+                    return;
+                }
+
+                var planPreview = string.IsNullOrWhiteSpace(freshGroup.DesignPlan)
+                    ? "（無設計規劃書）"
+                    : freshGroup.DesignPlan.Length > 600
+                        ? freshGroup.DesignPlan[..600] + "\n...\n（完整內容請查看 Dashboard）"
+                        : freshGroup.DesignPlan;
+
+                var embed = new EmbedBuilder()
+                    .WithTitle("🎨 設計規劃會議需上呈確認")
+                    .WithColor(Color.Purple)
+                    .AddField("任務", freshGroup.Title)
+                    .AddField("上呈原因", designResult.EscalateReason ?? "設計存在分歧，需老闆裁決")
+                    .AddField("設計規劃書摘要", planPreview)
+                    .AddField("會議輪次", designResult.TotalRounds.ToString())
+                    .WithFooter("▶️ 繼續 = 進入 Dev_plan；⏹️ 停止 = 取消任務；✏️ 修改 = 提供設計指引")
+                    .WithTimestamp(DateTimeOffset.UtcNow)
+                    .Build();
+
+                var buttons = new ComponentBuilder()
+                    .WithButton("▶️ 繼續開發",  $"design_continue_{freshGroup.Id}", ButtonStyle.Success)
+                    .WithButton("⏹️ 停止任務",  $"design_stop_{freshGroup.Id}",     ButtonStyle.Danger)
+                    .WithButton("✏️ 修改設計",  $"design_modify_{freshGroup.Id}",   ButtonStyle.Secondary)
+                    .Build();
+
+                var msg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+
+                var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+                commandHandler.RegisterDesignConfirmation(msg.Id, freshGroup.Id, designResult.PetraSessionId, designResult.EscalateReason);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "TaskGroupService：設計規劃會議失敗（Group={Id}）", group.Id);
+        }
+        finally
+        {
+            await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+            {
+                AgentName        = AgentNames.Pm,
+                Status           = "idle",
+                CurrentTaskTitle = null
+            });
+        }
+    }
+
+    /// <summary>
+    /// Stage 25b：Christ 確認設計規劃後的路由處理。
+    /// 由 CommandHandler 按鈕回調呼叫。
+    /// </summary>
+    public async Task HandleDesignConfirmedAsync(
+        Guid groupId,
+        string decision,           // "continue" | "stop" | "modify"
+        string petraSessionId,
+        string? modifyContent = null,
+        CancellationToken ct = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var group = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null)
+        {
+            logger.LogError("TaskGroupService：HandleDesignConfirmed 找不到 Group={Id}", groupId);
+            return;
+        }
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        switch (decision.ToLower())
+        {
+            case "continue":
+                logger.LogInformation("TaskGroupService：設計規劃確認繼續（Group={Id}）", groupId);
+                await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                break;
+
+            case "stop":
+                logger.LogInformation("TaskGroupService：設計規劃確認停止（Group={Id}）", groupId);
+                await meetingService.CloseAllSessionsAsync(groupId);
+                taskRepo.UpdateGroupStatus(group, "cancelled");
+                await taskRepo.SaveAsync(ct);
+
+                var ceoChannelStop = FindChannel(_discord.Channels.CeoChannel);
+                if (ceoChannelStop is not null)
+                    await ceoChannelStop.SendMessageAsync(
+                        $"⏹️ 任務《{group.Title}》已停止，設計規劃會議後由老闆決定取消。");
+                break;
+
+            case "modify":
+                if (string.IsNullOrWhiteSpace(modifyContent))
+                {
+                    logger.LogWarning("TaskGroupService：設計規劃修改意見為空（Group={Id}）", groupId);
+                    return;
+                }
+
+                logger.LogInformation("TaskGroupService：設計規劃修改（Group={Id}）", groupId);
+
+                await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+                {
+                    AgentName        = AgentNames.Pm,
+                    Status           = "running",
+                    CurrentTaskTitle = $"設計規劃修改：{group.Title}"
+                });
+
+                try
+                {
+                    var modifyResult = await meetingService.ModifyDesignPlanAsync(
+                        group, modifyContent, petraSessionId, owner, repo, ct);
+
+                    // 追加修改紀錄
+                    var modifyLogEntry =
+                        $"\n## Christ 設計修改 {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC\n\n" +
+                        $"### Christ 修改指引\n{modifyContent}\n\n" +
+                        $"### Petra 修改後設計規劃書\n{modifyResult.RevisedPlan}\n";
+                    group.DesignMeetingLog = (group.DesignMeetingLog ?? "") + modifyLogEntry;
+
+                    if (!string.IsNullOrWhiteSpace(modifyResult.RevisedPlan))
+                        group.DesignPlan = modifyResult.RevisedPlan;
+                    await taskRepo.SaveAsync(ct);
+
+                    // 再次上呈 Christ 確認
+                    var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+                    if (ceoChannel is null) return;
+
+                    var planPreview = (modifyResult.RevisedPlan ?? group.DesignPlan ?? "").Length > 600
+                        ? (modifyResult.RevisedPlan ?? group.DesignPlan ?? "")[..600] + "\n..."
+                        : (modifyResult.RevisedPlan ?? group.DesignPlan ?? "");
+
+                    var embed = new EmbedBuilder()
+                        .WithTitle("✏️ 設計規劃書已修改")
+                        .WithColor(Color.Green)
+                        .AddField("任務", group.Title)
+                        .AddField("修改後設計規劃書摘要", planPreview)
+                        .WithFooter("▶️ 繼續 = 進入 Dev_plan；⏹️ 停止 = 取消；✏️ 修改 = 繼續調整")
+                        .WithTimestamp(DateTimeOffset.UtcNow)
+                        .Build();
+
+                    var buttons = new ComponentBuilder()
+                        .WithButton("▶️ 繼續開發", $"design_continue_{group.Id}", ButtonStyle.Success)
+                        .WithButton("⏹️ 停止任務", $"design_stop_{group.Id}",    ButtonStyle.Danger)
+                        .WithButton("✏️ 修改設計", $"design_modify_{group.Id}",  ButtonStyle.Secondary)
+                        .Build();
+
+                    var reMsg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+                    var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+                    commandHandler.RegisterDesignConfirmation(reMsg.Id, group.Id, petraSessionId, null);
+                }
+                finally
+                {
+                    await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
+                    {
+                        AgentName        = AgentNames.Pm,
+                        Status           = "idle",
+                        CurrentTaskTitle = null
+                    });
+                }
+                break;
+
+            default:
+                logger.LogWarning("TaskGroupService：未知的 Design 決策：{Decision}（Group={Id}）", decision, groupId);
                 break;
         }
     }

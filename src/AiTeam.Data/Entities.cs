@@ -83,6 +83,12 @@ public class TaskGroup
     public string? TaskPlan { get; set; }
     /// <summary>Stage 25a：Kick-off 會議輪次計數。</summary>
     public int KickoffRound { get; set; } = 0;
+    /// <summary>Stage 25b：設計會議完整紀錄（Markdown，含前置作業、各輪討論、調整紀錄）。</summary>
+    public string? DesignMeetingLog { get; set; }
+    /// <summary>Stage 25b：Petra 在設計會議結束後產出的設計規劃書。</summary>
+    public string? DesignPlan { get; set; }
+    /// <summary>Stage 25b：設計會議輪次計數（含調整重開的次數）。</summary>
+    public int DesignRound { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];
