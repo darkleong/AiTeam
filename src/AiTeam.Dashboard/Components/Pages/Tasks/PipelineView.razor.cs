@@ -114,12 +114,9 @@ public partial class PipelineView : IAsyncDisposable
 
         try
         {
-            // 同時重新載入步驟與 Group 層級欄位（Kickoff/Design 紀錄與計劃書）
-            var itemsTask      = TaskService.GetTaskItemsByGroupAsync(Group.Id);
-            var freshGroupTask = TaskService.GetTaskGroupByIdAsync(Group.Id);
-            await Task.WhenAll(itemsTask, freshGroupTask);
-            var items      = itemsTask.Result;
-            var freshGroup = freshGroupTask.Result;
+            // 循序載入（AppDbContext 為 Scoped，不支援並發查詢）
+            var items      = await TaskService.GetTaskItemsByGroupAsync(Group.Id);
+            var freshGroup = await TaskService.GetTaskGroupByIdAsync(Group.Id);
             _steps = items.Select(t => new PipelineStepViewModel { Task = t }).ToList();
 
             // 同步更新 Group 折疊面板欄位（避免開啟 Drawer 後資料停留在快照）
