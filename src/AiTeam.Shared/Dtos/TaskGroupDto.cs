@@ -20,4 +20,9 @@ public class TaskGroupDto
     public string?  DesignMeetingLog  { get; set; }
     public string?  DesignPlan        { get; set; }
     public int      DesignRound       { get; set; }
+
+    // Stage 26 追加：流程文件折疊面板（實作計劃書 / 驗收報告 / 測試報告）
+    public string?  DevPlan          { get; set; }  // 實作計劃書
+    public string?  LastReviewBody   { get; set; }  // 驗收報告（Vera 最新審查）
+    public string?  TestReport       { get; set; }  // 測試報告（Quinn）
 }

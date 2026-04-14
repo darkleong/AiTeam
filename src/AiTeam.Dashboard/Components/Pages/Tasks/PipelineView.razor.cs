@@ -112,8 +112,28 @@ public partial class PipelineView : IAsyncDisposable
         _loading = true;
         _steps   = [];
 
-        var items = await TaskService.GetTaskItemsByGroupAsync(Group.Id);
-        _steps    = items.Select(t => new PipelineStepViewModel { Task = t }).ToList();
+        // 同時重新載入步驟與 Group 層級欄位（Kickoff/Design 紀錄與計劃書）
+        var itemsTask      = TaskService.GetTaskItemsByGroupAsync(Group.Id);
+        var freshGroupTask = TaskService.GetTaskGroupByIdAsync(Group.Id);
+        await Task.WhenAll(itemsTask, freshGroupTask);
+        var items      = itemsTask.Result;
+        var freshGroup = freshGroupTask.Result;
+        _steps = items.Select(t => new PipelineStepViewModel { Task = t }).ToList();
+
+        // 同步更新 Group 折疊面板欄位（避免開啟 Drawer 後資料停留在快照）
+        if (freshGroup is not null)
+        {
+            Group.KickoffMeetingLog = freshGroup.KickoffMeetingLog;
+            Group.TaskPlan          = freshGroup.TaskPlan;
+            Group.KickoffRound      = freshGroup.KickoffRound;
+            Group.DesignMeetingLog  = freshGroup.DesignMeetingLog;
+            Group.DesignPlan        = freshGroup.DesignPlan;
+            Group.DesignRound       = freshGroup.DesignRound;
+            Group.DevPrUrl          = freshGroup.DevPrUrl;
+            Group.DevPlan           = freshGroup.DevPlan;
+            Group.LastReviewBody    = freshGroup.LastReviewBody;
+            Group.TestReport        = freshGroup.TestReport;
+        }
 
         // 自動定位到正在執行中的步驟
         var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");

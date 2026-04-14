@@ -1631,7 +1631,7 @@ public class TaskGroupService(
                 .AddField("任務", freshGroup.Title)
                 .AddField("會議輪次", meetingResult.TotalRounds.ToString())
                 .AddField("任務計劃書摘要", planPreview)
-                .WithFooter("▶️ 繼續 = 進入 Dev_plan；⏹️ 停止 = 取消任務；✏️ 修改 = 調整計劃書")
+                .WithFooter("▶️ 繼續 = 進入設計規劃；⏹️ 停止 = 取消任務；✏️ 修改 = 調整計劃書")
                 .WithTimestamp(DateTimeOffset.UtcNow)
                 .Build();
 

@@ -95,6 +95,9 @@ public class DashboardTaskService(AppDbContext db)
                 DesignMeetingLog  = g.DesignMeetingLog,
                 DesignPlan        = g.DesignPlan,
                 DesignRound       = g.DesignRound,
+                DevPlan           = g.DevPlan,
+                LastReviewBody    = g.LastReviewBody,
+                TestReport        = g.TestReport,
             })
             .ToListAsync(cancellationToken);
 
@@ -131,11 +134,44 @@ public class DashboardTaskService(AppDbContext db)
                 DesignMeetingLog  = g.DesignMeetingLog,
                 DesignPlan        = g.DesignPlan,
                 DesignRound       = g.DesignRound,
+                DevPlan           = g.DevPlan,
+                LastReviewBody    = g.LastReviewBody,
+                TestReport        = g.TestReport,
             })
             .ToListAsync(cancellationToken);
 
         return new PagedResult<TaskGroupDto>(items, total);
     }
+
+    /// <summary>取得單一 TaskGroup 的最新快照（Pipeline View 折疊面板即時更新用）。</summary>
+    public async Task<TaskGroupDto?> GetTaskGroupByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+        => await db.TaskGroups
+            .AsNoTracking()
+            .Where(g => g.Id == id)
+            .Select(g => new TaskGroupDto
+            {
+                Id                = g.Id,
+                Title             = g.Title,
+                Status            = g.Status,
+                WorkflowType      = g.WorkflowType,
+                Project           = g.Project,
+                FixIteration      = g.FixIteration,
+                DevPlanRevision   = g.DevPlanRevision,
+                DevPrUrl          = g.DevPrUrl,
+                CreatedAt         = g.CreatedAt,
+                KickoffMeetingLog = g.KickoffMeetingLog,
+                TaskPlan          = g.TaskPlan,
+                KickoffRound      = g.KickoffRound,
+                DesignMeetingLog  = g.DesignMeetingLog,
+                DesignPlan        = g.DesignPlan,
+                DesignRound       = g.DesignRound,
+                DevPlan           = g.DevPlan,
+                LastReviewBody    = g.LastReviewBody,
+                TestReport        = g.TestReport,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>取得 TaskGroup 下所有 TaskItem（Pipeline View 步驟用）。</summary>
     public async Task<List<TaskItemDto>> GetTaskItemsByGroupAsync(

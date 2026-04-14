@@ -1,9 +1,34 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v6.1
+> 版本：v6.2
 > 建立日期：2026-04-01
-> 最後更新：2026-04-12
+> 最後更新：2026-04-14
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
+
+---
+
+## 零、Dashboard 歸檔報告折疊面板
+
+> 狀態：🟡 待實作 — 技術條件已釐清，預計納入下個 Stage
+
+### 背景
+
+Pipeline View 的流程文件折疊面板（Stage 26 追加）目前顯示：提案書、任務計劃書、設計規劃書、實作計劃書、驗收報告、測試報告，共六份文件。
+
+**歸檔報告**（Sage 產出的 `docs/archive/pr{N}-archive.md`）目前只寫入 Git 檔案，沒有存回 DB，所以 Dashboard 無法顯示。
+
+### 實作方式
+
+1. `TaskGroup` Entity 新增 `ArchiveContent string?` 欄位
+2. 新增 EF Core Migration
+3. `DocAgentService` 完成後，將歸檔報告全文存入 `TaskGroup.ArchiveContent`
+4. `TaskGroupDto` 新增 `ArchiveContent` 欄位
+5. `DashboardTaskService` 三個 LINQ 投影補上此欄位
+6. `PipelineView.razor` 新增 `📦 歸檔報告（Sage）` 折疊面板
+
+### 優先級
+
+🟡 中優先級 — 小工程，可納入下個 Stage 一起做
 
 ---
 
@@ -1116,38 +1141,6 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 
 ---
 
-## 十五、版本號集中管理（Directory.Build.props）
-
-### 背景
-
-目前版本號分散在各 `.csproj` 檔案中，每次改版需手動修改 Bot + Dashboard 兩個檔案。其他專案（AppHost / Data / Shared / ServiceDefaults）完全沒有版本號管理，assembly 版本與系統版本不一致。
-
-### 期望行為
-
-在方案根目錄建立 `Directory.Build.props`，集中管理版本號：
-
-```xml
-<Project>
-  <PropertyGroup>
-    <Version>3.10.0</Version>
-  </PropertyGroup>
-</Project>
-```
-
-所有專案自動繼承同一個版本，各 `.csproj` 的 `<Version>` 標籤移除。每次改版只改一個檔案。
-
-### 影響範圍
-
-- CLAUDE.md 的版本號管理章節需更新（改版位置從兩個 .csproj 改為一個 .props）
-- CI/CD 或 Dockerfile 中如有讀取 .csproj 版本的邏輯需確認相容性
-- Git tag 自動化（GitHub Actions）若從 .csproj 讀版本號，需驗證 `Directory.Build.props` 繼承後 MSBuild 屬性是否正確傳遞
-
-### 優先級
-
-🔵 低優先級 — 改動很小（一個新檔 + 刪兩行），但與主流程無關，適合在輕量 Stage 順便處理
-
----
-
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1175,6 +1168,7 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 四 | Discord #指令中心 頻道移除 | ✅ Stage 22（2026-04-12）— 程式碼已清除，Christ 需手動刪除 Discord 頻道 |
 | 七 | Token 異常消耗保護機制 | ✅ Stage 22（2026-04-12）— TokenTrackingProvider 四道關卡（單次/日/月/全域） |
 | 九 | Dashboard 存取分層（localhost 免登入） | ✅ Stage 22（2026-04-12）— LocalhostBypassMiddleware + Docker port 收緊 |
+| 十五 | 版本號集中管理（Directory.Build.props） | ✅ Stage 26（2026-04-14）— src/Directory.Build.props 集中四項版本屬性，Bot/Dashboard csproj 移除個別 Version 標籤，CI/CD + CLAUDE.md 同步更新 |
 
 ---
 
@@ -1216,3 +1210,4 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 2026-04-12 | v6.0：大整理 — 移除 3 個已完成項目（四 #指令中心 / 七 Token 保護 / 九 存取分層 → Stage 22），重新編號為一～十四；修正 Quinn 為 Claude Code（非 API call）；八（開發流程重構）Phase 1 標記設計完成；修正所有跨項目引用 |
 | 2026-04-14 | v6.1：新增十五（版本號集中管理 Directory.Build.props）；八（開發流程重構）Phase 1 實作狀態更新（Stage 25a 第一階段完成、Stage 25b 第二階段規劃中） |
 | 2026-04-14 | v6.2：八（開發流程重構）Phase 1 全部完成 — 第二階段（設計規劃 Stage 25b v3.10.0）實作完成，Feature 八 Phase 1 七個階段全部 ✅ |
+| 2026-04-14 | v6.3：十五（版本號集中管理）移入已完成摘要 — Stage 26 實作完成；十五條目從候選清單移除 |

@@ -25,12 +25,12 @@
 
 ### 待驗收項目
 
-| Stage | 版本 | 內容 | 驗收重點 |
-|-------|------|------|---------|
-| 23 | v3.7.0 | Review Appeal + 實作說明 + 阻礙報告 + Sage 轉型 + Git Tag | Vera-Cody 對話迴圈、Petra 仲裁、Sage CHANGELOG |
-| 24 | v3.8.0 | QA Petra 介入 + Dev_plan Appeal + TestReport 結構化 | QA 四路由、Dev_plan 反駁、文件傳遞 |
-| 25a | v3.9.0 | Kick-off 會議機制 | 5 人會議 + Christ 按鈕確認 + 修改計劃書 |
-| 25b | v3.10.0 | 設計規劃階段 | 提案簡化 + 設計會議 + consensus/escalate 路由 |
+| Stage | 版本    | 內容                                                      | 驗收重點                                       |
+| ----- | ------- | --------------------------------------------------------- | ---------------------------------------------- |
+| 23    | v3.7.0  | Review Appeal + 實作說明 + 阻礙報告 + Sage 轉型 + Git Tag | Vera-Cody 對話迴圈、Petra 仲裁、Sage CHANGELOG |
+| 24    | v3.8.0  | QA Petra 介入 + Dev_plan Appeal + TestReport 結構化       | QA 四路由、Dev_plan 反駁、文件傳遞             |
+| 25a   | v3.9.0  | Kick-off 會議機制                                         | 5 人會議 + Christ 按鈕確認 + 修改計劃書        |
+| 25b   | v3.10.0 | 設計規劃階段                                              | 提案簡化 + 設計會議 + consensus/escalate 路由  |
 
 ### 驗收時的流程
 
@@ -58,25 +58,25 @@ Dashboard: 全程觀察 Pipeline View + 任務詳情
 **需要做的事**
 
 1. **`TaskGroupDto` 新增欄位**：
-   ```
-   KickoffMeetingLog, TaskPlan, KickoffRound,
-   DesignMeetingLog, DesignPlan, DesignRound
-   ```
+
+    ```
+    KickoffMeetingLog, TaskPlan, KickoffRound,
+    DesignMeetingLog, DesignPlan, DesignRound
+    ```
 
 2. **Repository 查詢補齊**：`GetGroupByIdAsync` 或對應的 projection 需要包含新欄位
 
 3. **PipelineView.razor 新增折疊區塊**：在步驟列表之上，用 `MudExpansionPanels` 顯示：
 
-   | 面板 | 內容 | 條件 |
-   |------|------|------|
-   | 任務計劃書 | TaskPlan（Markdown 純文字） | TaskPlan 不為空 |
-   | Kick-off 會議紀錄 | KickoffMeetingLog（Markdown） | KickoffMeetingLog 不為空 |
-   | 設計規劃書 | DesignPlan（Markdown 純文字） | DesignPlan 不為空 |
-   | 設計會議紀錄 | DesignMeetingLog（Markdown） | DesignMeetingLog 不為空 |
-
-   - 預設全部收合（不佔空間）
-   - 展開後用 `<MudText>` 或 `<pre>` 顯示內容（不需要 Markdown renderer，純文字即可）
-   - 排列順序：計劃書在上、會議紀錄在下（先看結論，需要細節再展開紀錄）
+    | 面板              | 內容                          | 條件                     |
+    | ----------------- | ----------------------------- | ------------------------ |
+    | 任務計劃書        | TaskPlan（Markdown 純文字）   | TaskPlan 不為空          |
+    | Kick-off 會議紀錄 | KickoffMeetingLog（Markdown） | KickoffMeetingLog 不為空 |
+    | 設計規劃書        | DesignPlan（Markdown 純文字） | DesignPlan 不為空        |
+    | 設計會議紀錄      | DesignMeetingLog（Markdown）  | DesignMeetingLog 不為空  |
+    - 預設全部收合（不佔空間）
+    - 展開後用 `<MudText>` 或 `<pre>` 顯示內容（不需要 Markdown renderer，純文字即可）
+    - 排列順序：計劃書在上、會議紀錄在下（先看結論，需要細節再展開紀錄）
 
 ---
 
@@ -93,10 +93,11 @@ Kickoff 和 Design 步驟在 `FireOneStepAsync` 中被攔截（不走一般 Agen
 1. **確認 TaskItem 建立**：確認 Kickoff / Design 步驟執行時，是否有對應的 TaskItem 被建立。如果沒有，需要在 `RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 開始時建立 TaskItem（status: running），完成時更新（status: done）。
 
 2. **GetStepTitle() 新增顯示名稱**：
-   ```
-   "Kickoff" → "Kick-off 會議"
-   "Design"  → "設計規劃"
-   ```
+
+    ```
+    "Kickoff" → "Kick-off 會議"
+    "Design"  → "設計規劃"
+    ```
 
 3. **步驟圖示（如有）**：如果 PipelineView 有步驟圖示，Kickoff / Design 可用 `MudBlazor.Icons.Material.Filled.Groups`（會議）和 `MudBlazor.Icons.Material.Filled.DesignServices`（設計）。
 
@@ -121,6 +122,7 @@ MockMode 有兩大類問題需要修正：
 這三個 Agent 的執行流程一開頭就檢查 GitHub PR 是否存在（解析 PR 編號、查詢 open PR 列表等）。MockMode 不會建立真正的 GitHub PR，所以驗證直接失敗 → Agent 在到達 Mock 延遲代碼之前就 early return → **0 秒完成**，Dashboard 上根本看不到狀態變化。
 
 具體路徑：
+
 - **Reviewer**：找不到 open PR 或 PR 無 .cs 檔 → 立即返回
 - **QA**：從任務描述解析不到 PR 編號或無可測試檔案 → 立即返回
 - **Doc**：找不到 PR 編號 → 立即返回（且回傳 success，略過歸檔）
@@ -133,38 +135,39 @@ MockMode 有兩大類問題需要修正：
 
 1. **修正 Design session ID 解析（問題 A）**：
 
-   修改 `MockClaudeCodeService` 的判斷邏輯，讓它在無法從 sessionId 解析 Agent 角色時，根據 prompt 內容判斷（如果 prompt 包含「整理」「判斷」等關鍵字 → 回傳 Petra consensus JSON）。
+    修改 `MockClaudeCodeService` 的判斷邏輯，讓它在無法從 sessionId 解析 Agent 角色時，根據 prompt 內容判斷（如果 prompt 包含「整理」「判斷」等關鍵字 → 回傳 Petra consensus JSON）。
 
-   或者在 MeetingService 呼叫時，在 prompt 中帶入角色標記（如 `[ROLE:Petra]`），MockClaudeCodeService 從 prompt 中解析角色。
+    或者在 MeetingService 呼叫時，在 prompt 中帶入角色標記（如 `[ROLE:Petra]`），MockClaudeCodeService 從 prompt 中解析角色。
 
 2. **修正 Reviewer / QA / Doc 的 MockMode 路徑（問題 B）**：
 
-   在各 Agent Service 的執行流程最前面加入 MockMode 檢查：
-   ```
-   if (MockMode 啟用)
-   {
-       await Task.Delay(30~60 秒);
-       return MockMode 模擬結果（success）;
-   }
-   ```
-   
-   這樣在 MockMode 下直接跳過 GitHub 驗證，走 Mock 路徑（含延遲），確保 Dashboard 有足夠時間顯示狀態變化。
+    在各 Agent Service 的執行流程最前面加入 MockMode 檢查：
 
-   > 注意：Dev Agent 已有正確的 MockMode 延遲路徑（透過 MockClaudeCodeService），不需要修改。
+    ```
+    if (MockMode 啟用)
+    {
+        await Task.Delay(30~60 秒);
+        return MockMode 模擬結果（success）;
+    }
+    ```
+
+    這樣在 MockMode 下直接跳過 GitHub 驗證，走 Mock 路徑（含延遲），確保 Dashboard 有足夠時間顯示狀態變化。
+
+    > 注意：Dev Agent 已有正確的 MockMode 延遲路徑（透過 MockClaudeCodeService），不需要修改。
 
 3. **確認 Kickoff / Design 步驟的 Dashboard 狀態（問題 C）**：
 
-   確認 `RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 在開始時有正確建立 TaskItem（status: running），且 fire-and-forget 不影響 Dashboard 即時更新。如果 26-2 已處理 TaskItem 建立，此項只需驗證。
+    確認 `RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 在開始時有正確建立 TaskItem（status: running），且 fire-and-forget 不影響 Dashboard 即時更新。如果 26-2 已處理 TaskItem 建立，此項只需驗證。
 
 4. **全流程延遲審計**：確保 MockMode 下每個步驟（從提案到 Merge）都至少有 30 秒可觀察時間。
 
 5. **驗證完整 MockMode 流程**：
-   - `/mock proposal` → 提案（無 Rosa/Demi）→ 核准
-   - → Kickoff（MockMode consensus）→ Christ 按按鈕
-   - → Design（MockMode consensus）→ 直接 Dev_plan
-   - → Dev → Reviewer → QA → Doc → Merge
-   - 全程無卡住、無報錯
-   - **每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒**
+    - `/mock proposal` → 提案（無 Rosa/Demi）→ 核准
+    - → Kickoff（MockMode consensus）→ Christ 按按鈕
+    - → Design（MockMode consensus）→ 直接 Dev_plan
+    - → Dev → Reviewer → QA → Doc → Merge
+    - 全程無卡住、無報錯
+    - **每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒**
 
 ---
 
@@ -179,23 +182,25 @@ MockMode 有兩大類問題需要修正：
 **需要做的事**
 
 1. **在解決方案根目錄建立 `Directory.Build.props`**：
-   ```xml
-   <Project>
-     <PropertyGroup>
-       <Version>3.11.0</Version>
-     </PropertyGroup>
-   </Project>
-   ```
-   放在 `AiTeam.sln` 同層目錄（`src/`）。
+
+    ```xml
+    <Project>
+      <PropertyGroup>
+        <Version>3.11.0</Version>
+      </PropertyGroup>
+    </Project>
+    ```
+
+    放在 `AiTeam.sln` 同層目錄（`src/`）。
 
 2. **移除各 `.csproj` 的 `<Version>` 和 `<AssemblyVersion>`**：
-   - `src/AiTeam.Bot/AiTeam.Bot.csproj`
-   - `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj`
+    - `src/AiTeam.Bot/AiTeam.Bot.csproj`
+    - `src/AiTeam.Dashboard/AiTeam.Dashboard.csproj`
 
 3. **驗證**：
-   - `dotnet build` 確認所有專案自動繼承版本號
-   - Dashboard 頁腳讀取 assembly version 仍正確顯示
-   - GitHub Actions auto-tag（如有讀 .csproj version 的邏輯）仍正常
+    - `dotnet build` 確認所有專案自動繼承版本號
+    - Dashboard 頁腳讀取 assembly version 仍正確顯示
+    - GitHub Actions auto-tag（如有讀 .csproj version 的邏輯）仍正常
 
 4. **更新 CLAUDE.md**：版本號管理章節改為指向 `Directory.Build.props`，移除「需要修改的地方」中的兩個 .csproj
 
@@ -216,53 +221,59 @@ MockMode 有兩大類問題需要修正：
 ## 驗收清單
 
 ### 26-1 Dashboard 詳情頁
+
 - [ ] TaskGroupDto 包含 KickoffMeetingLog / TaskPlan / DesignMeetingLog / DesignPlan
 - [ ] PipelineView 顯示折疊面板（任務計劃書、Kickoff 紀錄、設計規劃書、設計紀錄）
 - [ ] 面板僅在有內容時顯示
 - [ ] 面板預設收合，展開後可讀
 
 ### 26-2 Pipeline View
+
 - [ ] Kickoff 步驟顯示為「Kick-off 會議」
 - [ ] Design 步驟顯示為「設計規劃」
 - [ ] 兩個步驟的 status（running / done / failed）正確顯示
 
 ### 26-3 MockMode
+
 - [ ] Design 會議 session ID 解析正確（Petra 回傳 consensus JSON，非靠 null fallback）
 - [ ] Reviewer 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
 - [ ] QA 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
 - [ ] Doc 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
 - [ ] Kickoff / Design 步驟在 Dashboard 上顯示 running 狀態正確
-- [ ] `/mock proposal` → 核准 → Kickoff → Design → Dev_plan → ... → Merge 全流程跑通
-- [ ] 每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒
-- [ ] MockMode 無卡住、無報錯
-- [ ] BugFix MockMode 跳過 Kickoff + Design
+- [ ] `/mock proposal` → 核准 → Kickoff → Design → Dev_plan → ... → Merge 全流程跑通（待 Christ 驗收）
+- [ ] 每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒（待 Christ 驗收）
+- [ ] MockMode 無卡住、無報錯（待 Christ 驗收）
+- [ ] BugFix MockMode 跳過 Kickoff + Design（待 Christ 驗收）
 
 ### 26-4 版本號
-- [ ] `Directory.Build.props` 存在且版本為 3.11.0
-- [ ] 各 `.csproj` 無 `<Version>` 標籤
-- [ ] Dashboard 頁腳顯示 v3.11.0
-- [ ] `dotnet build` 零 error
-- [ ] CLAUDE.md 版本號章節已更新
+
+- [x] `Directory.Build.props` 存在且版本為 3.11.0
+- [x] 各 `.csproj` 無 `<Version>` 標籤
+- [ ] Dashboard 頁腳顯示 v3.11.0（待部署後 Christ 確認）
+- [x] `dotnet build` 零 error
+- [x] CLAUDE.md 版本號章節已更新
 
 ### 整體
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
+
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
 
 ---
 
 ## 不在 Stage 26 範圍
 
-| 項目 | 原因 |
-|------|------|
-| 會議紀錄 Markdown 渲染 | 純文字足夠驗收，Markdown renderer 是後續美化 |
-| Dashboard 會議紀錄獨立頁面 | 折疊面板足夠，獨立頁面是後續需求 |
-| 實際（非 Mock）流程驗收 | Stage 26 確保 MockMode 能跑通，實際流程驗收在 Stage 26 完成後由 Christ 執行 |
+| 項目                       | 原因                                                                        |
+| -------------------------- | --------------------------------------------------------------------------- |
+| 會議紀錄 Markdown 渲染     | 純文字足夠驗收，Markdown renderer 是後續美化                                |
+| Dashboard 會議紀錄獨立頁面 | 折疊面板足夠，獨立頁面是後續需求                                            |
+| 實際（非 Mock）流程驗收    | Stage 26 確保 MockMode 能跑通，實際流程驗收在 Stage 26 完成後由 Christ 執行 |
 
 ---
 
 ## 變更紀錄
 
-| 日期       | 版本 | 內容                   |
-| ---------- | ---- | ---------------------- |
-| 2026-04-14 | v1.0 | Aria 撰寫初版規劃書    |
-| 2026-04-14 | v1.1 | 擴充 26-3：新增 MockMode 延遲修正（Reviewer/QA/Doc 0 秒問題）+ Dashboard 狀態時序確認 |
+| 日期       | 版本 | 內容                                                                                                                                                                                                  |
+| ---------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-04-14 | v1.0 | Aria 撰寫初版規劃書                                                                                                                                                                                   |
+| 2026-04-14 | v1.1 | 擴充 26-3：新增 MockMode 延遲修正（Reviewer/QA/Doc 0 秒問題）+ Dashboard 狀態時序確認                                                                                                                 |
+| 2026-04-14 | v1.2 | 實作完成：26-4（Directory.Build.props）→ 26-1（DTO + PipelineView 折疊面板）→ 26-2（Kickoff/Design TaskItem）→ 26-3（MockMode session ID 解析 + 狀態時序）；dotnet build 零 error，驗收待 Christ 確認 |
