@@ -4,7 +4,7 @@
 > 對應版本：v3.11.0
 > 建立日期：2026-04-14
 > 狀態：📋 規劃中
-> 文件版本：v1.0
+> 文件版本：v1.1
 
 ---
 
@@ -106,26 +106,65 @@ Kickoff 和 Design 步驟在 `FireOneStepAsync` 中被攔截（不走一般 Agen
 
 **現狀**
 
+MockMode 有兩大類問題需要修正：
+
+#### 問題 A：Design 會議 session ID 解析錯誤
+
 `MockClaudeCodeService.RunMeetingSessionAsync` 用 `sessionId.Split('-').Last()` 判斷 Agent 角色。這對 Kickoff 可以運作（session ID 格式 `{groupId}` 由 `group.Id.ToString()` 產生，Petra 的 session ID 就是 group GUID）。
 
 但 Design 階段的 session ID 全部是 `Guid.NewGuid().ToString()`（純 UUID），`Split('-').Last()` 拿到的是 UUID 最後一段（如 `a1b2c3d4e5f6`），不會匹配任何 Agent 名稱 → 所有 Agent 都走 default 分支 → Petra 不會回傳 consensus JSON → MeetingService 的 `TryParseDesignPetraDecision` 回傳 null → **靠 null fallback 走 consensus**。
 
-這個 fallback 恰好能跑通，但邏輯不正確。應該修正 MockMode 讓它能正確區分不同會議類型的 Agent。
+這個 fallback 恰好能跑通，但邏輯不正確。
+
+#### 問題 B：Reviewer / QA / Doc 在 MockMode 下 0 秒完成
+
+這三個 Agent 的執行流程一開頭就檢查 GitHub PR 是否存在（解析 PR 編號、查詢 open PR 列表等）。MockMode 不會建立真正的 GitHub PR，所以驗證直接失敗 → Agent 在到達 Mock 延遲代碼之前就 early return → **0 秒完成**，Dashboard 上根本看不到狀態變化。
+
+具體路徑：
+- **Reviewer**：找不到 open PR 或 PR 無 .cs 檔 → 立即返回
+- **QA**：從任務描述解析不到 PR 編號或無可測試檔案 → 立即返回
+- **Doc**：找不到 PR 編號 → 立即返回（且回傳 success，略過歸檔）
+
+#### 問題 C：Kickoff / Design 步驟的 Dashboard 顯示時序
+
+`FireOneStepAsync` 用 `_ = Task.Run(...)` fire-and-forget 啟動會議，立刻 return。會議本身有延遲，但需確認 Dashboard 的 Pipeline View 步驟狀態更新不會因為 fire-and-forget 而顯示異常。
 
 **需要做的事**
 
-1. **修改 `RunMeetingSessionAsync` 簽名或行為**：加入 `agentHint` 參數（或在 MeetingService 呼叫時傳入），讓 MockMode 知道目前是哪個 Agent。
+1. **修正 Design session ID 解析（問題 A）**：
 
-   或者更簡單的做法：**MeetingService 在呼叫 MockClaudeCodeService 時，在 prompt 中帶入角色標記**（如 `[ROLE:Petra]`），MockClaudeCodeService 從 prompt 中解析角色。
+   修改 `MockClaudeCodeService` 的判斷邏輯，讓它在無法從 sessionId 解析 Agent 角色時，根據 prompt 內容判斷（如果 prompt 包含「整理」「判斷」等關鍵字 → 回傳 Petra consensus JSON）。
 
-   或者最簡單的做法：**不改簽名，修改 MockClaudeCodeService 的判斷邏輯**，讓它在無法解析 Agent 角色時，根據 prompt 內容判斷（如果 prompt 包含「整理」「判斷」→ 回傳 Petra consensus JSON）。
+   或者在 MeetingService 呼叫時，在 prompt 中帶入角色標記（如 `[ROLE:Petra]`），MockClaudeCodeService 從 prompt 中解析角色。
 
-2. **驗證完整 MockMode 流程**：
+2. **修正 Reviewer / QA / Doc 的 MockMode 路徑（問題 B）**：
+
+   在各 Agent Service 的執行流程最前面加入 MockMode 檢查：
+   ```
+   if (MockMode 啟用)
+   {
+       await Task.Delay(30~60 秒);
+       return MockMode 模擬結果（success）;
+   }
+   ```
+   
+   這樣在 MockMode 下直接跳過 GitHub 驗證，走 Mock 路徑（含延遲），確保 Dashboard 有足夠時間顯示狀態變化。
+
+   > 注意：Dev Agent 已有正確的 MockMode 延遲路徑（透過 MockClaudeCodeService），不需要修改。
+
+3. **確認 Kickoff / Design 步驟的 Dashboard 狀態（問題 C）**：
+
+   確認 `RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 在開始時有正確建立 TaskItem（status: running），且 fire-and-forget 不影響 Dashboard 即時更新。如果 26-2 已處理 TaskItem 建立，此項只需驗證。
+
+4. **全流程延遲審計**：確保 MockMode 下每個步驟（從提案到 Merge）都至少有 30 秒可觀察時間。
+
+5. **驗證完整 MockMode 流程**：
    - `/mock proposal` → 提案（無 Rosa/Demi）→ 核准
    - → Kickoff（MockMode consensus）→ Christ 按按鈕
    - → Design（MockMode consensus）→ 直接 Dev_plan
    - → Dev → Reviewer → QA → Doc → Merge
    - 全程無卡住、無報錯
+   - **每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒**
 
 ---
 
@@ -188,7 +227,13 @@ Kickoff 和 Design 步驟在 `FireOneStepAsync` 中被攔截（不走一般 Agen
 - [ ] 兩個步驟的 status（running / done / failed）正確顯示
 
 ### 26-3 MockMode
+- [ ] Design 會議 session ID 解析正確（Petra 回傳 consensus JSON，非靠 null fallback）
+- [ ] Reviewer 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
+- [ ] QA 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
+- [ ] Doc 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
+- [ ] Kickoff / Design 步驟在 Dashboard 上顯示 running 狀態正確
 - [ ] `/mock proposal` → 核准 → Kickoff → Design → Dev_plan → ... → Merge 全流程跑通
+- [ ] 每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒
 - [ ] MockMode 無卡住、無報錯
 - [ ] BugFix MockMode 跳過 Kickoff + Design
 
@@ -220,3 +265,4 @@ Kickoff 和 Design 步驟在 `FireOneStepAsync` 中被攔截（不走一般 Agen
 | 日期       | 版本 | 內容                   |
 | ---------- | ---- | ---------------------- |
 | 2026-04-14 | v1.0 | Aria 撰寫初版規劃書    |
+| 2026-04-14 | v1.1 | 擴充 26-3：新增 MockMode 延遲修正（Reviewer/QA/Doc 0 秒問題）+ Dashboard 狀態時序確認 |
