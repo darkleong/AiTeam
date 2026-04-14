@@ -164,7 +164,7 @@ public class TaskGroupService(
 
             // 按需查詢 ProjectId（僅在進入 Petra 審核分支時才查，避免無謂的 DB 壓力）
             var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-            var petraDevPlanReview = await RunPetraDevPlanReviewAsync(group, result, groupProjectId, cancellationToken);
+            var (petraDevPlanReview, petraDevPlanTaskId) = await RunPetraDevPlanReviewAsync(group, result, groupProjectId, cancellationToken);
             switch (petraDevPlanReview.Decision)
             {
                 case "approve":
@@ -174,6 +174,8 @@ public class TaskGroupService(
                 case "revise":
                     // Stage 24：Appeal loop（Cody 反駁 + Petra 重評，純 LLM 緊密迴圈）
                     var appealApproved = await RunDevPlanAppealLoopAsync(group, petraDevPlanReview, taskRepo, cancellationToken);
+                    // Appeal 結束後更新 [Petra→Dev_plan] TaskItem 最終狀態（修正：appeal 前為 revision，需補收尾）
+                    await FinalizePetraDevPlanTaskAsync(petraDevPlanTaskId, appealApproved, group, cancellationToken);
                     if (appealApproved)
                     {
                         // Appeal 說服成功，直接觸發 Dev（計畫書已在 group.DevPlan）
@@ -1335,7 +1337,7 @@ public class TaskGroupService(
     /// <summary>
     /// 建立 Petra TaskItem、呼叫 ReviewDevPlanAsync、推送狀態、通知 #petra-pm 頻道。
     /// </summary>
-    private async Task<Agents.PetraReview> RunPetraDevPlanReviewAsync(
+    private async Task<(Agents.PetraReview, Guid)> RunPetraDevPlanReviewAsync(
         TaskGroup group,
         AgentExecutionResult devPlanResult,
         Guid? projectId,
@@ -1437,7 +1439,37 @@ public class TaskGroupService(
                 $"📋 **Petra 審核結果**（Dev_plan 第 {group.DevPlanRevision + 1} 輪）：**{petraReview.Decision.ToUpper()}**\n{petraReview.Summary}");
 
         logger.LogInformation("Petra Dev_plan 審核：Group={Id}，decision={Decision}", group.Id, petraReview.Decision);
-        return petraReview;
+        return (petraReview, petraTask.Id);
+    }
+
+    /// <summary>
+    /// Dev_plan Appeal 結束後，將 [Petra→Dev_plan] TaskItem 最終狀態更新並推送 SignalR。
+    /// </summary>
+    private async Task FinalizePetraDevPlanTaskAsync(
+        Guid petraTaskId,
+        bool approved,
+        TaskGroup group,
+        CancellationToken cancellationToken)
+    {
+        await using var scope   = serviceProvider.CreateAsyncScope();
+        var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var task = await taskRepo.GetByIdAsync(petraTaskId, cancellationToken);
+        if (task is null) return;
+
+        var finalStatus = approved ? "done" : "failed";
+        taskRepo.UpdateStatus(task, finalStatus);
+        await taskRepo.SaveAsync(cancellationToken);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            GroupId   = group.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = finalStatus
+        });
     }
 
     /// <summary>
