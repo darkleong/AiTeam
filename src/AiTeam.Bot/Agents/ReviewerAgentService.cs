@@ -51,6 +51,27 @@ public class ReviewerAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // 強制失敗情境：回傳 Critical Issue，觸發 Review Appeal 流程
+            if (MockClaudeCodeService.FailScenario == "review_appeal")
+            {
+                MockClaudeCodeService.FailScenario = "review_cody_appeal";
+                logger.LogInformation("[MockMode/FailReview] Vera 回傳模擬 Critical Issue，觸發 Appeal 流程");
+                AddLog(task, "[MOCK-FAIL] Vera 模擬審查中...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Id, task.Title);
+                await Task.Delay(Random.Shared.Next(10000, 20000), cancellationToken);
+                AddLog(task, "[MOCK-FAIL] Vera 模擬審查完成，發現 1 個 Critical Issue", "revision");
+                taskRepository.UpdateStatus(task, "revision");
+                await taskRepository.SaveAsync(cancellationToken);
+                const string failBody =
+                    "## 🔍 PR #999 程式碼審查報告\n\n" +
+                    "### 🔴 必須修改（Critical）\n" +
+                    "- [#1] **`MockFile.cs`** (line ~42): [MOCK-FAIL] 缺少錯誤處理，可能導致未處理例外\n\n" +
+                    "---\n\n**摘要**：[MOCK-FAIL] 發現 1 個 Critical 問題，請修正後重新提交。";
+                return new AgentExecutionResult(true, "[MOCK-FAIL] Vera 審查發現 1 個必修問題",
+                    ReviewBody: failBody, CriticalReviewCount: 1);
+            }
+
             logger.LogInformation("[MockMode] ReviewerAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Vera 模擬審查中...", "running");
             await taskRepository.SaveAsync(cancellationToken);

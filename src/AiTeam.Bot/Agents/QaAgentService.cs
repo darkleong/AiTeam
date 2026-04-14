@@ -47,6 +47,29 @@ public class QaAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // 強制失敗情境：回傳 QA 失敗報告，觸發 Petra 判斷路由
+            if (MockClaudeCodeService.FailScenario == "qa_failure")
+            {
+                MockClaudeCodeService.FailScenario = null;
+                logger.LogInformation("[MockMode/FailQA] Quinn 回傳模擬 QA 失敗報告，觸發 Petra 路由");
+                AddLog(task, "[MOCK-FAIL] Quinn 模擬 QA 執行中...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Title);
+                await Task.Delay(Random.Shared.Next(10000, 20000), cancellationToken);
+                AddLog(task, "[MOCK-FAIL] Quinn 模擬 QA 完成，1 個測試失敗", "failed");
+                taskRepository.UpdateStatus(task, "failed");
+                await taskRepository.SaveAsync(cancellationToken);
+                var failReport = new QaReport
+                {
+                    Status      = "failed",
+                    PassedTests = [],
+                    FailedTests = ["[MOCK-FAIL] MockFailTest.cs::TestMockFeature"],
+                    Summary     = "[MOCK-FAIL] 1 個測試失敗：模擬錯誤處理邏輯異常"
+                };
+                return new AgentExecutionResult(true, "[MOCK-FAIL] QA 失敗，1 個測試未通過",
+                    TestReport: JsonSerializer.Serialize(failReport, JsonOptions));
+            }
+
             logger.LogInformation("[MockMode] QaAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Quinn 模擬 QA 執行中...", "running");
             await taskRepository.SaveAsync(cancellationToken);

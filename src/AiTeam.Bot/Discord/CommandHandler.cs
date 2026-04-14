@@ -109,7 +109,10 @@ public class CommandHandler(
                     .AddChoice("新功能（new_feature）", "new_feature")
                     .AddChoice("新功能（含提案）", "new_feature_with_proposal")
                     .AddChoice("Bug 修復（bug_fix）", "bug_fix")
-                    .AddChoice("技術改善（tech_improvement）", "tech_improvement"))
+                    .AddChoice("技術改善（tech_improvement）", "tech_improvement")
+                    .AddChoice("【失敗測試】Review Appeal（Vera 拒絕 → Cody 反駁）", "fail_review")
+                    .AddChoice("【失敗測試】QA 失敗（Quinn 失敗 → Petra 路由）", "fail_qa")
+                    .AddChoice("【失敗測試】Dev_plan Appeal（Petra 拒絕 → Cody 反駁）", "fail_dev_plan"))
                 .AddOption("title", ApplicationCommandOptionType.String, "（選用）模擬任務標題", isRequired: false)
                 .Build(),
         };
@@ -638,12 +641,23 @@ public class CommandHandler(
         var workflowStr = command.Data.Options.First(o => o.Name == "workflow").Value.ToString()!;
         var customTitle = command.Data.Options.FirstOrDefault(o => o.Name == "title")?.Value?.ToString();
 
+        // 失敗測試情境：設定 FailScenario 並對應到適合的起始步驟
+        if (workflowStr == "fail_review")
+            MockClaudeCodeService.FailScenario = "review_appeal";
+        else if (workflowStr == "fail_qa")
+            MockClaudeCodeService.FailScenario = "qa_failure";
+        else if (workflowStr == "fail_dev_plan")
+            MockClaudeCodeService.FailScenario = "dev_plan_appeal";
+
         var (workflowType, workflowLabel, initialStep) = workflowStr switch
         {
-            "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",        "Dev"),
-            "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",        "Dev_plan"),
-            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）", "Dev_plan"),
-            _                           => (WorkflowType.NewFeature,       "新功能",          "Dev_plan")
+            "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",           "Dev"),
+            "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",           "Dev_plan"),
+            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）",    "Dev_plan"),
+            "fail_review"               => (WorkflowType.NewFeature,      "失敗測試-ReviewAppeal", "Dev"),
+            "fail_qa"                   => (WorkflowType.NewFeature,      "失敗測試-QA失敗",      "Dev"),
+            "fail_dev_plan"             => (WorkflowType.NewFeature,      "失敗測試-DevPlanAppeal", "Dev_plan"),
+            _                           => (WorkflowType.NewFeature,      "新功能",              "Dev_plan")
         };
 
         var title   = customTitle ?? $"[MOCK] 模擬{workflowLabel}任務（{DateTime.Now:HH:mm:ss}）";
@@ -906,7 +920,7 @@ public class CommandHandler(
 
         var actionText = action switch
         {
-            "continue" => "▶️ 繼續開發，Cody 即將開始規劃實作計畫書...",
+            "continue" => "▶️ 繼續開發，即將進入設計規劃階段...",
             "stop"     => "⏹️ 任務已停止。",
             "restart"  => "🔄 重新召開 Kick-off 會議...",
             _          => $"✅ 已執行 {action}。"

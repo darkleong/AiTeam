@@ -80,6 +80,16 @@ public class PmAgentService(
         string repoLocalPath,
         CancellationToken ct = default)
     {
+        // 強制失敗情境：模擬 Petra 拒絕 Dev_plan，觸發 Dev_plan Appeal 流程
+        if (MockClaudeCodeService.FailScenario == "dev_plan_appeal")
+        {
+            MockClaudeCodeService.FailScenario = "dev_plan_cody_appeal";
+            logger.LogInformation("[MockMode/FailDevPlan] Petra 模擬拒絕 Dev_plan，觸發 Appeal 流程");
+            return new PetraReview("revise", "[MOCK-FAIL] Dev_plan 不夠詳細，缺少錯誤處理章節與回滾計劃。",
+                [new PetraIssue("blocking", "[MOCK-FAIL] 缺少錯誤處理與回滾計劃")],
+                "[MOCK-FAIL] 請補充：1. 錯誤處理策略 2. 回滾計劃 3. 影響範圍評估");
+        }
+
         var prompt = BuildDevPlanReviewPrompt(taskTitle, devPlan, issueUrlsJson, uiSpecContent);
         var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
         if (review is not null)
@@ -471,6 +481,17 @@ public class PmAgentService(
         string? priorContext,
         CancellationToken ct = default)
     {
+        // 強制失敗情境：Cody 對 Vera 的 Critical 提出 disagree，推進到 Vera 重評
+        if (MockClaudeCodeService.FailScenario == "review_cody_appeal")
+        {
+            MockClaudeCodeService.FailScenario = "review_vera_appeal";
+            logger.LogInformation("[MockMode/FailReview] Cody 模擬 disagree Vera 的 Critical Issue");
+            var disagreeItems = remainingCriticalIds
+                .Select(id => new CodyAppealItem(id, "disagree", "[MOCK-FAIL] 這個 Critical 判斷有誤，現有架構已有 global error handler 處理。"))
+                .ToList();
+            return new CodyAppeal(disagreeItems);
+        }
+
         var prompt       = BuildCodyAppealPrompt(reviewBody, taskTitle, remainingCriticalIds, priorContext);
         var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildCodyAppealSystemPrompt();
@@ -509,6 +530,14 @@ public class PmAgentService(
         string codyAppealJson,
         CancellationToken ct = default)
     {
+        // 強制失敗情境：Vera 維持 Critical，迫使進入 Petra 仲裁（輪數達上限）
+        if (MockClaudeCodeService.FailScenario == "review_vera_appeal")
+        {
+            MockClaudeCodeService.FailScenario = null;
+            logger.LogInformation("[MockMode/FailReview] Vera 模擬維持所有 Critical，不接受 Cody 反駁");
+            return new VeraAppealResponse([], [1], "[MOCK-FAIL] Vera 審查架構後確認：此問題不在 global handler 涵蓋範圍內，屬必修項目。");
+        }
+
         var prompt       = BuildVeraAppealPrompt(reviewBody, codyAppealJson);
         var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildVeraAppealSystemPrompt();
@@ -934,6 +963,15 @@ public class PmAgentService(
         string? priorContext,
         CancellationToken ct = default)
     {
+        // 強制失敗情境：Cody 對 Petra 拒絕 Dev_plan 提出反駁
+        if (MockClaudeCodeService.FailScenario == "dev_plan_cody_appeal")
+        {
+            MockClaudeCodeService.FailScenario = null;
+            logger.LogInformation("[MockMode/FailDevPlan] Cody 模擬 disagree Petra 的 Dev_plan 拒絕決定");
+            return new CodyDevPlanAppeal("disagree",
+                "[MOCK-FAIL] 計劃書中已有錯誤處理章節（見第 3.2 節），回滾計劃透過 DB Transaction 保證，不需額外補充。");
+        }
+
         var prompt       = BuildCodyDevPlanAppealPrompt(group, petraReview, priorContext);
         var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildCodyDevPlanAppealSystemPrompt();

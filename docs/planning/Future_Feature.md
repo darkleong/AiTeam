@@ -7,6 +7,30 @@
 
 ---
 
+## 零-A、任務列表右側 Log 顯示統一化
+
+> 狀態：🟡 待確認 — 需逐一核查每種 Agent 任務的 Log 顯示行為
+
+### 背景
+
+在「任務列表」頁面點擊任務後，右側會展開顯示 TaskLog 記錄。目前各 Agent 的 MockMode 寫 Log 風格不一致：
+
+- **QA / Reviewer**：寫兩筆 Log（`running` → `done`），完成後點開仍看到第一筆「執行中」
+- **Doc**：只寫一筆 `done` Log，第一筆即「完成」
+- **PM（Petra）/ Design**：未寫任何 TaskLog，顯示「尚無 Log 記錄」
+
+### 待確認項目
+
+1. 逐一確認每種 Agent 任務（Kickoff / Design / Dev / Reviewer / PM / QA / Doc）右側顯示的 Log 內容與期望是否一致
+2. 決定統一規格：所有 Agent 要不要都補 `running` Log？或 PM / Design 是否要補寫 TaskLog？
+3. 若有不一致的 Agent，逐一修正 MockMode 的 Log 寫入邏輯
+
+### 優先級
+
+🟡 中優先級 — 不影響流程正確性，但影響 Dashboard 可觀察性
+
+---
+
 ## 零、Dashboard 歸檔報告折疊面板
 
 > 狀態：🟡 待實作 — 技術條件已釐清，預計納入下個 Stage

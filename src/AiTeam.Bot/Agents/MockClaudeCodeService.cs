@@ -8,6 +8,23 @@ namespace AiTeam.Bot.Agents;
 public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : IClaudeCodeService
 {
     /// <summary>
+    /// 強制失敗情境（供 /mock fail_* 指令使用）。
+    /// 各 Agent 的 MockMode 區塊會依據此值決定是否回傳失敗結果。
+    /// 每次使用後由 Agent 自行推進到下一個值（或清為 null）。
+    ///
+    /// 狀態機：
+    ///  fail_review  → ReviewerAgent 設為 review_cody_appeal，回傳 Critical
+    ///  review_cody_appeal → PmAgent.RunCodyAppealAsync 設為 review_vera_appeal，Cody disagree
+    ///  review_vera_appeal → PmAgent.RunVeraAppealAsync 設為 null，Vera maintain critical
+    ///
+    ///  qa_failure → QaAgent 設為 null，回傳 failed 報告
+    ///
+    ///  dev_plan_appeal → PmAgent.ReviewDevPlanAsync 設為 dev_plan_cody_appeal，回傳 revise
+    ///  dev_plan_cody_appeal → PmAgent.RunCodyDevPlanAppealAsync 設為 null，Cody disagree
+    /// </summary>
+    public static string? FailScenario { get; set; }
+
+    /// <summary>
     /// 模擬 Dev Agent 完整開發（RunAsync）。
     /// Output 包含 /pull/999，讓 DevAgentService.ExtractPrNumberFromText 可解析 PR 編號。
     /// </summary>
