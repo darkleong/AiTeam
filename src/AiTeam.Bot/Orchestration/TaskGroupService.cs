@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiTeam.Bot.Agents;
@@ -28,18 +27,15 @@ public class TaskGroupService(
     IOptions<DiscordSettings> discordSettings,
     IOptions<GitHubSettings> gitHubSettings,
     IOptions<WorkflowSettings> workflowSettings,
-    RulesService rulesService,
     WorkflowEngine workflowEngine,
     MeetingService meetingService,
+    AgentQueueService agentQueueService,
     IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
     private readonly DiscordSettings  _discord          = discordSettings.Value;
     private readonly GitHubSettings   _gitHub           = gitHubSettings.Value;
     private readonly WorkflowSettings _workflowSettings = workflowSettings.Value;
-
-    // Stage 14：記錄每個執行中 TaskItem 的 CTS，供取消時 kill subprocess
-    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _runningCts = new();
 
     // ---- 任務群組建立 ----
 
@@ -350,7 +346,8 @@ public class TaskGroupService(
     // ---- 觸發 Agent 執行 ----
 
     /// <summary>
-    /// 依流程步驟清單建立 TaskItem 並並行觸發 Agent 執行。
+    /// Stage 27a：依流程步驟清單建立 TaskItem 並推入佇列。
+    /// 佇列本身保證 per-agent 串行（同 Agent 排隊），不同 Agent 天然並行（各自的 semaphore）。
     /// </summary>
     public async Task FireStepsAsync(
         TaskGroup group,
@@ -359,19 +356,7 @@ public class TaskGroupService(
     {
         if (steps.Count == 0) return;
 
-        var parallel = steps.Where(s => s.RunInParallel || steps.Count == 1).ToList();
-        var serial   = steps.Where(s => !s.RunInParallel && steps.Count > 1).ToList();
-
-        // 並行步驟：同時觸發
-        if (parallel.Count > 0)
-        {
-            var tasks = parallel.Select(step =>
-                FireOneStepAsync(group, step, cancellationToken));
-            await Task.WhenAll(tasks);
-        }
-
-        // 序列步驟（目前流程表裡不存在，保留擴充彈性）
-        foreach (var step in serial)
+        foreach (var step in steps)
             await FireOneStepAsync(group, step, cancellationToken);
     }
 
@@ -408,220 +393,63 @@ public class TaskGroupService(
             return;
         }
 
+        // Stage 27a：純 enqueue 操作，執行邏輯移至 AgentQueueProcessor
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService       = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
 
-        var owner = _gitHub.Owner;
-        var repo  = string.IsNullOrWhiteSpace(group.Project)
-            ? _gitHub.DefaultRepo
-            : group.Project;
-
-        // 建立 TaskItem
-        var description = BuildTaskDescription(group, step);
         // 查詢專案 ID（供任務中心顯示專案欄位）
         var projectId = string.IsNullOrWhiteSpace(group.Project)
             ? (Guid?)null
             : await taskRepo.GetProjectIdByNameAsync(group.Project, cancellationToken);
 
-        // Stage 16：Dev_plan 步驟由 Cody（Dev）執行，AssignedAgent 顯示為 Dev 避免 Dashboard 出現未知 Agent
-        var displayAgent = step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase)
-            ? AgentNames.Dev
+        // WorkflowAgentKey：預計算 HandleAgentCompletedAsync 的 agentKey
+        // - IsFixLoop && Dev → "Dev_fix"（讓 WorkflowEngine 查 Dev_fix 路由）
+        // - Dev_plan → "Dev_plan"（讓 WorkflowEngine 查 Dev_plan → Dev 路由）
+        // - 其他 → step.AgentName
+        var workflowAgentKey = step.IsFixLoop && step.AgentName == AgentNames.Dev
+            ? "Dev_fix"
             : step.AgentName;
 
         var taskItem = new TaskItem
         {
-            Title         = $"{group.Title}（{step.AgentName}）",
-            Description   = description,
-            TriggeredBy   = "Orchestrator",
-            AssignedAgent = displayAgent,
-            Status        = "running",
-            GroupId       = group.Id,
-            ProjectId     = projectId,
+            Title            = $"{group.Title}（{step.AgentName}）",
+            Description      = BuildTaskDescription(group, step),
+            TriggeredBy      = "Orchestrator",
+            AssignedAgent    = step.AgentName,   // 保持語義（Dev_plan 就存 Dev_plan）
+            Status           = "queued",
+            GroupId          = group.Id,
+            ProjectId        = projectId,
+            WorkflowAgentKey = workflowAgentKey,
         };
 
         taskRepo.Add(taskItem);
         await taskRepo.SaveAsync(cancellationToken);
 
+        // 推送「queued」狀態給 Dashboard
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
             TaskId    = taskItem.Id,
             GroupId   = group.Id,
             Title     = taskItem.Title,
             AgentName = taskItem.AssignedAgent,
-            Status    = "running"
+            Status    = "queued"
         });
 
-        // 通知 Agent 頻道
-        var agentChannelName = GetAgentChannelName(step.AgentName);
-        var agentChannel     = FindChannel(agentChannelName);
-        if (agentChannel is not null)
-            await agentChannel.SendMessageAsync(
-                $"🚀 CEO Orchestrator 自動觸發：**{step.AgentName}** 開始執行任務《{group.Title}》");
+        // EnqueueAsync：設定 QueuedAt、QueueStatus = "queued"，並喚醒 AgentQueueProcessor
+        await agentQueueService.EnqueueAsync(taskItem, cancellationToken);
 
-        // 執行 Agent（Stage 16：Dev_plan 映射到 Dev executor，用不同 prompt 驅動）
-        var executorKey = step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase)
-            ? AgentNames.Dev
-            : step.AgentName;
-        var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(executorKey);
-        if (executor is null)
-        {
-            logger.LogError("TaskGroupService：找不到 Agent 實作：{Agent}", step.AgentName);
-            taskRepo.UpdateStatus(taskItem, "failed");
-            await taskRepo.SaveAsync(cancellationToken);
-            // Stage 18：Agent 找不到，推送 error 狀態
-            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
-            {
-                AgentName        = displayAgent,
-                Status           = "error",
-                CurrentTaskTitle = $"找不到 Agent 實作：{step.AgentName}"
-            });
-            return;
-        }
-
-        // Stage 14：建立 linked CTS，供外部取消時 kill subprocess
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _runningCts[taskItem.Id] = linkedCts;
-
-        try
-        {
-            var rules = await rulesService.GetRulesAsync(step.AgentName);
-            // Stage 18：Agent 開始執行前推送 running 狀態
-            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
-            {
-                AgentName        = displayAgent,
-                Status           = "running",
-                CurrentTaskTitle = group.Title
-            });
-            var result = await executor.ExecuteTaskAsync(taskItem, owner, repo, rules, linkedCts.Token);
-
-            var finalStatus = result.Success ? "done" : "failed";
-            taskRepo.UpdateStatus(taskItem, finalStatus);
-            // Stage 13：補全最終 TaskLog，讓 Dashboard 能顯示完成原因或失敗原因
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId = taskItem.Id,
-                Agent  = step.AgentName,
-                Step   = result.Summary,
-                Status = finalStatus,
-            });
-            await taskRepo.SaveAsync(cancellationToken);
-
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = taskItem.Id,
-                GroupId   = group.Id,
-                Title     = taskItem.Title,
-                AgentName = taskItem.AssignedAgent,
-                Status    = finalStatus
-            });
-            // Stage 18：Agent 完成後推送 idle / error 狀態
-            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
-            {
-                AgentName        = displayAgent,
-                Status           = result.Success ? "idle" : "error",
-                CurrentTaskTitle = result.Success ? null : result.Summary
-            });
-
-            // 推送結果到頻道
-            var embed = new EmbedBuilder()
-                .WithTitle(result.Success
-                    ? $"✅ {step.AgentName} Agent 執行完成（Orchestrator）"
-                    : $"❌ {step.AgentName} Agent 執行失敗（Orchestrator）")
-                .WithColor(result.Success ? Color.Green : Color.Red)
-                .AddField("任務", taskItem.Title)
-                .AddField("摘要", result.Summary)
-                .WithTimestamp(DateTimeOffset.UtcNow);
-
-            if (!string.IsNullOrEmpty(result.OutputUrl))
-                embed.AddField("連結", result.OutputUrl);
-
-            if (agentChannel is not null)
-                await agentChannel.SendMessageAsync(embed: embed.Build());
-
-            // Stage 13：改用 ApplicationStopping token，Bot 關閉時背景工作可被取消
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    var prUrl = result.OutputUrl ?? group.DevPrUrl ?? "";
-                    // 更新 completedAgent：若為修復迭代，用 "Dev_fix" 讓 WorkflowEngine 正確查表
-                    var agentKey = step.IsFixLoop && step.AgentName == AgentNames.Dev
-                        ? "Dev_fix"
-                        : step.AgentName;
-                    await HandleAgentCompletedAsync(group.Id, agentKey, result, prUrl,
-                        appLifetime.ApplicationStopping);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "TaskGroupService：遞迴觸發下一步失敗（Group={Id}）", group.Id);
-                }
-            }, appLifetime.ApplicationStopping);
-        }
-        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            // Stage 14：外部取消（CancelAsync 呼叫），標記為 cancelled
-            logger.LogInformation("TaskGroupService：Agent {Agent}（Task={Id}）被外部取消", step.AgentName, taskItem.Id);
-            taskRepo.UpdateStatus(taskItem, "cancelled");
-            await taskRepo.SaveAsync(CancellationToken.None);
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = taskItem.Id,
-                GroupId   = group.Id,
-                Title     = taskItem.Title,
-                AgentName = taskItem.AssignedAgent,
-                Status    = "cancelled"
-            });
-            // Stage 18：取消後恢復 idle
-            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
-            {
-                AgentName = displayAgent,
-                Status    = "idle"
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "TaskGroupService：Agent {Agent} 執行失敗（Task={Id}）",
-                step.AgentName, taskItem.Id);
-            taskRepo.UpdateStatus(taskItem, "failed");
-            // Stage 13：補全失敗 TaskLog，讓 Dashboard 能顯示例外訊息
-            taskRepo.AddLog(new TaskLog
-            {
-                TaskId = taskItem.Id,
-                Agent  = step.AgentName,
-                Step   = ex.Message,
-                Status = "failed",
-            });
-            await taskRepo.SaveAsync(cancellationToken);
-
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = taskItem.Id,
-                GroupId   = group.Id,
-                Title     = taskItem.Title,
-                AgentName = taskItem.AssignedAgent,
-                Status    = "failed"
-            });
-            // Stage 18：例外導致失敗，推送 error 狀態
-            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
-            {
-                AgentName        = displayAgent,
-                Status           = "error",
-                CurrentTaskTitle = ex.Message
-            });
-        }
-        finally
-        {
-            _runningCts.TryRemove(taskItem.Id, out _);
-        }
+        logger.LogInformation("TaskGroupService：{Agent} 任務已入佇列（Task={Id}，Group={GroupId}）",
+            step.AgentName, taskItem.Id, group.Id);
     }
 
     // ---- 取消任務（Stage 14）----
 
     /// <summary>
-    /// 取消指定 TaskGroup 的所有進行中任務。
-    /// 1. 呼叫 CTS.Cancel() 中斷正在執行的 subprocess
-    /// 2. 將 TaskGroup / 未完成 TaskItem 狀態改為 cancelled
+    /// Stage 27a 更新：取消指定 TaskGroup 的所有進行中任務。
+    /// 1. 取消 queued 中（尚未 dequeue）的任務：透過 AgentQueueService 直接 DB 標記
+    /// 2. 取消執行中（已 dequeue）的任務：透過 AgentQueueService.TryCancel 送 CTS signal
+    /// 3. 更新 TaskGroup 狀態為 cancelled
     /// </summary>
     public async Task CancelAsync(Guid groupId, CancellationToken cancellationToken = default)
     {
@@ -635,15 +463,12 @@ public class TaskGroupService(
             return;
         }
 
-        // Kill 正在執行的 subprocess（best effort）
+        // 取消 queued 中的任務（尚未被 dequeue，直接 DB 標記）
+        await agentQueueService.CancelQueuedTasksForGroupAsync(groupId, cancellationToken);
+
+        // 取消執行中的任務（已 dequeue，透過 CTS kill subprocess，best effort）
         foreach (var task in group.Tasks)
-        {
-            if (_runningCts.TryRemove(task.Id, out var cts))
-            {
-                try { cts.Cancel(); }
-                catch (Exception ex) { logger.LogWarning(ex, "CancelAsync：Cancel CTS 失敗（TaskId={Id}）", task.Id); }
-            }
-        }
+            agentQueueService.TryCancel(task.Id);
 
         // 更新 DB 狀態
         taskRepo.CancelGroupItems(group);

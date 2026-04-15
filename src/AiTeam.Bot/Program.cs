@@ -93,6 +93,10 @@ builder.Services.AddControllers();
 builder.Services.AddSingleton<WorkflowEngine>();
 // Stage 25a：Kick-off 會議引擎（依賴 GitHubService / IClaudeCodeService，均為 Singleton）
 builder.Services.AddSingleton<MeetingService>();
+// Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
+builder.Services.AddSingleton<AgentQueueService>();
+builder.Services.AddSingleton<AgentQueueProcessor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentQueueProcessor>());
 builder.Services.AddSingleton<TaskGroupService>();
 
 // Discord（Stage 7：加入 GuildMessages + MessageContent 以接收自然語言訊息）

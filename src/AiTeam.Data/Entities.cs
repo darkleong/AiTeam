@@ -104,7 +104,10 @@ public class TaskItem
     public string? Description { get; set; } // CEO 任務描述（供 Agent 使用）
     public string TriggeredBy { get; set; } = ""; // Discord / GitHub / Schedule
     public string AssignedAgent { get; set; } = "";
-    public string Status { get; set; } = "pending"; // pending / running / waiting_input / reviewing / revision / done / failed / cancelled
+    public string Status { get; set; } = "pending"; // pending / queued / running / waiting_input / reviewing / revision / done / failed / cancelled
+    public DateTime? QueuedAt { get; set; }          // Stage 27a：進入佇列的時間（排序用）
+    public string? QueueStatus { get; set; }         // Stage 27a："queued" / "processing" / null（不在佇列中）
+    public string? WorkflowAgentKey { get; set; }    // Stage 27a：HandleAgentCompletedAsync 的 agentKey（預計算，含 IsFixLoop 邏輯）
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
 
