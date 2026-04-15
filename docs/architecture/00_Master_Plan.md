@@ -39,6 +39,8 @@
 | [Stage_25a_Roadmap.md](../planning/Stage_25a_Roadmap.md) | Stage 25a：開發流程重構 Phase 1c（Kick-off 會議機制） | v3.9.0 | ✅ 已完成（2026-04-14） |
 | [Stage_25b_Roadmap.md](../planning/Stage_25b_Roadmap.md) | Stage 25b：開發流程重構 Phase 1d（設計規劃階段） | v3.10.0 | ✅ 已完成（2026-04-14） |
 | [Stage_26_Roadmap.md](../planning/Stage_26_Roadmap.md) | Stage 26：驗收基礎設施 + 版本號集中管理 | v3.11.0 | ✅ 已完成（2026-04-14） |
+| [Stage_27a_Roadmap.md](../planning/Stage_27a_Roadmap.md) | Stage 27a：Agent 任務序列 — 核心佇列機制 | v3.12.0 | 📋 規劃中 |
+| [Stage_27b_Roadmap.md](../planning/Stage_27b_Roadmap.md) | Stage 27b：Agent 任務序列 — 操作性與可觀察性 | v3.13.0 | 📋 規劃中 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -106,6 +108,7 @@
 | v6.2 | 2026-04-14 | Stage 25b 實作完成（v3.10.0）：設計規劃階段全流程（5 人設計會議 + needs_adjustment 調整 + consensus/escalate 路由）；關鍵踩坑：Petra Design session 改用 Guid.NewGuid()（非 group.Id，避免 Kickoff 衝突）、ModifyDesignPlanAsync 接收外部 sessionId、MockMode Rosa Issues 解析失敗 fallback、Demi 動態加入邊界案例；EF Migration Stage25bDesignFields；Feature 八 Phase 1 全部完成 |
 | v6.3 | 2026-04-14 | 新增 Stage_26_Roadmap.md（驗收基礎設施：Dashboard 詳情頁顯示會議紀錄/計劃書、Pipeline View Kickoff/Design 步驟、MockMode 全流程修正、版本號集中管理 Directory.Build.props） |
 | v6.4 | 2026-04-14 | Stage 26 實作完成（v3.11.0）：Directory.Build.props 集中版本號管理、TaskGroupDto 補 6 欄位 + PipelineView MudExpansionPanels 折疊面板、Kickoff/Design 步驟建立 TaskItem（PipelineView 可見）、MockClaudeCodeService 改 prompt 判斷角色（修正 sessionId UUID 誤判）、Reviewer/QA/Doc MockMode 狀態時序修正（running → delay → done）|
+| v6.5 | 2026-04-15 | 新增 Stage_27a/27b_Roadmap.md（Agent 任務序列：27a = 核心佇列 + WorkflowEngine 整合 + Crash Recovery；27b = Agent 狀態管理 + Dashboard 佇列視覺化，對應 FF 十） |
 
 ---
 
