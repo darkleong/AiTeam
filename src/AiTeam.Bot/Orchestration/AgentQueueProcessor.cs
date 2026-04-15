@@ -104,6 +104,11 @@ public class AgentQueueProcessor(
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
+        // task 是從 DequeueAsync 的 scope 返回的 detached entity（那個 scope 已 dispose）。
+        // 重新附加到當前 scope 的 DbContext，讓 UpdateStatus / AddLog 的變更能正確被追蹤並存入 DB。
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Attach(task);
+
         // 取得 TaskGroup（owner / repo 資訊）
         if (task.GroupId is null)
         {
