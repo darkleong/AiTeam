@@ -228,21 +228,23 @@ Quinn 測試完畢後產出結構化測試報告，存入 TaskGroup 供 Petra �
 
 ## 驗收清單
 
-- [ ] QA 流程：Quinn 測試失敗時，Petra 介入判斷而非直接交 Cody
-- [ ] QA 流程：Petra 判斷「大幅改動」時退回 Vera 重新審查
-- [ ] QA 流程：QA 修正超過 3 輪時上呈 Christ
-- [ ] QA 流程：Quinn 輸出 `no_applicable_tests` 時，Petra 輕量判斷放行/要求補測試
-- [ ] Dev_plan：Cody 被 Petra 打回時可 disagree（附理由）
-- [ ] Dev_plan：appeal 迴圈上限 3 輪，超限上呈 Christ
-- [ ] Dev_plan：appeal 對話完整記錄到 `DevPlanAppealLog`
-- [ ] 測試報告：Quinn 產出結構化 JSON 測試報告
-- [ ] 測試報告：報告存入 `TaskGroup.TestReport`
+- [x] QA 流程：Quinn 測試失敗時，Petra 介入判斷而非直接交 Cody（`/mock fail_qa` 驗收 2026-04-15，Petra 路由到 env_or_test_issue）
+- [ ] QA 流程：Petra 判斷「大幅改動」時退回 Vera 重新審查（`back_to_reviewer` 路由未驗收）
+- [ ] QA 流程：QA 修正超過 3 輪時上呈 Christ（未驗收）
+- [ ] QA 流程：Quinn 輸出 `no_applicable_tests` 時，Petra 輕量判斷放行/要求補測試（未驗收）
+- [x] Dev_plan：Cody 被 Petra 打回時可 disagree（附理由）（`/mock fail_dev_plan` 驗收 2026-04-15）
+- [ ] Dev_plan：appeal 迴圈上限 3 輪，超限上呈 Christ（未驗收：Cody 第 1 輪即 disagree，Petra Haiku 重評 approve，未達上限）
+- [x] Dev_plan：appeal 對話完整記錄到 `DevPlanAppealLog`（靜態驗證通過；DevPlanAppealLog JSON 記錄設計確認）
+- [x] 測試報告：Quinn 產出結構化 JSON 測試報告（Dashboard 測試報告（Quinn）折疊面板可展開確認）
+- [x] 測試報告：報告存入 `TaskGroup.TestReport`（Dashboard 折疊面板顯示確認）
 - [x] 文件傳遞：Vera 收到 Dev_plan、Quinn 收到 Issues 清單
 - [x] 文件傳遞：Sage 收到 TestReport
 - [x] `dotnet build` 零 error
 - [x] `dotnet test` 通過
 - [x] git commit + push
 - [x] `.csproj` 版本更新為 `3.8.0`
+
+> **驗收紀錄（2026-04-15）**：`/mock fail_qa` 確認 Petra 介入並路由到 `env_or_test_issue`（視同通過）。`/mock fail_dev_plan` 確認 Dev_plan Appeal（Petra revise → Cody disagree → Petra Haiku approve → Dev 繼續）。`back_to_reviewer` / `code_bug` / `escalate_boss` / 上限機制等路由未驗收，保留為未來測試項目。
 
 ---
 

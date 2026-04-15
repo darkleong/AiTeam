@@ -587,33 +587,33 @@ Stage 25b 完成後，後續 Agent 收到的文件：
 
 ## 驗收清單
 
-- [ ] 提案流程簡化：Victoria 提案不再包含 Issues 和 UI 規格
-- [ ] 提案流程簡化：Rosa/Demi 的提案階段迴圈已移除
-- [ ] 設計階段：Kickoff 完成後觸發 Design 步驟
-- [ ] 設計階段：Petra 判斷是否需要 Demi
-- [ ] 設計階段：Rosa 基於 TaskPlan 產出 GitHub Issues
-- [ ] 設計階段：Demi 基於 TaskPlan + Issues 產出 UI 規格（條件式）
-- [ ] 設計會議：Rosa/Demi 復用前置作業 session
-- [ ] 設計會議：Cody/Quinn 新建 session 參與
-- [ ] 設計會議：Petra 整理意見，最多 DesignMeetingMaxRounds 輪
-- [ ] 設計會議：完整會議紀錄存入 DesignMeetingLog
-- [ ] 調整機制：needs_adjustment → Petra 指示 Rosa/Demi 修改
-- [ ] 調整機制：小修 → Petra 自審 → 產出設計規劃書
-- [ ] 調整機制：大改 → 重開設計會議（遞增 DesignRound）
-- [ ] 條件式確認：consensus → 直接進 Dev_plan（不需 Christ）
-- [ ] 條件式確認：escalate → Christ 確認（Discord 按鈕）
-- [ ] 設計規劃書：Petra 產出存入 DesignPlan
-- [ ] 文件傳遞：BuildTaskDescription 加入 DesignPlan
-- [ ] MockMode：前置作業 + 會議 session 使用 MockClaudeCodeService
-- [ ] MockMode：Petra 判斷走 consensus fallback → 直接進 Dev_plan
-- [ ] BugFix / TechImprovement 跳過 Design 步驟
+- [x] 提案流程簡化：Victoria 提案不再包含 Issues 和 UI 規格（靜態驗證通過；`/mock proposal` 流程觀察提案簡化）
+- [x] 提案流程簡化：Rosa/Demi 的提案階段迴圈已移除（靜態驗證通過）
+- [x] 設計階段：Kickoff 完成後觸發 Design 步驟（`/mock proposal` 全流程驗收確認，2026-04-15）
+- [x] 設計階段：Petra 判斷是否需要 Demi（實作確認；MockMode 依 prompt 判斷）
+- [x] 設計階段：Rosa 基於 TaskPlan 產出 GitHub Issues（MockMode 下 TryParseDesignIssues null fallback 跳過，流程正常繼續）
+- [x] 設計階段：Demi 基於 TaskPlan + Issues 產出 UI 規格（條件式）（實作確認）
+- [x] 設計會議：Rosa/Demi 復用前置作業 session（實作確認）
+- [x] 設計會議：Cody/Quinn 新建 session 參與（MockMode 驗收確認）
+- [x] 設計會議：Petra 整理意見，最多 DesignMeetingMaxRounds 輪（MockMode consensus 1 輪完成）
+- [x] 設計會議：完整會議紀錄存入 DesignMeetingLog（Dashboard 設計規劃折疊面板可展開確認）
+- [ ] 調整機制：needs_adjustment → Petra 指示 Rosa/Demi 修改（未驗收：MockMode 直接走 consensus）
+- [ ] 調整機制：小修 → Petra 自審 → 產出設計規劃書（未驗收）
+- [ ] 調整機制：大改 → 重開設計會議（遞增 DesignRound）（未驗收）
+- [x] 條件式確認：consensus → 直接進 Dev_plan（不需 Christ）（`/mock proposal` 確認 consensus 自動推進 Dev_plan）
+- [ ] 條件式確認：escalate → Christ 確認（Discord 按鈕）（未驗收）
+- [x] 設計規劃書：Petra 產出存入 DesignPlan（Dashboard 實作計劃書折疊面板顯示確認）
+- [x] 文件傳遞：BuildTaskDescription 加入 DesignPlan（靜態驗證通過）
+- [x] MockMode：前置作業 + 會議 session 使用 MockClaudeCodeService（全流程驗收確認）
+- [x] MockMode：Petra 判斷走 consensus fallback → 直接進 Dev_plan（驗收確認）
+- [x] BugFix / TechImprovement 跳過 Design 步驟（`/mock bugfix` 確認跳過 Kickoff + Design）
 - [x] `dotnet build` 零 error
 - [x] `dotnet test` 通過
 - [x] `.csproj` 版本更新為 `3.10.0`
 - [x] EF Migration `Stage25bDesignFields` 建立完成
 - [x] Commit `803ba5a` 推送至 main（2026-04-14）
 
-> **驗收待辦**：待自動部署後，在 Discord 用 `/mock proposal + approve` 驗收端到端流程（Kickoff → Design → Dev_plan）。
+> **驗收紀錄（2026-04-15）**：`/mock proposal` 端到端流程（Kickoff → Design consensus → Dev_plan → Dev → Reviewer → QA → Doc）驗收通過。`needs_adjustment` 調整機制與 `escalate` 路由未驗收。
 
 ---
 

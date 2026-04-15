@@ -258,21 +258,23 @@ GitHub Actions workflow 在部署成功後，自動從 `.csproj` 讀取版本號
 
 ## 驗收清單
 
-- [ ] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（Mock Mode 測試）
-- [ ] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁
-- [ ] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）
-- [ ] 實作說明：Cody 開發完畢時產出結構化實作說明
-- [ ] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra
-- [ ] 審查報告：ReviewIssue 加 Id 欄位，BuildReviewBody 顯示 [#N]
-- [ ] 版本號檢查：Vera 審查時檢查 .csproj 版本號
-- [ ] Sage 轉型：Sage 產出 CHANGELOG + docs/archive/（非 API 技術文件）
+- [x] Review Appeal：Cody 可對 Vera critical 表達 disagree，觸發對話迴圈（`/mock fail_review` 驗收 2026-04-15）
+- [ ] Review Appeal：迴圈 A 超過 3 輪，觸發 Petra 仲裁（未驗收：mock 流程第 2 輪 Cody 即 agree，未到上限）
+- [ ] Review Appeal：Petra 仲裁後 Cody 修正交 Petra 審核（不回 Vera）（未驗收：同上）
+- [ ] 實作說明：Cody 開發完畢時產出結構化實作說明（MockMode 下為 mock 輸出，無法驗證實際格式）
+- [x] 阻礙報告：Cody 輸出 blocked 狀態時，WorkflowEngine 路由給 Petra（靜態驗證通過）
+- [x] 審查報告：ReviewIssue 加 Id 欄位，BuildReviewBody 顯示 [#N]（`/mock fail_review` 回傳含 [#1] Critical 報告確認）
+- [ ] 版本號檢查：Vera 審查時檢查 .csproj 版本號（MockMode 下 Vera 不執行真實審查，未驗收）
+- [x] Sage 轉型：Sage 產出 CHANGELOG + docs/archive/（DocAgentService write mode；Pipeline View Doc ✅ 確認執行）
 - [x] Git Tag：push to main 後自動建立版本 tag
-- [ ] `ReviewAppealMaxRounds` 設定值生效（WorkflowSettings）
+- [x] `ReviewAppealMaxRounds` 設定值生效（WorkflowSettings，靜態驗證通過）
 - [x] `dotnet build` 零 error
 - [x] `dotnet test` 通過
 - [x] git commit + push
 - [x] `.csproj` 版本更新為 `3.7.0`
 - [x] git tag `v3.7.0`
+
+> **驗收紀錄（2026-04-15）**：`/mock fail_review` 完整跑通 Review Appeal 流程（Vera Critical → Cody disagree → Vera Haiku 重評 → agree → 繼續 PM → QA → Doc）。迴圈上限（3 輪超限 Petra 仲裁）未驗收，保留為未來驗收項目。
 
 ---
 

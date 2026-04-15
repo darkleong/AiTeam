@@ -222,34 +222,34 @@ MockMode 有兩大類問題需要修正：
 
 ### 26-1 Dashboard 詳情頁
 
-- [ ] TaskGroupDto 包含 KickoffMeetingLog / TaskPlan / DesignMeetingLog / DesignPlan
-- [ ] PipelineView 顯示折疊面板（任務計劃書、Kickoff 紀錄、設計規劃書、設計紀錄）
-- [ ] 面板僅在有內容時顯示
-- [ ] 面板預設收合，展開後可讀
+- [x] TaskGroupDto 包含 KickoffMeetingLog / TaskPlan / DesignMeetingLog / DesignPlan（驗收確認）
+- [x] PipelineView 顯示折疊面板（實作計劃書、驗收報告 Vera、測試報告 Quinn 等）（Christ 驗收確認 2026-04-15）
+- [x] 面板僅在有內容時顯示
+- [x] 面板預設收合，展開後可讀（Christ 操作確認）
 
 ### 26-2 Pipeline View
 
-- [ ] Kickoff 步驟顯示為「Kick-off 會議」
-- [ ] Design 步驟顯示為「設計規劃」
-- [ ] 兩個步驟的 status（running / done / failed）正確顯示
+- [x] Kickoff 步驟顯示為「Kick-off 會議」（Pipeline View 觀察確認）
+- [x] Design 步驟顯示為「設計規劃」（Pipeline View 觀察確認）
+- [x] 兩個步驟的 status（running / done / failed）正確顯示（全流程驗收確認）
 
 ### 26-3 MockMode
 
-- [ ] Design 會議 session ID 解析正確（Petra 回傳 consensus JSON，非靠 null fallback）
-- [ ] Reviewer 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
-- [ ] QA 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
-- [ ] Doc 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成
-- [ ] Kickoff / Design 步驟在 Dashboard 上顯示 running 狀態正確
-- [ ] `/mock proposal` → 核准 → Kickoff → Design → Dev_plan → ... → Merge 全流程跑通（待 Christ 驗收）
-- [ ] 每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒（待 Christ 驗收）
-- [ ] MockMode 無卡住、無報錯（待 Christ 驗收）
-- [ ] BugFix MockMode 跳過 Kickoff + Design（待 Christ 驗收）
+- [x] Design 會議 session ID 解析正確（prompt 內容判斷角色，Petra 回傳 consensus JSON）
+- [x] Reviewer 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成（Dashboard 觀察確認）
+- [x] QA 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成（Dashboard 觀察確認）
+- [x] Doc 在 MockMode 下有 30~60 秒延遲，不會 0 秒完成（Dashboard 觀察確認）
+- [x] Kickoff / Design 步驟在 Dashboard 上顯示 running 狀態正確（Pipeline View 觀察確認）
+- [x] `/mock proposal` → 核准 → Kickoff → Design → Dev_plan → ... → Merge 全流程跑通（Christ 驗收 2026-04-15）
+- [x] 每個步驟在 Dashboard 上都能觀察到 running 狀態至少 30 秒（Christ 觀察確認）
+- [x] MockMode 無卡住、無報錯（Christ 驗收確認）
+- [x] BugFix MockMode 跳過 Kickoff + Design（`/mock bugfix` Christ 確認）
 
 ### 26-4 版本號
 
 - [x] `Directory.Build.props` 存在且版本為 3.11.0
 - [x] 各 `.csproj` 無 `<Version>` 標籤
-- [ ] Dashboard 頁腳顯示 v3.11.0（待部署後 Christ 確認）
+- [x] Dashboard 頁腳顯示 v3.11.0（Christ 確認；commit hash 截斷 bug 已修復）
 - [x] `dotnet build` 零 error
 - [x] CLAUDE.md 版本號章節已更新
 
@@ -257,6 +257,8 @@ MockMode 有兩大類問題需要修正：
 
 - [x] `dotnet build` 零 error
 - [x] `dotnet test` 通過
+
+> **驗收紀錄（2026-04-15）**：Stage 26 全部驗收項目通過。本 Stage 大驗收過程中額外發現並修復 5 個 bug（頁腳 commit hash、Kickoff 按鈕文字、PipelineView DbContext 並發、`[Petra→Dev_plan]` 狀態卡 revision、DashboardTaskService SemaphoreSlim）。
 
 ---
 

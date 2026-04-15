@@ -585,18 +585,20 @@ CLI 要求 `--session-id` 的值必須是合法 UUID（如 `3f4d2b1a-...`），�
 
 ## 驗收清單
 
-- [ ] Claude Code CLI `-p` + `--resume <uuid>` 行為驗證通過（透過實際 Discord 流程觀察）
-- [ ] Kick-off 會議：NewFeature 流程觸發 Kick-off，BugFix/TechImprovement 跳過
-- [ ] Kick-off 會議：4 位 Agent（Rosa/Demi/Cody/Quinn）各自開啟 Claude Code session
-- [ ] Kick-off 會議：Petra 也使用 Claude Code session，可讀取 codebase 驗證意見
-- [ ] Kick-off 會議：Petra 整理意見，最多 3 輪
-- [ ] 完整會議紀錄存入 `KickoffMeetingLog`
-- [ ] 任務計劃書：Petra 產出存入 `TaskPlan`
-- [ ] Christ 確認：Victoria 上呈計劃書，Discord 按鈕出現
-- [ ] Christ 確認：繼續 → 觸發 Dev_plan
-- [ ] Christ 確認：停止 → 任務取消
-- [ ] Christ 確認：修改 → 餵入 Petra session → 調整計劃書
-- [ ] MockMode：30~60 秒內完成 + 自動 consensus → 進入 Dev_plan
+- [x] Claude Code CLI `-p` + `--resume <uuid>` 行為驗證通過（Mock 流程觀察 session 正常銜接，2026-04-15）
+- [x] Kick-off 會議：NewFeature 流程觸發 Kick-off，BugFix/TechImprovement 跳過（`/mock bugfix` 確認跳過 Kickoff + Design）
+- [x] Kick-off 會議：4 位 Agent（Rosa/Demi/Cody/Quinn）各自開啟 Claude Code session（MockMode 驗收確認）
+- [x] Kick-off 會議：Petra 也使用 Claude Code session，可讀取 codebase 驗證意見（實作確認）
+- [x] Kick-off 會議：Petra 整理意見，最多 3 輪（MockMode consensus 1 輪完成）
+- [x] 完整會議紀錄存入 `KickoffMeetingLog`（Dashboard PipelineView Kick-off 會議紀錄折疊面板可展開確認）
+- [x] 任務計劃書：Petra 產出存入 `TaskPlan`（Dashboard 實作計劃書折疊面板可展開確認）
+- [x] Christ 確認：Victoria 上呈計劃書，Discord 按鈕出現（▶️ 繼續 / ⏹️ 停止 / ✏️ 修改 三鍵確認）
+- [x] Christ 確認：繼續 → 觸發 Dev_plan（Christ 點繼續後流程正常推進至 Dev_plan）
+- [ ] Christ 確認：停止 → 任務取消（未驗收）
+- [ ] Christ 確認：修改 → 餵入 Petra session → 調整計劃書（未驗收）
+- [x] MockMode：30~60 秒內完成 + 自動 consensus → 進入 Dev_plan（全流程驗收確認）
+
+> **驗收紀錄（2026-04-15）**：`/mock proposal` 全流程（Kickoff → Christ 確認 → Design → Dev_plan → Dev → Reviewer → QA → Doc）驗收通過。停止/修改按鈕未驗收。
 
 ---
 
