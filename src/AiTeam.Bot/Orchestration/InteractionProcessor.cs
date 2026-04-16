@@ -69,8 +69,21 @@ public class InteractionProcessor(
                 catch (Exception ex)
                 {
                     logger.LogError(ex,
-                        "InteractionProcessor：處理 {Type} 失敗（Id={Id}），下次輪詢重試",
+                        "InteractionProcessor：處理 {Type} 失敗（Id={Id}），標記已處理避免無限重試",
                         interaction.InteractionType, interaction.Id);
+
+                    // 標記已處理，避免壞資料（如 ContextJson 格式異常）無限重試
+                    try
+                    {
+                        await using var errScope = serviceProvider.CreateAsyncScope();
+                        var errRepo              = errScope.ServiceProvider.GetRequiredService<BossInteractionRepository>();
+                        await errRepo.MarkProcessedByBotAsync(interaction.Id, ct);
+                    }
+                    catch (Exception markEx)
+                    {
+                        logger.LogError(markEx,
+                            "InteractionProcessor：標記 ProcessedByBot 也失敗（Id={Id}）", interaction.Id);
+                    }
                 }
             }
         }

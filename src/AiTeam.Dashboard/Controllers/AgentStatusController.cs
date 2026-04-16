@@ -1,5 +1,5 @@
+using AiTeam.Dashboard.Services;
 using AiTeam.Data.Hubs;
-using AiTeam.Data.Repositories;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -18,7 +18,7 @@ namespace AiTeam.Dashboard.Controllers;
 [Route("internal/agent-status")]
 public class AgentStatusController(
     IHubContext<AgentStatusHub> hubContext,
-    BossInteractionRepository interactionRepo) : ControllerBase
+    InteractionRespondService respondService) : ControllerBase
 {
     /// <summary>Bot 呼叫此端點推送 Agent 狀態變動。</summary>
     [HttpPost]
@@ -85,11 +85,11 @@ public class AgentStatusController(
     [HttpPost("/api/interactions/{id}/respond")]
     public async Task<IActionResult> RespondToInteractionAsync(Guid id, [FromBody] InteractionResponseRequest request)
     {
-        var responded = await interactionRepo.RespondAsync(id, request.Action, "dashboard");
+        // Delegate 給 InteractionRespondService，回覆邏輯只維護一份
+        var responded = await respondService.RespondAsync(id, request.Action);
         if (!responded)
             return Conflict(new { message = "此互動已被回覆，請重新整理頁面。" });
 
-        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveInteractionUpdate);
         return Ok();
     }
 }

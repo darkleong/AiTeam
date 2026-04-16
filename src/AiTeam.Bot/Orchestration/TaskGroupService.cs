@@ -2108,12 +2108,15 @@ public class TaskGroupService(
                 if (action == "confirm_yes" && contextJson is not null)
                     await ProcessCeoConfirmAsync(contextJson, ct);
                 else
+                    // confirm_no：尚未建立 TaskItem，不需要清理，刻意只記 log
                     logger.LogInformation("InteractionProcessor：CEO 確認取消（action={Action}）", action);
                 break;
 
             case "exec_confirm":
                 if (action == "exec_yes" && contextJson is not null)
                     await ProcessExecConfirmAsync(contextJson, ct);
+                else if (action == "exec_no" && contextJson is not null)
+                    await CancelTaskItemFromContextAsync(contextJson, ct);
                 else
                     logger.LogInformation("InteractionProcessor：Agent 執行取消（action={Action}）", action);
                 break;
@@ -2329,6 +2332,30 @@ public class TaskGroupService(
             taskRepo.UpdateGroupStatus(group, "failed");
             await taskRepo.SaveAsync(ct);
         }
+    }
+
+    private async Task CancelTaskItemFromContextAsync(string contextJson, CancellationToken ct)
+    {
+        using var doc  = JsonDocument.Parse(contextJson);
+        var taskIdStr  = doc.RootElement.TryGetProperty("taskId", out var t) ? t.GetString() : null;
+        if (!Guid.TryParse(taskIdStr, out var taskId)) return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var task              = await taskRepo.GetByIdAsync(taskId);
+        if (task is null) return;
+
+        taskRepo.UpdateStatus(task, "cancelled");
+        await taskRepo.SaveAsync(ct);
+
+        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = "cancelled"
+        });
     }
 
     /// <summary>解析 CeoResponse 的工作流程類型（Stage 28a：從 CommandHandler 提取共用邏輯）。</summary>
