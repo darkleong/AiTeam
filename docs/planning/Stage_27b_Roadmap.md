@@ -4,7 +4,7 @@
 > 對應版本：v3.13.0
 > 建立日期：2026-04-15
 > 狀態：📋 規劃中（待 Stage 27a 完成後開始）
-> 文件版本：v1.0
+> 文件版本：v1.1
 
 ---
 
@@ -48,6 +48,7 @@ Stopped — 完全停止
    - `active`：正常 dequeue 執行
    - `paused` / `stopped`：跳過該 Agent
    - `stopping`：不 dequeue 新任務，但允許正在執行的任務完成 → 完成後自動設為 `stopped`
+   - **Stopping → Stopped 自動轉換**：在 `AgentQueueProcessor.ExecuteTaskAsync` 的 finally 區塊中，任務完成後檢查該 agent 狀態——若為 `stopping`，則透過 AppSettingsService 寫入 `stopped`，並推送 Dashboard 狀態更新
 
 2. **Discord 指令**：
    - `/pause {agent}` — 暫停指定 Agent
@@ -55,9 +56,10 @@ Stopped — 完全停止
    - `/stop-all` — 所有 Agent 進入 Stopping
    - `/queue {agent?}` — 顯示指定 Agent（或全部）的佇列狀態
 
-3. **AppSettingsService 寫入**：
+3. **AppSettingsService 寫入（含 cache 即時生效）**：
    - CommandHandler 呼叫 `appSettings.SetAsync("AgentState:{agentName}", "paused")`
    - AgentQueueProcessor 透過 `appSettings.GetAsync("AgentState:{agentName}", "active")` 讀取
+   - **重要**：`SetAsync` 寫入 DB 時須同步更新本地 cache（或 invalidate），確保同一 Bot 進程中 Processor 的下一次輪詢（最多 3 秒後）即可讀到新狀態。若現有 AppSettingsService 的 cache TTL 過長，需在 `SetAsync` 中加入 cache invalidation
 
 4. **Dashboard Agent 卡片**：
    - 在現有的 Agent 狀態卡上加入狀態指示（Active / Paused / Stopped 的 Badge 或圖標）
@@ -76,7 +78,7 @@ Dashboard 的 Agent 狀態卡（Team Office 頁面）只顯示「正在執行的
 1. **Agent 狀態卡增強**：
    - 加入佇列深度指示（例如 `佇列：3 個任務等待中`）
    - 加入 Agent 狀態 Badge（Active / Paused / Stopped）
-   - SignalR 即時更新（enqueue / dequeue 時推送）
+   - SignalR 即時更新（enqueue / dequeue / cancel 時推送）
 
 2. **TaskItem 新增 "queued" 狀態的 Dashboard 顯示**：
    - StatusBadge 新增 `"queued"` 對應顏色（建議 Default / Gray）
@@ -135,3 +137,4 @@ v3.13.0（Directory.Build.props）
 | 日期       | 版本 | 內容                   |
 | ---------- | ---- | ---------------------- |
 | 2026-04-15 | v1.0 | Aria 撰寫初版規劃書（從 Stage 27 拆分為 27b） |
+| 2026-04-16 | v1.1 | Aria Review 補充：AppSettingsService cache 即時生效、Stopping→Stopped 自動轉換邏輯位置、SignalR 觸發加入 cancel |
