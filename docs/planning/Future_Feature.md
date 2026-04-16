@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v6.2
+> 版本：v6.4
 > 建立日期：2026-04-01
-> 最後更新：2026-04-14
+> 最後更新：2026-04-16
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -1019,6 +1019,36 @@ Dashboard 顯示每個 Agent 目前的任務序列：
 - **八（開發流程重構）**：流程中需要知道 Agent 正在處理什麼，queue 提供這個資訊
 - **九（Dashboard 雙向操作中心）**：Dashboard 顯示 queue 讓 Christ 掌握全局；Victoria queue 解決「討論需求時 Petra 上報被卡住」的問題；Error 任務的重試/取消也透過 Dashboard 操作
 
+### 📌 Stage 27b 後待討論（2026-04-16）
+
+Stage 27b（v3.13.0）完成了佇列機制的 Discord 操作指令（`/pause` / `/resume` / `/stop-all`）與 Dashboard 視覺化。實作完成後發現以下三個問題需要後續討論：
+
+#### 討論一：PM（Petra）不走佇列，要怎麼控制她停止/恢復？
+
+目前 `AgentQueueProcessor.SemaphoreGroups` 只包含 8 個執行型 Agent（Dev/Reviewer/QA/Doc/Requirements/Designer/Release/Ops）。PM（Petra）不在其中——她是在 `TaskGroupService` 流程中被直接 `await` 呼叫的內嵌式審核角色，不透過 `AgentQueueService.EnqueueAsync`。
+
+因此 `/stop-all` 不影響 Petra，`AgentState:PM` 這個 key 不存在，Dashboard 也不顯示她的佇列狀態。
+
+**需要討論的問題：**
+- 如果要能控制 Petra 暫停/停止，要怎麼做？（把她納入 queue 機制？還是另外設計？）
+- 她現在是 inline `await`，改成 queue 是否會造成流程的阻塞問題？
+- 「Petra 暫停中，流程卡在審核點」是否是合理的使用情境？
+
+#### 討論二：PM 的快速審核決策是哪種執行方式？
+
+目前系統中的 Agent 有兩種執行路徑：
+- **Claude Code CLI**（`claude -p`）：Cody / Vera / Quinn / Rosa / Demi / Sage / Victoria
+- **直接 API call**（`ILlmProvider`）：Rena / Maya
+
+Petra（PM）是哪一種？這個問題在 Stage 27b 的 `/pause` 設計時才被注意到，目前尚未確認。
+需要確認後補入 Future Feature 四（多 LLM 供應商支援）的限制說明，也影響她是否能被 `/pause` 管控的設計方向。
+
+#### 討論三：Dashboard 上的 pause/resume 操作
+
+Stage 27b 的操作指令（`/pause` / `/resume` / `/stop-all`）目前只能透過 Discord 執行。Dashboard 只顯示狀態（Active/暫停/已停止 Badge + 佇列深度），沒有操作按鈕。
+
+未來需要在 Dashboard 上也能操作，讓 Christ 不用切換到 Discord。此功能已記錄在 Future Feature 九（Dashboard 雙向操作中心）的設計方向中，但需要明確排入 Stage 後才會實作。
+
 ### 優先級
 
 🟠 中高優先級 — 目前「一次一個流程」的隱性假設遲早會被打破，提前建立 queue 機制可避免並行衝突事故
@@ -1235,3 +1265,4 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 2026-04-14 | v6.1：新增十五（版本號集中管理 Directory.Build.props）；八（開發流程重構）Phase 1 實作狀態更新（Stage 25a 第一階段完成、Stage 25b 第二階段規劃中） |
 | 2026-04-14 | v6.2：八（開發流程重構）Phase 1 全部完成 — 第二階段（設計規劃 Stage 25b v3.10.0）實作完成，Feature 八 Phase 1 七個階段全部 ✅ |
 | 2026-04-14 | v6.3：十五（版本號集中管理）移入已完成摘要 — Stage 26 實作完成；十五條目從候選清單移除 |
+| 2026-04-16 | v6.4：十（Agent 任務序列）新增「Stage 27b 後待討論」— PM 不走佇列的控制方式、PM 執行路徑確認（API vs Claude Code CLI）、Dashboard pause/resume 操作按鈕排入 Stage 議題 |
