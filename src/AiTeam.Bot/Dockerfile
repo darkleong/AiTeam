@@ -14,10 +14,9 @@ RUN dotnet publish src/AiTeam.Bot/AiTeam.Bot.csproj \
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
-COPY --from=build /app/publish .
-
 # 安裝：Npgsql GSSAPI 支援 + Node.js 22（Claude Code CLI 需要）+ git（Claude Code 操作 repo 需要）
 # 建立非 root 使用者（Claude Code 拒絕在 root 下執行 --dangerously-skip-permissions）
+# ⚠️ 此層放在 COPY 之前，確保 apt/npm 步驟能被 Docker layer cache 命中。
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgssapi-krb5-2 \
     curl \
@@ -26,8 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y nodejs \
     && npm install -g @anthropic-ai/claude-code \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r appuser && useradd -r -g appuser -m appuser \
-    && chown -R appuser:appuser /app
+    && groupadd -r appuser && useradd -r -g appuser -m appuser
+
+COPY --from=build /app/publish .
+RUN chown -R appuser:appuser /app
 
 USER appuser
 
