@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v6.4
+> 版本：v7.0
 > 建立日期：2026-04-01
 > 最後更新：2026-04-16
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -323,410 +323,37 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 ## 八、開發流程重構（多人會議制 + 糾錯機制）
 
-> **Phase 1 實作狀態：**
-> - ✅ 第一階段（需求計劃）：Kick-off 會議機制 — Stage 25a（v3.9.0，2026-04-14）
-> - ✅ 第二階段（設計規劃）：設計會議 + Rosa/Demi 移至設計階段 — Stage 25b（v3.10.0，2026-04-14）
-> - ✅ 第三階段（開發）：實作說明、阻礙報告機制 — Stage 23（v3.7.0，2026-04-12）
-> - ✅ 第四階段（程式碼審查）：Review Appeal + Petra 仲裁 — Stage 23
-> - ✅ 第五階段（QA 測試）：Petra 四路由判斷 — Stage 24（v3.8.0，2026-04-13）
-> - ✅ 第六階段（收尾歸檔）：Sage 轉型 — Stage 23
-> - ✅ 第七階段（完成/上線）：Git Tag 自動化 — Stage 23
+> **Phase 1 已全部完成。** 詳細流程設計請參閱各 Stage Roadmap 文件。
+>
+> | 階段 | 內容 | 完成於 |
+> |------|------|--------|
+> | 第一階段（需求計劃） | Kick-off 會議機制 | Stage 25a（v3.9.0） |
+> | 第二階段（設計規劃） | 設計會議 + Rosa/Demi 移至設計階段 | Stage 25b（v3.10.0） |
+> | 第三階段（開發） | 實作說明、阻礙報告、Dev_plan Appeal | Stage 23（v3.7.0） |
+> | 第四階段（程式碼審查） | Review Appeal + Petra 仲裁 | Stage 23（v3.7.0） |
+> | 第五階段（QA 測試） | Petra 四路由判斷 + QA 修復迴圈 | Stage 24（v3.8.0） |
+> | 第六階段（收尾歸檔） | Sage 轉型為收尾歸檔員 | Stage 23（v3.7.0） |
+> | 第七階段（完成/上線） | Git Tag 自動化 | Stage 23（v3.7.0） |
 
 ### 背景
 
 **已知事故：**
-1. **Vera 誤判事故**：Vera 持續報告 false critical，Cody 只能接受並反覆修改。因 Cody 無法反駁審查結果（單向權力結構），直到 Christ 手動介入才發現是 Vera 異常。
-2. **實作 Session 死循環事故**：驗收不斷失敗，Session 反覆做無效修正，沒有機制偵測循環模式，直到 Christ 請 Aria 分析才找出根因。
+1. **Vera 誤判事故**：Vera 持續報告 false critical，Cody 無法反駁（單向權力結構），直到 Christ 手動介入才發現是 Vera 異常。
+2. **實作 Session 死循環事故**：Session 反覆做無效修正，沒有機制偵測循環模式。
 
 **流程設計缺陷（2026-04-12 全盤討論後發現）：**
-- Agent 之間是單向串行，接收指令後只能執行，不能質疑上游輸入
-- 現實團隊有 Kick-off 會議讓所有人在開工前對齊認知，AiTeam 沒有
-- Code Review 是單向判決（Vera → Cody），現實中是雙向對話（開發可以反駁）
-- 問題在流程各階段逐一浮現，效率低且頻繁回溯
-
-### 設計方向演化
-
-| 原始設計 | 討論後結論 | 原因 |
-|---------|----------|------|
-| Pre-flight Objection（逐 handoff 質疑） | **→ 多人會議制**（Kick-off / Design Review） | 會議一次性解決所有問題，比逐一質疑更有效率 |
-| 熔斷機制（Circuit Breaker） | **→ 已存在，不需新增** | Petra（Stage 16）已有 3 次打回上限 + escalate |
-| Review Appeal（Cody 反駁 Vera） | **→ 保留** | 唯一的審查反駁機制，Petra 仲裁 |
-| 循環偵測 + 新鮮視角 | **→ Phase 2 保留** | Phase 1 跑穩後再加 |
-
-### 核心設計原則
-
-1. **Petra 是 PM 協調者**：主持會議、判斷流程走向、評估影響範圍，但不替 Christ 做需求決策、不覆蓋技術判斷
-2. **會議只對齊認知**：Agent 在會議中只提疑問與風險，不產出實際工作成果（Rosa 不拆 Issues、Cody 不寫程式碼）
-3. **Kick-off 全員參加**：成本低（只是提問），確保所有角色的視角都被考慮。後續階段再依需要精簡人員
-4. **每個階段都有「會議 → 確認」兩段式**：確保品質和 Christ 掌控
-5. **所有輪次上限預設 3 輪**：會議輪次、迴圈 A/B、QA 修正迴圈統一預設 3 輪。未來可在 Dashboard 動態調整（依賴 Future Feature 十二 的動態設定機制）
-6. **文件存入 DB**：各階段產出的文件統一存入資料庫。WorkflowEngine 啟動下游 Agent 前，從 DB 取出相關文件，以 prompt 或 workspace 檔案方式傳入
-7. **BugFix / TechImprovement 精簡路徑**：這兩種任務類型不一定走完全部七個階段，由 Petra 判斷可跳過哪些階段（例如跳過 Kick-off 直接開發、跳過收尾歸檔直接完成）
-8. **Petra 工作量待觀察**：Petra 幾乎參與每個階段，Token 消耗需持續監控。若過載，考慮將部分輕量判斷下放或簡化
-
----
-
-### 第一階段：需求計劃（✅ 已確認）
-
-#### 會議流程
-
-```
-Victoria 跟 Christ 確認提案
-    ↓
-交給 Petra 主導
-    ↓
-Petra 召開 Kick-off 會議（Rosa / Demi / Cody / Quinn 全員參加）
-    ↓
-收集大家的意見，Petra 進行判斷後回應（最多 3 輪）
-    ↓
-狀況一：全部沒問題 → 進入確認流程
-狀況二：未達成共識 → Victoria 上呈 Christ
-    ↓
-Christ 回覆 → Victoria 交給 Petra → 再次進入會議流程
-```
-
-#### 確認流程
-
-```
-Kick-off 會議完成
-    ↓
-Petra 整合討論結果，產出「任務計劃書」
-    ↓
-Victoria 上呈 Christ 確認（Discord + Dashboard）
-    ↓
-Christ 選擇：
-    ├── 繼續 → 進入第二階段
-    ├── 停止 → 流程結束
-    └── 修改 → Victoria 把修改後的計劃書交給 Petra
-                    ↓
-               Petra 評估影響範圍：
-                 ├── 小 → 直接進入第二階段
-                 └── 大 → 退回重新開 Kick-off
-```
-
-**產出：任務計劃書**（Petra 負責）— 後續所有 Agent 的單一真相來源。計劃書中記錄每位參加者在 Kick-off 提出的意見與結論，包含是否需要 Demi 參與設計規劃。
-
----
-
-### 第二階段：設計規劃（✅ 已確認）
-
-#### 作業流程
-
-```
-Petra 收到計劃書
-    ↓
-Petra 把計劃書交給 Rosa → Rosa 產出 GitHub Issues
-    ↓
-Petra 判斷是否需要 Demi（依計劃書中的記錄）：
-    ├── 不需要 → 直接進入設計會議
-    └── 需要 → Petra 把 Issues + 計劃書交給 Demi
-                    ↓
-               Demi 產出 UI/UX 規格
-                    ↓
-               進入設計會議
-```
-
-> Rosa → Demi 維持串行（避免並行產出不一致的風險）。
-
-#### 設計會議
-
-```
-Petra 召開設計會議（Rosa / Demi* / Cody / Quinn）
-   *Demi 視需要參加
-    ↓
-收集意見，Petra 回應（最多 3 輪）
-    ↓
-狀況一：全部沒問題 → 進入確認流程
-狀況二：需要調整 Issues / UI 規格
-    ↓
-    Petra 把會議記錄交給 Rosa / Demi 修改
-    （Petra 給指示，Rosa/Demi 執行修改。Petra 不直接改 Issues。）
-    ↓
-    Petra 依修改幅度判斷：
-        ├── 小修 → Petra 自己審核 → 確認流程
-        └── 大改 → 再開一次設計會議
-狀況三：發現計劃書本身有問題
-    ↓
-    Petra 判斷影響範圍：
-        ├── 小問題 → 會議上討論解決
-        └── 根本性問題 → 退回第一階段
-```
-
-#### 確認流程
-
-```
-Petra 判斷是否需要 Christ 確認：
-    ├── 不需要 → 直接進入第三階段
-    └── 需要 → 走與第一階段相同的確認流程
-               （Victoria 上呈 → Christ 繼續/停止/修改 → Petra 評估影響）
-```
-
-**產出：**
-- **GitHub Issues**（Rosa 負責）
-- **UI/UX 規格**（Demi 負責，如需要）
-- **設計規劃書**（Petra 負責）— 整合設計會議結論、決策理由、對 Issues / UI 規格的補充說明
-
-Cody 開發時同時讀取三份文件。
-
----
-
-### 第三階段：開發（✅ 已確認）
-
-#### 流程
-
-```
-Cody 收到：計劃書 + Issues + UI 規格（如有）
-    ↓
-Petra 判斷是否需要 Dev_plan：
-    ├── 不需要（簡單功能）→ Cody 直接開發
-    └── 需要（複雜功能）→ Cody 撰寫 Dev_plan
-                    ↓
-               Petra 審核 Dev_plan：
-                 ├── 通過 → Cody 開始開發
-                 ├── 打回 → Cody 可反駁（Review Appeal）
-                 │           ├── 共識達成 → Cody 修改後通過
-                 │           └── 超過討論次數限制
-                 │                    → Petra 請 Victoria 上呈 Christ
-                 │                    → Christ 下指示
-                 │                    → Victoria 傳給 Petra
-                 └── 上呈 → Victoria → Christ
-    ↓
-Cody 開發實作 → 提交 PR
-    ↓
-進入第四階段
-```
-
-#### 設計決策
-
-- **Dev_plan 是否需要由 Petra 判斷**：複雜功能（跨多模組、新架構）需要計劃；簡單功能（單一檔案、明確修改）可跳過直接開發
-- **Review Appeal 適用於 Dev_plan 審核**：Cody 可反駁 Petra 的打回意見，超過討論次數上呈 Christ
-- **Cody 的輸入比現行流程更完整**：經過 Kick-off + 設計會議，Cody 對需求的理解已充分
-- **阻礙回報機制**：Cody 開發中遇到無法解決的阻礙（架構不支援、依賴缺失、需求矛盾），可輸出「阻礙報告」，WorkflowEngine 交給 Petra 判斷：技術問題給建議繼續開發 / 需求問題退回上游 / 無法判斷上呈 Christ
-- **實作說明**：Cody 開發完畢時產出一份實作說明，隨 PR 一起交出。內容包含：實作了哪些 Issues、關鍵技術決策與理由、與 Dev_plan 不同的地方及原因、開發中遇到的問題與解決方式、修改的檔案清單與用途。Vera 審查時可參考
-
-**產出：**
-- **PR（Pull Request）**（Cody 負責）
-- **Dev_plan**（Cody 負責，如需要）
-- **實作說明**（Cody 負責）
-
----
-
-### 第四階段：程式碼審查（✅ 已確認）
-
-#### 流程
-
-```
-Cody 提交 PR + 實作說明
-    ↓
-Vera 審查 PR → 產出 Review 報告
-    ↓
-Vera 把審查結果回饋給 Cody
-    ↓
-Cody 逐條回應（agree 為預設）：
-    ├── 全部 agree → 一次性修正 → 重新提交 PR → Vera 再審（迴圈 B）
-    ├── 部分 disagree → 先討論反駁項目（迴圈 A）
-    │       ↓
-    │   Cody 說明反駁理由給 Vera
-    │       ↓
-    │   Vera 基於程式碼事實重新評估：
-    │       ├── 修改報告（接受反駁）
-    │       └── 維持原判（增加說明）
-    │       ↓
-    │   回到 Cody 回應（迴圈 A，上限 3 輪）
-    │       ↓
-    │   所有項目有結論 → Cody 一次性修正 → 重新提交 PR
-    └── 全部 disagree → 同上走迴圈 A
-
-迴圈 A（意見分歧）超過限制：
-    → Petra 仲裁（收到 Vera 報告 + Cody 反駁 + 完整討論記錄）
-    → Petra 判斷每個爭議項目：支持 Vera / 支持 Cody
-    → Cody 依仲裁結果修正 → 交 Petra 直接審核（不回 Vera）
-
-迴圈 B（接受修正）超過限制：
-    → Petra 介入（檢視所有歷史審查報告）
-    → Petra 判斷：
-        ├── Vera 過度挑剔 → 要求放行
-        ├── Cody 修正品質不佳 → 上呈 Christ
-        └── 需求本身有問題 → 退回上游
-
-Petra 無法仲裁 → Victoria → Christ
-```
-
-#### 設計決策
-
-- **Vera 和 Cody 直接對話**：對標真實 PR review，Petra 不在默認路徑上，只在需要仲裁時介入
-- **部分同意部分反駁**：先討論完反駁項目達成共識，再一次性修正（選項 A）
-- **修正引入新問題**：統一計入迴圈 B 總輪次，不另外區分
-- **Petra 仲裁後**：Cody 修正完交 Petra 直接審核，不回 Vera（避免重新進入迴圈）
-- **Vera prompt 規範**：收到反駁時基於程式碼事實重新評估，不被話術說服；如果反駁指出漏看的程式碼則修改報告，如果只是「我覺得也可以」但無事實支撐則維持原判
-- **Vera 收到 Issues 清單 + 實作說明**：可交叉比對程式碼是否符合需求（如持續發生漏做問題再強化）
-- **Vera 審查加入版本號檢查**：比對 `.csproj` 版本號是否與 Stage Roadmap 目標版本一致
-
-#### 審查報告格式
-
-Vera 負責產出，記錄完整的審查過程：
-
-```
-# 審查報告
-
-## 基本資訊
-- PR: #{編號}
-- 審查者: Vera
-- 總輪次: {N}
-- 最終結果: 通過 / 仲裁後通過
-
-## 各輪紀錄
-
-### 第 1 輪
-| # | 嚴重度 | 檔案 | 說明 | Cody 回應 | 結論 |
-|---|--------|------|------|-----------|------|
-| 1 | Critical | path/file.cs:42 | ... | agree | 已修正 |
-| 2 | Warning  | path/file.cs:87 | ... | disagree: {理由} | Vera 接受反駁 |
-
-### 第 2 輪
-（同上格式，只列出新發現或未解決項目）
-
-## 仲裁紀錄（如有）
-- 觸發原因: 迴圈 A/B 超限
-- Petra 判斷:
-  | # | 爭議項目 | 判斷 | 理由 |
-  |---|---------|------|------|
-  | 1 | ... | 支持 Vera | ... |
-  | 2 | ... | 支持 Cody | ... |
-```
-
-**產出：**
-- **通過審查的 PR**
-- **審查報告**（Vera 負責，含每輪紀錄 + Cody 回應 + 仲裁紀錄）
-
----
-
-### 第五階段：QA 測試（✅ 已確認）
-
-#### 流程
-
-```
-Vera 審查通過的 PR
-    ↓
-Quinn 執行測試（Playwright E2E + 截圖比對）
-    ↓
-Quinn 產出測試報告（結構化：通過項目 / 失敗項目 / 失敗截圖）：
-    ├── 全部通過 → 進入下一階段
-    ├── 無適用測試 → 輸出 "no_applicable_tests" + 理由 → Petra 輕量判斷
-    │       ├── 理由合理 → 放行，進入下一階段
-    │       └── 理由不合理 → 要求 Quinn 補寫測試
-    └── 有失敗 → 報告 Petra
-            ↓
-        Petra 判斷：
-            ├── 明確是功能 bug → 派 Cody 修正
-            ├── 疑似環境 / 測試本身問題 → Petra 自行判斷或上呈
-            └── 不確定 → 派 Cody 調查，Cody 可回報「測試有問題」
-            ↓
-        Cody 修正完 → 回報 Petra
-            ↓
-        Petra 決定：
-            ├── 小修正 → Quinn 重測（完整測試套件）
-            ├── 大幅改動 → 退回 Vera 重新審查
-            └── 反覆失敗（超過輪次上限）→ 上呈 Christ
-```
-
-#### 設計決策
-
-- **Petra 始終在 QA 迴圈中**：與第四階段不同，QA 問題量較少且較客觀（通過/失敗），Petra 在迴圈中的開銷很小，但能確保大幅修正退回 Vera、環境問題不空轉
-- **Cody 保有質疑權利**：Cody 可向 Petra 表達「測試本身有問題」，由 Petra 判斷
-- **Quinn 的輸入**：除了 PR diff（現有），還應包含 Issues 清單 + Cody 的實作說明，讓 Quinn 能交叉比對「需求 vs 實作 vs 測試覆蓋」
-- **`no_applicable_tests` 需附理由**：防止 LLM 走捷徑，Petra 做輕量把關
-- **重測範圍**：預設跑完整測試套件。Quinn 在報告中區分「原問題重測結果」與「新發現的問題」，Petra 可分開處理
-- **輪次上限**：QA 修正迴圈上限 3 次，超過由 Petra 上呈 Christ
-- **BugFix / TechImprovement**：QA 通過後直接跳到完成，不走收尾歸檔階段
-
-**產出：**
-- **通過測試的 PR**
-- **測試報告**（Quinn 負責）
-
----
-
-### 第六階段：收尾歸檔（✅ 已確認）
-
-#### 背景：Sage 角色轉型
-
-新流程中，每個階段都已產出對應文件（需求計劃書、設計規劃書、實作計劃書、實作說明書、審查報告書、測試報告書），一個功能從頭到尾已有六份文件完整覆蓋「為什麼→怎麼設計→怎麼做→做得好不好→測試結果」。
-
-Sage 原本的工作（讀 .cs 產生 API 技術文件）在此脈絡下價值很低——API 資訊看程式碼本身就能得到，且每次 PR 的快照會迅速過時。
-
-因此 Sage 從「技術文件撰寫員」轉型為**收尾歸檔員**，定位為 pipeline 中的輕量收尾步驟。
-
-#### 流程
-
-```
-QA 通過（或第四階段通過，若為 BugFix / TechImprovement 則跳過本階段）
-    ↓
-Sage 收到該任務所有階段產出：
-    - 需求計劃書（第一階段）
-    - 設計規劃書（第二階段）
-    - 實作計劃書（第三階段，如有）
-    - 實作說明書（第三階段）
-    - 審查報告書（第四階段）
-    - 測試報告書（第五階段）
-    ↓
-Sage 執行收尾工作：
-    1. 將所有文件歸檔整理（統一格式、建索引）
-    2. 更新 CHANGELOG
-    ↓
-進入完成階段
-```
-
-#### 設計決策
-
-- **輕量收尾**：Sage 不再產生技術文件，改為歸檔整理 + CHANGELOG 更新，pipeline 中最輕量的步驟
-- **不設 review 迴圈**：歸檔工作不阻擋上線
-- **不再讀 .cs 產生 API 文件**：六份流程文件已充分覆蓋，API 資訊由程式碼本身承載
-- **BugFix / TechImprovement 跳過本階段**：這兩種任務不走收尾歸檔，直接完成
-
-#### 待觀察事項
-
-- ⚠️ **定期檢閱 Sage 歸檔品質**：觀察整理結果和 CHANGELOG 是否符合預期
-- ⚠️ **全系統文件健康檢查**：更強大的功能（掃描程式碼與文件差異、主動補更新），已記錄於 Future Feature 另案，不在 Phase 1 範圍
-
-**產出：**
-- **歸檔文件索引**（Sage 負責）
-- **CHANGELOG 更新**（Sage 負責）
-
----
-
-### 第七階段：完成 / 上線（✅ 已確認）
-
-#### 流程
-
-```
-Sage 收尾歸檔完成
-    ↓
-Victoria 整理交付通知：
-    - 摘要（任務標題、完成的 Issues、關鍵變更）
-    - Dashboard 連結（可查看所有階段產出的完整內容）
-    - PR 連結
-    ↓
-通知 Christ（Discord + Dashboard 雙通道）
-    ↓
-Christ 確認 merge PR
-    ↓
-GitHub Actions 自動執行：
-    1. docker compose build + up（現有）
-    2. 部署成功後，從 .csproj 讀取版本號，自動建立 git tag
-```
-
-#### 設計決策
-
-- **版本號由 Cody 在開發階段更新**：Stage Roadmap 指定目標版本，Cody 開發時更新 `.csproj`，Vera 審查時檢查版本號是否正確
-- **Git tag 自動化**：部署成功後自動從 `.csproj` 讀取版本號建立 tag，檢查是否重複以避免覆蓋
-- **Auto-tag 在部署成功之後**：確保 tag 只指向成功部署的程式碼
-- **Discord 通知輕量化**：Discord 只放摘要 + Dashboard 連結 + PR 連結，��整的階段文件在 Dashboard 查閱
-- **雙通道通知**：Discord + Dashboard（Dashboard 通知依賴 Future Feature 十二實作）
-- **Vera 審查加入版本號檢查**：防止 Cody 忘記更新或填錯版本號
-
-**產出：**
-- **交付通知**（Victoria 負責）
-- **部署完成 + git tag**（GitHub Actions 自動）
+- Agent 之間是單向串行，不能質疑上游輸入
+- 缺少 Kick-off 會議對齊認知
+- Code Review 是單向判決，現實中是雙向對話
+
+### 核心設計原則（Phase 1 & 2 共用）
+
+1. **Petra 是 PM 協調者**：主持會議、判斷流程走向、評估影響範圍
+2. **會議只對齊認知**：Agent 在會議中只提疑問與風險，不產出實際工作成果
+3. **所有輪次上限預設 3 輪**：未來可在 Dashboard 動態調整（依賴 FF 十二）
+4. **文件存入 DB**：各階段產出統一存入 DB，WorkflowEngine 啟動下游 Agent 前從 DB 取出
+5. **BugFix / TechImprovement 精簡路徑**：由 Petra 判斷可跳過哪些階段
+6. **Petra 工作量待觀察**：幾乎參與每個階段，Token 消耗需持續監控
 
 ---
 
@@ -744,12 +371,12 @@ GitHub Actions 自動執行：
 
 | Phase | 包含內容 | 狀態 |
 |-------|---------|------|
-| **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 設計完成，待排入 Stage 實作 |
+| **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 全部完成（Stage 23~25b，v3.7.0~v3.10.0） |
 | **Phase 2** | 循環偵測 + 新鮮視角 | 🔵 待後續 Stage |
 
 ### 優先級
 
-🟠 中高優先級 — 已有實際事故，且流程缺陷會隨使用量放大
+🔵 低優先級 — Phase 1 已全部完成，Phase 2 待 Phase 1 實際運行一段時間後再評估是否需要
 
 ---
 
@@ -830,228 +457,40 @@ Agent 需要老闆介入（確認 / 上報 / 申訴 / 通知）
 
 ---
 
-## 十、Agent 任務序列（Per-Agent Task Queue）
+## 十、Agent 任務序列 — 後續議題
 
-### 背景
+> 核心機制已完成：Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）
+> 詳見已完成項目摘要
 
-目前系統建立在「一次只跑一個完整流程」的隱性假設上。實際上只有 Victoria 有 `SemaphoreSlim(1,1)` 保護序列化執行，其他 Agent 都沒有：
+### 📌 待討論議題（2026-04-16）
 
-| Agent | 有 Lock | 共用資源 | 並行風險 |
-|-------|---------|---------|---------|
-| Victoria | ✅ `SemaphoreSlim(1,1)` | CLAUDE.md swap | 排隊等待，不會衝突 |
-| Cody | ❌ 無 | workspace 目錄、git branch | ⚠️ 兩任務同時跑會互踩 |
-| Vera | ❌ 無 | workspace 目錄（唯讀） | 風險較低 |
-| Quinn | ❌ 無 | workspace 目錄（唯讀） | 風險較低 |
-| Rosa/Demi/Sage | ❌ 無 | workspace 目錄 | ⚠️ 理論上可能衝突 |
+以下三個問題在 Stage 27b 實作過程中發現，需要後續討論：
 
-一旦開始並行多個任務（例如 Cody 正在開發任務 A，同時 Vera 對任務 B 退回修正需要 Cody 再跑），兩個 Cody session 會操作同一個 workspace，導致檔案互相覆蓋、git branch 衝突。
+**1. PM（Petra）不走佇列，要怎麼控制她停止/恢復？**
 
-### 期望行為
+Petra 是 `TaskGroupService` 中的 inline `await` 閘門，不在 `AgentQueueProcessor.SemaphoreGroups` 的 8 個 executor key 中。`/stop-all` 不影響她，Dashboard 也不顯示她的佇列狀態。
+- 把她納入 queue 機制？還是另外設計？
+- inline `await` 改成 queue 是否會造成流程阻塞？
+- 「Petra 暫停中，流程卡在審核點」是否合理？
 
-每個 Agent 擁有獨立的任務序列（Task Queue），同一時間只處理一件事，其餘排隊等待：
+**2. PM 的執行路徑確認**
 
-```
-Victoria Queue: [需求討論] → [Petra 上報] → [申訴仲裁]
-                  ↑ 執行中      等待中         等待中
+系統中 Agent 有兩種路徑：Claude Code CLI（Cody/Vera/Quinn/Rosa/Demi/Sage/Victoria）和直接 API call（Rena/Maya）。Petra 是哪一種？需確認後補入 FF 四的限制說明。
 
-Cody Queue:     [任務 A 開發] → [任務 B 修正]
-                   ↑ 執行中        等待中
+**3. Dashboard pause/resume 操作按鈕**
 
-Vera Queue:     [任務 A Review]
-                   ↑ 執行中
+目前佇列操作只能透過 Discord 指令。Dashboard 只顯示狀態（Badge + 佇列深度），沒有操作按鈕。此需求已記錄在 FF 九（Dashboard 雙向操作中心）。
 
-Petra Queue:    （空閒）
-```
+### 未實作的設計方向（保留供未來參考）
 
-### 設計方向
-
-**1. Per-Agent Queue**
-
-每個 Agent 一個 FIFO 佇列（預設先進先出）：
-- `FireStepsAsync` 不再直接執行，而是將任務放入對應 Agent 的 queue
-- 每個 queue 有一個 consumer，依序取出並執行
-- Agent 正在忙碌時，新任務自動排隊
-
-**2. Queue 狀態持久化（DB）**
-
-Queue 必須存入 DB，不能只在記憶體中。每個任務有明確的狀態流轉：
-
-```
-Queued → Running → Completed
-                 → Failed
-                 → Interrupted（系統中斷）
-```
-
-持久化讓系統重啟後能恢復：
-- 啟動時掃描 DB，找出狀態為 `Running` 的任務 → 判定為被中斷 → 標記為 `Interrupted` → 重新排入 queue 執行
-- `Queued` 狀態的任務 → 直接還原到 queue 繼續等待
-
-**3. Agent 狀態管理（暫停 / Graceful Shutdown）**
-
-每個 Agent 有四種狀態：
-
-```
-Agent 狀態流轉：
-
-Active（正常工作中）
-   ├── 收到暫停指令 → Paused（立即暫停，queue 凍結）
-   └── 收到停止指令 → Stopping（正在停止中 — 完成手頭任務後停止，不再接新任務）
-                           ↓ 手頭任務完成交付
-                      Stopped（已停止）
-
-Paused / Stopped → 收到恢復指令 → Active
-```
-
-**暫停（Paused）**：立即凍結 queue，不消費任務。適用於調試、模型異常。
-
-```
-Cody Queue（暫停中 ⏸️）: [任務 B 修正] → [任務 C 開發]
-                            凍結中           凍結中
-
-Christ 在 Dashboard 點擊「恢復」→ Cody 開始處理任務 B
-```
-
-**Graceful Shutdown（Stopping → Stopped）**：Agent 收到停止指令後，完成手頭正在執行的任務並交付出去，然後才進入 Stopped。不再接新任務。適用於系統更新部署。
-
-```
-Christ：「準備部署，全員停止」
-
-Victoria: Active → Stopping（正在跟 Christ 對話中...）→ 對話結束 → Stopped ✅
-Cody:     Active → Stopping（正在開發任務 A...）→ 任務 A 完成並推 PR → Stopped ✅
-Vera:     Active → Stopped ✅（手頭沒任務，立即停止）
-Petra:    Active → Stopped ✅
-
-Dashboard 顯示：全員 Stopped → 可以安全部署 ✅
-```
-
-- 暫停/停止/恢復可從 Discord 或 Dashboard 操作
-- Stopping 狀態下不接新任務，新任務排入 queue 等部署完成後處理
-- 暫停中的 Agent 不會阻塞其他 Agent 的流程；上游產出的任務正常排入 queue 等待
-
-**4. Maya 自動化部署流程**
-
-當 Christ 驗收完功能確認要上線時，整個部署由 Maya 自動編排：
-
-```
-Christ：「Maya，部署上線」
-    ↓
-Maya 向所有 Agent 發送 Graceful Shutdown 指令
-    ↓
-Dashboard 即時顯示各 Agent 狀態：
-  Victoria: Stopping... → Stopped ✅
-  Cody:     Stopping... → Stopped ✅（等待手頭任務完成）
-  Vera:     Stopped ✅
-  ...
-    ↓
-Maya 確認所有 Agent 都 Stopped
-    ↓
-Maya 執行部署（docker compose build + up）
-    ↓
-部署完成 → Maya 自動恢復所有 Agent → Active
-    ↓
-Maya 回報：「部署完成，全員已恢復工作」
-```
-
-**5. Error 狀態與手動重試（吸收原 API 餘額恢復需求）**
-
-任何 Agent 執行任務時遇到錯誤（API 餘額不足、timeout、rate limit、模型異常等），任務進入 Error 狀態但不從 queue 移除：
-
-```
-Cody 執行任務 A → API 餘額不足 → 任務 A 狀態：Error
-    ↓
-Queue 不消費下一個任務（避免連環失敗）
-    ↓
-Dashboard 顯示：❌ Cody — 任務 A（Error：API 餘額不足）
-                     [重試] [取消]
-    ↓
-Christ 充值後，在 Dashboard 點擊「重試」
-    ↓
-任務 A 狀態 → Running → 繼續執行
-```
-
-- Error 任務留在 queue 頭部，阻塞後續任務（避免同樣原因連環失敗）
-- Dashboard 顯示錯誤原因，Christ 判斷後決定「重試」或「取消」
-- 取消的任務從 queue 移除，後續任務繼續
-- 不需要 NLP 偵測意圖、不需要精確區分錯誤類型——統一由人工判斷
-
-**6. Crash Recovery（系統中斷恢復）**
-
-系統因更新發布或意外重啟時的恢復流程：
-
-```
-系統停止前：
-  Cody 正在執行任務 A（狀態：Running）
-  Queue 中還有任務 B（狀態：Queued）
-
-系統重啟後：
-  1. 掃描 DB → 發現任務 A 狀態 Running → 標記為 Interrupted
-  2. 任務 A 重新排入 Cody Queue 頭部（優先執行）
-  3. 任務 B 維持 Queued 排在後面
-  4. Cody Queue 開始消費 → 重新執行任務 A
-```
-
-**7. 優先級支援（未來可選）**
-
-預設 FIFO，但保留優先級擴充點：
-- 一般任務：正常排隊
-- 修正任務（fix loop）：可優先處理
-- 緊急上報：可插隊
-- 中斷恢復任務：排入隊首
-
-**8. Dashboard 可視化**
-
-Dashboard 顯示每個 Agent 目前的任務序列：
-- 正在執行的任務（進度、耗時）
-- 排隊中的任務（順序）
-- Error 任務（錯誤原因 + 重試/取消按鈕）
-- Agent 狀態：Active / Stopping / Stopped / Paused
-- 暫停 / 停止 / 恢復按鈕
-- 「全員停止」一鍵操作（部署前用）
-
-### 與現有架構的關係
-
-- 取代目前 Victoria 單獨的 `SemaphoreSlim`，改為統一的 queue 機制
-- WorkflowEngine 的 `FireStepsAsync` 改為投入 queue 而非直接 `await`
-- Dashboard Agent 狀態卡（Stage 18）可擴充顯示 queue 深度與暫停控制
-
-### 與現有 Future Feature 的關係
-
-- **八（開發流程重構）**：流程中需要知道 Agent 正在處理什麼，queue 提供這個資訊
-- **九（Dashboard 雙向操作中心）**：Dashboard 顯示 queue 讓 Christ 掌握全局；Victoria queue 解決「討論需求時 Petra 上報被卡住」的問題；Error 任務的重試/取消也透過 Dashboard 操作
-
-### 📌 Stage 27b 後待討論（2026-04-16）
-
-Stage 27b（v3.13.0）完成了佇列機制的 Discord 操作指令（`/pause` / `/resume` / `/stop-all`）與 Dashboard 視覺化。實作完成後發現以下三個問題需要後續討論：
-
-#### 討論一：PM（Petra）不走佇列，要怎麼控制她停止/恢復？
-
-目前 `AgentQueueProcessor.SemaphoreGroups` 只包含 8 個執行型 Agent（Dev/Reviewer/QA/Doc/Requirements/Designer/Release/Ops）。PM（Petra）不在其中——她是在 `TaskGroupService` 流程中被直接 `await` 呼叫的內嵌式審核角色，不透過 `AgentQueueService.EnqueueAsync`。
-
-因此 `/stop-all` 不影響 Petra，`AgentState:PM` 這個 key 不存在，Dashboard 也不顯示她的佇列狀態。
-
-**需要討論的問題：**
-- 如果要能控制 Petra 暫停/停止，要怎麼做？（把她納入 queue 機制？還是另外設計？）
-- 她現在是 inline `await`，改成 queue 是否會造成流程的阻塞問題？
-- 「Petra 暫停中，流程卡在審核點」是否是合理的使用情境？
-
-#### 討論二：PM 的快速審核決策是哪種執行方式？
-
-目前系統中的 Agent 有兩種執行路徑：
-- **Claude Code CLI**（`claude -p`）：Cody / Vera / Quinn / Rosa / Demi / Sage / Victoria
-- **直接 API call**（`ILlmProvider`）：Rena / Maya
-
-Petra（PM）是哪一種？這個問題在 Stage 27b 的 `/pause` 設計時才被注意到，目前尚未確認。
-需要確認後補入 Future Feature 四（多 LLM 供應商支援）的限制說明，也影響她是否能被 `/pause` 管控的設計方向。
-
-#### 討論三：Dashboard 上的 pause/resume 操作
-
-Stage 27b 的操作指令（`/pause` / `/resume` / `/stop-all`）目前只能透過 Discord 執行。Dashboard 只顯示狀態（Active/暫停/已停止 Badge + 佇列深度），沒有操作按鈕。
-
-未來需要在 Dashboard 上也能操作，讓 Christ 不用切換到 Discord。此功能已記錄在 Future Feature 九（Dashboard 雙向操作中心）的設計方向中，但需要明確排入 Stage 後才會實作。
+以下項目在原始設計中規劃但尚未實作，保留作為未來擴充方向：
+- **Maya 自動化部署流程**：Maya 發送 Graceful Shutdown → 確認全員 Stopped → 執行部署 → 自動恢復
+- **Error 狀態阻塞 + 手動重試/取消**：Error 任務留在 queue 頭部，Dashboard 提供重試/取消按鈕（吸收原 API 餘額恢復需求）
+- **優先級支援**：修正任務優先、緊急上報可插隊、中斷恢復排入隊首
 
 ### 優先級
 
-🟠 中高優先級 — 目前「一次一個流程」的隱性假設遲早會被打破，提前建立 queue 機制可避免並行衝突事故
+🔵 低優先級 — 核心佇列已完成，剩餘為擴充性需求
 
 ---
 
@@ -1223,6 +662,7 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 七 | Token 異常消耗保護機制 | ✅ Stage 22（2026-04-12）— TokenTrackingProvider 四道關卡（單次/日/月/全域） |
 | 九 | Dashboard 存取分層（localhost 免登入） | ✅ Stage 22（2026-04-12）— LocalhostBypassMiddleware + Docker port 收緊 |
 | 十五 | 版本號集中管理（Directory.Build.props） | ✅ Stage 26（2026-04-14）— src/Directory.Build.props 集中四項版本屬性，Bot/Dashboard csproj 移除個別 Version 標籤，CI/CD + CLAUDE.md 同步更新 |
+| 十（核心） | Agent 任務序列（Per-Agent Queue + 狀態管理 + Dashboard 視覺化） | ✅ Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）— DB-as-Queue、AgentQueueProcessor、Agent 狀態管理（Active/Paused/Stopped）、Discord 五指令、Dashboard 佇列視覺化 |
 
 ---
 
@@ -1266,3 +706,4 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 2026-04-14 | v6.2：八（開發流程重構）Phase 1 全部完成 — 第二階段（設計規劃 Stage 25b v3.10.0）實作完成，Feature 八 Phase 1 七個階段全部 ✅ |
 | 2026-04-14 | v6.3：十五（版本號集中管理）移入已完成摘要 — Stage 26 實作完成；十五條目從候選清單移除 |
 | 2026-04-16 | v6.4：十（Agent 任務序列）新增「Stage 27b 後待討論」— PM 不走佇列的控制方式、PM 執行路徑確認（API vs Claude Code CLI）、Dashboard pause/resume 操作按鈕排入 Stage 議題 |
+| 2026-04-16 | v7.0：已完成項目清理 — 八（開發流程重構）Phase 1 詳細流程圖精簡為摘要表格、優先級降為 🔵 低；十（Agent 任務序列）核心設計方案精簡為待討論議題 + 未實作方向，核心完成部分移入已完成摘要 |
