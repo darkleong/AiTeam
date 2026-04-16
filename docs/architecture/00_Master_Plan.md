@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v6.8
+> 版本：v6.9
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -41,7 +41,7 @@
 | [Stage_26_Roadmap.md](../planning/Stage_26_Roadmap.md) | Stage 26：驗收基礎設施 + 版本號集中管理 | v3.11.0 | ✅ 已完成（2026-04-14） |
 | [Stage_27a_Roadmap.md](../planning/Stage_27a_Roadmap.md) | Stage 27a：Agent 任務序列 — 核心佇列機制 | v3.12.0 | ✅ 已完成（2026-04-16） |
 | [Stage_27b_Roadmap.md](../planning/Stage_27b_Roadmap.md) | Stage 27b：Agent 任務序列 — 操作性與可觀察性 | v3.13.0 | ✅ 已完成（2026-04-16） |
-| [Stage_28a_Roadmap.md](../planning/Stage_28a_Roadmap.md) | Stage 28a：Dashboard 雙向操作中心 — 基礎架構與按鈕回覆 | v3.14.0 | 📝 規劃中 |
+| [Stage_28a_Roadmap.md](../planning/Stage_28a_Roadmap.md) | Stage 28a：Dashboard 雙向操作中心 — 基礎架構與按鈕回覆 | v3.14.0 | ✅ 已完成（2026-04-17） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -113,6 +113,7 @@
 | v6.6 | 2026-04-16 | Stage 27a 實作完成（v3.12.0）：DB-as-Queue（TaskItem 新增 QueuedAt/QueueStatus/WorkflowAgentKey）、AgentQueueService + AgentQueueProcessor（per-agent SemaphoreSlim）、FireOneStepAsync 純 enqueue、Crash Recovery；關鍵修正 db.Attach(task)（EF detached entity 導致狀態卡在執行中） |
 | v6.7 | 2026-04-16 | Stage 27b 實作完成（v3.13.0）：AppSettingsService.SetAsync（cache 即時生效）、Processor 雙保險 Stopping→Stopped（主迴圈空閒路徑 + finally race condition 安全網）、Discord 五指令（/pause、/resume、/stop-all、/resume-all、/queue）AddChoice 下拉選單、AgentQueueDto + SignalR QueueUpdate 鏈路、StatusBadge queued、Home.razor 卡片狀態 Badge + 佇列深度 Chip；Future_Feature.md 新增 Feature 十後續三個待討論項目 |
 | v6.8 | 2026-04-16 | 新增 Stage_28a_Roadmap.md（Dashboard 雙向操作中心 Phase 1 — BossInteraction Entity、Bot 寫入 8 個確認點、Dashboard 操作中心頁面 /interactions、InteractionProcessor 輪詢 Dashboard 回覆 + 先到先贏雙通道同步，對應 FF 九） |
+| v6.9 | 2026-04-17 | Stage 28a 實作完成（v3.14.0）：BossInteraction Entity + EF Migration、BossInteractionRepository（樂觀鎖 ExecuteUpdateAsync WHERE status='pending'）、InteractionService（Singleton + CreateAsyncScope，8 個確認點 pure additive 寫入）、Dashboard 操作中心 /interactions（InteractionCenter + InteractionCard + InteractionRespondService Scoped 直寫 DB + SignalR）、InteractionProcessor（3 秒輪詢消費 + Discord 同步訊息）、TaskGroupService.ProcessBossResponseAsync（統一分派入口，kickoff/design 共用既有方法）；CI/CD 踩坑：Bot Dockerfile apt NodeSource 安裝在 GitHub runner 上極慢（22min+），改用 node:22-slim multi-stage COPY binary 解決 |
 
 ---
 

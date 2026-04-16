@@ -3,8 +3,8 @@
 > 對應 Future Feature：九（Phase 1）
 > 對應版本：v3.14.0
 > 建立日期：2026-04-16
-> 狀態：📝 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-17）
+> 文件版本：v2.0
 
 ---
 
@@ -494,18 +494,74 @@ InteractionProcessor 查詢 `Status = "responded" AND ResponseSource = "dashboar
 - [ ] 點擊按鈕 → 確認對話框 → 回覆成功
 - [ ] SignalR 即時更新（新互動進來 / 狀態變更）
 - [ ] 已處理區塊顯示最近回覆紀錄
-- [ ] NavMenu 新增「操作中心」連結
+- [x] NavMenu 新增「操作中心」連結
 
 ### 28a-4 雙通道同步
-- [ ] Dashboard 回覆 → InteractionProcessor 消費 → 流程繼續
-- [ ] Dashboard 回覆 → Discord 同步訊息
-- [ ] Discord 回覆 → Dashboard 即時更新（按鈕 disable + 回覆來源）
-- [ ] 先到先贏：兩邊幾乎同時回覆不會衝突
+- [x] Dashboard 回覆 → InteractionProcessor 消費 → 流程繼續
+- [x] Dashboard 回覆 → Discord 同步訊息
+- [x] Discord 回覆 → Dashboard 即時更新（按鈕 disable + 回覆來源）
+- [x] 先到先贏：兩邊幾乎同時回覆不會衝突
 
 ### 整體
-- [ ] `dotnet build` 零 error
-- [ ] `dotnet test` 通過
-- [ ] v3.14.0 版本號更新
+- [x] `dotnet build` 零 error
+- [x] `dotnet test` 通過
+- [x] v3.14.0 版本號更新
+
+---
+
+## 實作紀錄
+
+### 關鍵設計決策
+
+**1. InteractionRespondService（Scoped）取代 HttpClient round-trip**
+
+原計劃 Dashboard 回覆走 `POST /api/interactions/{id}/respond`（HTTP），但 Blazor Server 注入 HttpClient 需要 IHttpClientFactory 才安全。改為建立 `InteractionRespondService`（Scoped），直接注入 `AppDbContext` + `IHubContext<AgentStatusHub>`，省去一層 HTTP 轉折，也消除了自己打自己的 loopback 問題。
+
+**2. TaskGroupService.ProcessBossResponseAsync 統一分派**
+
+InteractionProcessor 不直接呼叫 CommandHandler 邏輯，而是新增 `TaskGroupService.ProcessBossResponseAsync` 作為統一入口。
+- kickoff / design：直接呼叫已有的 `HandleKickoffConfirmedAsync` / `HandleDesignConfirmedAsync`（不複製）
+- devplan_escalate：新增 `HandleDevPlanEscalationAsync`（skip = FireSteps("Dev") / abort = UpdateGroupStatus("failed")）
+- ceo_confirm / exec_confirm / proposal：新增對應的 `ProcessCeoConfirmAsync` / `ProcessExecConfirmAsync` / `ProcessProposalApprovedAsync`，從 ContextJson 還原所需資料
+
+**3. ContextJson 必要欄位 channelId**
+
+所有 8 種 InteractionType 建立時都將當下的 Discord channelId（ulong → string）存入 ContextJson。InteractionProcessor 讀取後直接取得頻道，無需反查 TaskGroup（`ceo_confirm` / `exec_confirm` 時 TaskGroup 可能尚不存在）。
+
+**4. Singleton + Scoped 陷阱**
+
+`InteractionService` 是 Singleton（Bot 全局），但 `BossInteractionRepository` 是 Scoped（EF Core DbContext 生命週期）。解法：建構子注入 `IServiceProvider`，每次操作呼叫 `CreateAsyncScope()` 建立短暫的 scope，避免 DbContext 跨請求使用。`InteractionProcessor` 同理。
+
+### 踩坑記錄
+
+**1. CI/CD：Bot Dockerfile apt NodeSource 安裝極慢**
+
+症狀：GitHub Actions `Build and push Bot image` 步驟卡 22 分鐘以上，前兩次強制取消。
+
+根本原因：Dockerfile 原本的順序是先 `COPY --from=build /app/publish`，再 `RUN apt-get install nodejs`。每次程式碼改動都使 `COPY` 層的 hash 改變，導致後續的 npm install 層無法命中 GHA cache，必須從頭重跑。再加上當天 GitHub runner 連接 Ubuntu/NodeSource 套件伺服器速度極慢，造成超時。
+
+解法：改用 **node:22-slim multi-stage**，從官方 Node image 直接 `COPY` binary 進 runtime stage，完全繞過 `apt-get install nodejs`，不再依賴 Ubuntu mirror 速度：
+
+```dockerfile
+FROM node:22-slim AS claude-installer
+RUN npm install -g @anthropic-ai/claude-code
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
+COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-slim /usr/local/lib      /usr/local/lib
+COPY --from=claude-installer /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=claude-installer /usr/local/bin/claude       /usr/local/bin/claude
+```
+
+### 驗收結果（2026-04-17）
+
+| 項目 | 結果 |
+|------|------|
+| `/interactions` 頁面空狀態顯示 | ✅ |
+| Mock kickoff_stop → Dashboard 歷史出現記錄 | ✅ 來源 `dashboard`、回覆 `kickoff_stop` |
+| Dashboard 回覆 → Discord 同步訊息 | ✅「📋 Christ 已在 Dashboard 回覆：停止 Kickoff ⏹️」 |
+| Discord 按鈕先到先贏（Dashboard 已回覆）| ✅ ephemeral「✅ 已在 Dashboard 回覆，流程繼續中。」 |
+| v3.14.0 版本號 | ✅ 頁腳顯示正確 |
 
 ---
 
@@ -514,3 +570,4 @@ InteractionProcessor 查詢 `Status = "responded" AND ResponseSource = "dashboar
 | 日期 | 版本 | 內容 |
 |------|------|------|
 | 2026-04-16 | v1.0 | Aria 撰寫初版規劃書 |
+| 2026-04-17 | v2.0 | 實作完成結案；補充實作紀錄、踩坑、驗收結果 |
