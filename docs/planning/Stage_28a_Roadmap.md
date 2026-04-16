@@ -553,6 +553,26 @@ COPY --from=claude-installer /usr/local/lib/node_modules /usr/local/lib/node_mod
 COPY --from=claude-installer /usr/local/bin/claude       /usr/local/bin/claude
 ```
 
+### 驗收修正（2026-04-17）
+
+**問題 1：AgentStatusController 與 InteractionRespondService 重複 respond 邏輯**
+
+原本 `AgentStatusController.RespondToInteractionAsync` 自己呼叫 `interactionRepo.RespondAsync` + `hubContext.Clients.All.SendAsync`，與 `InteractionRespondService.RespondAsync` 做完全相同的事。
+
+修正：Controller 改注入 `InteractionRespondService`，直接 delegate `RespondAsync(id, request.Action)`，移除 Controller 裡的 `BossInteractionRepository` 依賴與 SignalR 廣播程式碼。Respond 邏輯現在只有一份。
+
+**問題 2：exec_no 缺少取消邏輯**
+
+`ProcessBossResponseAsync` 的 `exec_no` 分支只寫 log，沒有實際清理。`exec_no` 時 TaskItem 已在 `ceo_confirm + confirm_yes` 階段建立，若不清理會懸空在 DB 中。
+
+修正：新增 `CancelTaskItemFromContextAsync(contextJson, ct)`，從 ContextJson 取得 `taskId`，將對應 TaskItem 狀態更新為 `"cancelled"` 並推送 Dashboard 更新。`confirm_no` 因為 TaskItem 尚未建立，刻意不做清理（加說明註解）。
+
+**問題 3：InteractionProcessor 壞資料無限重試**
+
+若某筆 BossInteraction 的 ContextJson 格式異常，`ProcessBossResponseAsync` 會 throw，被 catch 後 `ProcessedByBot` 仍為 false，下次輪詢又撈到，形成無限循環。
+
+修正：catch 區塊加入 `MarkProcessedByBotAsync(interaction.Id, ct)`；外層再用 try/catch 防止 mark 本身也拋例外造成整個 foreach 中斷。
+
 ### 驗收結果（2026-04-17）
 
 | 項目 | 結果 |
@@ -571,3 +591,4 @@ COPY --from=claude-installer /usr/local/bin/claude       /usr/local/bin/claude
 |------|------|------|
 | 2026-04-16 | v1.0 | Aria 撰寫初版規劃書 |
 | 2026-04-17 | v2.0 | 實作完成結案；補充實作紀錄、踩坑、驗收結果 |
+| 2026-04-17 | v2.1 | 驗收修正三項（見下方）|

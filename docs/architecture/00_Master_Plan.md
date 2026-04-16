@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v6.9
+> 版本：v7.0
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -114,6 +114,7 @@
 | v6.7 | 2026-04-16 | Stage 27b 實作完成（v3.13.0）：AppSettingsService.SetAsync（cache 即時生效）、Processor 雙保險 Stopping→Stopped（主迴圈空閒路徑 + finally race condition 安全網）、Discord 五指令（/pause、/resume、/stop-all、/resume-all、/queue）AddChoice 下拉選單、AgentQueueDto + SignalR QueueUpdate 鏈路、StatusBadge queued、Home.razor 卡片狀態 Badge + 佇列深度 Chip；Future_Feature.md 新增 Feature 十後續三個待討論項目 |
 | v6.8 | 2026-04-16 | 新增 Stage_28a_Roadmap.md（Dashboard 雙向操作中心 Phase 1 — BossInteraction Entity、Bot 寫入 8 個確認點、Dashboard 操作中心頁面 /interactions、InteractionProcessor 輪詢 Dashboard 回覆 + 先到先贏雙通道同步，對應 FF 九） |
 | v6.9 | 2026-04-17 | Stage 28a 實作完成（v3.14.0）：BossInteraction Entity + EF Migration、BossInteractionRepository（樂觀鎖 ExecuteUpdateAsync WHERE status='pending'）、InteractionService（Singleton + CreateAsyncScope，8 個確認點 pure additive 寫入）、Dashboard 操作中心 /interactions（InteractionCenter + InteractionCard + InteractionRespondService Scoped 直寫 DB + SignalR）、InteractionProcessor（3 秒輪詢消費 + Discord 同步訊息）、TaskGroupService.ProcessBossResponseAsync（統一分派入口，kickoff/design 共用既有方法）；CI/CD 踩坑：Bot Dockerfile apt NodeSource 安裝在 GitHub runner 上極慢（22min+），改用 node:22-slim multi-stage COPY binary 解決 |
+| v7.0 | 2026-04-17 | Stage 28a 驗收修正三項：① AgentStatusController.RespondToInteractionAsync 改 delegate 給 InteractionRespondService，消除重複的 interactionRepo + SignalR 邏輯；② TaskGroupService exec_no 新增 CancelTaskItemFromContextAsync（TaskItem 標記 cancelled + Dashboard 推送），confirm_no 加說明註解；③ InteractionProcessor catch 區塊加入 MarkProcessedByBotAsync，避免 ContextJson 格式異常造成無限重試 |
 
 ---
 
