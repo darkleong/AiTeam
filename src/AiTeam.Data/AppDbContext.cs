@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
     public DbSet<CeoConversation> CeoConversations => Set<CeoConversation>();
     public DbSet<CeoMemory> CeoMemories => Set<CeoMemory>();
+    public DbSet<BossInteraction> BossInteractions => Set<BossInteraction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasIndex(x => new { x.UserId, x.IsActive });
+        });
+
+        // Stage 28a：老闆互動雙通道記錄
+        modelBuilder.Entity<BossInteraction>(e =>
+        {
+            e.ToTable("boss_interactions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.DiscordMessageId).HasColumnType("numeric(20,0)");
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+            e.HasIndex(x => x.DiscordMessageId);
+            e.HasOne(x => x.TaskGroup).WithMany().HasForeignKey(x => x.TaskGroupId).IsRequired(false);
+            e.HasOne(x => x.TaskItem).WithMany().HasForeignKey(x => x.TaskItemId).IsRequired(false);
         });
     }
 }

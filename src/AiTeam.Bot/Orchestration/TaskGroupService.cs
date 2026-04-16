@@ -30,6 +30,7 @@ public class TaskGroupService(
     WorkflowEngine workflowEngine,
     MeetingService meetingService,
     AgentQueueService agentQueueService,
+    InteractionService interactionService,
     IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
@@ -495,6 +496,22 @@ public class TaskGroupService(
             $"請確認後即可合併 👆");
 
         logger.LogInformation("TaskGroup {Id} 通知老闆可以 merge PR", group.Id);
+
+        // Stage 28a：寫入 BossInteraction（merge_notify）
+        _ = interactionService.CreateInteractionAsync(
+            "merge_notify",
+            title:                $"全流程完成：{group.Title}",
+            description:          $"PR：{prLink}（含 code + tests + docs），請確認後合併。",
+            project:              group.Project,
+            agentName:            null,
+            availableActionsJson: InteractionService.EmptyActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString(),
+                prUrl     = group.DevPrUrl ?? ""
+            }),
+            taskGroupId: group.Id);
     }
 
     private async Task NotifyBossInterventionAsync(TaskGroup group, CancellationToken cancellationToken)
@@ -507,6 +524,23 @@ public class TaskGroupService(
             $"PR：{group.DevPrUrl ?? "（無）"}");
 
         logger.LogWarning("TaskGroup {Id} 修復次數超限（{Count} 次），升級給老闆", group.Id, group.FixIteration);
+
+        // Stage 28a：寫入 BossInteraction（intervention）
+        _ = interactionService.CreateInteractionAsync(
+            "intervention",
+            title:                $"需要介入：{group.Title}",
+            description:          $"Vera 在 {group.FixIteration} 次修復後仍發現問題，需要您介入處理。",
+            project:              group.Project,
+            agentName:            null,
+            availableActionsJson: InteractionService.EmptyActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId    = ceoChannel.Id.ToString(),
+                groupId      = group.Id.ToString(),
+                prUrl        = group.DevPrUrl ?? "",
+                fixIteration = group.FixIteration
+            }),
+            taskGroupId: group.Id);
     }
 
     /// <summary>
@@ -555,6 +589,22 @@ public class TaskGroupService(
         commandHandler.RegisterDevPlanEscalation(msg.Id, group.Id);
 
         logger.LogWarning("TaskGroup {Id} Dev_plan 審核超限，升級給老闆", group.Id);
+
+        // Stage 28a：寫入 BossInteraction（devplan_escalate）
+        _ = interactionService.CreateInteractionAsync(
+            "devplan_escalate",
+            title:                $"Dev_plan 升級：{group.Title}",
+            description:          $"Cody 實作計畫書經過 {group.DevPlanRevision} 輪審核仍未通過",
+            project:              group.Project,
+            agentName:            AgentNames.Pm,
+            availableActionsJson: InteractionService.DevPlanEscalateActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString()
+            }),
+            discordMessageId: (decimal)msg.Id,
+            taskGroupId:      group.Id);
     }
 
     // ---- 輔助方法 ----
@@ -1504,6 +1554,22 @@ public class TaskGroupService(
             var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
             commandHandler.RegisterKickoffConfirmation(msg.Id, freshGroup.Id, planPreview);
 
+            // Stage 28a：寫入 BossInteraction（kickoff）
+            _ = interactionService.CreateInteractionAsync(
+                "kickoff",
+                title:                $"Kickoff 確認：{freshGroup.Title}",
+                description:          planPreview,
+                project:              freshGroup.Project,
+                agentName:            AgentNames.Pm,
+                availableActionsJson: InteractionService.KickoffActionsJson,
+                contextJson:          JsonSerializer.Serialize(new
+                {
+                    channelId = ceoChannel.Id.ToString(),
+                    groupId   = freshGroup.Id.ToString()
+                }),
+                discordMessageId: (decimal)msg.Id,
+                taskGroupId:      freshGroup.Id);
+
             // Stage 26：Kickoff TaskItem 標記完成
             taskRepo.UpdateStatus(kickoffTask, "done");
             await taskRepo.SaveAsync(ct);
@@ -1822,6 +1888,23 @@ public class TaskGroupService(
 
                 var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
                 commandHandler.RegisterDesignConfirmation(msg.Id, freshGroup.Id, designResult.PetraSessionId, designResult.EscalateReason);
+
+                // Stage 28a：寫入 BossInteraction（design）
+                _ = interactionService.CreateInteractionAsync(
+                    "design",
+                    title:                $"設計確認：{freshGroup.Title}",
+                    description:          planPreview,
+                    project:              freshGroup.Project,
+                    agentName:            AgentNames.Pm,
+                    availableActionsJson: InteractionService.DesignActionsJson,
+                    contextJson:          JsonSerializer.Serialize(new
+                    {
+                        channelId      = ceoChannel.Id.ToString(),
+                        groupId        = freshGroup.Id.ToString(),
+                        petraSessionId = designResult.PetraSessionId
+                    }),
+                    discordMessageId: (decimal)msg.Id,
+                    taskGroupId:      freshGroup.Id);
             }
         }
         catch (Exception ex)
@@ -2008,5 +2091,257 @@ public class TaskGroupService(
         if (!ulong.TryParse(_discord.GuildId, out var guildId)) return null;
         return discordClient.GetGuild(guildId)
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
+    }
+
+    // ---- Stage 28a：InteractionProcessor 分派入口 ----
+
+    /// <summary>
+    /// Dashboard 回覆後，InteractionProcessor 呼叫此入口依 interactionType + action 分派。
+    /// 各型別對應的處理邏輯與 CommandHandler 的 Discord 路徑共用同一套 TaskGroupService 方法。
+    /// </summary>
+    public async Task ProcessBossResponseAsync(
+        string interactionType, string action, string? contextJson, CancellationToken ct = default)
+    {
+        switch (interactionType)
+        {
+            case "ceo_confirm":
+                if (action == "confirm_yes" && contextJson is not null)
+                    await ProcessCeoConfirmAsync(contextJson, ct);
+                else
+                    logger.LogInformation("InteractionProcessor：CEO 確認取消（action={Action}）", action);
+                break;
+
+            case "exec_confirm":
+                if (action == "exec_yes" && contextJson is not null)
+                    await ProcessExecConfirmAsync(contextJson, ct);
+                else
+                    logger.LogInformation("InteractionProcessor：Agent 執行取消（action={Action}）", action);
+                break;
+
+            case "proposal":
+                if (action == "propose_yes" && contextJson is not null)
+                    await ProcessProposalApprovedAsync(contextJson, ct);
+                else
+                    logger.LogInformation("InteractionProcessor：提案取消（action={Action}）", action);
+                break;
+
+            case "kickoff":
+            {
+                if (contextJson is null) return;
+                using var doc     = JsonDocument.Parse(contextJson);
+                var groupIdStr    = doc.RootElement.GetProperty("groupId").GetString() ?? "";
+                if (!Guid.TryParse(groupIdStr, out var groupId)) return;
+                var decision      = action.Replace("kickoff_", "");
+                await HandleKickoffConfirmedAsync(groupId, decision, ct: ct);
+                break;
+            }
+
+            case "design":
+            {
+                if (contextJson is null) return;
+                using var doc        = JsonDocument.Parse(contextJson);
+                var groupIdStr       = doc.RootElement.GetProperty("groupId").GetString() ?? "";
+                var petraSessionId   = doc.RootElement.GetProperty("petraSessionId").GetString() ?? "";
+                if (!Guid.TryParse(groupIdStr, out var groupId)) return;
+                var decision         = action.Replace("design_", "");
+                await HandleDesignConfirmedAsync(groupId, decision, petraSessionId, ct: ct);
+                break;
+            }
+
+            case "devplan_escalate":
+                if (contextJson is not null)
+                    await HandleDevPlanEscalationAsync(contextJson, action, ct);
+                break;
+
+            default:
+                logger.LogInformation("InteractionProcessor：無需處理的互動類型（{Type}）", interactionType);
+                break;
+        }
+    }
+
+    private async Task ProcessCeoConfirmAsync(string contextJson, CancellationToken ct)
+    {
+        using var doc         = JsonDocument.Parse(contextJson);
+        var root              = doc.RootElement;
+        var ceoResponseJson   = root.GetProperty("ceoResponseJson").GetString() ?? "{}";
+        var project           = root.TryGetProperty("project",     out var p) ? p.GetString() : null;
+        var description       = root.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+        var channelIdStr      = root.TryGetProperty("channelId",   out var c) ? c.GetString() : null;
+
+        var ceoResponse = JsonSerializer.Deserialize<CeoResponse>(ceoResponseJson);
+        if (ceoResponse is null)
+        {
+            logger.LogWarning("ProcessCeoConfirmAsync：無法解析 ceoResponseJson");
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService       = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var projectId = string.IsNullOrWhiteSpace(project)
+            ? (Guid?)null
+            : await taskRepo.GetProjectIdByNameAsync(project);
+
+        var task = new TaskItem
+        {
+            Title         = ceoResponse.Task?.Title ?? description,
+            Description   = ceoResponse.Task?.Description,
+            TriggeredBy   = "Dashboard",
+            AssignedAgent = ceoResponse.TargetAgent ?? "CEO",
+            Status        = "pending",
+            ProjectId     = projectId,
+        };
+        taskRepo.Add(task);
+        await taskRepo.SaveAsync(ct);
+
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = task.Status
+        });
+
+        // 建立 exec_confirm BossInteraction，讓 Dashboard 顯示第二層確認
+        _ = interactionService.CreateInteractionAsync(
+            "exec_confirm",
+            title:                ceoResponse.Task?.Title ?? description,
+            description:          $"即將由 {ceoResponse.TargetAgent} 執行",
+            project:              project,
+            agentName:            ceoResponse.TargetAgent,
+            availableActionsJson: InteractionService.ExecConfirmActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId       = channelIdStr,
+                ceoResponseJson = ceoResponseJson,
+                project         = project,
+                description     = description,
+                taskId          = task.Id.ToString()
+            }),
+            taskItemId: task.Id);
+    }
+
+    private async Task ProcessExecConfirmAsync(string contextJson, CancellationToken ct)
+    {
+        using var doc         = JsonDocument.Parse(contextJson);
+        var root              = doc.RootElement;
+        var ceoResponseJson   = root.GetProperty("ceoResponseJson").GetString() ?? "{}";
+        var project           = root.TryGetProperty("project",     out var p) ? p.GetString() ?? "" : "";
+        var description       = root.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+        var taskIdStr         = root.TryGetProperty("taskId",      out var t) ? t.GetString() : null;
+
+        var ceoResponse = JsonSerializer.Deserialize<CeoResponse>(ceoResponseJson);
+        if (ceoResponse is null)
+        {
+            logger.LogWarning("ProcessExecConfirmAsync：無法解析 ceoResponseJson");
+            return;
+        }
+
+        var wfType = ResolveWorkflowTypeInternal(ceoResponse);
+
+        if (wfType == WorkflowType.TechImprovement)
+        {
+            var group = await CreateGroupAsync(
+                ceoResponse.Task?.Title ?? description, project, WorkflowType.TechImprovement, cancellationToken: ct);
+            await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+            return;
+        }
+
+        // BugFix 或單次任務：直接 enqueue 現有 TaskItem
+        if (!Guid.TryParse(taskIdStr, out var taskId))
+        {
+            logger.LogWarning("ProcessExecConfirmAsync：無效的 taskId ({Id})", taskIdStr);
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var task              = await taskRepo.GetByIdAsync(taskId);
+        if (task is null)
+        {
+            logger.LogWarning("ProcessExecConfirmAsync：找不到 TaskItem ({Id})", taskId);
+            return;
+        }
+
+        await agentQueueService.EnqueueAsync(task, ct);
+    }
+
+    private async Task ProcessProposalApprovedAsync(string contextJson, CancellationToken ct)
+    {
+        using var doc    = JsonDocument.Parse(contextJson);
+        var root         = doc.RootElement;
+        var taskIdStr    = root.TryGetProperty("taskId",  out var t) ? t.GetString() : null;
+        var project      = root.TryGetProperty("project", out var p) ? p.GetString() ?? "" : "";
+
+        if (!Guid.TryParse(taskIdStr, out var taskId))
+        {
+            logger.LogWarning("ProcessProposalApprovedAsync：無效的 taskId ({Id})", taskIdStr);
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService       = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+
+        var task = await taskRepo.GetByIdAsync(taskId);
+        if (task is null)
+        {
+            logger.LogWarning("ProcessProposalApprovedAsync：找不到 TaskItem ({Id})", taskId);
+            return;
+        }
+
+        taskRepo.UpdateStatus(task, "done");
+        await taskRepo.SaveAsync(ct);
+        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+        {
+            TaskId    = task.Id,
+            Title     = task.Title,
+            AgentName = task.AssignedAgent,
+            Status    = "done"
+        });
+
+        var group = await CreateGroupAsync(task.Title, project, WorkflowType.NewFeature, cancellationToken: ct);
+        await FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)], ct);
+    }
+
+    private async Task HandleDevPlanEscalationAsync(string contextJson, string action, CancellationToken ct)
+    {
+        using var doc    = JsonDocument.Parse(contextJson);
+        var groupIdStr   = doc.RootElement.TryGetProperty("groupId", out var g) ? g.GetString() : null;
+        if (!Guid.TryParse(groupIdStr, out var groupId)) return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group             = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null)
+        {
+            logger.LogWarning("HandleDevPlanEscalationAsync：找不到 TaskGroup ({Id})", groupId);
+            return;
+        }
+
+        if (action == "devplan_skip")
+        {
+            await FireStepsAsync(group, [new WorkflowStep("Dev")], ct);
+        }
+        else // devplan_abort
+        {
+            taskRepo.UpdateGroupStatus(group, "failed");
+            await taskRepo.SaveAsync(ct);
+        }
+    }
+
+    /// <summary>解析 CeoResponse 的工作流程類型（Stage 28a：從 CommandHandler 提取共用邏輯）。</summary>
+    private static WorkflowType? ResolveWorkflowTypeInternal(CeoResponse ceoResponse)
+    {
+        // 單次任務：不走 Orchestrator pipeline
+        if (ceoResponse.TargetAgent is AgentNames.Release or AgentNames.Ops or AgentNames.Doc)
+            return null;
+
+        return ceoResponse.WorkflowType switch
+        {
+            "tech_improvement" => WorkflowType.TechImprovement,
+            _                  => WorkflowType.BugFix
+        };
     }
 }

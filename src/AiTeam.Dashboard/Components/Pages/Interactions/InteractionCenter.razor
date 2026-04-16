@@ -1,0 +1,87 @@
+@page "/interactions"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Shared.Dtos
+
+<PageTitle>操作中心 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>操作中心</h2>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+@* 待處理區塊 *@
+<MudText Typo="Typo.h6" Class="mb-2">
+    待處理
+    @if (_pending.Count > 0)
+    {
+        <MudBadge Content="@_pending.Count" Color="Color.Warning" Overlap="true" Class="ml-2">
+            <span></span>
+        </MudBadge>
+    }
+</MudText>
+
+@if (_pending.Count == 0 && !_isLoading)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircleOutline" Class="mr-2" />
+        目前沒有待處理的確認項目。
+    </MudAlert>
+}
+else
+{
+    <MudStack Spacing="3" Class="mb-4">
+        @foreach (var interaction in _pending)
+        {
+            <InteractionCard Interaction="interaction" OnRespond="HandleResponseAsync" />
+        }
+    </MudStack>
+}
+
+@* 已處理區塊 *@
+<MudText Typo="Typo.h6" Class="mb-2 mt-4">已處理（最近 @_recentCount 筆）</MudText>
+
+@if (_responded.Count == 0)
+{
+    <MudAlert Severity="Severity.Normal" Class="mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+        尚無歷史回覆記錄。
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="_responded" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>類型</MudTh>
+            <MudTh>標題</MudTh>
+            <MudTh>專案</MudTh>
+            <MudTh>回覆</MudTh>
+            <MudTh>來源</MudTh>
+            <MudTh>時間</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudIcon Icon="@GetInteractionIcon(context.InteractionType)" Size="Size.Small"
+                         Color="@GetInteractionColor(context.InteractionType)" Class="mr-1" />
+                @GetInteractionLabel(context.InteractionType)
+            </MudTd>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@(context.Project ?? "—")</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@GetActionColor(context.ResponseAction)">
+                    @(context.ResponseAction ?? "—")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@(context.ResponseSource == "dashboard" ? Color.Info : Color.Default)">
+                    @(context.ResponseSource ?? "—")
+                </MudChip>
+            </MudTd>
+            <MudTd>@(context.RespondedAt.HasValue ? context.RespondedAt.Value.ToLocalTime().ToString("MM/dd HH:mm") : "—")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}

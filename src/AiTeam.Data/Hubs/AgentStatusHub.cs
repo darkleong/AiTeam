@@ -19,4 +19,7 @@ public class AgentStatusHub : Hub
 
     /// <summary>Dashboard 訂閱此事件以接收佇列狀態變動（enqueue / dequeue / cancel / 狀態變更時觸發）。</summary>
     public const string ReceiveQueueUpdate = nameof(ReceiveQueueUpdate);
+
+    /// <summary>Stage 28a：Dashboard 訂閱此事件以接收互動狀態變動（新互動進來 / 回覆後即時更新）。</summary>
+    public const string ReceiveInteractionUpdate = nameof(ReceiveInteractionUpdate);
 }

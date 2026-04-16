@@ -1,4 +1,6 @@
 using AiTeam.Data.Hubs;
+using AiTeam.Data.Repositories;
+using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -10,10 +12,13 @@ namespace AiTeam.Dashboard.Controllers;
 /// <summary>
 /// Internal API：Bot 透過此端點觸發 SignalR 推送，解決跨 Process 無法共享 IHubContext 的問題。
 /// Bot → POST /internal/agent-status → Hub → Dashboard Browser
+/// Stage 28a 新增 interaction push 端點 + Dashboard 回覆 API。
 /// </summary>
 [ApiController]
 [Route("internal/agent-status")]
-public class AgentStatusController(IHubContext<AgentStatusHub> hubContext) : ControllerBase
+public class AgentStatusController(
+    IHubContext<AgentStatusHub> hubContext,
+    BossInteractionRepository interactionRepo) : ControllerBase
 {
     /// <summary>Bot 呼叫此端點推送 Agent 狀態變動。</summary>
     [HttpPost]
@@ -59,5 +64,32 @@ public class AgentStatusController(IHubContext<AgentStatusHub> hubContext) : Con
             LastUpdated      = DateTime.UtcNow
         });
         return Ok(new { message = "測試推送成功" });
+    }
+
+    // ─── Stage 28a：互動操作 ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stage 28a：Bot 呼叫此端點通知互動狀態已變動（新互動進來 / 回覆後），觸發操作中心即時重整。
+    /// </summary>
+    [HttpPost("interaction")]
+    public async Task<IActionResult> PushInteractionUpdateAsync()
+    {
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveInteractionUpdate);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Stage 28a：Dashboard 前端回覆互動。
+    /// 使用樂觀鎖防止先到先贏衝突（另一通道已回覆則回傳 409）。
+    /// </summary>
+    [HttpPost("/api/interactions/{id}/respond")]
+    public async Task<IActionResult> RespondToInteractionAsync(Guid id, [FromBody] InteractionResponseRequest request)
+    {
+        var responded = await interactionRepo.RespondAsync(id, request.Action, "dashboard");
+        if (!responded)
+            return Conflict(new { message = "此互動已被回覆，請重新整理頁面。" });
+
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveInteractionUpdate);
+        return Ok();
     }
 }

@@ -57,6 +57,20 @@ public class DashboardPushService(
         }
     }
 
+    /// <summary>Stage 28a：通知 Dashboard 互動狀態已變動（新互動進來 / 回覆後），觸發操作中心即時重整。</summary>
+    public async Task PushInteractionUpdateAsync()
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("aiteam-dashboard");
+            await client.PostAsync("/internal/agent-status/interaction", null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "推送互動更新至 Dashboard 失敗（非關鍵錯誤）");
+        }
+    }
+
     /// <summary>推送任務狀態變動至 Dashboard，由 Dashboard 轉發至 SignalR Hub，觸發任務中心自動重新整理。</summary>
     public async Task PushTaskUpdateAsync(TaskUpdateViewModel taskUpdate)
     {

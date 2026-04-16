@@ -1,0 +1,112 @@
+@using AiTeam.Shared.Dtos
+@using MudBlazor
+
+<MudCard Outlined="true" Class="mb-2">
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudIcon Icon="@InteractionCenter.GetInteractionIcon(Interaction.InteractionType)"
+                     Color="@InteractionCenter.GetInteractionColor(Interaction.InteractionType)"
+                     Size="Size.Medium" />
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.subtitle1">
+                @InteractionCenter.GetInteractionLabel(Interaction.InteractionType)
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @Interaction.Title
+                @if (!string.IsNullOrWhiteSpace(Interaction.Project))
+                {
+                    <span> · @Interaction.Project</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Interaction.AgentName))
+                {
+                    <span> · @Interaction.AgentName</span>
+                }
+                <span> · @GetRelativeTime(Interaction.CreatedAt)</span>
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    @if (!string.IsNullOrWhiteSpace(Interaction.Description))
+    {
+        <MudCardContent>
+            <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
+                @Interaction.Description
+            </MudText>
+        </MudCardContent>
+    }
+
+    @if (Interaction.Status == "responded")
+    {
+        <MudCardActions>
+            <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
+                已由 @Interaction.ResponseSource 回覆：@Interaction.ResponseAction
+            </MudChip>
+        </MudCardActions>
+    }
+    else if (Interaction.AvailableActions.Count > 0)
+    {
+        <MudCardActions>
+            @foreach (var action in Interaction.AvailableActions)
+            {
+                var actionCopy = action;
+                <MudButton Variant="Variant.Filled"
+                           Color="@MapButtonColor(actionCopy.Color)"
+                           Size="Size.Small"
+                           Disabled="_isResponding"
+                           OnClick="@(() => ConfirmAndRespondAsync(actionCopy))"
+                           Class="mr-2">
+                    @actionCopy.Label
+                </MudButton>
+            }
+        </MudCardActions>
+    }
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public BossInteractionDto Interaction { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback<ResponseRequest> OnRespond { get; set; }
+
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
+
+    private bool _isResponding;
+
+    private async Task ConfirmAndRespondAsync(InteractionActionDto action)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "確認回覆",
+            $"確定執行「{action.Label}」？",
+            yesText: "確定", cancelText: "取消");
+
+        if (confirmed != true) return;
+
+        _isResponding = true;
+        StateHasChanged();
+
+        await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action.Id));
+
+        _isResponding = false;
+    }
+
+    private static Color MapButtonColor(string color) => color switch
+    {
+        "success" => Color.Success,
+        "error"   => Color.Error,
+        "warning" => Color.Warning,
+        "info"    => Color.Info,
+        _         => Color.Default
+    };
+
+    private static string GetRelativeTime(DateTime createdAt)
+    {
+        var diff = DateTime.UtcNow - createdAt;
+        if (diff.TotalMinutes < 1)  return "剛剛";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes} 分鐘前";
+        if (diff.TotalHours   < 24) return $"{(int)diff.TotalHours} 小時前";
+        return $"{(int)diff.TotalDays} 天前";
+    }
+}

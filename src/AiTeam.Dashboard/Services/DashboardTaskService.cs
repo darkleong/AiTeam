@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiTeam.Data;
 using AiTeam.Shared.Dtos;
 using Microsoft.EntityFrameworkCore;
@@ -331,6 +332,73 @@ public class DashboardTaskService(AppDbContext db)
         ["Release"]      = ["Release"],
         ["Ops"]          = ["Ops"],
     };
+
+    // ─── Stage 28a：BossInteraction 互動操作 ────────────────────────────────────
+
+    /// <summary>取得所有 pending 互動（Dashboard 操作中心待處理清單）。</summary>
+    public async Task<List<BossInteractionDto>> GetPendingInteractionsAsync(CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            return await db.BossInteractions
+                .AsNoTracking()
+                .Where(x => x.Status == "pending")
+                .OrderBy(x => x.CreatedAt)
+                .Select(x => MapToDto(x))
+                .ToListAsync(cancellationToken);
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>取得最近已處理互動（Dashboard 歷史區）。</summary>
+    public async Task<List<BossInteractionDto>> GetRecentInteractionsAsync(int count = 10, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            return await db.BossInteractions
+                .AsNoTracking()
+                .Where(x => x.Status == "responded")
+                .OrderByDescending(x => x.RespondedAt)
+                .Take(count)
+                .Select(x => MapToDto(x))
+                .ToListAsync(cancellationToken);
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>互動 Entity → DTO 轉換（含 AvailableActionsJson 反序列化）。</summary>
+    private static BossInteractionDto MapToDto(BossInteraction x)
+    {
+        List<InteractionActionDto> actions;
+        try
+        {
+            actions = string.IsNullOrWhiteSpace(x.AvailableActionsJson)
+                ? []
+                : JsonSerializer.Deserialize<List<InteractionActionDto>>(x.AvailableActionsJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch { actions = []; }
+
+        return new BossInteractionDto
+        {
+            Id               = x.Id,
+            TaskGroupId      = x.TaskGroupId,
+            TaskItemId       = x.TaskItemId,
+            InteractionType  = x.InteractionType,
+            Status           = x.Status,
+            Title            = x.Title,
+            Description      = x.Description,
+            Project          = x.Project,
+            AgentName        = x.AgentName,
+            AvailableActions = actions,
+            ResponseAction   = x.ResponseAction,
+            ResponseSource   = x.ResponseSource,
+            RespondedAt      = x.RespondedAt,
+            CreatedAt        = x.CreatedAt
+        };
+    }
 
     #endregion
 }

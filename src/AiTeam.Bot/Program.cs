@@ -77,6 +77,8 @@ var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashb
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri(dashboardPushUrl));
 builder.Services.AddSingleton<DashboardPushService>();
+// Stage 28a：BossInteraction 寫入與 Discord 回覆同步
+builder.Services.AddSingleton<InteractionService>();
 
 // GitHub
 builder.Services.AddSingleton<GitHubService>();
@@ -98,6 +100,10 @@ builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentQueueProcessor>());
 builder.Services.AddSingleton<TaskGroupService>();
+
+// Stage 28a：Dashboard 回覆消費器
+builder.Services.AddSingleton<InteractionProcessor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<InteractionProcessor>());
 
 // Discord（Stage 7：加入 GuildMessages + MessageContent 以接收自然語言訊息）
 // 注意：MessageContent 是 Privileged Intent，需在 Discord Developer Portal 手動開啟

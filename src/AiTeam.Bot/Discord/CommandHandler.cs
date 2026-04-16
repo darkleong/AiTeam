@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Orchestration;
@@ -27,6 +28,7 @@ public class CommandHandler(
     DashboardPushService dashboardPush,
     ConversationContextStore contextStore,
     TaskGroupService taskGroupService,
+    InteractionService interactionService,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
@@ -350,7 +352,8 @@ public class CommandHandler(
                 adjustPending.CeoResponse,
                 adjustPending.Project,
                 augmentedDescription,
-                images: adjustPending.Images);
+                images: adjustPending.Images,
+                channelId: msg.Channel.Id);
             return;
         }
 
@@ -419,7 +422,8 @@ public class CommandHandler(
             await ShowProposalAsync(
                 async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
                 ceoResponse, finalProject, msg.CleanContent,
-                images: images.Count > 0 ? images : null);
+                images: images.Count > 0 ? images : null,
+                channelId: msg.Channel.Id);
         }
         else if (ceoResponse.Action == "cancel")
         {
@@ -440,7 +444,8 @@ public class CommandHandler(
                 // 跳過 CEO 派工確認，直接進入 Agent 執行確認
                 await ShowDirectAgentConfirmAsync(
                     async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
-                    ceoResponse, finalProject, msg.CleanContent);
+                    ceoResponse, finalProject, msg.CleanContent,
+                    channelId: msg.Channel.Id);
             }
             else
             {
@@ -450,6 +455,23 @@ public class CommandHandler(
 
                 _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
                     ceoResponse, finalProject, msg.CleanContent);
+
+                // Stage 28a：寫入 BossInteraction（ceo_confirm）
+                _ = interactionService.CreateInteractionAsync(
+                    "ceo_confirm",
+                    title:                ceoResponse.Task?.Title ?? msg.CleanContent,
+                    description:          ceoResponse.Reply ?? msg.CleanContent,
+                    project:              finalProject,
+                    agentName:            ceoResponse.TargetAgent,
+                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
+                    contextJson:          JsonSerializer.Serialize(new
+                    {
+                        channelId       = msg.Channel.Id.ToString(),
+                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                        project         = finalProject,
+                        description     = msg.CleanContent
+                    }),
+                    discordMessageId: (decimal)confirmMessage.Id);
             }
         }
     }
@@ -497,6 +519,23 @@ public class CommandHandler(
 
         _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
             fakeResponse, project, msg.CleanContent);
+
+        // Stage 28a：寫入 BossInteraction（ceo_confirm，直接指派 Agent）
+        _ = interactionService.CreateInteractionAsync(
+            "ceo_confirm",
+            title:                fakeResponse.Task?.Title ?? msg.CleanContent,
+            description:          fakeResponse.Reply,
+            project:              project,
+            agentName:            agentName,
+            availableActionsJson: InteractionService.CeoConfirmActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId       = msg.Channel.Id.ToString(),
+                ceoResponseJson = JsonSerializer.Serialize(fakeResponse),
+                project,
+                description     = msg.CleanContent
+            }),
+            discordMessageId: (decimal)confirmMessage.Id);
     }
 
     /// <summary>頻道名稱 → Agent 名稱的對應表。</summary>
@@ -638,7 +677,8 @@ public class CommandHandler(
             await ShowProposalAsync(
                 async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
                 ceoResponse, project, description,
-                images: images.Count > 0 ? images : null);
+                images: images.Count > 0 ? images : null,
+                channelId: command.Channel.Id);
         }
         else if (ceoResponse.Action != "reply")
         {
@@ -648,7 +688,8 @@ public class CommandHandler(
                 // 跳過 CEO 派工確認，直接進入 Agent 執行確認
                 await ShowDirectAgentConfirmAsync(
                     async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
-                    ceoResponse, project, description);
+                    ceoResponse, project, description,
+                    channelId: command.Channel.Id);
             }
             else
             {
@@ -658,6 +699,23 @@ public class CommandHandler(
 
                 _pendingConfirmations[confirmMessage.Id] = new PendingConfirmation(
                     ceoResponse, project, description);
+
+                // Stage 28a：寫入 BossInteraction（ceo_confirm，/task 指令）
+                _ = interactionService.CreateInteractionAsync(
+                    "ceo_confirm",
+                    title:                ceoResponse.Task?.Title ?? description,
+                    description:          ceoResponse.Reply ?? description,
+                    project:              project,
+                    agentName:            ceoResponse.TargetAgent,
+                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
+                    contextJson:          JsonSerializer.Serialize(new
+                    {
+                        channelId       = command.Channel.Id.ToString(),
+                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                        project,
+                        description
+                    }),
+                    discordMessageId: (decimal)confirmMessage.Id);
             }
         }
         else
@@ -984,7 +1042,8 @@ public class CommandHandler(
         Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
         CeoResponse ceoResponse,
         string project,
-        string description)
+        string description,
+        ulong channelId = 0)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo  = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -1019,6 +1078,25 @@ public class CommandHandler(
 
         _pendingConfirmations[agentConfirmMsg.Id] = new PendingConfirmation(
             ceoResponse, project, description) with { TaskId = task.Id };
+
+        // Stage 28a：寫入 BossInteraction（exec_confirm，SkipCeoConfirm 模式）
+        _ = interactionService.CreateInteractionAsync(
+            "exec_confirm",
+            title:                ceoResponse.Task?.Title ?? description,
+            description:          $"即將由 {ceoResponse.TargetAgent} 執行",
+            project:              project,
+            agentName:            ceoResponse.TargetAgent,
+            availableActionsJson: InteractionService.ExecConfirmActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId       = channelId.ToString(),
+                ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                project,
+                description,
+                taskId          = task.Id.ToString()
+            }),
+            discordMessageId: (decimal)agentConfirmMsg.Id,
+            taskItemId:       task.Id);
     }
 
     #region 雙層確認機制
@@ -1134,6 +1212,15 @@ public class CommandHandler(
 
     private async Task OnButtonExecutedAsync(SocketMessageComponent interaction)
     {
+        // Stage 28a：先到先贏 — 嘗試標記 Discord 回覆。若 Dashboard 已先回覆，early return
+        var discordMsgId = (decimal)interaction.Message.Id;
+        var isFirstToRespond = await interactionService.SyncDiscordResponseAsync(discordMsgId, interaction.Data.CustomId);
+        if (!isFirstToRespond)
+        {
+            await interaction.RespondAsync("✅ 已在 Dashboard 回覆，流程繼續中。", ephemeral: true);
+            return;
+        }
+
         // Stage 25b：Design 確認按鈕（CustomId 以 design_ 開頭）
         if (interaction.Data.CustomId.StartsWith("design_", StringComparison.Ordinal))
         {
@@ -1198,6 +1285,25 @@ public class CommandHandler(
                     components: BuildConfirmButtons("exec_yes", "exec_no"));
 
                 _pendingConfirmations[agentConfirmMsg.Id] = pending with { TaskId = task.Id };
+
+                // Stage 28a：寫入 BossInteraction（exec_confirm）
+                _ = interactionService.CreateInteractionAsync(
+                    "exec_confirm",
+                    title:                pending.CeoResponse.Task?.Title ?? pending.Description,
+                    description:          $"即將由 {pending.CeoResponse.TargetAgent} 執行",
+                    project:              pending.Project,
+                    agentName:            pending.CeoResponse.TargetAgent,
+                    availableActionsJson: InteractionService.ExecConfirmActionsJson,
+                    contextJson:          JsonSerializer.Serialize(new
+                    {
+                        channelId       = interaction.Channel.Id.ToString(),
+                        ceoResponseJson = JsonSerializer.Serialize(pending.CeoResponse),
+                        project         = pending.Project,
+                        description     = pending.Description,
+                        taskId          = task.Id.ToString()
+                    }),
+                    discordMessageId: (decimal)agentConfirmMsg.Id,
+                    taskItemId:       task.Id);
             }
             catch (Exception ex)
             {
@@ -1534,7 +1640,8 @@ public class CommandHandler(
         CeoResponse ceoResponse,
         string project,
         string description,
-        IReadOnlyList<ImageAttachment>? images = null)
+        IReadOnlyList<ImageAttachment>? images = null,
+        ulong channelId = 0)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -1565,6 +1672,24 @@ public class CommandHandler(
                 TaskId: task.Id,
                 IsProposal: true,
                 Images: images);
+
+            // Stage 28a：寫入 BossInteraction（proposal）
+            _ = interactionService.CreateInteractionAsync(
+                "proposal",
+                title:                task.Title,
+                description:          task.Description ?? description,
+                project:              project,
+                agentName:            null,
+                availableActionsJson: InteractionService.ProposalActionsJson,
+                contextJson:          JsonSerializer.Serialize(new
+                {
+                    channelId   = channelId.ToString(),
+                    taskId      = task.Id.ToString(),
+                    project,
+                    description
+                }),
+                discordMessageId: (decimal)confirmMsg.Id,
+                taskItemId:       task.Id);
         }
         catch (Exception ex)
         {
