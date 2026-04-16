@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using AiTeam.Data.Hubs;
 using AiTeam.Shared.Dtos;
+using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.SignalR.Client;
 using MudBlazor;
 
@@ -34,6 +35,7 @@ public partial class Home : IAsyncDisposable
 
     private List<AgentStatusViewModel> _agentStatuses = [];
     private List<TaskGroupDto>         _recentGroups  = [];
+    private List<AgentQueueDto>        _agentQueues   = [];
     private HubConnection?             _hubConnection;
     private bool                       _hubConnected;
 
@@ -45,6 +47,7 @@ public partial class Home : IAsyncDisposable
     {
         _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
         _recentGroups  = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
+        _agentQueues   = await TaskService.GetAgentQueuesAsync();
         await ConnectSignalRAsync();
     }
 
@@ -78,6 +81,14 @@ public partial class Home : IAsyncDisposable
             async _ =>
             {
                 _recentGroups = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
+                await InvokeAsync(StateHasChanged);
+            });
+
+        _hubConnection.On(
+            AgentStatusHub.ReceiveQueueUpdate,
+            async () =>
+            {
+                _agentQueues = await TaskService.GetAgentQueuesAsync();
                 await InvokeAsync(StateHasChanged);
             });
 
@@ -130,6 +141,22 @@ public partial class Home : IAsyncDisposable
             Logger.LogError(ex, "測試推送失敗");
         }
     }
+
+    private static string GetAgentStateLabel(string state) => state switch
+    {
+        "paused"   => "暫停",
+        "stopping" => "停止中",
+        "stopped"  => "已停止",
+        _          => state
+    };
+
+    private static Color GetAgentStateColor(string state) => state switch
+    {
+        "paused"   => Color.Warning,
+        "stopping" => Color.Warning,
+        "stopped"  => Color.Error,
+        _          => Color.Default
+    };
 
     private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
     {

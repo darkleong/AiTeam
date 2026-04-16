@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace AiTeam.Bot.Orchestration;
 /// </summary>
 public class AgentQueueService(
     IServiceScopeFactory scopeFactory,
+    DashboardPushService pushService,
     ILogger<AgentQueueService> logger)
 {
     private readonly ManualResetEventSlim _signal = new(false);
@@ -39,6 +41,7 @@ public class AgentQueueService(
 
         logger.LogDebug("AgentQueueService：TaskItem {Id}（{Agent}）已入佇列", task.Id, task.AssignedAgent);
         _signal.Set();
+        _ = pushService.PushQueueUpdateAsync();
     }
 
     // ---- Dequeue ----
@@ -65,6 +68,7 @@ public class AgentQueueService(
         await db.SaveChangesAsync(ct);
 
         logger.LogDebug("AgentQueueService：TaskItem {Id}（{Agent}）已出佇列，開始執行", task.Id, task.AssignedAgent);
+        _ = pushService.PushQueueUpdateAsync();
         return task;
     }
 
@@ -147,6 +151,7 @@ public class AgentQueueService(
             await db.SaveChangesAsync(ct);
             logger.LogInformation("AgentQueueService：GroupId={Id} 的 {N} 個 queued 任務已標記 cancelled",
                 groupId, queuedTasks.Count);
+            _ = pushService.PushQueueUpdateAsync();
         }
     }
 }

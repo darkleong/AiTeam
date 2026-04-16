@@ -29,17 +29,37 @@
         <MudGrid Spacing="2" Class="mb-2">
             @foreach (var agent in _agentStatuses)
             {
+                var queueInfo = _agentQueues.FirstOrDefault(q => q.AgentName == agent.AgentName);
                 <MudItem xs="12" sm="6" md="4" lg="3">
-                    <MudPaper Elevation="1" Class="pa-2 d-flex align-center" Style="gap:8px; min-height:52px">
-                        <div style="flex:1; overflow:hidden">
-                            <MudText Typo="Typo.body2" Style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
-                                @agent.AgentName
-                            </MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                今日完成 @agent.TodayCompletedCount
-                            </MudText>
-                        </div>
-                        <StatusBadge Status="@agent.Status" />
+                    <MudPaper Elevation="1" Class="pa-2" Style="min-height:60px">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <div style="flex:1; overflow:hidden">
+                                <MudText Typo="Typo.body2" Style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                                    @agent.AgentName
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    今日完成 @agent.TodayCompletedCount
+                                </MudText>
+                            </div>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (queueInfo is not null && queueInfo.AgentState != "active")
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Color="@GetAgentStateColor(queueInfo.AgentState)"
+                                             Style="margin:0; height:20px; font-size:0.7rem">
+                                        @GetAgentStateLabel(queueInfo.AgentState)
+                                    </MudChip>
+                                }
+                                @if (queueInfo is not null && queueInfo.QueueDepth > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                             Style="margin:0; height:20px; font-size:0.7rem">
+                                        佇列 @queueInfo.QueueDepth
+                                    </MudChip>
+                                }
+                                <StatusBadge Status="@agent.Status" />
+                            </MudStack>
+                        </MudStack>
                     </MudPaper>
                 </MudItem>
             }

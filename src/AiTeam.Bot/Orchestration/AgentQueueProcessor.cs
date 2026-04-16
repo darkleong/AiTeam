@@ -24,6 +24,7 @@ public class AgentQueueProcessor(
     AgentQueueService queueService,
     TaskGroupService taskGroupService,
     DashboardPushService pushService,
+    AppSettingsService appSettings,
     RulesService rulesService,
     DiscordSocketClient discordClient,
     IOptions<GitHubSettings> gitHubSettings,
@@ -74,6 +75,22 @@ public class AgentQueueProcessor(
 
                 var semaphore = _semaphores[semaphoreKey];
                 if (!semaphore.Wait(0)) continue; // 已有任務在跑，跳過
+
+                // 27b-1：讀取 Agent 狀態，決定是否消費佇列
+                var agentState = await appSettings.GetAsync($"AgentState:{semaphoreKey}") ?? "active";
+                if (agentState is "paused" or "stopped")
+                {
+                    semaphore.Release();
+                    continue;
+                }
+                if (agentState is "stopping")
+                {
+                    // semaphore 已取得 = 無任務在跑 = 可安全轉為 stopped
+                    await appSettings.SetAsync($"AgentState:{semaphoreKey}", "stopped");
+                    _ = pushService.PushQueueUpdateAsync();
+                    semaphore.Release();
+                    continue;
+                }
 
                 var task = await queueService.DequeueAsync(agentNames, stoppingToken);
                 if (task is null) { semaphore.Release(); continue; }
@@ -292,6 +309,15 @@ public class AgentQueueProcessor(
         {
             queueService.TryRemoveCts(task.Id, out _);
             await queueService.ClearQueueStatusAsync(task.Id, CancellationToken.None);
+
+            // 27b-1：安全網 — 若 /stop-all 在任務執行中觸發，任務完成後自動轉為 stopped
+            var stateAfter = await appSettings.GetAsync($"AgentState:{executorKey}") ?? "active";
+            if (stateAfter == "stopping")
+            {
+                await appSettings.SetAsync($"AgentState:{executorKey}", "stopped");
+                _ = pushService.PushQueueUpdateAsync();
+            }
+
             semaphore.Release();
         }
     }

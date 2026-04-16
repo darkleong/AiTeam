@@ -16,4 +16,7 @@ public class AgentStatusHub : Hub
 
     /// <summary>Dashboard 訂閱此事件以接收 Token 用量更新（每次 LLM 呼叫後觸發）。</summary>
     public const string ReceiveTokenUpdate = nameof(ReceiveTokenUpdate);
+
+    /// <summary>Dashboard 訂閱此事件以接收佇列狀態變動（enqueue / dequeue / cancel / 狀態變更時觸發）。</summary>
+    public const string ReceiveQueueUpdate = nameof(ReceiveQueueUpdate);
 }

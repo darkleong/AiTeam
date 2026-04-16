@@ -32,6 +32,43 @@ public class AppSettingsService(
         return _cache.TryGetValue(key, out var value) ? value : null;
     }
 
+    /// <summary>寫入設定值並立即更新本地快取，確保 Processor 下次輪詢即生效。</summary>
+    public async Task SetAsync(string key, string value, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var existing = await db.AppSettings.FindAsync([key], cancellationToken);
+            if (existing is not null)
+            {
+                existing.Value     = value;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                db.AppSettings.Add(new AppSetting { Key = key, Value = value });
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            // 同步更新 cache，確保下次 GetAsync 命中新值（不等 TTL 過期）
+            _cache[key] = value;
+            logger.LogInformation("AppSettings 已寫入：{Key} = {Value}", key, value);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "AppSettings 寫入失敗：{Key}", key);
+            throw;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     /// <summary>強制清除快取，下次讀取時重新從 DB 載入。</summary>
     public void InvalidateCache() => _cacheExpiry = DateTime.MinValue;
 

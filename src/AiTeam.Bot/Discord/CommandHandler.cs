@@ -8,6 +8,7 @@ using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +24,7 @@ public class CommandHandler(
     IServiceProvider serviceProvider,
     RulesService rulesService,
     AppSettingsService appSettings,
+    DashboardPushService dashboardPush,
     ConversationContextStore contextStore,
     TaskGroupService taskGroupService,
     ILogger<CommandHandler> logger)
@@ -96,6 +98,53 @@ public class CommandHandler(
             new SlashCommandBuilder()
                 .WithName("new-session")
                 .WithDescription("清除 Victoria 的對話記憶，開始全新 Session（長期記憶不受影響）")
+                .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("pause")
+                .WithDescription("暫停指定 Agent 的佇列消費（不中斷正在執行的任務）")
+                .AddOption(new SlashCommandOptionBuilder()
+                    .WithName("agent")
+                    .WithDescription("要暫停的 Agent")
+                    .WithType(ApplicationCommandOptionType.String)
+                    .WithRequired(true)
+                    .AddChoice("Dev（Cody）",           AgentNames.Dev)
+                    .AddChoice("Reviewer（Vera）",       AgentNames.Reviewer)
+                    .AddChoice("QA（Quinn）",            AgentNames.Qa)
+                    .AddChoice("Doc（Sage）",            AgentNames.Doc)
+                    .AddChoice("Requirements（Rosa）",   AgentNames.Requirements)
+                    .AddChoice("Designer（Demi）",       AgentNames.Designer)
+                    .AddChoice("Release（Rena）",        AgentNames.Release)
+                    .AddChoice("Ops（Maya）",            AgentNames.Ops))
+                .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("resume")
+                .WithDescription("恢復指定 Agent 的佇列消費")
+                .AddOption(new SlashCommandOptionBuilder()
+                    .WithName("agent")
+                    .WithDescription("要恢復的 Agent")
+                    .WithType(ApplicationCommandOptionType.String)
+                    .WithRequired(true)
+                    .AddChoice("Dev（Cody）",           AgentNames.Dev)
+                    .AddChoice("Reviewer（Vera）",       AgentNames.Reviewer)
+                    .AddChoice("QA（Quinn）",            AgentNames.Qa)
+                    .AddChoice("Doc（Sage）",            AgentNames.Doc)
+                    .AddChoice("Requirements（Rosa）",   AgentNames.Requirements)
+                    .AddChoice("Designer（Demi）",       AgentNames.Designer)
+                    .AddChoice("Release（Rena）",        AgentNames.Release)
+                    .AddChoice("Ops（Maya）",            AgentNames.Ops))
+                .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("stop-all")
+                .WithDescription("讓所有 Agent 完成手頭任務後停止，不再接新任務")
+                .Build(),
+
+            new SlashCommandBuilder()
+                .WithName("queue")
+                .WithDescription("顯示 Agent 佇列狀態（排隊中 / 執行中的任務）")
+                .AddOption("agent", ApplicationCommandOptionType.String, "（選用）指定 Agent 名稱，省略顯示全部", isRequired: false)
                 .Build(),
 
             new SlashCommandBuilder()
@@ -505,6 +554,10 @@ public class CommandHandler(
                 "status"       => HandleStatusAsync(command),
                 "new-session"  => HandleNewSessionAsync(command),
                 "mock"         => HandleMockCommandAsync(command),
+                "pause"        => HandlePauseCommandAsync(command),
+                "resume"       => HandleResumeCommandAsync(command),
+                "stop-all"     => HandleStopAllCommandAsync(command),
+                "queue"        => HandleQueueCommandAsync(command),
                 _              => command.FollowupAsync("未知指令")
             });
         }
@@ -822,6 +875,88 @@ public class CommandHandler(
             : "（尚未設定 Agent）";
 
         await command.FollowupAsync($"**Agent 狀態**\n{agentLines}");
+    }
+
+    // 27b-1：Agent 佇列操作指令
+
+    private static readonly string[] QueueExecutorKeys =
+    [
+        AgentNames.Dev, AgentNames.Reviewer, AgentNames.Qa, AgentNames.Doc,
+        AgentNames.Requirements, AgentNames.Designer, AgentNames.Release, AgentNames.Ops
+    ];
+
+    private async Task HandlePauseCommandAsync(SocketSlashCommand command)
+    {
+        var agent = command.Data.Options.First(o => o.Name == "agent").Value.ToString()!;
+        await appSettings.SetAsync($"AgentState:{agent}", "paused");
+        _ = dashboardPush.PushQueueUpdateAsync();
+        await command.FollowupAsync($"⏸️ **{agent}** 已暫停佇列消費，正在執行的任務不受影響。\n使用 `/resume agent:{agent}` 恢復。");
+    }
+
+    private async Task HandleResumeCommandAsync(SocketSlashCommand command)
+    {
+        var agent = command.Data.Options.First(o => o.Name == "agent").Value.ToString()!;
+        await appSettings.SetAsync($"AgentState:{agent}", "active");
+        _ = dashboardPush.PushQueueUpdateAsync();
+        await command.FollowupAsync($"▶️ **{agent}** 已恢復佇列消費。");
+    }
+
+    private async Task HandleStopAllCommandAsync(SocketSlashCommand command)
+    {
+        foreach (var key in QueueExecutorKeys)
+            await appSettings.SetAsync($"AgentState:{key}", "stopping");
+
+        _ = dashboardPush.PushQueueUpdateAsync();
+        await command.FollowupAsync("🛑 所有 Agent 已進入 **Stopping** 狀態，完成手頭任務後將自動停止。\n使用 `/resume` 指定個別 Agent 恢復。");
+    }
+
+    private async Task HandleQueueCommandAsync(SocketSlashCommand command)
+    {
+        var agentFilter = command.Data.Options.FirstOrDefault(o => o.Name == "agent")?.Value?.ToString();
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AiTeam.Data.AppDbContext>();
+
+        var query = db.Set<TaskItem>()
+            .AsNoTracking()
+            .Where(t => t.QueueStatus == "queued" || t.QueueStatus == "processing");
+
+        if (!string.IsNullOrWhiteSpace(agentFilter))
+        {
+            // Dev_plan 歸在 Dev group
+            var matchAgents = agentFilter == AgentNames.Dev
+                ? new[] { AgentNames.Dev, "Dev_plan" }
+                : new[] { agentFilter };
+            query = query.Where(t => matchAgents.Contains(t.AssignedAgent));
+        }
+
+        var tasks = await query.OrderBy(t => t.QueuedAt).ToListAsync();
+
+        if (tasks.Count == 0)
+        {
+            var targetLabel = string.IsNullOrWhiteSpace(agentFilter) ? "所有 Agent" : agentFilter;
+            await command.FollowupAsync($"✅ {targetLabel} 佇列為空，目前無待執行任務。");
+            return;
+        }
+
+        var lines = tasks.Select(t =>
+        {
+            var waitTime = t.QueuedAt.HasValue
+                ? $"（等待 {(DateTime.UtcNow - t.QueuedAt.Value).TotalMinutes:F0} 分鐘）"
+                : "";
+            var statusIcon = t.QueueStatus == "processing" ? "🔄" : "⏳";
+            return $"{statusIcon} [{t.AssignedAgent}] {t.Title} {waitTime}";
+        });
+
+        var embed = new EmbedBuilder()
+            .WithTitle("📋 Agent 佇列狀態")
+            .WithDescription(string.Join("\n", lines))
+            .WithColor(Color.Blue)
+            .WithFooter($"共 {tasks.Count} 個任務（🔄 執行中 / ⏳ 排隊中）")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        await command.FollowupAsync(embed: embed);
     }
 
     #endregion

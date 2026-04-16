@@ -264,6 +264,74 @@ public class DashboardTaskService(AppDbContext db)
         finally { _lock.Release(); }
     }
 
+    /// <summary>
+    /// 取得所有 Agent 的佇列狀態（Stage 27b）。
+    /// 包含 Agent 狀態（active/paused/stopped）、佇列深度，以及排隊中的任務清單。
+    /// </summary>
+    public async Task<List<AgentQueueDto>> GetAgentQueuesAsync(CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            // 讀取 AgentState 設定（app_settings 表）
+            var agentStateSettings = await db.AppSettings
+                .AsNoTracking()
+                .Where(s => s.Key.StartsWith("AgentState:"))
+                .ToDictionaryAsync(s => s.Key, s => s.Value, cancellationToken);
+
+            // 查詢所有排隊中 / 執行中的任務
+            var queuedTasks = await db.Tasks
+                .AsNoTracking()
+                .Where(t => t.QueueStatus == "queued" || t.QueueStatus == "processing")
+                .OrderBy(t => t.QueuedAt)
+                .Select(t => new { t.Id, t.Title, t.AssignedAgent, t.QueueStatus, t.QueuedAt })
+                .ToListAsync(cancellationToken);
+
+            // Dev group 包含 Dev_plan
+            var result = new List<AgentQueueDto>();
+            foreach (var (executorKey, assignedAgents) in AgentGroups)
+            {
+                var groupTasks = queuedTasks
+                    .Where(t => assignedAgents.Contains(t.AssignedAgent))
+                    .ToList();
+
+                var state        = agentStateSettings.GetValueOrDefault($"AgentState:{executorKey}", "active");
+                var processingTask = groupTasks.FirstOrDefault(t => t.QueueStatus == "processing");
+                var waitingTasks   = groupTasks.Where(t => t.QueueStatus == "queued").ToList();
+
+                result.Add(new AgentQueueDto
+                {
+                    AgentName        = executorKey,
+                    AgentState       = state,
+                    QueueDepth       = waitingTasks.Count,
+                    CurrentTaskTitle = processingTask?.Title,
+                    QueuedTasks      = waitingTasks.Select(t => new QueuedTaskItemDto
+                    {
+                        TaskId   = t.Id,
+                        Title    = t.Title,
+                        QueuedAt = t.QueuedAt
+                    }).ToList()
+                });
+            }
+
+            return result;
+        }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>Executor key → AssignedAgent 名稱列表（對應 AgentQueueProcessor.SemaphoreGroups）。</summary>
+    private static readonly Dictionary<string, string[]> AgentGroups = new()
+    {
+        ["Dev"]          = ["Dev", "Dev_plan"],
+        ["Reviewer"]     = ["Reviewer"],
+        ["QA"]           = ["QA"],
+        ["Doc"]          = ["Doc"],
+        ["Requirements"] = ["Requirements"],
+        ["Designer"]     = ["Designer"],
+        ["Release"]      = ["Release"],
+        ["Ops"]          = ["Ops"],
+    };
+
     #endregion
 }
 

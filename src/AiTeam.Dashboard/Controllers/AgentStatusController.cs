@@ -39,6 +39,14 @@ public class AgentStatusController(IHubContext<AgentStatusHub> hubContext) : Con
         return Ok();
     }
 
+    /// <summary>Bot 呼叫此端點通知佇列狀態已變動（enqueue / dequeue / cancel / Agent 狀態變更）。</summary>
+    [HttpPost("queue")]
+    public async Task<IActionResult> PushQueueUpdateAsync()
+    {
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveQueueUpdate);
+        return Ok();
+    }
+
     /// <summary>測試用端點：直接觸發 SignalR 推送，驗證 Hub → Browser 的管道是否正常。</summary>
     [HttpPost("test")]
     public async Task<IActionResult> TestPushAsync()
