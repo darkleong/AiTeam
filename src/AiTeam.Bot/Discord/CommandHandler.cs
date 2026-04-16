@@ -142,6 +142,11 @@ public class CommandHandler(
                 .Build(),
 
             new SlashCommandBuilder()
+                .WithName("resume-all")
+                .WithDescription("恢復所有 Agent 的佇列消費（對應 /stop-all）")
+                .Build(),
+
+            new SlashCommandBuilder()
                 .WithName("queue")
                 .WithDescription("顯示 Agent 佇列狀態（排隊中 / 執行中的任務）")
                 .AddOption("agent", ApplicationCommandOptionType.String, "（選用）指定 Agent 名稱，省略顯示全部", isRequired: false)
@@ -557,6 +562,7 @@ public class CommandHandler(
                 "pause"        => HandlePauseCommandAsync(command),
                 "resume"       => HandleResumeCommandAsync(command),
                 "stop-all"     => HandleStopAllCommandAsync(command),
+                "resume-all"   => HandleResumeAllCommandAsync(command),
                 "queue"        => HandleQueueCommandAsync(command),
                 _              => command.FollowupAsync("未知指令")
             });
@@ -907,7 +913,16 @@ public class CommandHandler(
             await appSettings.SetAsync($"AgentState:{key}", "stopping");
 
         _ = dashboardPush.PushQueueUpdateAsync();
-        await command.FollowupAsync("🛑 所有 Agent 已進入 **Stopping** 狀態，完成手頭任務後將自動停止。\n使用 `/resume` 指定個別 Agent 恢復。");
+        await command.FollowupAsync("🛑 所有 Agent 已進入 **Stopping** 狀態，完成手頭任務後將自動停止。\n使用 `/resume` 指定個別 Agent 恢復，或 `/resume-all` 全部恢復。");
+    }
+
+    private async Task HandleResumeAllCommandAsync(SocketSlashCommand command)
+    {
+        foreach (var key in QueueExecutorKeys)
+            await appSettings.SetAsync($"AgentState:{key}", "active");
+
+        _ = dashboardPush.PushQueueUpdateAsync();
+        await command.FollowupAsync("▶️ 所有 Agent 已恢復佇列消費。");
     }
 
     private async Task HandleQueueCommandAsync(SocketSlashCommand command)
