@@ -723,18 +723,29 @@ Dashboard 路徑的 `ProcessProposalAdjustAsync` 產出新的 Discord Embed + �
 | 28b-6 歷史紀錄擴充 | ✅ | `GetInteractionHistoryAsync` 含類型/來源/日期範圍篩選；InteractionCenter 篩選列 + MudTable 分頁 |
 | 28b-7 任務取消 | ⏭️ | 延後至下一 Stage |
 
+### 驗收後修正（2026-04-18）
+
+| 修正 | 說明 |
+|------|------|
+| **Kickoff modify 未建 BossInteraction** | `HandleKickoffConfirmedAsync` modify 分支（large/small 兩條）發完新 Discord Embed 後，漏掉 `CreateInteractionAsync`，導致 Dashboard 待處理區沒有新卡片。補上後 Dashboard 正常出現下一輪確認。 |
+| **Design modify 未建 BossInteraction** | 同上，`HandleDesignConfirmedAsync` modify 分支補上 `CreateInteractionAsync`。 |
+| **MockMode 提案改為手動確認** | `HandleMockProposalFlowAsync` 移除倒數自動確認的 `Task.Run`，改為 `RegisterProposalConfirmation` + `CreateInteractionAsync`，需要 Christ 手動點擊（Discord 或 Dashboard）。`ExecuteProposalApprovedAsync` 同步修正：若 task 已有 GroupId（MockMode 預建），直接用現有 TaskGroup 觸發 Kickoff，避免重複建立 group。 |
+
 ### 關鍵設計決策
 
 1. **循環依賴**：沿用 `serviceProvider.GetRequiredService<CommandHandler>()` 模式（與 Kickoff/Design 相同），不新增 interface
 2. **channelId fallback**：實際探索後發現 `HandleKickoffConfirmedAsync` / `HandleDesignConfirmedAsync` 使用 `FindChannel` 直接查找頻道，不需要 channelId 參數——比計劃書更簡單
 3. **CeoResponse 最小化**：`PendingConfirmation` 的 CeoResponse 只有 propose_yes 路徑使用 TaskId/Project，實際上 CeoResponse 完全未被讀取，傳入 `new CeoResponse()` 即可
 4. **歷史紀錄分頁**：前端用 `pageSize: 200` 一次撈，讓 MudTable 做客戶端分頁（互動量小，不需 server-side pagination）
+5. **MockMode GroupId 重複建立防護**：`ExecuteProposalApprovedAsync` 先檢查 `task.GroupId.HasValue`，有則用現有 group（MockMode 路徑），無則新建（一般 CEO 路徑）
 
 ### 踩坑記錄
 
 1. **EF Migration 多 DbContext**：需加 `--context AppDbContext`，否則報 "More than one DbContext was found"
 2. **Solution 檔案**：專案用 `AiTeam.slnx` 不是 `AiTeam.sln`
 3. **MudChipSet SelectedValueChanged**：回傳 `string?` 而非 `string`，handler 簽名要用 `string?`
+4. **modify 分支 CreateInteractionAsync 遺漏**：`HandleKickoffConfirmedAsync` / `HandleDesignConfirmedAsync` 的 modify 分支只呼叫了 `RegisterXxxConfirmation`（Discord 按鈕），忘記 `CreateInteractionAsync`（Dashboard 卡片）——兩者都需要
+5. **TaskGroup 命名空間**：`TaskGroup` 位於 `AiTeam.Data` namespace，`CommandHandler.cs` 中引用需用 `AiTeam.Data.TaskGroup`
 
 ---
 
@@ -744,3 +755,4 @@ Dashboard 路徑的 `ProcessProposalAdjustAsync` 產出新的 Discord Embed + �
 |------|------|------|
 | 2026-04-17 | v1.0 | Aria 撰寫初版規劃書 |
 | 2026-04-17 | v2.0 | Stage 28b 實作完成，補充實作紀錄 |
+| 2026-04-18 | v2.1 | 驗收後三項修正：Kickoff/Design modify 補 CreateInteractionAsync、MockMode 提案改手動確認 |

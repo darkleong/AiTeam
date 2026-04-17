@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.1
+> 版本：v7.2
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -117,6 +117,7 @@
 | v6.9 | 2026-04-17 | Stage 28a 實作完成（v3.14.0）：BossInteraction Entity + EF Migration、BossInteractionRepository（樂觀鎖 ExecuteUpdateAsync WHERE status='pending'）、InteractionService（Singleton + CreateAsyncScope，8 個確認點 pure additive 寫入）、Dashboard 操作中心 /interactions（InteractionCenter + InteractionCard + InteractionRespondService Scoped 直寫 DB + SignalR）、InteractionProcessor（3 秒輪詢消費 + Discord 同步訊息）、TaskGroupService.ProcessBossResponseAsync（統一分派入口，kickoff/design 共用既有方法）；CI/CD 踩坑：Bot Dockerfile apt NodeSource 安裝在 GitHub runner 上極慢（22min+），改用 node:22-slim multi-stage COPY binary 解決 |
 | v7.0 | 2026-04-17 | Stage 28a 驗收修正三項：① AgentStatusController.RespondToInteractionAsync 改 delegate 給 InteractionRespondService，消除重複的 interactionRepo + SignalR 邏輯；② TaskGroupService exec_no 新增 CancelTaskItemFromContextAsync（TaskItem 標記 cancelled + Dashboard 推送），confirm_no 加說明註解；③ InteractionProcessor catch 區塊加入 MarkProcessedByBotAsync，避免 ContextJson 格式異常造成無限重試 |
 | v7.1 | 2026-04-17 | Stage 28b 實作完成（v3.15.0）：BossInteraction.ResponseContent + EF Migration、三個 ActionsJson 加入修改動作（requiresInput: true）、TextInputDialog.razor + InteractionCard RequiresInput 分支、InteractionRespondService content overload、ProcessBossResponseAsync responseContent 參數 + ProcessProposalAdjustAsync 新方法、Discord 三個修改按鈕 SyncDiscordResponseAsync 同步、RegisterProposalConfirmation、歷史紀錄篩選（類型/來源/日期）+ MudTable 分頁 |
+| v7.2 | 2026-04-18 | Stage 28b 驗收修正三項：① Kickoff/Design modify 分支補 CreateInteractionAsync（修改後的新確認 Dashboard 看不到）；② MockMode 提案改手動確認（移除倒數 Task.Run，改用 RegisterProposalConfirmation + CreateInteractionAsync）；③ ExecuteProposalApprovedAsync 防重複建 group（task.GroupId 有值時直接用現有 group）|
 
 ---
 
