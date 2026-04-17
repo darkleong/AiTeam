@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.0
+> 版本：v7.6
 > 建立日期：2026-04-01
-> 最後更新：2026-04-16
+> 最後更新：2026-04-18
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -363,7 +363,7 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 1. **Petra 是 PM 協調者**：主持會議、判斷流程走向、評估影響範圍
 2. **會議只對齊認知**：Agent 在會議中只提疑問與風險，不產出實際工作成果
-3. **所有輪次上限預設 3 輪**：未來可在 Dashboard 動態調整（依賴 FF 十二）
+3. **所有輪次上限預設 3 輪**：未來可在 Dashboard 動態調整（依賴 FF 十一）
 4. **文件存入 DB**：各階段產出統一存入 DB，WorkflowEngine 啟動下游 Agent 前從 DB 取出
 5. **BugFix / TechImprovement 精簡路徑**：由 Petra 判斷可跳過哪些階段
 6. **Petra 工作量待觀察**：幾乎參與每個階段，Token 消耗需持續監控
@@ -417,84 +417,7 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 ---
 
-## 九、Dashboard 雙向操作中心（Discord + Dashboard 雙通道）
-
-### 背景
-
-目前所有需要老闆介入的互動（CEO 雙層確認、流程異常上報、狀態通知等）都只發生在 Discord。Dashboard 是純「唯讀監控」，只能看不能操作。這代表：
-
-- Christ 必須盯著 Discord 才能回覆確認
-- 歷史互動記錄散落在 Discord 訊息中，難以回溯查詢
-- 未來功能（申訴仲裁、驗收確認）也只能在 Discord 處理
-
-### 期望行為
-
-```
-Agent 需要老闆介入（確認 / 上報 / 申訴 / 通知）
-        ↓
-   統一存入 DB
-    ↓           ↓
-  Discord     Dashboard（SignalR 即時推送）
-    ↓           ↓
-  Christ 擇一回覆（先到的算數）
-        ↓
-   回覆存入 DB
-        ↓
-   Agent 讀取回覆，繼續流程
-```
-
-### 涵蓋的互動類型
-
-| 互動類型 | 目前 | 改後 |
-|---------|------|------|
-| CEO 提案確認 | Discord only | Discord + Dashboard |
-| CEO 執行確認 | Discord only | Discord + Dashboard |
-| 流程異常上報（熔斷、錯誤） | Discord only | Discord + Dashboard |
-| Agent 狀態通知 | Discord + Dashboard（唯讀） | 不變 |
-| 未來：申訴仲裁 | — | Discord + Dashboard |
-| 未來：驗收確認 | — | Discord + Dashboard |
-
-### 實作方向
-
-**1. 統一訊息模型**
-
-所有 Boss ↔ Agent 互動存入 DB（新 Entity），不再只活在 Discord 訊息裡：
-- 請求方（哪個 Agent、什麼類型）
-- 請求內容（確認什麼、附帶資訊）
-- 回覆內容（Christ 的回答）
-- 回覆來源（Discord / Dashboard）
-- 時間戳
-
-**2. 雙通道寫入**
-
-- Discord 回覆 → Bot 攔截 → 寫入 DB → Agent 繼續
-- Dashboard 回覆 → API → 寫入 DB → 推送 Discord 同步顯示 → Agent 繼續
-- 兩邊先到的算數，後到的標記為「已在另一通道回覆」
-
-**3. Dashboard UI**
-
-- 待處理清單（未回覆的確認/上報/申訴）
-- 歷史紀錄（可依時間、Agent、類型篩選）
-- 即時通知（SignalR，新請求進來時提醒）
-
-**4. 雙向同步**
-
-- Dashboard 回覆後，Discord 也要顯示（讓 Discord 的對話脈絡完整）
-- Discord 回覆後，Dashboard 即時更新狀態（避免重複回覆）
-
-### 與現有 Future Feature 的關係
-
-- **八（開發流程重構）**：申訴上呈老闆時，Dashboard 成為仲裁介面
-- **七（客戶專案交付）**：驗收確認可透過 Dashboard 處理
-- **存取分層（Stage 22 已完成）**：外部透過 Tailscale + 登入存取 Dashboard 操作中心
-
-### 優先級
-
-🟠 中高優先級 — 將 Dashboard 從唯讀升級為操作中心，是多項未來功能的基礎設施
-
----
-
-## 十、Agent 任務序列 — 後續議題
+## 九、Agent 任務序列 — 後續議題
 
 > 核心機制已完成：Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）
 > 詳見已完成項目摘要
@@ -531,7 +454,7 @@ Petra 是 `TaskGroupService` 中的 inline `await` 閘門，不在 `AgentQueuePr
 
 ---
 
-## 十一、Dashboard UI 細節打磨（第四批）
+## 十、Dashboard UI 細節打磨（第四批）
 
 > 狀態：🔵 低優先級 — UI 組織與使用便利性優化，待 Christ 確認完整清單後排入 Stage
 
@@ -618,7 +541,7 @@ PR 欄位顯示優化：
 
 ---
 
-## 十二、Dashboard 可調整 Token 守門全域限額
+## 十一、Dashboard 可調整 Token 守門全域限額
 
 > 狀態：🔵 低優先級 — 目前只能改設定檔後重新部署
 
@@ -634,7 +557,7 @@ Stage 22 實作了 Token 守門機制，包含：
 
 ### 需求
 
-在 Dashboard 「系統設定」頁面（配合十一、系統設定獨立頁面規劃）加入 Token 守門設定區塊：
+在 Dashboard 「系統設定」頁面（配合十、系統設定獨立頁面規劃）加入 Token 守門設定區塊：
 
 - **全域月費上限**（MonthlyTokenLimitK）— 數字輸入框，單位 K tokens
 - **單次請求上限**（SingleRequestTokenLimitK）— 數字輸入框，單位 K tokens
@@ -654,7 +577,7 @@ Stage 22 實作了 Token 守門機制，包含：
 
 ---
 
-## 十三、Sage 全系統文件健康檢查
+## 十二、Sage 全系統文件健康檢查
 
 ### 背景
 
@@ -680,7 +603,7 @@ Sage 作為獨立定期任務（非 pipeline 內），掃描整個專案：
 
 ---
 
-## 十四、UAT 驗收階段（待觀察）
+## 十三、UAT 驗收階段（待觀察）
 
 ### 背景
 
@@ -704,9 +627,9 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 
 ---
 
-## 十五、Agent I/O 完整記錄（待討論）
+## 十四、Agent I/O 完整記錄（待討論）
 
-> 狀態：⚪ 待討論 — 等 TaskLog 獨立頁面（十一）上線後，實際檢視現有 Log 內容再決定
+> 狀態：⚪ 待討論 — 等 TaskLog 獨立頁面（十）上線後，實際檢視現有 Log 內容再決定
 
 ### 背景
 
@@ -731,14 +654,14 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 
 ### 決策前提
 
-先完成十一的 TaskLog 獨立頁面，Christ 實際看過現有 Log 內容後，再決定：
+先完成十的 TaskLog 獨立頁面，Christ 實際看過現有 Log 內容後，再決定：
 1. 現有 TaskLog 的資訊是否足夠
 2. 若不夠，需要補到什麼層級（流程摘要 vs 完整 I/O）
 3. 儲存策略與效能取捨
 
 ### 優先級
 
-⚪ 待討論 — 依賴十一的 TaskLog 頁面上線後再評估
+⚪ 待討論 — 依賴十的 TaskLog 頁面上線後再評估
 
 ---
 
@@ -771,6 +694,7 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 | 九 | Dashboard 存取分層（localhost 免登入） | ✅ Stage 22（2026-04-12）— LocalhostBypassMiddleware + Docker port 收緊 |
 | 十五 | 版本號集中管理（Directory.Build.props） | ✅ Stage 26（2026-04-14）— src/Directory.Build.props 集中四項版本屬性，Bot/Dashboard csproj 移除個別 Version 標籤，CI/CD + CLAUDE.md 同步更新 |
 | 十（核心） | Agent 任務序列（Per-Agent Queue + 狀態管理 + Dashboard 視覺化） | ✅ Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）— DB-as-Queue、AgentQueueProcessor、Agent 狀態管理（Active/Paused/Stopped）、Discord 五指令、Dashboard 佇列視覺化 |
+| 九 | Dashboard 雙向操作中心（Discord + Dashboard 雙通道） | ✅ Stage 28a（v3.14.0）+ Stage 28b（v3.15.0）— BossInteraction Entity、8 個確認點 pure additive 寫入、樂觀鎖先到先贏、InteractionProcessor 輪詢、操作中心 /interactions、文字輸入互動（修改意見）、歷史紀錄篩選 |
 
 ---
 
@@ -820,3 +744,4 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 | 2026-04-16 | v7.3：八 Phase 2 擴充為「LLM API → CLI 全面升級」— 新增設計原則（預設 CLI，不需要時才 LLM API）；完整列出 5 個應改環節 + 3 個不需改環節；取代原「申訴迴圈 Session 延續」單點描述 |
 | 2026-04-16 | v7.4：十一新增「Agent 角色設定 Dashboard 化」— 角色描述 + 行為準則從 C# 硬碼抽至 DB，Dashboard Agent 設定頁可編輯；復用規則系統 Cache 機制；流程邏輯模板留在 C# 不動 |
 | 2026-04-17 | v7.5：十一新增「Dashboard Cache Reload 按鈕」— 規則/Agent 設定修改後免跑 Discord 指令，Dashboard 直接呼叫 Bot internal API 刷新 Cache |
+| 2026-04-18 | v7.6：九（Dashboard 雙向操作中心）移入已完成摘要 — Stage 28a（v3.14.0）+ Stage 28b（v3.15.0）實作完成；原 FF 十～十五重新編號為九～十四；修正所有跨項目引用（原十一→十、原十二→十一） |
