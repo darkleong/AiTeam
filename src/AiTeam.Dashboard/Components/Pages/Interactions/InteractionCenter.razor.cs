@@ -28,10 +28,15 @@ public partial class InteractionCenter : IAsyncDisposable
 
     #region Private Variables
 
-    private List<BossInteractionDto> _pending   = [];
-    private List<BossInteractionDto> _responded = [];
-    private bool                     _isLoading = true;
-    private const int _recentCount = 10;
+    private List<BossInteractionDto> _pending      = [];
+    private List<BossInteractionDto> _historyItems = [];
+    private bool                     _isLoading    = true;
+    private bool                     _historyLoading = false;
+
+    // 歷史紀錄篩選條件
+    private string?    _typeFilter   = null;
+    private string     _sourceFilter = "";
+    private DateRange? _dateRange    = null;
 
     #endregion
 
@@ -58,24 +63,61 @@ public partial class InteractionCenter : IAsyncDisposable
         _isLoading = true;
         try
         {
-            var pendingTask   = TaskService.GetPendingInteractionsAsync();
-            var respondedTask = TaskService.GetRecentInteractionsAsync(_recentCount);
-            await Task.WhenAll(pendingTask, respondedTask);
-            _pending   = await pendingTask;
-            _responded = await respondedTask;
+            _pending = await TaskService.GetPendingInteractionsAsync();
         }
         finally
         {
             _isLoading = false;
             await InvokeAsync(StateHasChanged);
         }
+        await LoadHistoryAsync();
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        _historyLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            DateTime? from = _dateRange?.Start?.ToUniversalTime();
+            DateTime? to   = _dateRange?.End?.AddDays(1).ToUniversalTime();
+            var (items, _) = await TaskService.GetInteractionHistoryAsync(
+                page: 1, pageSize: 200,
+                typeFilter:   _typeFilter,
+                sourceFilter: string.IsNullOrEmpty(_sourceFilter) ? null : _sourceFilter,
+                from: from, to: to);
+            _historyItems = items;
+        }
+        finally
+        {
+            _historyLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnTypeFilterChanged(string? value)
+    {
+        _typeFilter = value;
+        await LoadHistoryAsync();
+    }
+
+    private async Task OnSourceFilterChanged(string? value)
+    {
+        _sourceFilter = value ?? "";
+        await LoadHistoryAsync();
+    }
+
+    private async Task OnDateRangeChanged(DateRange? range)
+    {
+        _dateRange = range;
+        await LoadHistoryAsync();
     }
 
     private async Task HandleResponseAsync(ResponseRequest request)
     {
         try
         {
-            var responded = await RespondService.RespondAsync(request.InteractionId, request.Action);
+            var responded = await RespondService.RespondAsync(request.InteractionId, request.Action, request.Content);
             if (responded)
             {
                 Snackbar.Add("回覆成功！", Severity.Success);
@@ -165,6 +207,7 @@ public partial class InteractionCenter : IAsyncDisposable
         "kickoff_restart"                                                                         => Color.Warning,
         "devplan_skip"                                                                            => Color.Warning,
         "devplan_abort"                                                                           => Color.Error,
+        "propose_adjust" or "kickoff_modify" or "design_modify"                                  => Color.Info,
         _                                                                                         => Color.Default
     };
 
@@ -181,5 +224,5 @@ public partial class InteractionCenter : IAsyncDisposable
     #endregion
 }
 
-/// <summary>InteractionCard → InteractionCenter 的回覆請求。</summary>
-public record ResponseRequest(Guid InteractionId, string Action);
+/// <summary>InteractionCard → InteractionCenter 的回覆請求。Stage 28b 新增 Content（文字輸入類回覆）。</summary>
+public record ResponseRequest(Guid InteractionId, string Action, string? Content = null);

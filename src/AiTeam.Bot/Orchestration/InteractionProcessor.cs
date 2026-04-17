@@ -53,6 +53,7 @@ public class InteractionProcessor(
                         interaction.InteractionType,
                         interaction.ResponseAction!,
                         interaction.ContextJson,
+                        interaction.ResponseContent,   // Stage 28b：文字輸入類回覆內容
                         ct);
 
                     // Discord 同步訊息
@@ -127,11 +128,14 @@ public class InteractionProcessor(
         ("exec_confirm",     "exec_no")          => "取消 ❌",
         ("proposal",         "propose_yes")      => "核准提案 ✅",
         ("proposal",         "propose_no")       => "駁回提案 ❌",
+        ("proposal",         "propose_adjust")   => "需要調整 ✏️",
         ("kickoff",          "kickoff_continue") => "繼續 Kickoff ▶️",
         ("kickoff",          "kickoff_stop")     => "停止 Kickoff ⏹️",
         ("kickoff",          "kickoff_restart")  => "重開 Kickoff 🔄",
+        ("kickoff",          "kickoff_modify")   => "需要修改 ✏️",
         ("design",           "design_continue")  => "繼續設計 ▶️",
         ("design",           "design_stop")      => "停止設計 ⏹️",
+        ("design",           "design_modify")    => "需要修改 ✏️",
         ("devplan_escalate", "devplan_skip")     => "跳過 Dev_plan，直接開發 ⏭️",
         ("devplan_escalate", "devplan_abort")    => "放棄任務 ❌",
         _                                        => $"{type} → {action}"

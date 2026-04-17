@@ -15,18 +15,25 @@ public class InteractionRespondService(
     ILogger<InteractionRespondService> logger)
 {
     /// <summary>
-    /// 以樂觀鎖回覆互動。
+    /// 以樂觀鎖回覆互動（無文字內容）。
     /// 回傳 true：回覆成功；false：另一通道已先回覆（競態衝突）。
     /// </summary>
-    public async Task<bool> RespondAsync(Guid id, string action, CancellationToken ct = default)
+    public Task<bool> RespondAsync(Guid id, string action, CancellationToken ct = default)
+        => RespondAsync(id, action, content: null, ct);
+
+    /// <summary>
+    /// Stage 28b：以樂觀鎖回覆互動，支援文字輸入內容（修改意見）。
+    /// </summary>
+    public async Task<bool> RespondAsync(Guid id, string action, string? content, CancellationToken ct = default)
     {
         var affected = await db.BossInteractions
             .Where(x => x.Id == id && x.Status == "pending")
             .ExecuteUpdateAsync(s => s
-                .SetProperty(x => x.Status,         "responded")
-                .SetProperty(x => x.ResponseAction, action)
-                .SetProperty(x => x.ResponseSource, "dashboard")
-                .SetProperty(x => x.RespondedAt,    DateTime.UtcNow), ct);
+                .SetProperty(x => x.Status,           "responded")
+                .SetProperty(x => x.ResponseAction,   action)
+                .SetProperty(x => x.ResponseContent,  content)
+                .SetProperty(x => x.ResponseSource,   "dashboard")
+                .SetProperty(x => x.RespondedAt,      DateTime.UtcNow), ct);
 
         if (affected > 0)
         {

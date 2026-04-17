@@ -2100,7 +2100,8 @@ public class TaskGroupService(
     /// 各型別對應的處理邏輯與 CommandHandler 的 Discord 路徑共用同一套 TaskGroupService 方法。
     /// </summary>
     public async Task ProcessBossResponseAsync(
-        string interactionType, string action, string? contextJson, CancellationToken ct = default)
+        string interactionType, string action, string? contextJson,
+        string? responseContent = null, CancellationToken ct = default)
     {
         switch (interactionType)
         {
@@ -2124,6 +2125,8 @@ public class TaskGroupService(
             case "proposal":
                 if (action == "propose_yes" && contextJson is not null)
                     await ProcessProposalApprovedAsync(contextJson, ct);
+                else if (action == "propose_adjust" && contextJson is not null)
+                    await ProcessProposalAdjustAsync(contextJson, responseContent, ct);
                 else
                     logger.LogInformation("InteractionProcessor：提案取消（action={Action}）", action);
                 break;
@@ -2131,11 +2134,12 @@ public class TaskGroupService(
             case "kickoff":
             {
                 if (contextJson is null) return;
-                using var doc     = JsonDocument.Parse(contextJson);
-                var groupIdStr    = doc.RootElement.GetProperty("groupId").GetString() ?? "";
+                using var doc        = JsonDocument.Parse(contextJson);
+                var groupIdStr       = doc.RootElement.GetProperty("groupId").GetString() ?? "";
                 if (!Guid.TryParse(groupIdStr, out var groupId)) return;
-                var decision      = action.Replace("kickoff_", "");
-                await HandleKickoffConfirmedAsync(groupId, decision, ct: ct);
+                var decision         = action.Replace("kickoff_", "");
+                // HandleKickoffConfirmedAsync 已用 FindChannel 直接取得 ceoChannel，不需要額外 channelId
+                await HandleKickoffConfirmedAsync(groupId, decision, responseContent, ct);
                 break;
             }
 
@@ -2147,7 +2151,8 @@ public class TaskGroupService(
                 var petraSessionId   = doc.RootElement.GetProperty("petraSessionId").GetString() ?? "";
                 if (!Guid.TryParse(groupIdStr, out var groupId)) return;
                 var decision         = action.Replace("design_", "");
-                await HandleDesignConfirmedAsync(groupId, decision, petraSessionId, ct: ct);
+                // HandleDesignConfirmedAsync 已用 FindChannel 直接取得 ceoChannel，不需要額外 channelId
+                await HandleDesignConfirmedAsync(groupId, decision, petraSessionId, responseContent, ct);
                 break;
             }
 
@@ -2306,6 +2311,104 @@ public class TaskGroupService(
 
         var group = await CreateGroupAsync(task.Title, project, WorkflowType.NewFeature, cancellationToken: ct);
         await FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)], ct);
+    }
+
+    /// <summary>
+    /// Stage 28b：Dashboard 提案調整路徑。
+    /// 增補描述後重新發送提案 Discord Embed，並建立新的 BossInteraction。
+    /// </summary>
+    private async Task ProcessProposalAdjustAsync(string contextJson, string? adjustmentText, CancellationToken ct)
+    {
+        using var doc    = JsonDocument.Parse(contextJson);
+        var root         = doc.RootElement;
+        var taskIdStr    = root.TryGetProperty("taskId",      out var t) ? t.GetString() : null;
+        var project      = root.TryGetProperty("project",     out var p) ? p.GetString() ?? "" : "";
+        var description  = root.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+        var channelIdStr = root.TryGetProperty("channelId",   out var c) ? c.GetString() : null;
+
+        if (!Guid.TryParse(taskIdStr, out var taskId))
+        {
+            logger.LogWarning("ProcessProposalAdjustAsync：無效的 taskId ({Id})", taskIdStr);
+            return;
+        }
+        if (!ulong.TryParse(channelIdStr, out var channelId))
+        {
+            logger.LogWarning("ProcessProposalAdjustAsync：無效的 channelId ({Id})", channelIdStr);
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+
+        var task = await taskRepo.GetByIdAsync(taskId, ct);
+        if (task is null)
+        {
+            logger.LogWarning("ProcessProposalAdjustAsync：找不到 TaskItem ({Id})", taskId);
+            return;
+        }
+
+        // 增補描述
+        var adjustNote       = string.IsNullOrWhiteSpace(adjustmentText) ? "（未填寫修改意見）" : adjustmentText;
+        var updatedDesc      = string.IsNullOrWhiteSpace(task.Description)
+            ? adjustNote
+            : $"{task.Description}\n\n【老闆調整意見】{adjustNote}";
+        task.Description = updatedDesc;
+        await taskRepo.SaveAsync(ct);
+
+        // 找 Discord 頻道
+        if (!ulong.TryParse(_discord.GuildId, out var guildId))
+        {
+            logger.LogWarning("ProcessProposalAdjustAsync：無效的 GuildId");
+            return;
+        }
+        var channel = discordClient.GetGuild(guildId)?.GetTextChannel(channelId);
+        if (channel is null)
+        {
+            logger.LogWarning("ProcessProposalAdjustAsync：找不到 Discord 頻道（channelId={Id}）", channelId);
+            return;
+        }
+
+        // 建立新提案 Embed + 按鈕（CustomId 與 CommandHandler 一致）
+        var descPreview = updatedDesc.Length > 800 ? updatedDesc[..800] + "\n…（已截斷）" : updatedDesc;
+        var embed = new EmbedBuilder()
+            .WithTitle($"📋 提案書：{task.Title}")
+            .WithColor(Color.Blue)
+            .AddField("需求描述", descPreview)
+            .WithFooter("✅ 核准後將進入 Kick-off 會議")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        var buttons = new ComponentBuilder()
+            .WithButton("✅ 核准，開始開發", InteractionService.ProposeYes,    ButtonStyle.Success)
+            .WithButton("✏️ 需要調整",       InteractionService.ProposeAdjust, ButtonStyle.Primary)
+            .WithButton("❌ 取消",           InteractionService.ProposeNo,     ButtonStyle.Danger)
+            .Build();
+
+        var msg = await channel.SendMessageAsync(embed: embed, components: buttons);
+
+        // 在 CommandHandler 登記，讓 Discord 按鈕可以繼續回覆
+        var cmdHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
+        cmdHandler.RegisterProposalConfirmation(msg.Id, taskId, project, updatedDesc);
+
+        // 建立新 BossInteraction（Dashboard 顯示新提案）
+        _ = interactionService.CreateInteractionAsync(
+            "proposal",
+            title:                task.Title,
+            description:          updatedDesc,
+            project:              project,
+            agentName:            null,
+            availableActionsJson: InteractionService.ProposalActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId   = channelId.ToString(),
+                taskId      = taskId.ToString(),
+                project,
+                description = updatedDesc
+            }),
+            discordMessageId: (decimal)msg.Id,
+            taskItemId:       taskId);
+
+        logger.LogInformation("ProcessProposalAdjustAsync：完成（TaskId={Id}，已發送新提案）", taskId);
     }
 
     private async Task HandleDevPlanEscalationAsync(string contextJson, string action, CancellationToken ct)

@@ -98,10 +98,23 @@ Pipeline View 的流程文件折疊面板（Stage 26 追加）目前顯示：提
 - Dashboard Team Office 頁面的人物造型替換
 - 依狀態有對應動畫（忙碌打字、閒置發呆、錯誤冒汗）
 - 辦公區之外加入休息區（Agent 閒置時移動過去）
+- **Agent 互動頁面**：Dashboard 新增頁面，可觀察 Agent 當前活動，搭配個性化對話與心情文字
+
+### LLM 供應商策略：Gemini Flash 免費額度
+
+Agent 個性對話、心情文字、互動描述等屬於**低複雜度文字生成**，不需要 Coding 能力，也不要求高精準度（不正確也是有趣的一種表現）。
+
+建議搭配 Feature 四（多 LLM 供應商）的最小實作，將此類場景路由到 **Google Gemini Flash API 免費額度**：
+
+- Gemini Flash 免費、不需信用卡，有 rate limit（15 req/min）但對此場景綽綽有餘
+- 新增 `GeminiProvider : ILlmProvider`，只需實作文字生成（不需 Vision / Tool Use）
+- `appsettings.json` 設定範例：`"Personality": { "Provider": "Gemini", "Model": "gemini-2.5-flash" }`
+- **零額外成本**，把 Claude API 費用留給真正需要 Coding 能力的 Agent
 
 ### 行動建議
 
 - 等 Dashboard 視覺整體穩定後，開一個專門的討論來設計細節
+- 實作時順帶完成 Feature 四的最小版（GeminiProvider），一石二鳥
 
 ### 優先級
 
@@ -365,6 +378,30 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 **新鮮視角（Fresh Eyes）**：熔斷觸發後，啟動全新獨立 Session 診斷問題根因（不帶前面的對話歷史）。對標現實：叫一個不在脈絡中的同事過來看問題。
 
+**LLM API → Claude Code CLI 全面升級**：
+
+> **設計原則：預設使用 Claude Code CLI，只有確定不需要 codebase 存取時才選用 LLM API。**
+
+目前流程中多個審核/申訴環節使用 LLM API（純文字問答），導致 Agent 在修正、反駁、再評估時**失去 codebase 存取能力**，品質明顯低於 Claude Code CLI。應全面升級為 Claude Code CLI + `--session-id` / `--resume`，讓 Agent 在迴圈中保留原始 session 的 codebase 上下文。會議機制（Kickoff / Design）已驗證此模式可行。
+
+**應改（影響最大）：**
+
+| 環節 | Agent | 目前 | 改為 |
+|------|-------|------|------|
+| Dev_plan 申訴 — 修正 | Cody | LLM API | Resume Dev_plan session |
+| Dev_plan 申訴 — 再評估 | Petra | LLM API | Resume 或新開 CLI |
+| Review 申訴 — 反駁 | Cody | LLM API | Resume Dev session |
+| Review 申訴 — 再評估 | Vera | LLM API | Resume Review session |
+| Review 申訴 — 仲裁 | Petra | LLM API | 可選改 CLI |
+
+**不需改（純文字分析，無 codebase 需求）：**
+
+| 環節 | Agent | 理由 |
+|------|-------|------|
+| QA 失敗路由判斷 | Petra | 分析 TestReport JSON，不需看程式碼 |
+| QA no_tests 評估 | Petra | 判斷是否合理，純文字 |
+| 審閱 Vera Review 報告 | Petra | 分析 Review 品質，純文字 |
+
 ---
 
 ### 實作分期
@@ -372,7 +409,7 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 | Phase | 包含內容 | 狀態 |
 |-------|---------|------|
 | **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 全部完成（Stage 23~25b，v3.7.0~v3.10.0） |
-| **Phase 2** | 循環偵測 + 新鮮視角 | 🔵 待後續 Stage |
+| **Phase 2** | 循環偵測 + 新鮮視角 + LLM API → CLI 全面升級 | 🔵 待後續 Stage |
 
 ### 優先級
 
@@ -542,6 +579,39 @@ PR 欄位顯示優化：
 - 改為圖示按鈕（Icon Button），不顯示文字
 - 建議圖示：編輯用 `Edit`，刪除用 `Delete`（MudIconButton）
 
+#### TaskLog 獨立檢視頁面
+
+目前 TaskLog 只能透過任務列表或 Pipeline View 點擊任務後，在右側 480px 抽屜中查看，不夠直觀。新增獨立頁面：
+- 新增路由 `/logs`，對應新 Blazor 頁面
+- 側邊欄 NavMenu 加入「執行記錄」連結
+- 以時間軸方式展示所有 Agent 的 TaskLog，可依 Agent / 任務 / 狀態篩選
+- 支援展開 Payload 內容（如 Designer 的 UI 規格 Markdown）
+
+#### Dashboard Cache Reload 按鈕
+
+目前在 Dashboard 修改規則或 Agent 設定後，需要到 Discord 執行 `/reload-rules` 才能生效，操作流程不合理。Dashboard 應自帶 reload 按鈕：
+- 規則管理頁面 / Agent 設定頁面新增「套用設定」按鈕
+- 按鈕呼叫 Bot internal API：`POST /internal/reload-cache?scope=rules|agents|all`
+- Bot 收到後清空對應 Cache，重新從 DB 載入
+- 與 DashboardPushService 同模式（Dashboard → Bot HTTP 呼叫）
+
+#### Agent 角色設定 Dashboard 化
+
+目前每個 Agent 的角色描述、行為準則都硬碼在 C# Agent Service 的 prompt 字串中，修改需要改程式碼重新部署。將可配置的部分抽出至 DB，透過 Dashboard 編輯：
+
+**可配置（存 DB）：**
+- 角色設定 — 「你是 Cody，Dev Agent，負責撰寫程式碼...」
+- 行為準則 — 「寫完要 dotnet build 確認」「commit message 用繁中」
+
+**不可配置（留在 C#）：**
+- 流程邏輯模板 — 輸出格式要求、JSON 結構定義等（與 C# parse 邏輯綁定，改了 prompt 會導致程式端解析失敗）
+
+**技術方向：**
+- 復用現有規則系統的 DB + Cache + `/reload-rules` 機制
+- Agent 設定頁面擴充：現有 Provider / Model 欄位旁，新增「角色設定」和「行為準則」文字編輯區
+- prompt 組合順序：`DB 角色設定` + `DB 行為準則` + `C# 流程邏輯模板` + `任務動態內容`
+- 與 Feature 二（Agent 個性）共用：個性描述就是角色設定的一部分
+
 ### 優先級
 
 🔵 低優先級 — 不影響功能，純 UI 組織與使用便利性優化
@@ -634,6 +704,44 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 
 ---
 
+## 十五、Agent I/O 完整記錄（待討論）
+
+> 狀態：⚪ 待討論 — 等 TaskLog 獨立頁面（十一）上線後，實際檢視現有 Log 內容再決定
+
+### 背景
+
+目前 TaskLog 記錄的是流程層級的步驟狀態（「開始執行」「Git Clone 完成」等），不包含 Agent 實際與 LLM 交換的 prompt 和 response 全文。Christ 希望能看到每個 Agent 接收和產出的完整內容。
+
+### 涵蓋範圍
+
+系統中 Agent 與 LLM 的互動分兩條路徑，都需要埋 log：
+
+| 路徑 | 涉及 Agent | 埋點位置 |
+|------|-----------|---------|
+| Claude Code CLI | Victoria、Cody、Vera、Quinn、Sage、Rosa、Demi、Petra（部分） | `ClaudeCodeService` 執行前後 |
+| LLM API | Rena、Petra（部分）、申訴/仲裁流程 | `ILlmProvider.CompleteAsync()` 前後 |
+
+Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
+
+### 注意事項
+
+- **資料量大**：Claude Code CLI 的 prompt 通常包含 CLAUDE.md、規則、上下文，一筆可能數千到上萬 token 的文字量
+- **DB 儲存策略**：需考慮是否壓縮、TTL 自動清理、或只存摘要
+- **Dashboard 載入效能**：完整 prompt/response 不適合列表直接顯示，應採用摺疊/按需載入
+
+### 決策前提
+
+先完成十一的 TaskLog 獨立頁面，Christ 實際看過現有 Log 內容後，再決定：
+1. 現有 TaskLog 的資訊是否足夠
+2. 若不夠，需要補到什麼層級（流程摘要 vs 完整 I/O）
+3. 儲存策略與效能取捨
+
+### 優先級
+
+⚪ 待討論 — 依賴十一的 TaskLog 頁面上線後再評估
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -707,3 +815,8 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 | 2026-04-14 | v6.3：十五（版本號集中管理）移入已完成摘要 — Stage 26 實作完成；十五條目從候選清單移除 |
 | 2026-04-16 | v6.4：十（Agent 任務序列）新增「Stage 27b 後待討論」— PM 不走佇列的控制方式、PM 執行路徑確認（API vs Claude Code CLI）、Dashboard pause/resume 操作按鈕排入 Stage 議題 |
 | 2026-04-16 | v7.0：已完成項目清理 — 八（開發流程重構）Phase 1 詳細流程圖精簡為摘要表格、優先級降為 🔵 低；十（Agent 任務序列）核心設計方案精簡為待討論議題 + 未實作方向，核心完成部分移入已完成摘要 |
+| 2026-04-16 | v7.1：二（Agent 個性與造型）新增 Agent 互動頁面構想 + Gemini Flash 免費額度策略 — 個性對話等低複雜度文字生成路由到 Gemini Flash，零額外成本；搭配四（多 LLM 供應商）最小實作 |
+| 2026-04-16 | v7.2：十一新增「TaskLog 獨立檢視頁面」；新增十五（Agent I/O 完整記錄）— 待 TaskLog 頁面上線後再討論記錄層級與儲存策略 |
+| 2026-04-16 | v7.3：八 Phase 2 擴充為「LLM API → CLI 全面升級」— 新增設計原則（預設 CLI，不需要時才 LLM API）；完整列出 5 個應改環節 + 3 個不需改環節；取代原「申訴迴圈 Session 延續」單點描述 |
+| 2026-04-16 | v7.4：十一新增「Agent 角色設定 Dashboard 化」— 角色描述 + 行為準則從 C# 硬碼抽至 DB，Dashboard Agent 設定頁可編輯；復用規則系統 Cache 機制；流程邏輯模板留在 C# 不動 |
+| 2026-04-17 | v7.5：十一新增「Dashboard Cache Reload 按鈕」— 規則/Agent 設定修改後免跑 Discord 指令，Dashboard 直接呼叫 Bot internal API 刷新 Cache |

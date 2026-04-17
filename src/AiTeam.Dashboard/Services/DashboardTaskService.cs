@@ -368,6 +368,39 @@ public class DashboardTaskService(AppDbContext db)
         finally { _lock.Release(); }
     }
 
+    /// <summary>Stage 28b：取得已處理互動歷史，支援篩選與分頁。</summary>
+    public async Task<(List<BossInteractionDto> Items, int TotalCount)> GetInteractionHistoryAsync(
+        int page, int pageSize, string? typeFilter, string? sourceFilter,
+        DateTime? from, DateTime? to, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            var query = db.BossInteractions.AsNoTracking()
+                .Where(x => x.Status == "responded");
+
+            if (!string.IsNullOrEmpty(typeFilter))
+                query = query.Where(x => x.InteractionType == typeFilter);
+            if (!string.IsNullOrEmpty(sourceFilter))
+                query = query.Where(x => x.ResponseSource == sourceFilter);
+            if (from.HasValue)
+                query = query.Where(x => x.RespondedAt >= from.Value);
+            if (to.HasValue)
+                query = query.Where(x => x.RespondedAt <= to.Value.AddDays(1)); // 包含當天
+
+            var total = await query.CountAsync(cancellationToken);
+            var items = await query
+                .OrderByDescending(x => x.RespondedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => MapToDto(x))
+                .ToListAsync(cancellationToken);
+
+            return (items, total);
+        }
+        finally { _lock.Release(); }
+    }
+
     /// <summary>互動 Entity → DTO 轉換（含 AvailableActionsJson 反序列化）。</summary>
     private static BossInteractionDto MapToDto(BossInteraction x)
     {
@@ -395,6 +428,7 @@ public class DashboardTaskService(AppDbContext db)
             AvailableActions = actions,
             ResponseAction   = x.ResponseAction,
             ResponseSource   = x.ResponseSource,
+            ResponseContent  = x.ResponseContent,
             RespondedAt      = x.RespondedAt,
             CreatedAt        = x.CreatedAt
         };

@@ -38,10 +38,16 @@
 
     @if (Interaction.Status == "responded")
     {
-        <MudCardActions>
+        <MudCardActions Class="flex-column align-start">
             <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
                 已由 @Interaction.ResponseSource 回覆：@Interaction.ResponseAction
             </MudChip>
+            @if (!string.IsNullOrWhiteSpace(Interaction.ResponseContent))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    調整意見：@Interaction.ResponseContent
+                </MudText>
+            }
         </MudCardActions>
     }
     else if (Interaction.AvailableActions.Count > 0)
@@ -54,7 +60,9 @@
                            Color="@MapButtonColor(actionCopy.Color)"
                            Size="Size.Small"
                            Disabled="_isResponding"
-                           OnClick="@(() => ConfirmAndRespondAsync(actionCopy))"
+                           OnClick="@(actionCopy.RequiresInput
+                               ? () => TextInputAndRespondAsync(actionCopy)
+                               : () => ConfirmAndRespondAsync(actionCopy))"
                            Class="mr-2">
                     @actionCopy.Label
                 </MudButton>
@@ -87,9 +95,38 @@
         _isResponding = true;
         StateHasChanged();
 
-        await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action.Id));
+        await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action.Id, null));
 
         _isResponding = false;
+    }
+
+    private async Task TextInputAndRespondAsync(InteractionActionDto action)
+    {
+        var (title, prompt) = action.Id switch
+        {
+            "propose_adjust" => ("提案調整",     "請輸入您希望如何調整提案方向"),
+            "kickoff_modify" => ("Kickoff 計劃修改", "請輸入您對任務計劃書的修改意見"),
+            "design_modify"  => ("設計規劃修改", "請輸入您對設計規劃書的修改指引"),
+            _                => (action.Label,   "請輸入修改意見")
+        };
+
+        var parameters = new DialogParameters<TextInputDialog>
+        {
+            { x => x.Title,  title  },
+            { x => x.Prompt, prompt }
+        };
+        var dialog = await DialogService.ShowAsync<TextInputDialog>(title, parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false } && result.Data is string content && !string.IsNullOrWhiteSpace(content))
+        {
+            _isResponding = true;
+            StateHasChanged();
+
+            await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action.Id, content));
+
+            _isResponding = false;
+        }
     }
 
     private static Color MapButtonColor(string color) => color switch

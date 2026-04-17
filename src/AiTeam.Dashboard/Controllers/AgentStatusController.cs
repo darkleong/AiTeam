@@ -85,8 +85,13 @@ public class AgentStatusController(
     [HttpPost("/api/interactions/{id}/respond")]
     public async Task<IActionResult> RespondToInteractionAsync(Guid id, [FromBody] InteractionResponseRequest request)
     {
+        // Stage 28b：文字輸入類動作需驗證 Content 非空
+        string[] textInputActions = ["propose_adjust", "kickoff_modify", "design_modify"];
+        if (textInputActions.Contains(request.Action) && string.IsNullOrWhiteSpace(request.Content))
+            return BadRequest(new { error = "此動作需要輸入修改意見" });
+
         // Delegate 給 InteractionRespondService，回覆邏輯只維護一份
-        var responded = await respondService.RespondAsync(id, request.Action);
+        var responded = await respondService.RespondAsync(id, request.Action, request.Content);
         if (!responded)
             return Conflict(new { message = "此互動已被回覆，請重新整理頁面。" });
 

@@ -22,14 +22,19 @@ public class InteractionService(
     public const string ExecConfirmActionsJson =
         """[{"id":"exec_yes","label":"執行","color":"success"},{"id":"exec_no","label":"取消","color":"error"}]""";
 
+    // Stage 28b：提案 Discord 按鈕 CustomId 常數（TaskGroupService 建立 ComponentBuilder 時共用）
+    public const string ProposeYes    = "propose_yes";
+    public const string ProposeAdjust = "propose_adjust";
+    public const string ProposeNo     = "propose_no";
+
     public const string ProposalActionsJson =
-        """[{"id":"propose_yes","label":"核准提案","color":"success"},{"id":"propose_no","label":"駁回","color":"error"}]""";
+        """[{"id":"propose_yes","label":"核准提案","color":"success","requiresInput":false},{"id":"propose_adjust","label":"需要調整 ✏️","color":"info","requiresInput":true},{"id":"propose_no","label":"駁回","color":"error","requiresInput":false}]""";
 
     public const string KickoffActionsJson =
-        """[{"id":"kickoff_continue","label":"繼續","color":"success"},{"id":"kickoff_stop","label":"停止","color":"error"},{"id":"kickoff_restart","label":"重開會議","color":"warning"}]""";
+        """[{"id":"kickoff_continue","label":"繼續","color":"success","requiresInput":false},{"id":"kickoff_modify","label":"需要修改 ✏️","color":"info","requiresInput":true},{"id":"kickoff_stop","label":"停止","color":"error","requiresInput":false},{"id":"kickoff_restart","label":"重開會議","color":"warning","requiresInput":false}]""";
 
     public const string DesignActionsJson =
-        """[{"id":"design_continue","label":"繼續","color":"success"},{"id":"design_stop","label":"停止","color":"error"}]""";
+        """[{"id":"design_continue","label":"繼續","color":"success","requiresInput":false},{"id":"design_modify","label":"需要修改 ✏️","color":"info","requiresInput":true},{"id":"design_stop","label":"停止","color":"error","requiresInput":false}]""";
 
     public const string DevPlanEscalateActionsJson =
         """[{"id":"devplan_skip","label":"跳過審閱，直接開發","color":"warning"},{"id":"devplan_abort","label":"放棄任務","color":"error"}]""";

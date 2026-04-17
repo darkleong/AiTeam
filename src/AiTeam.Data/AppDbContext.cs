@@ -124,6 +124,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.DiscordMessageId).HasColumnType("numeric(20,0)");
+            e.Property(x => x.ResponseContent).HasColumnType("text");
             e.HasIndex(x => new { x.Status, x.CreatedAt });
             e.HasIndex(x => x.DiscordMessageId);
             e.HasOne(x => x.TaskGroup).WithMany().HasForeignKey(x => x.TaskGroupId).IsRequired(false);

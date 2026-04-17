@@ -216,6 +216,18 @@ public class CommandHandler(
             messageId, groupId);
     }
 
+    /// <summary>
+    /// Stage 28b：供 TaskGroupService（Dashboard 路徑）呼叫，登記提案確認訊息。
+    /// CeoResponse 在提案核准流程（ExecuteProposalApprovedAsync）中不被讀取，傳入最小化實例即可。
+    /// </summary>
+    public void RegisterProposalConfirmation(ulong messageId, Guid taskId, string project, string description)
+    {
+        _pendingConfirmations[messageId] = new PendingConfirmation(
+            new CeoResponse(), project, description, TaskId: taskId, IsProposal: true);
+        logger.LogInformation("CommandHandler：Proposal 確認已登記（messageId={MsgId}，taskId={TaskId}）",
+            messageId, taskId);
+    }
+
     #region 自然語言訊息路由（Stage 7）
 
     /// <summary>
@@ -1128,6 +1140,9 @@ public class CommandHandler(
             await interaction.RespondAsync(
                 "✏️ 請直接輸入你的修改意見，Petra 將基於完整的會議 context 評估並調整計劃書。",
                 ephemeral: true);
+
+            // Stage 28b：同步更新 BossInteraction 狀態，讓 Dashboard 按鈕 disable
+            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "kickoff_modify");
             return;
         }
 
@@ -1183,6 +1198,9 @@ public class CommandHandler(
             await interaction.RespondAsync(
                 "✏️ 請直接輸入你的設計指引，Petra 將基於完整設計會議 context 調整設計規劃書。",
                 ephemeral: true);
+
+            // Stage 28b：同步更新 BossInteraction 狀態，讓 Dashboard 按鈕 disable
+            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "design_modify");
             return;
         }
 
@@ -1424,6 +1442,9 @@ public class CommandHandler(
 
             _pendingAdjustments[interaction.User.Id] = pending;
             logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
+
+            // Stage 28b：同步更新 BossInteraction 狀態，讓 Dashboard 按鈕 disable
+            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "propose_adjust");
         }
         else if (interaction.Data.CustomId == "escalate_skip")
         {

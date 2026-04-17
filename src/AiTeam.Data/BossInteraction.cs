@@ -34,6 +34,9 @@ public class BossInteraction
     /// <summary>回覆來源：discord / dashboard。</summary>
     public string?  ResponseSource       { get; set; }
 
+    /// <summary>Stage 28b：文字輸入類回覆的內容（修改意見）。</summary>
+    public string?  ResponseContent      { get; set; }
+
     public DateTime? RespondedAt         { get; set; }
 
     /// <summary>對應的 Discord 訊息 ID（ulong 存為 numeric(20,0)），用於 Discord 回覆時反查。</summary>

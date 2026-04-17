@@ -43,18 +43,48 @@ else
 }
 
 @* 已處理區塊 *@
-<MudText Typo="Typo.h6" Class="mb-2 mt-4">已處理（最近 @_recentCount 筆）</MudText>
+<MudText Typo="Typo.h6" Class="mb-2 mt-4">已處理</MudText>
 
-@if (_responded.Count == 0)
+@* 篩選列 *@
+<MudPaper Elevation="0" Class="pa-3 mb-3" Style="background: var(--mud-palette-background-grey);">
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        <MudSelect T="string" Label="互動類型" Value="_typeFilter" ValueChanged="OnTypeFilterChanged"
+                   Clearable="true" Dense="true" Style="min-width: 160px;">
+            <MudSelectItem Value="@("ceo_confirm")">CEO 決策確認</MudSelectItem>
+            <MudSelectItem Value="@("exec_confirm")">Agent 執行確認</MudSelectItem>
+            <MudSelectItem Value="@("proposal")">提案確認</MudSelectItem>
+            <MudSelectItem Value="@("kickoff")">Kickoff 確認</MudSelectItem>
+            <MudSelectItem Value="@("design")">設計確認</MudSelectItem>
+            <MudSelectItem Value="@("devplan_escalate")">Dev_plan 升級</MudSelectItem>
+        </MudSelect>
+
+        <MudChipSet T="string" SelectionMode="SelectionMode.SingleSelection"
+                    SelectedValue="_sourceFilter"
+                    SelectedValueChanged="@((v) => OnSourceFilterChanged(v))">
+            <MudChip T="string" Value="@("")">全部</MudChip>
+            <MudChip T="string" Value="@("discord")">Discord</MudChip>
+            <MudChip T="string" Value="@("dashboard")">Dashboard</MudChip>
+        </MudChipSet>
+
+        <MudDateRangePicker Label="日期範圍" DateRange="_dateRange" DateRangeChanged="OnDateRangeChanged"
+                            Clearable="true" AutoClose="true" />
+    </MudStack>
+</MudPaper>
+
+@if (_historyLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Secondary" Class="mb-2" />
+}
+else if (_historyItems.Count == 0)
 {
     <MudAlert Severity="Severity.Normal" Class="mb-4">
         <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
-        尚無歷史回覆記錄。
+        尚無符合條件的歷史回覆記錄。
     </MudAlert>
 }
 else
 {
-    <MudTable Items="_responded" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+    <MudTable Items="_historyItems" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
         <HeaderContent>
             <MudTh>類型</MudTh>
             <MudTh>標題</MudTh>
@@ -69,7 +99,15 @@ else
                          Color="@GetInteractionColor(context.InteractionType)" Class="mr-1" />
                 @GetInteractionLabel(context.InteractionType)
             </MudTd>
-            <MudTd>@context.Title</MudTd>
+            <MudTd>
+                <div>@context.Title</div>
+                @if (!string.IsNullOrWhiteSpace(context.ResponseContent))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        調整意見：@context.ResponseContent
+                    </MudText>
+                }
+            </MudTd>
             <MudTd>@(context.Project ?? "—")</MudTd>
             <MudTd>
                 <MudChip T="string" Size="Size.Small" Color="@GetActionColor(context.ResponseAction)">
@@ -83,5 +121,8 @@ else
             </MudTd>
             <MudTd>@(context.RespondedAt.HasValue ? context.RespondedAt.Value.ToLocalTime().ToString("MM/dd HH:mm") : "—")</MudTd>
         </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new[] {15, 30, 50}" />
+        </PagerContent>
     </MudTable>
 }
