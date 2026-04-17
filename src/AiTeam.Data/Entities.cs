@@ -89,6 +89,8 @@ public class TaskGroup
     public string? DesignPlan { get; set; }
     /// <summary>Stage 25b：設計會議輪次計數（含調整重開的次數）。</summary>
     public int DesignRound { get; set; } = 0;
+    /// <summary>Stage 29-1：Sage 歸檔報告全文（docs/archive/pr{N}-archive.md）。</summary>
+    public string? ArchiveContent { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

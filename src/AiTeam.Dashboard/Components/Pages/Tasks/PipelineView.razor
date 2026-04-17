@@ -42,7 +42,7 @@ else
     @if (!string.IsNullOrEmpty(Group.TaskPlan) || !string.IsNullOrEmpty(Group.KickoffMeetingLog)
          || !string.IsNullOrEmpty(Group.DesignPlan) || !string.IsNullOrEmpty(Group.DesignMeetingLog)
          || !string.IsNullOrEmpty(Group.DevPlan) || !string.IsNullOrEmpty(Group.LastReviewBody)
-         || !string.IsNullOrEmpty(Group.TestReport))
+         || !string.IsNullOrEmpty(Group.TestReport) || !string.IsNullOrEmpty(Group.ArchiveContent))
     {
         <MudExpansionPanels Class="mb-3" MultiExpansion="true">
             @if (!string.IsNullOrEmpty(Group.TaskPlan))
@@ -85,6 +85,12 @@ else
             {
                 <MudExpansionPanel Text="🧪 測試報告（Quinn）">
                     <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.TestReport</MudText>
+                </MudExpansionPanel>
+            }
+            @if (!string.IsNullOrEmpty(Group.ArchiveContent))
+            {
+                <MudExpansionPanel Text="📦 歸檔報告（Sage）">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.ArchiveContent</MudText>
                 </MudExpansionPanel>
             }
         </MudExpansionPanels>

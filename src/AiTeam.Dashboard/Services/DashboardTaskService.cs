@@ -119,6 +119,7 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlan           = g.DevPlan,
                     LastReviewBody    = g.LastReviewBody,
                     TestReport        = g.TestReport,
+                    ArchiveContent    = g.ArchiveContent,
                 })
                 .ToListAsync(cancellationToken);
         }
@@ -164,6 +165,7 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlan           = g.DevPlan,
                     LastReviewBody    = g.LastReviewBody,
                     TestReport        = g.TestReport,
+                    ArchiveContent    = g.ArchiveContent,
                 })
                 .ToListAsync(cancellationToken);
 
@@ -203,6 +205,7 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlan           = g.DevPlan,
                     LastReviewBody    = g.LastReviewBody,
                     TestReport        = g.TestReport,
+                    ArchiveContent    = g.ArchiveContent,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
         }

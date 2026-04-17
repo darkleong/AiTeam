@@ -44,6 +44,13 @@ public class DocAgentService(
             await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             AddLog(task, "[MOCK] Sage 模擬歸檔完成", "done");
             taskRepository.UpdateStatus(task, "done");
+            // Stage 29-1：MockMode 也存入 ArchiveContent，供 Dashboard 折疊面板驗收
+            if (task.GroupId is not null)
+            {
+                var mockGroup = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
+                if (mockGroup is not null)
+                    mockGroup.ArchiveContent = "[MOCK] 模擬歸檔報告（Sage）\n\n此為 MockMode 產生的測試內容。";
+            }
             await taskRepository.SaveAsync(cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] 歸檔完成（CHANGELOG + archive）");
         }
@@ -81,6 +88,21 @@ public class DocAgentService(
 
             if (!success)
                 return new AgentExecutionResult(true, $"PR #{prNumber} 歸檔無輸出，略過提交");
+
+            // Stage 29-1：歸檔完成後存入 TaskGroup.ArchiveContent（供 Dashboard 折疊面板顯示）
+            if (task.GroupId is not null)
+            {
+                var archivePath = Path.Combine(writePath, "docs", "archive", $"pr{prNumber}-archive.md");
+                if (File.Exists(archivePath))
+                {
+                    var group = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
+                    if (group is not null)
+                    {
+                        group.ArchiveContent = await File.ReadAllTextAsync(archivePath, cancellationToken);
+                        await taskRepository.SaveAsync(cancellationToken);
+                    }
+                }
+            }
 
             gitHubService.CommitAll(writePath, $"docs: Sage 歸檔 PR #{prNumber} 任務");
             gitHubService.Push(writePath, headRef);

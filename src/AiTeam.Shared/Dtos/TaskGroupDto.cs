@@ -25,4 +25,7 @@ public class TaskGroupDto
     public string?  DevPlan          { get; set; }  // 實作計劃書
     public string?  LastReviewBody   { get; set; }  // 驗收報告（Vera 最新審查）
     public string?  TestReport       { get; set; }  // 測試報告（Quinn）
+
+    // Stage 29-1：歸檔報告折疊面板
+    public string?  ArchiveContent   { get; set; }  // Sage 歸檔報告
 }
