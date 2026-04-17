@@ -878,60 +878,37 @@ public class CommandHandler(
 
         // ── 3. 傳送與真實流程相同的提案 Embed + 確認按鈕 ──
         var proposalEmbed = BuildProposalEmbed(title, "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。");
-        await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: BuildProposalConfirmButtons());
+        var proposalMsg   = await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: BuildProposalConfirmButtons());
 
-        // ── 4. 自動確認說明訊息 ──
-        var autoConfirmDelaySec = Random.Shared.Next(30, 60);
-        await ceoChannel.SendMessageAsync(
-            $"🤖 **【Mock Mode】** 上方提案書將在 **{autoConfirmDelaySec} 秒後**自動確認，無需手動操作。\n" +
-            $"（確認後流程繼續至 Kickoff → Design → Dev_plan → Dev → …）");
+        // ── 4. 登記 _pendingConfirmations，讓按鈕回調可以路由 ──
+        RegisterProposalConfirmation(proposalMsg.Id, ceoTaskId, project,
+            "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。");
 
-        // ── 5. 回應 /mock 指令 ──
+        // ── 5. 建立 BossInteraction，讓 Dashboard 操作中心顯示待處理卡片 ──
+        await using var interactionScope = serviceProvider.CreateAsyncScope();
+        var interactionSvc = interactionScope.ServiceProvider.GetRequiredService<InteractionService>();
+        _ = interactionSvc.CreateInteractionAsync(
+            "proposal",
+            title:                title,
+            description:          "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。",
+            project:              project,
+            agentName:            null,
+            availableActionsJson: InteractionService.ProposalActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                taskId    = ceoTaskId.ToString(),
+                project,
+                description = "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。"
+            }),
+            discordMessageId: (decimal)proposalMsg.Id,
+            taskItemId:       ceoTaskId);
+
+        // ── 6. 回應 /mock 指令 ──
         await command.FollowupAsync(
             $"📋 **[MOCK] 新功能（含提案）流程已啟動**\n" +
             $"任務：`{title}`\n" +
-            $"請至 <#{ceoChannel.Id}> 觀察提案書確認流程（**{autoConfirmDelaySec} 秒後自動確認**）。");
-
-        // ── 6. 背景倒數，自動確認後觸發 Kickoff 會議 ──
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(autoConfirmDelaySec * 1000);
-
-                await ceoChannel.SendMessageAsync(
-                    "✅ **【Mock Mode】** 提案書已自動確認，即將召開 Kick-off 會議...");
-
-                // 更新 CEO 主任務狀態為 done
-                await using var confirmScope = serviceProvider.CreateAsyncScope();
-                var confirmRepo  = confirmScope.ServiceProvider.GetRequiredService<TaskRepository>();
-                var confirmPush  = confirmScope.ServiceProvider.GetRequiredService<DashboardPushService>();
-
-                var ceoTaskItem = await confirmRepo.GetByIdAsync(ceoTaskId);
-                if (ceoTaskItem is not null)
-                {
-                    confirmRepo.UpdateStatus(ceoTaskItem, "done");
-                    await confirmRepo.SaveAsync();
-                    await confirmPush.PushTaskUpdateAsync(new TaskUpdateViewModel
-                    {
-                        TaskId    = ceoTaskItem.Id,
-                        GroupId   = group.Id,
-                        Title     = ceoTaskItem.Title,
-                        AgentName = ceoTaskItem.AssignedAgent,
-                        Status    = "done"
-                    });
-                }
-
-                // 觸發 Kickoff 會議（MockClaudeCodeService 會自動 consensus，流程繼續）
-                await taskGroupService.FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)]);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[MockMode] 自動確認提案書失敗：{Title}", title);
-                try { await ceoChannel.SendMessageAsync("❌ **[MOCK]** 自動確認失敗，請查看 log。"); }
-                catch { /* 靜默忽略 */ }
-            }
-        });
+            $"請至 <#{ceoChannel.Id}> 或 Dashboard 操作中心點擊確認，流程才會繼續。");
     }
 
     private async Task HandleReloadRulesAsync(SocketSlashCommand command)
@@ -1759,13 +1736,25 @@ public class CommandHandler(
         if (notifyChannel is not null)
             await notifyChannel.SendMessageAsync(embed: embed.Build());
 
-        // Stage 25b：提案核准後建立 TaskGroup，觸發 Kick-off 會議（Issues/UI 規格由設計階段產出）
+        // Stage 25b：提案核准後觸發 Kick-off 會議（Issues/UI 規格由設計階段產出）
+        // MockMode 下 task 已有 GroupId（預先建立），直接用現有 group；一般流程則新建。
         try
         {
-            var group = await taskGroupService.CreateGroupAsync(
-                task.Title,
-                pending.Project,
-                Orchestration.WorkflowType.NewFeature);
+            AiTeam.Data.TaskGroup group;
+            if (task.GroupId.HasValue && task.GroupId != Guid.Empty)
+            {
+                var existingGroup = await taskRepo.GetGroupByIdAsync(task.GroupId.Value);
+                if (existingGroup is null)
+                    throw new InvalidOperationException($"找不到 TaskGroup（Id={task.GroupId}）");
+                group = existingGroup;
+            }
+            else
+            {
+                group = await taskGroupService.CreateGroupAsync(
+                    task.Title,
+                    pending.Project,
+                    Orchestration.WorkflowType.NewFeature);
+            }
 
             await taskGroupService.FireStepsAsync(group,
                 [new Orchestration.WorkflowStep(AgentNames.Kickoff)]);
