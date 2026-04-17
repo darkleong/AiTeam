@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.3
+> 版本：v7.4
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -43,6 +43,7 @@
 | [Stage_27b_Roadmap.md](../planning/Stage_27b_Roadmap.md) | Stage 27b：Agent 任務序列 — 操作性與可觀察性 | v3.13.0 | ✅ 已完成（2026-04-16） |
 | [Stage_28a_Roadmap.md](../planning/Stage_28a_Roadmap.md) | Stage 28a：Dashboard 雙向操作中心 — 基礎架構與按鈕回覆 | v3.14.0 | ✅ 已完成（2026-04-17） |
 | [Stage_28b_Roadmap.md](../planning/Stage_28b_Roadmap.md) | Stage 28b：Dashboard 雙向操作中心 — 文字輸入互動與歷史紀錄 | v3.15.0 | ✅ 已完成（2026-04-17） |
+| [Stage_29_Roadmap.md](../planning/Stage_29_Roadmap.md) | Stage 29：Dashboard 操作性收尾 + CEO 指令通道擴充 | v3.16.0 | 🟡 待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -119,6 +120,7 @@
 | v7.1 | 2026-04-17 | Stage 28b 實作完成（v3.15.0）：BossInteraction.ResponseContent + EF Migration、三個 ActionsJson 加入修改動作（requiresInput: true）、TextInputDialog.razor + InteractionCard RequiresInput 分支、InteractionRespondService content overload、ProcessBossResponseAsync responseContent 參數 + ProcessProposalAdjustAsync 新方法、Discord 三個修改按鈕 SyncDiscordResponseAsync 同步、RegisterProposalConfirmation、歷史紀錄篩選（類型/來源/日期）+ MudTable 分頁 |
 | v7.2 | 2026-04-18 | Stage 28b 驗收修正三項：① Kickoff/Design modify 分支補 CreateInteractionAsync（修改後的新確認 Dashboard 看不到）；② MockMode 提案改手動確認（移除倒數 Task.Run，改用 RegisterProposalConfirmation + CreateInteractionAsync）；③ ExecuteProposalApprovedAsync 防重複建 group（task.GroupId 有值時直接用現有 group）|
 | v7.3 | 2026-04-18 | Hotfix：操作中心日期範圍篩選 `AddDays(1)` 重複（UI 層與資料層各加一次，選 04/17 會撈到 04/18 的資料）；移除 `InteractionCenter.razor.cs` UI 層的 `.AddDays(1)`，日界邏輯集中於 `DashboardTaskService.GetInteractionHistoryAsync` 一處 |
+| v7.4 | 2026-04-18 | Stage 29 規劃書建立（v3.16.0）— Dashboard 操作性收尾 + CEO 指令通道擴充：歸檔報告折疊面板、TaskLog 顯示統一化、Cache Reload 按鈕、系統設定獨立頁、Dashboard 下達指令給 Victoria（含圖片附件，對應 FF 零、零-A、十部分） |
 
 ---
 
