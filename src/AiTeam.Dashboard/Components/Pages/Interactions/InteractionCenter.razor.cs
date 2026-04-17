@@ -80,7 +80,7 @@ public partial class InteractionCenter : IAsyncDisposable
         try
         {
             DateTime? from = _dateRange?.Start?.ToUniversalTime();
-            DateTime? to   = _dateRange?.End?.AddDays(1).ToUniversalTime();
+            DateTime? to   = _dateRange?.End?.ToUniversalTime();
             var (items, _) = await TaskService.GetInteractionHistoryAsync(
                 page: 1, pageSize: 200,
                 typeFilter:   _typeFilter,
