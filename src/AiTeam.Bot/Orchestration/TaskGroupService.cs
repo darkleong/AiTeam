@@ -1710,6 +1710,21 @@ public class TaskGroupService(
                     var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
                     commandHandler.RegisterKickoffConfirmation(reMsg.Id, group.Id,
                         modifyResult.RevisedPlan ?? group.TaskPlan ?? "");
+
+                    _ = interactionService.CreateInteractionAsync(
+                        "kickoff",
+                        title:                $"Kickoff 確認：{group.Title}",
+                        description:          modifyResult.RevisedPlan ?? group.TaskPlan ?? "",
+                        project:              group.Project,
+                        agentName:            AgentNames.Pm,
+                        availableActionsJson: InteractionService.KickoffActionsJson,
+                        contextJson:          JsonSerializer.Serialize(new
+                        {
+                            channelId = ceoChannelModify.Id.ToString(),
+                            groupId   = group.Id.ToString()
+                        }),
+                        discordMessageId: (decimal)reMsg.Id,
+                        taskGroupId:      group.Id);
                 }
                 else
                 {
@@ -1736,6 +1751,21 @@ public class TaskGroupService(
                     var reMsg = await ceoChannelModify.SendMessageAsync(embed: embed, components: buttons);
                     var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
                     commandHandler.RegisterKickoffConfirmation(reMsg.Id, group.Id, planPreview);
+
+                    _ = interactionService.CreateInteractionAsync(
+                        "kickoff",
+                        title:                $"Kickoff 確認：{group.Title}",
+                        description:          planPreview,
+                        project:              group.Project,
+                        agentName:            AgentNames.Pm,
+                        availableActionsJson: InteractionService.KickoffActionsJson,
+                        contextJson:          JsonSerializer.Serialize(new
+                        {
+                            channelId = ceoChannelModify.Id.ToString(),
+                            groupId   = group.Id.ToString()
+                        }),
+                        discordMessageId: (decimal)reMsg.Id,
+                        taskGroupId:      group.Id);
                 }
                 break;
 
@@ -2036,6 +2066,22 @@ public class TaskGroupService(
                     var reMsg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
                     var commandHandler = serviceProvider.GetRequiredService<Discord.CommandHandler>();
                     commandHandler.RegisterDesignConfirmation(reMsg.Id, group.Id, petraSessionId, null);
+
+                    _ = interactionService.CreateInteractionAsync(
+                        "design",
+                        title:                $"設計確認：{group.Title}",
+                        description:          planPreview,
+                        project:              group.Project,
+                        agentName:            AgentNames.Pm,
+                        availableActionsJson: InteractionService.DesignActionsJson,
+                        contextJson:          JsonSerializer.Serialize(new
+                        {
+                            channelId     = ceoChannel.Id.ToString(),
+                            groupId       = group.Id.ToString(),
+                            petraSessionId
+                        }),
+                        discordMessageId: (decimal)reMsg.Id,
+                        taskGroupId:      group.Id);
                 }
                 finally
                 {
