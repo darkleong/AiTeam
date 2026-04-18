@@ -192,7 +192,7 @@ public class CeoAgentService(
                         cancellationToken);
 
                 claudeResult = await claudeCodeService.RunVictoriaAsync(
-                    repoPath, prompt, model, apiKey, cancellationToken);
+                    repoPath, prompt, model, apiKey, images, cancellationToken);
             }
             finally
             {

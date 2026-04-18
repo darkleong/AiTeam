@@ -82,5 +82,26 @@
                 @(_isSavingChannel ? "儲存中..." : "儲存")
             </MudButton>
         </div>
+        <MudDivider Style="margin: 20px 0" />
+        <strong>Christ Discord User ID</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 12px">
+            Dashboard 下達指令時，用於識別老闆身份並延續 Victoria 的對話 Session（與 Discord 共用同一段歷史）。<br/>
+            可在 Discord 個人設定中開啟「開發者模式」後，右鍵帳號複製 User ID。
+        </p>
+        <div class="d-flex align-center gap-3">
+            <MudTextField T="string"
+                          @bind-Value="_christUserId"
+                          Label="Discord User ID"
+                          Placeholder="例：1234567890123456789"
+                          Variant="Variant.Outlined"
+                          Style="max-width:400px"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Person" />
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                       OnClick="SaveChristUserIdAsync"
+                       Disabled="@_isSavingUserId">
+                @(_isSavingUserId ? "儲存中..." : "儲存")
+            </MudButton>
+        </div>
     </div>
 </div>

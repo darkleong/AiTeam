@@ -41,6 +41,10 @@ public class InteractionService(
 
     public const string EmptyActionsJson = "[]";
 
+    /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>
+    public const string NotifyActionsJson =
+        """[{"id":"ack","label":"我知道了","color":"default","requiresInput":false}]""";
+
     // ─── 建立 BossInteraction ─────────────────────────────────────────────────
 
     /// <summary>

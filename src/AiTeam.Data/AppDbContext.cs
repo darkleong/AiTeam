@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CeoConversation> CeoConversations => Set<CeoConversation>();
     public DbSet<CeoMemory> CeoMemories => Set<CeoMemory>();
     public DbSet<BossInteraction> BossInteractions => Set<BossInteraction>();
+    public DbSet<BossCommandLog>  BossCommandLogs  => Set<BossCommandLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -115,6 +116,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasIndex(x => new { x.UserId, x.IsActive });
+        });
+
+        // Stage 29-5：老闆從 Dashboard 下達的指令記錄
+        modelBuilder.Entity<BossCommandLog>(e =>
+        {
+            e.ToTable("boss_command_logs");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.Images).HasColumnType("jsonb");
+            e.Property(x => x.CeoResponseRaw).HasColumnType("text");
+            e.HasIndex(x => x.CreatedAt);
         });
 
         // Stage 28a：老闆互動雙通道記錄

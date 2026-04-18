@@ -59,7 +59,8 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
     /// Output 包含 &lt;ACTION&gt; 區塊，供 CeoAgentService.TryParseActionBlock 解析為 CeoResponse。
     /// </summary>
     public async Task<ClaudeCodeResult> RunVictoriaAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunVictoriaAsync 回傳模擬結果");
         await Task.Delay(Random.Shared.Next(30000, 60000), ct);

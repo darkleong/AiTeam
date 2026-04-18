@@ -22,8 +22,10 @@ public partial class SystemSettings
     private bool    _skipCeoConfirm;
     private bool    _mockMode;
     private string  _ceoChannelId  = "";
+    private string  _christUserId  = "";
     private bool    _isReloading;
     private bool    _isSavingChannel;
+    private bool    _isSavingUserId;
     private string? _saveMessage;
 
     #endregion
@@ -40,6 +42,9 @@ public partial class SystemSettings
 
         var channelSetting = await AppSettingsService.GetAsync("CeoDefaultChannelId");
         _ceoChannelId = channelSetting?.Value ?? "";
+
+        var userIdSetting = await AppSettingsService.GetAsync("ChristDiscordUserId");
+        _christUserId = userIdSetting?.Value ?? "";
     }
 
     #endregion
@@ -63,7 +68,7 @@ public partial class SystemSettings
     private async Task SaveCeoChannelIdAsync()
     {
         var trimmed = _ceoChannelId.Trim();
-        if (!string.IsNullOrEmpty(trimmed) && !System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{17,20}$"))
+        if (!IsValidSnowflakeId(trimmed))
         {
             _saveMessage = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
             return;
@@ -74,6 +79,25 @@ public partial class SystemSettings
         _isSavingChannel = false;
         _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
     }
+
+    private async Task SaveChristUserIdAsync()
+    {
+        var trimmed = _christUserId.Trim();
+        if (!IsValidSnowflakeId(trimmed))
+        {
+            _saveMessage = "格式錯誤：Discord User ID 應為 17-20 位純數字";
+            return;
+        }
+
+        _isSavingUserId = true;
+        await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
+        _isSavingUserId = false;
+        _saveMessage = $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+    }
+
+    /// <summary>Discord Snowflake ID 格式驗證：空字串（代表清除）或 17-20 位純數字。</summary>
+    private static bool IsValidSnowflakeId(string value)
+        => string.IsNullOrEmpty(value) || System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{17,20}$");
 
     private async Task ReloadCacheAsync()
     {

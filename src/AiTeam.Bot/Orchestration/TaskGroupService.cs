@@ -504,7 +504,7 @@ public class TaskGroupService(
             description:          $"PR：{prLink}（含 code + tests + docs），請確認後合併。",
             project:              group.Project,
             agentName:            null,
-            availableActionsJson: InteractionService.EmptyActionsJson,
+            availableActionsJson: InteractionService.NotifyActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId = ceoChannel.Id.ToString(),
@@ -532,7 +532,7 @@ public class TaskGroupService(
             description:          $"Vera 在 {group.FixIteration} 次修復後仍發現問題，需要您介入處理。",
             project:              group.Project,
             agentName:            null,
-            availableActionsJson: InteractionService.EmptyActionsJson,
+            availableActionsJson: InteractionService.NotifyActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId    = ceoChannel.Id.ToString(),

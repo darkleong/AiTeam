@@ -138,6 +138,9 @@ public class InteractionProcessor(
         ("design",           "design_modify")    => "需要修改 ✏️",
         ("devplan_escalate", "devplan_skip")     => "跳過 Dev_plan，直接開發 ⏭️",
         ("devplan_escalate", "devplan_abort")    => "放棄任務 ❌",
+        ("merge_notify",     "ack")              => "已知道了 ✅",
+        ("intervention",     "ack")              => "已知道了 ✅",
+        ("ceo_reply",        "ack")              => "已知道了 ✅",
         _                                        => $"{type} → {action}"
     };
 }

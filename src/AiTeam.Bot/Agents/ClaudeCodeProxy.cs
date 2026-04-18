@@ -39,14 +39,15 @@ public class ClaudeCodeProxy(
     }
 
     public async Task<ClaudeCodeResult> RunVictoriaAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
     {
         if (await IsMockModeAsync(ct))
         {
             logger.LogInformation("[MockMode] ClaudeCodeProxy → RunVictoriaAsync");
-            return await mock.RunVictoriaAsync(workingDir, prompt, model, anthropicApiKey, ct);
+            return await mock.RunVictoriaAsync(workingDir, prompt, model, anthropicApiKey, images, ct);
         }
-        return await real.RunVictoriaAsync(workingDir, prompt, model, anthropicApiKey, ct);
+        return await real.RunVictoriaAsync(workingDir, prompt, model, anthropicApiKey, images, ct);
     }
 
     public async Task<ClaudeCodeResult> RunQaAsync(

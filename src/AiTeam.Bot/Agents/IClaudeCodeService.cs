@@ -22,12 +22,13 @@ public interface IClaudeCodeService
         string anthropicApiKey,
         CancellationToken ct = default);
 
-    /// <summary>以 Victoria CEO 模式執行 Claude Code（讀 repo、寫 docs/、git commit）。</summary>
+    /// <summary>以 Victoria CEO 模式執行 Claude Code（讀 repo、寫 docs/、git commit）。可選傳入圖片附件（走 stream-json stdin）。</summary>
     Task<ClaudeCodeResult> RunVictoriaAsync(
         string workingDir,
         string prompt,
         string model,
         string anthropicApiKey,
+        IReadOnlyList<ImageAttachment>? images = null,
         CancellationToken ct = default);
 
     /// <summary>以 QA 模式執行 Claude Code（開放所有工具，供 Quinn 產生測試）。</summary>

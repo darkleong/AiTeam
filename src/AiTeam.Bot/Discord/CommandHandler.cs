@@ -228,6 +228,103 @@ public class CommandHandler(
             messageId, taskId);
     }
 
+    /// <summary>
+    /// Stage 29-5：Dashboard 下達指令後，依 CeoResponse.Action 路由至對應的 Discord/互動流程。
+    /// 與 Discord 路徑共用同一套私有方法（ShowProposalAsync / ShowDirectAgentConfirmAsync），
+    /// 差異僅在目標頻道改用 ceoChannelId 直接查詢，以及 TriggeredBy 標記為 "Dashboard"。
+    /// </summary>
+    public async Task HandleCeoResponseFromDashboardAsync(
+        CeoResponse ceoResponse,
+        string userInput,
+        ulong ceoChannelId,
+        IReadOnlyList<ImageAttachment>? images = null)
+    {
+        if (!ulong.TryParse(_settings.GuildId, out var guildId)) return;
+        var ceoChannel = client.GetGuild(guildId)?.GetTextChannel(ceoChannelId);
+        if (ceoChannel is null)
+        {
+            logger.LogWarning("HandleCeoResponseFromDashboardAsync：找不到 CEO 頻道（id={Id}）", ceoChannelId);
+            return;
+        }
+
+        // 防護：action=reply 但有 target_agent，強制修正
+        if (!string.IsNullOrWhiteSpace(ceoResponse.TargetAgent) && ceoResponse.Action == "reply")
+        {
+            logger.LogWarning("CEO 回傳 action=reply 但 target_agent={Agent}（Dashboard 路徑），強制修正為 delegate", ceoResponse.TargetAgent);
+            ceoResponse.Action = "delegate";
+        }
+
+        var finalProject = ceoResponse.Task?.Project ?? "";
+
+        if (ceoResponse.Action == "reply")
+        {
+            // 純回覆：發到 CEO 頻道 + 建 BossInteraction（ceo_reply）供 Dashboard 操作中心確認
+            await ceoChannel.SendMessageAsync(ceoResponse.Reply);
+            var replyTitle = ceoResponse.Reply?.Length > 50
+                ? ceoResponse.Reply[..50] + "…"
+                : ceoResponse.Reply ?? userInput;
+            _ = interactionService.CreateInteractionAsync(
+                "ceo_reply",
+                title:                $"Victoria 回覆：{replyTitle}",
+                description:          ceoResponse.Reply ?? "",
+                project:              finalProject,
+                agentName:            "Victoria",
+                availableActionsJson: InteractionService.NotifyActionsJson,
+                contextJson:          JsonSerializer.Serialize(new { channelId = ceoChannelId.ToString() }));
+        }
+        else if (ceoResponse.Action == "propose")
+        {
+            await ceoChannel.SendMessageAsync(ceoResponse.Reply);
+            await ShowProposalAsync(
+                async (embed, comps) => await ceoChannel.SendMessageAsync(embed: embed, components: comps),
+                ceoResponse, finalProject, userInput,
+                images: images,
+                channelId: ceoChannelId,
+                triggeredBy: "Dashboard");
+        }
+        else if (ceoResponse.Action == "cancel")
+        {
+            await ceoChannel.SendMessageAsync($"✋ {ceoResponse.Reply ?? "取消指令已收到，但目前無進行中的任務可取消。"}");
+        }
+        else
+        {
+            // delegate：CEO 確認或直接 Agent 確認
+            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
+            {
+                await ShowDirectAgentConfirmAsync(
+                    async (embed, comps) => await ceoChannel.SendMessageAsync(embed: embed, components: comps),
+                    ceoResponse, finalProject, userInput,
+                    channelId: ceoChannelId,
+                    triggeredBy: "Dashboard");
+            }
+            else
+            {
+                var confirmMsg = await ceoChannel.SendMessageAsync(
+                    embed: BuildCeoDecisionEmbed(ceoResponse, finalProject),
+                    components: BuildConfirmButtons());
+
+                _pendingConfirmations[confirmMsg.Id] = new PendingConfirmation(
+                    ceoResponse, finalProject, userInput);
+
+                _ = interactionService.CreateInteractionAsync(
+                    "ceo_confirm",
+                    title:                ceoResponse.Task?.Title ?? userInput,
+                    description:          ceoResponse.Reply ?? userInput,
+                    project:              finalProject,
+                    agentName:            ceoResponse.TargetAgent,
+                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
+                    contextJson:          JsonSerializer.Serialize(new
+                    {
+                        channelId       = ceoChannelId.ToString(),
+                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                        project         = finalProject,
+                        description     = userInput
+                    }),
+                    discordMessageId: (decimal)confirmMsg.Id);
+            }
+        }
+    }
+
     #region 自然語言訊息路由（Stage 7）
 
     /// <summary>
@@ -1032,7 +1129,8 @@ public class CommandHandler(
         CeoResponse ceoResponse,
         string project,
         string description,
-        ulong channelId = 0)
+        ulong channelId = 0,
+        string triggeredBy = "Discord")
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo  = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -1046,7 +1144,7 @@ public class CommandHandler(
         {
             Title         = ceoResponse.Task?.Title ?? description,
             Description   = ceoResponse.Task?.Description,
-            TriggeredBy   = "Discord",
+            TriggeredBy   = triggeredBy,
             AssignedAgent = ceoResponse.TargetAgent ?? "CEO",
             Status        = "pending",
             ProjectId     = projectId,
@@ -1639,7 +1737,8 @@ public class CommandHandler(
         string project,
         string description,
         IReadOnlyList<ImageAttachment>? images = null,
-        ulong channelId = 0)
+        ulong channelId = 0,
+        string triggeredBy = "Discord")
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -1652,7 +1751,7 @@ public class CommandHandler(
         {
             Title         = ceoResponse.Task?.Title ?? description,
             Description   = ceoResponse.Task?.Description ?? description,
-            TriggeredBy   = "Discord",
+            TriggeredBy   = triggeredBy,
             AssignedAgent = "CEO",
             Status        = "pending",
             ProjectId     = projectId,

@@ -1,0 +1,66 @@
+@using AiTeam.Dashboard.Services
+@using Microsoft.AspNetCore.Components.Forms
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-3">快速下達指令</MudText>
+
+    @if (_submitted)
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-3">
+            已送達 Victoria，請至操作中心查看回應。正在跳轉中…
+        </MudAlert>
+    }
+    else
+    {
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-3">@_error</MudAlert>
+        }
+
+        <MudTextField T="string"
+                      @bind-Value="_text"
+                      Label="指令內容"
+                      Placeholder="例：我想知道目前任務進度，並規劃下個 Stage..."
+                      Lines="4"
+                      Variant="Variant.Outlined"
+                      Class="mb-3"
+                      Disabled="@_isSubmitting" />
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            附加圖片（選填，最多 5 張，每張 ≤ 5MB，支援 PNG / JPEG / GIF / WebP）
+        </MudText>
+
+        <InputFile id="quickcmd-files" multiple OnChange="OnFilesChangedAsync"
+                   accept="image/png,image/jpeg,image/gif,image/webp"
+                   style="display:none" />
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            @foreach (var (file, index) in _selectedFiles.Select((f, i) => (f, i)))
+            {
+                <MudChip T="string" OnClose="@(() => RemoveFile(index))"
+                         Color="Color.Default" Size="Size.Small">
+                    @file.Name (@(Math.Round(file.Size / 1024.0, 1)) KB)
+                </MudChip>
+            }
+            @if (_selectedFiles.Count < 5)
+            {
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.AttachFile"
+                           OnClick="TriggerFilePicker"
+                           Disabled="@_isSubmitting">
+                    新增圖片
+                </MudButton>
+            }
+        </div>
+
+        <div class="d-flex justify-end gap-2">
+            <MudButton Variant="Variant.Text" OnClick="Reset" Disabled="@_isSubmitting">取消</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="SubmitAsync"
+                       Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_text))">
+                @(_isSubmitting ? "送出中..." : "送出")
+            </MudButton>
+        </div>
+    }
+</MudPaper>

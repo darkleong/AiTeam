@@ -53,20 +53,19 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     /// Victoria CEO 模式：可讀取整個 repo（src/ docs/ 等）、寫入 docs/、執行 git commit docs 變更。
     /// 不可 push、不可修改 src/ 程式碼（靠 CLAUDE_Victoria.md 提示詞約束）。
     /// 使用實際 repo 路徑（非 clone），呼叫端負責在進入前設定 CLAUDE.md。
+    /// 有圖片時改用 stdin stream-json 模式（--input-format/--output-format stream-json）。
     /// </summary>
-    /// <param name="workingDir">實際 repo 本地路徑（非 clone 的 workspace）</param>
-    /// <param name="prompt">含對話歷史、長期記憶及老闆指令的組合 Prompt</param>
-    /// <param name="model">Claude 模型 ID</param>
-    /// <param name="anthropicApiKey">Anthropic API Key</param>
-    /// <param name="ct">CancellationToken</param>
     public async Task<ClaudeCodeResult> RunVictoriaAsync(
         string workingDir,
         string prompt,
         string model,
         string anthropicApiKey,
+        IReadOnlyList<ImageAttachment>? images = null,
         CancellationToken ct = default)
     {
         await ConfigureGitVictoriaAsync(workingDir, ct);
+        if (images is { Count: > 0 })
+            return await RunCoreWithImagesAsync(workingDir, prompt, model, anthropicApiKey, images, VictoriaTimeout, maxTurns: 15, ct);
         return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
             VictoriaTimeout, allowedTools: null, maxTurns: 15, ct);
     }
@@ -127,6 +126,117 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             isFirstMessage, maxTurns, allowedTools, ct);
 
     // ────────────── Private ──────────────
+
+    /// <summary>
+    /// 有圖片時改用 stdin stream-json 格式，解決 Claude Code CLI 不支援 -p 帶圖片的限制。
+    /// Discord Embed 的圖片縮圖展示已在 Bot controller 端以 SendMessageAsync 附件方式簡化處理，
+    /// 因此此處只需把圖片 base64 組進 stream-json content array，讓 Victoria 能看到圖片內容。
+    /// </summary>
+    private async Task<ClaudeCodeResult> RunCoreWithImagesAsync(
+        string workingDir,
+        string prompt,
+        string model,
+        string anthropicApiKey,
+        IReadOnlyList<ImageAttachment> images,
+        TimeSpan timeout,
+        int maxTurns,
+        CancellationToken ct)
+    {
+        // 組 stream-json 輸入：text + N 張圖片
+        var contentItems = new List<object>
+        {
+            new { type = "text", text = prompt }
+        };
+        foreach (var img in images)
+            contentItems.Add(new { type = "image", source = new { type = "base64", media_type = img.MediaType, data = img.Base64Data } });
+
+        var inputJson = JsonSerializer.Serialize(new
+        {
+            type    = "user",
+            message = new { role = "user", content = contentItems }
+        });
+
+        var args = $"--input-format stream-json --output-format stream-json --verbose " +
+                   $"--dangerously-skip-permissions " +
+                   $"--max-turns {maxTurns} " +
+                   $"--no-session-persistence " +
+                   $"--model {model}";
+
+        logger.LogInformation(
+            "ClaudeCodeService 啟動 subprocess（含圖片，dir={Dir}，model={Model}，images={Count}）",
+            workingDir, model, images.Count);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(timeout);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName               = "claude",
+            Arguments              = args,
+            WorkingDirectory       = workingDir,
+            RedirectStandardInput  = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        psi.Environment["ANTHROPIC_API_KEY"] = anthropicApiKey;
+
+        using var process = new Process { StartInfo = psi };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdoutBuilder.AppendLine(e.Data); };
+        process.ErrorDataReceived  += (_, e) => { if (e.Data is not null) stderrBuilder.AppendLine(e.Data); };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        // 寫入 stream-json 後關閉 stdin，CLI 讀到 EOF 才開始處理
+        await process.StandardInput.WriteLineAsync(inputJson);
+        process.StandardInput.Close();
+
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"Claude Code subprocess（含圖片）超過 {timeout.TotalMinutes} 分鐘逾時");
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw;
+        }
+
+        var stdout   = stdoutBuilder.ToString();
+        var stderr   = stderrBuilder.ToString();
+        var exitCode = process.ExitCode;
+        var (success, output) = ParseJsonOutput(stdout, exitCode);
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            if (!success || exitCode != 0)
+                logger.LogError("Claude Code stderr（含圖片，exitCode={Code}）：{Stderr}", exitCode, stderr);
+            else
+                logger.LogDebug("Claude Code stderr（含圖片）：{Stderr}", stderr);
+        }
+
+        if (!success || exitCode != 0)
+        {
+            var rawTail = stdout.Length > 3000 ? "…" + stdout[^3000..] : stdout;
+            logger.LogError("Claude Code 失敗完整輸出（含圖片，exitCode={Code}）：\n{Raw}", exitCode, rawTail);
+        }
+
+        logger.LogInformation(
+            "Claude Code subprocess 結束（含圖片，exitCode={Code}，success={Success}）",
+            exitCode, success);
+
+        return new ClaudeCodeResult(success, output, exitCode, stdout);
+    }
 
     private async Task<ClaudeCodeResult> RunCoreAsync(
         string workingDir,
