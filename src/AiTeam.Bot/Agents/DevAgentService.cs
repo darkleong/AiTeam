@@ -675,8 +675,7 @@ public class DevAgentService(
         {
             const string mockPrUrl = "https://github.com/mock/repo/pull/999";
             logger.LogInformation("[MockMode] DevAgentService 跳過 GitHub 操作，回傳模擬結果");
-            AddLog(task, "[MOCK] Dev Agent 模擬執行完成，PR: " + mockPrUrl, "done");
-            taskRepository.UpdateStatus(task, "done");
+            AddLog(task, "[MOCK] Dev Agent 模擬執行中...", "running");
             await taskRepository.SaveAsync(cancellationToken);
             await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] PR 已開啟：" + mockPrUrl, mockPrUrl);
@@ -753,7 +752,6 @@ public class DevAgentService(
                     result.ExitCode, result.Output);
             }
 
-            AddLog(task, "實作計畫書產出完成", "done");
             await taskRepository.SaveAsync(cancellationToken);
 
             return new AgentExecutionResult(true, $"實作計畫書已產出（{planContent.Length} 字）",
