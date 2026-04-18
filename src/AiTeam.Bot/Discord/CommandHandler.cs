@@ -256,10 +256,15 @@ public class CommandHandler(
 
         var finalProject = ceoResponse.Task?.Project ?? "";
 
+        // Dashboard 路徑的圖片不會實體附到 Discord（簡化版），改以文字提示讓 Discord 端知道老闆傳了圖
+        var imagesNote = images is { Count: > 0 }
+            ? $"📎 _（附 {images.Count} 張圖片）_\n\n"
+            : "";
+
         if (ceoResponse.Action == "reply")
         {
             // 純回覆：發到 CEO 頻道 + 建 BossInteraction（ceo_reply）供 Dashboard 操作中心確認
-            await ceoChannel.SendMessageAsync(ceoResponse.Reply);
+            await ceoChannel.SendMessageAsync(imagesNote + ceoResponse.Reply);
             var replyTitle = ceoResponse.Reply?.Length > 50
                 ? ceoResponse.Reply[..50] + "…"
                 : ceoResponse.Reply ?? userInput;
@@ -274,7 +279,7 @@ public class CommandHandler(
         }
         else if (ceoResponse.Action == "propose")
         {
-            await ceoChannel.SendMessageAsync(ceoResponse.Reply);
+            await ceoChannel.SendMessageAsync(imagesNote + ceoResponse.Reply);
             await ShowProposalAsync(
                 async (embed, comps) => await ceoChannel.SendMessageAsync(embed: embed, components: comps),
                 ceoResponse, finalProject, userInput,

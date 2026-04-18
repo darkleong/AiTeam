@@ -28,6 +28,12 @@ public class CeoCommandController(
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
 
+    /// <summary>圖片序列化為 jsonb 時使用 camelCase，對齊 BossCommandLog.Images 註解的 {base64Data, mediaType} 格式。</summary>
+    private static readonly JsonSerializerOptions ImagesJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     /// <summary>
     /// 接收來自 Dashboard 的指令，轉交 Victoria 處理後路由至 Discord + BossInteraction。
     /// Body：{ text, images?: [{base64Data, mediaType}][] }
@@ -74,7 +80,7 @@ public class CeoCommandController(
         {
             Text   = request.Text,
             Images = request.Images?.Count > 0
-                ? JsonSerializer.Serialize(request.Images)
+                ? JsonSerializer.Serialize(request.Images, ImagesJsonOptions)
                 : null,
             Source = "dashboard"
         };
