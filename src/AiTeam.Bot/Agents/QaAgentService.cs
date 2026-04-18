@@ -128,7 +128,7 @@ public class QaAgentService(
 
             var prompt = BuildClaudeCodeQaPrompt(prNumber, csFiles, uiFiles);
 
-            AddLog(task, $"啟動 Claude Code QA session（{csFiles.Count} 個 .cs + {uiFiles.Count} 個 UI 檔）", "running");
+            AddLog(task, $"啟動 Claude Code QA session（{csFiles.Count} 個 .cs + {uiFiles.Count} 個 UI 檔）", "done");
             await taskRepository.SaveAsync(cancellationToken);
 
             // 5. 單一 Claude Code session

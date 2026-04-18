@@ -1237,6 +1237,8 @@ public class TaskGroupService(
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
+        taskRepo.AddLog(new TaskLog { TaskId = petraTask.Id, Agent = AgentNames.Pm, Step = "Petra 審核實作計畫書中...", Status = "running" });
+        await taskRepo.SaveAsync(cancellationToken);
 
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
@@ -1290,6 +1292,7 @@ public class TaskGroupService(
         var petraStatus = petraReview.Decision == "revise" ? "revision"
                         : petraReview.Decision == "escalate" ? "failed"
                         : "done";
+        taskRepo.AddLog(new TaskLog { TaskId = petraTask.Id, Agent = AgentNames.Pm, Step = petraReview.Summary, Status = petraStatus });
         taskRepo.UpdateStatus(petraTask, petraStatus);
         await taskRepo.SaveAsync(cancellationToken);
 
@@ -1374,6 +1377,8 @@ public class TaskGroupService(
         };
         taskRepo.Add(petraTask);
         await taskRepo.SaveAsync(cancellationToken);
+        taskRepo.AddLog(new TaskLog { TaskId = petraTask.Id, Agent = AgentNames.Pm, Step = "Petra 審核 Vera Code Review 嚴重度...", Status = "running" });
+        await taskRepo.SaveAsync(cancellationToken);
 
         await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
         {
@@ -1413,6 +1418,7 @@ public class TaskGroupService(
         var petraStatus = petraReview.Decision == "revise" ? "revision"
                         : petraReview.Decision == "escalate" ? "failed"
                         : "done";
+        taskRepo.AddLog(new TaskLog { TaskId = petraTask.Id, Agent = AgentNames.Pm, Step = petraReview.Summary, Status = petraStatus });
         taskRepo.UpdateStatus(petraTask, petraStatus);
         await taskRepo.SaveAsync(cancellationToken);
 
@@ -1473,6 +1479,8 @@ public class TaskGroupService(
             ProjectId     = projectId,
         };
         taskRepo.Add(kickoffTask);
+        await taskRepo.SaveAsync(ct);
+        taskRepo.AddLog(new TaskLog { TaskId = kickoffTask.Id, Agent = AgentNames.Kickoff, Step = "Kick-off 多 Agent 會議進行中...", Status = "running" });
         await taskRepo.SaveAsync(ct);
 
         // 推送 Kickoff 進行中狀態到 Dashboard
@@ -1571,6 +1579,7 @@ public class TaskGroupService(
                 taskGroupId:      freshGroup.Id);
 
             // Stage 26：Kickoff TaskItem 標記完成
+            taskRepo.AddLog(new TaskLog { TaskId = kickoffTask.Id, Agent = AgentNames.Kickoff, Step = $"Kick-off 完成（共 {meetingResult.TotalRounds} 輪）", Status = "done" });
             taskRepo.UpdateStatus(kickoffTask, "done");
             await taskRepo.SaveAsync(ct);
             await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
@@ -1594,6 +1603,7 @@ public class TaskGroupService(
             logger.LogError(ex, "TaskGroupService：Kick-off 會議失敗（Group={Id}）", group.Id);
 
             // Stage 26：Kickoff TaskItem 標記失敗
+            taskRepo.AddLog(new TaskLog { TaskId = kickoffTask.Id, Agent = AgentNames.Kickoff, Step = $"Kick-off 失敗：{ex.Message}", Status = "failed" });
             taskRepo.UpdateStatus(kickoffTask, "failed");
             await taskRepo.SaveAsync(CancellationToken.None);
             await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
@@ -1821,6 +1831,8 @@ public class TaskGroupService(
         };
         taskRepo.Add(designTask);
         await taskRepo.SaveAsync(ct);
+        taskRepo.AddLog(new TaskLog { TaskId = designTask.Id, Agent = AgentNames.Design, Step = "設計規劃多 Agent 會議進行中...", Status = "running" });
+        await taskRepo.SaveAsync(ct);
 
         await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
         {
@@ -1864,6 +1876,7 @@ public class TaskGroupService(
             logger.LogInformation("TaskGroupService：設計規劃會議記錄已存入 DB（Group={Id}）", group.Id);
 
             // Stage 26：Design TaskItem 標記完成（無論 consensus 或 escalate，設計階段本身已結束）
+            taskRepo.AddLog(new TaskLog { TaskId = designTask.Id, Agent = AgentNames.Design, Step = $"設計規劃完成（共 {designResult.TotalRounds} 輪）", Status = "done" });
             taskRepo.UpdateStatus(designTask, "done");
             await taskRepo.SaveAsync(ct);
             await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel
@@ -1942,6 +1955,7 @@ public class TaskGroupService(
             logger.LogError(ex, "TaskGroupService：設計規劃會議失敗（Group={Id}）", group.Id);
 
             // Stage 26：Design TaskItem 標記失敗
+            taskRepo.AddLog(new TaskLog { TaskId = designTask.Id, Agent = AgentNames.Design, Step = $"設計規劃失敗：{ex.Message}", Status = "failed" });
             taskRepo.UpdateStatus(designTask, "failed");
             await taskRepo.SaveAsync(CancellationToken.None);
             await pushService.PushTaskUpdateAsync(new Shared.ViewModels.TaskUpdateViewModel

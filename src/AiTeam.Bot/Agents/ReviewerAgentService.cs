@@ -94,7 +94,7 @@ public class ReviewerAgentService(
             var prNumber = ExtractPrNumber($"{task.Title} {task.Description}");
             if (prNumber <= 0)
             {
-                AddLog(task, "未指定 PR 編號，自動取最新 open PR", "running");
+                AddLog(task, "未指定 PR 編號，自動取最新 open PR", "done");
                 await taskRepository.SaveAsync(cancellationToken);
                 prNumber = await gitHubService.GetLatestOpenPullRequestNumberAsync(owner, repo);
             }
@@ -111,7 +111,7 @@ public class ReviewerAgentService(
             if (csFiles.Count == 0)
                 return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
 
-            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔，啟動 Claude Code Review session", "running");
+            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔，啟動 Claude Code Review session", "done");
             await taskRepository.SaveAsync(cancellationToken);
 
             // 3. 組建 prompt（只帶 patch，不帶完整檔案內容；Claude Code 自行 Read 需要的檔案）
@@ -148,9 +148,6 @@ public class ReviewerAgentService(
             var reviewBody = BuildReviewBody(allIssues, report.Summary, report.Impact, prNumber);
 
             // 8. 在 GitHub PR 上提交 Review
-            AddLog(task, "提交 GitHub Review 中...", "running");
-            await taskRepository.SaveAsync(cancellationToken);
-
             var reviewUrl = await gitHubService.CreatePullRequestReviewAsync(owner, repo, prNumber, reviewBody);
 
             AddLog(task, $"Review 已提交：{reviewUrl}", "done");
