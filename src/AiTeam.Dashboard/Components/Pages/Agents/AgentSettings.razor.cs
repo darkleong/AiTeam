@@ -127,7 +127,7 @@ public partial class AgentSettings
         _isReloading = true;
         var ok = await BotService.ReloadCacheAsync("all");
         _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則與 Agent 快取已更新）" : "套用失敗，請確認 Bot 服務正常",
+        Snackbar.Add(ok ? "已套用變更（規則與系統設定快取已更新）" : "套用失敗，請確認 Bot 服務正常",
             ok ? Severity.Success : Severity.Error);
     }
 

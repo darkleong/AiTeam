@@ -165,6 +165,12 @@ Dashboard 自帶 reload 按鈕：
 | `AiTeam.Dashboard/Components/Layout/NavMenu.razor` | 加入「系統設定」連結 |
 | `AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor` | 移除底部系統設定區塊 |
 
+### 實作注意事項（29-3 後）
+
+- **Agent 設定頁的「套用變更」按鈕**：29-3 實作時清的是 `AppSettingsService` cache（非 AgentRepository，後者無 cache）。
+  Snackbar 訊息已修正為「規則與系統設定快取已更新」。
+  29-4 將「系統設定」區塊移到新頁面時，一併將此按鈕**移至系統設定頁**（或移除），避免在 Agent 設定頁語意不明。
+
 ### 設計決策
 
 - **用現有 `AppSettingsService`**：Stage 27b 已建好 DB-backed + TTL cache 的 AppSettings 機制，直接沿用
