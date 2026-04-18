@@ -1,0 +1,86 @@
+@page "/system-settings"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>系統設定 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>系統設定</h2>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+               StartIcon="@Icons.Material.Filled.CloudSync"
+               OnClick="ReloadCacheAsync"
+               Disabled="@_isReloading">
+        @(_isReloading ? "套用中..." : "套用變更")
+    </MudButton>
+</div>
+
+@if (_saveMessage is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3">@_saveMessage</MudAlert>
+}
+
+<h3 style="margin-bottom:16px">一般設定</h3>
+
+<div class="system-config-card">
+    <div class="system-config-header">
+        <div>
+            <strong>跳過 CEO 派工確認</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後，老闆下指令時將直接進入 Agent 執行確認，省略 CEO 決策 Embed。<br/>
+                建議 CEO 準確率穩定後再開啟。修改後 5 分鐘內自動生效，免重啟 Bot。
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_skipCeoConfirm"
+                   ValueChanged="@OnSkipCeoConfirmChanged"
+                   Color="Color.Primary"
+                   Label="@(_skipCeoConfirm ? "啟用" : "停用")" />
+    </div>
+</div>
+
+<div class="system-config-card system-config-card--warning">
+    <div class="system-config-header">
+        <div>
+            <strong>Mock Mode（模擬模式）</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後，所有 AI 呼叫（Claude Code subprocess 與直接 LLM）改用預設模擬結果，不消耗 API 費用。<br/>
+                適合 Dashboard / Discord 功能開發與流程測試。修改後 5 分鐘內自動生效，免重啟 Bot。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">⚠ 注意：所有 TaskLog / Discord embed 將標記為 [MOCK]，不建立真實 GitHub PR / branch。</MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_mockMode"
+                   ValueChanged="@OnMockModeChanged"
+                   Color="Color.Warning"
+                   Label="@(_mockMode ? "啟用" : "停用")" />
+    </div>
+</div>
+
+<MudDivider Style="margin: 32px 0" />
+
+<h3 style="margin-bottom:16px">CEO 指令通道</h3>
+
+<div class="system-config-card">
+    <div style="flex:1">
+        <strong>CEO 指令預設頻道 ID</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 12px">
+            Dashboard 下達指令給 Victoria 時，用於發送 Discord Embed 的頻道 ID。<br/>
+            未設定時，Dashboard 下指令將回傳錯誤提示。
+        </p>
+        <div class="d-flex align-center gap-3">
+            <MudTextField T="string"
+                          @bind-Value="_ceoChannelId"
+                          Label="Discord 頻道 ID"
+                          Placeholder="例：1234567890123456789"
+                          Variant="Variant.Outlined"
+                          Style="max-width:400px"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Tag" />
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                       OnClick="SaveCeoChannelIdAsync"
+                       Disabled="@_isSavingChannel">
+                @(_isSavingChannel ? "儲存中..." : "儲存")
+            </MudButton>
+        </div>
+    </div>
+</div>

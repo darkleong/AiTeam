@@ -14,13 +14,7 @@ public partial class AgentSettings
     private DashboardBotService BotService { get; set; } = null!;
 
     [Inject]
-    private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
-
-    [Inject]
     private IDialogService DialogService { get; set; } = null!;
-
-    [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
 
     #endregion
 
@@ -38,13 +32,6 @@ public partial class AgentSettings
     private bool  _showRestartConfirm;
     private bool  _isRestarting;
 
-    // 套用變更
-    private bool  _isReloading;
-
-    // 系統設定
-    private bool _skipCeoConfirm;
-    private bool _mockMode;
-
     #endregion
 
     #region Override Methods
@@ -57,12 +44,7 @@ public partial class AgentSettings
             foreach (var agent in _agents)
                 _trustLevels[agent.Id] = agent.TrustLevel;
 
-            var skipSetting = await AppSettingsService.GetAsync("SkipCeoConfirm");
-            _skipCeoConfirm = bool.TryParse(skipSetting?.Value, out var v) && v;
-
-            var mockSetting = await AppSettingsService.GetAsync("MockMode");
-            _mockMode = bool.TryParse(mockSetting?.Value, out var mv) && mv;
-        }
+            }
         catch (Exception ex)
         {
             _loadError = ex.Message;
@@ -106,29 +88,6 @@ public partial class AgentSettings
 
         _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
         _isSaving    = false;
-    }
-
-    private async Task OnSkipCeoConfirmChanged(bool newValue)
-    {
-        _skipCeoConfirm = newValue;
-        await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
-        _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
-    }
-
-    private async Task OnMockModeChanged(bool newValue)
-    {
-        _mockMode = newValue;
-        await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
-        _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
-    }
-
-    private async Task ReloadCacheAsync()
-    {
-        _isReloading = true;
-        var ok = await BotService.ReloadCacheAsync("all");
-        _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則與系統設定快取已更新）" : "套用失敗，請確認 Bot 服務正常",
-            ok ? Severity.Success : Severity.Error);
     }
 
     private async Task RestartBotAsync()

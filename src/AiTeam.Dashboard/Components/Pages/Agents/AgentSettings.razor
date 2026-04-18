@@ -12,12 +12,6 @@
                    OnClick="OpenCreateAgentDialogAsync">
             新增 Agent
         </MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   StartIcon="@Icons.Material.Filled.CloudSync"
-                   OnClick="ReloadCacheAsync"
-                   Disabled="@_isReloading">
-            @(_isReloading ? "套用中..." : "套用變更")
-        </MudButton>
         @if (_showRestartConfirm)
         {
             <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
@@ -126,42 +120,3 @@ else
 {
     <MudAlert Severity="Severity.Success" Class="mt-3">@_saveMessage</MudAlert>
 }
-
-<MudDivider Style="margin: 32px 0" />
-
-<h3 style="margin-bottom:16px">系統設定</h3>
-
-<div class="system-config-card">
-    <div class="system-config-header">
-        <div>
-            <strong>跳過 CEO 派工確認</strong>
-            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
-                啟用後，老闆下指令時將直接進入 Agent 執行確認，省略 CEO 決策 Embed。<br/>
-                建議 CEO 準確率穩定後再開啟。修改後 5 分鐘內自動生效，免重啟 Bot。
-            </p>
-        </div>
-        <MudSwitch T="bool"
-                   Value="@_skipCeoConfirm"
-                   ValueChanged="@OnSkipCeoConfirmChanged"
-                   Color="Color.Primary"
-                   Label="@(_skipCeoConfirm ? "啟用" : "停用")" />
-    </div>
-</div>
-
-<div class="system-config-card system-config-card--warning">
-    <div class="system-config-header">
-        <div>
-            <strong>Mock Mode（模擬模式）</strong>
-            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
-                啟用後，所有 AI 呼叫（Claude Code subprocess 與直接 LLM）改用預設模擬結果，不消耗 API 費用。<br/>
-                適合 Dashboard / Discord 功能開發與流程測試。修改後 5 分鐘內自動生效，免重啟 Bot。<br/>
-                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">⚠ 注意：所有 TaskLog / Discord embed 將標記為 [MOCK]，不建立真實 GitHub PR / branch。</MudText>
-            </p>
-        </div>
-        <MudSwitch T="bool"
-                   Value="@_mockMode"
-                   ValueChanged="@OnMockModeChanged"
-                   Color="Color.Warning"
-                   Label="@(_mockMode ? "啟用" : "停用")" />
-    </div>
-</div>
