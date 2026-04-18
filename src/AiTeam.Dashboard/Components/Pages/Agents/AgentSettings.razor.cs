@@ -43,8 +43,7 @@ public partial class AgentSettings
             _agents = await AgentService.GetAgentConfigsAsync();
             foreach (var agent in _agents)
                 _trustLevels[agent.Id] = agent.TrustLevel;
-
-            }
+        }
         catch (Exception ex)
         {
             _loadError = ex.Message;

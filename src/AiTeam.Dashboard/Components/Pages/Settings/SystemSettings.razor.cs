@@ -62,10 +62,18 @@ public partial class SystemSettings
 
     private async Task SaveCeoChannelIdAsync()
     {
+        var trimmed = _ceoChannelId.Trim();
+        if (!string.IsNullOrEmpty(trimmed) && !System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{17,20}$"))
+        {
+            _saveMessage = null;
+            Snackbar.Add("頻道 ID 格式錯誤，應為 17–20 位純數字（Discord Snowflake ID）", Severity.Warning);
+            return;
+        }
+
         _isSavingChannel = true;
-        await AppSettingsService.UpsertAsync("CeoDefaultChannelId", _ceoChannelId.Trim());
+        await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
         _isSavingChannel = false;
-        _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(_ceoChannelId) ? "（已清除）" : $"：{_ceoChannelId.Trim()}")}";
+        _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
     }
 
     private async Task ReloadCacheAsync()
