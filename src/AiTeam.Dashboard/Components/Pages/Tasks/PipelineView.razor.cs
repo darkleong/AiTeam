@@ -63,7 +63,11 @@ public partial class PipelineView : IAsyncDisposable
             // 找到對應步驟，直接更新狀態
             step.Task.Status = update.Status;
             if (update.Status is "done" or "failed" or "cancelled")
+            {
                 step.Task.CompletedAt = DateTime.UtcNow;
+                // 步驟完成時同步更新 Group content 欄位（Agent 可能已寫入歸檔報告等資料）
+                await RefreshGroupContentAsync();
+            }
 
             // 更新 ActiveIndex 到目前 running 的步驟
             var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
@@ -120,19 +124,7 @@ public partial class PipelineView : IAsyncDisposable
             _steps = items.Select(t => new PipelineStepViewModel { Task = t }).ToList();
 
             // 同步更新 Group 折疊面板欄位（避免開啟 Drawer 後資料停留在快照）
-            if (freshGroup is not null)
-            {
-                Group.KickoffMeetingLog = freshGroup.KickoffMeetingLog;
-                Group.TaskPlan          = freshGroup.TaskPlan;
-                Group.KickoffRound      = freshGroup.KickoffRound;
-                Group.DesignMeetingLog  = freshGroup.DesignMeetingLog;
-                Group.DesignPlan        = freshGroup.DesignPlan;
-                Group.DesignRound       = freshGroup.DesignRound;
-                Group.DevPrUrl          = freshGroup.DevPrUrl;
-                Group.DevPlan           = freshGroup.DevPlan;
-                Group.LastReviewBody    = freshGroup.LastReviewBody;
-                Group.TestReport        = freshGroup.TestReport;
-            }
+            ApplyGroupContent(freshGroup);
 
             // 自動定位到正在執行中的步驟
             var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
@@ -142,6 +134,31 @@ public partial class PipelineView : IAsyncDisposable
         {
             _loading = false;
         }
+    }
+
+    /// <summary>從 DB 重新載入 Group 的所有 content 欄位（折疊面板資料），不重載步驟清單。</summary>
+    private async Task RefreshGroupContentAsync()
+    {
+        if (Group is null) return;
+        var freshGroup = await TaskService.GetTaskGroupByIdAsync(Group.Id);
+        ApplyGroupContent(freshGroup);
+    }
+
+    /// <summary>將 freshGroup 的 content 欄位同步回 Group Parameter（集中管理，避免漏欄位）。</summary>
+    private void ApplyGroupContent(TaskGroupDto? freshGroup)
+    {
+        if (Group is null || freshGroup is null) return;
+        Group.KickoffMeetingLog = freshGroup.KickoffMeetingLog;
+        Group.TaskPlan          = freshGroup.TaskPlan;
+        Group.KickoffRound      = freshGroup.KickoffRound;
+        Group.DesignMeetingLog  = freshGroup.DesignMeetingLog;
+        Group.DesignPlan        = freshGroup.DesignPlan;
+        Group.DesignRound       = freshGroup.DesignRound;
+        Group.DevPrUrl          = freshGroup.DevPrUrl;
+        Group.DevPlan           = freshGroup.DevPlan;
+        Group.LastReviewBody    = freshGroup.LastReviewBody;
+        Group.TestReport        = freshGroup.TestReport;
+        Group.ArchiveContent    = freshGroup.ArchiveContent;
     }
 
     private async Task LoadLogsAsync(PipelineStepViewModel step)
