@@ -6,11 +6,19 @@
 
 <div class="page-header">
     <h2>規則管理</h2>
-    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Add"
-               OnClick="OpenCreateRuleDialogAsync">
-        新增規則
-    </MudButton>
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateRuleDialogAsync">
+            新增規則
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+                   StartIcon="@Icons.Material.Filled.CloudSync"
+                   OnClick="ReloadCacheAsync"
+                   Disabled="@_isReloading">
+            @(_isReloading ? "套用中..." : "套用變更")
+        </MudButton>
+    </MudStack>
 </div>
 
 @if (_rules.Count == 0)

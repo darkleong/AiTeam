@@ -10,6 +10,12 @@ public partial class RuleManagement
     private DashboardRuleService RuleService { get; set; } = null!;
 
     [Inject]
+    private DashboardBotService BotService { get; set; } = null!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
+    [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
     #endregion
@@ -51,7 +57,8 @@ public partial class RuleManagement
 
     #region Private Variables
 
-    private List<Rule> _rules = [];
+    private List<Rule> _rules    = [];
+    private bool       _isReloading;
 
     #endregion
 
@@ -63,6 +70,15 @@ public partial class RuleManagement
     #endregion
 
     #region Private Methods
+
+    private async Task ReloadCacheAsync()
+    {
+        _isReloading = true;
+        var ok = await BotService.ReloadCacheAsync("rules");
+        _isReloading = false;
+        Snackbar.Add(ok ? "已套用變更（規則快取已更新）" : "套用失敗，請確認 Bot 服務正常",
+            ok ? Severity.Success : Severity.Error);
+    }
 
     private List<(string Label, string Value)> GetDialogAgentOptions()
         => _agentOptions.Select(o => (o.Label, o.Value)).ToList();

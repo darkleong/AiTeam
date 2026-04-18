@@ -20,9 +20,29 @@ public class InternalController(
     IServiceScopeFactory scopeFactory,
     IHostApplicationLifetime appLifetime,
     AppSettingsService appSettings,
+    RulesService rulesService,
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
+
+    /// <summary>
+    /// 清除 Bot 端 Cache，下次存取時自動從 DB 重新載入。
+    /// scope: rules | agents | all（預設 all）
+    /// </summary>
+    [HttpPost("reload-cache")]
+    public IActionResult ReloadCache([FromQuery] string scope = "all")
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        if (scope is "rules" or "all")
+            rulesService.InvalidateCache();
+
+        if (scope is "agents" or "all")
+            appSettings.InvalidateCache();
+
+        logger.LogInformation("Bot Cache 已清除（scope={Scope}）", scope);
+        return Ok(new { message = "已套用變更", scope });
+    }
 
     /// <summary>
     /// 重啟 Bot：呼叫後 Bot 容器退出，由 Docker restart:always 自動重新啟動。

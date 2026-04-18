@@ -12,6 +12,12 @@
                    OnClick="OpenCreateAgentDialogAsync">
             新增 Agent
         </MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+                   StartIcon="@Icons.Material.Filled.CloudSync"
+                   OnClick="ReloadCacheAsync"
+                   Disabled="@_isReloading">
+            @(_isReloading ? "套用中..." : "套用變更")
+        </MudButton>
         @if (_showRestartConfirm)
         {
             <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"

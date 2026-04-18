@@ -19,6 +19,9 @@ public partial class AgentSettings
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -34,6 +37,9 @@ public partial class AgentSettings
     // 重啟 Bot
     private bool  _showRestartConfirm;
     private bool  _isRestarting;
+
+    // 套用變更
+    private bool  _isReloading;
 
     // 系統設定
     private bool _skipCeoConfirm;
@@ -114,6 +120,15 @@ public partial class AgentSettings
         _mockMode = newValue;
         await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
         _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
+    }
+
+    private async Task ReloadCacheAsync()
+    {
+        _isReloading = true;
+        var ok = await BotService.ReloadCacheAsync("all");
+        _isReloading = false;
+        Snackbar.Add(ok ? "已套用變更（規則與 Agent 快取已更新）" : "套用失敗，請確認 Bot 服務正常",
+            ok ? Severity.Success : Severity.Error);
     }
 
     private async Task RestartBotAsync()

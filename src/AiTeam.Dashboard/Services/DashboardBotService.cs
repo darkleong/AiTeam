@@ -11,6 +11,27 @@ public class DashboardBotService(
     private readonly string _botInternalUrl  = configuration["Bot:InternalUrl"]  ?? "http://aiteam-bot:8080";
     private readonly string _botInternalKey  = configuration["Bot:InternalApiKey"] ?? "";
 
+    /// <summary>呼叫 /internal/reload-cache，清除 Bot 端 Cache，回傳是否成功。</summary>
+    public async Task<bool> ReloadCacheAsync(string scope = "all", CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/reload-cache?scope={scope}");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("Bot 快取套用指令已送出（scope={Scope}）", scope);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出 Bot 快取套用指令失敗");
+            return false;
+        }
+    }
+
     /// <summary>呼叫 /internal/restart，回傳是否成功。</summary>
     public async Task<bool> RestartBotAsync(CancellationToken cancellationToken = default)
     {
