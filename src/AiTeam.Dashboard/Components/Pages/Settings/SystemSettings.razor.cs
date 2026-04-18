@@ -65,8 +65,7 @@ public partial class SystemSettings
         var trimmed = _ceoChannelId.Trim();
         if (!string.IsNullOrEmpty(trimmed) && !System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{17,20}$"))
         {
-            _saveMessage = null;
-            Snackbar.Add("頻道 ID 格式錯誤，應為 17–20 位純數字（Discord Snowflake ID）", Severity.Warning);
+            _saveMessage = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
             return;
         }
 
