@@ -1,51 +1,9 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.12
+> 版本：v7.13
 > 建立日期：2026-04-01
 > 最後更新：2026-04-19
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
-
----
-
-## 零-B、MockMode 新提案流程產生重複 TaskGroup（Bug）
-
-> 狀態：🔴 待重現 — 需撈 Bot log 確認兩個 TaskGroup 的建立來源
-> 發現日期：2026-04-18（Christ 使用時回報）
-
-### 症狀
-
-Discord 對 Victoria 下 `/mock 新功能（含提案）`，Victoria 產生提案 → Christ 點核准 → **流程追蹤頁面出現兩筆 TaskGroup**，兩筆標題與時間戳完全相同：
-
-- **第 1 筆**：顯示 Kick-off + 設計規劃（執行中）— 看起來是正常核准後的流程
-- **第 2 筆**：只顯示 CEO 完成 15 秒 — 獨立的 Group，只含 CEO 階段
-
-兩筆時間戳都是同一秒，確定是兩個獨立的 TaskGroup 被建立。
-
-### 預期行為
-
-依 Stage 28b 驗收修正「MockMode GroupId 重複建立防護」：
-
-- `HandleMockProposalFlowAsync` 建立 Group A + CEO TaskItem（`GroupId = A.Id`）
-- `ExecuteProposalApprovedAsync` 檢查 `task.GroupId.HasValue` → 取得 Group A，**不新建**
-- 全程只有 1 個 TaskGroup
-
-### 初步程式碼檢視
-
-- `HandleMockProposalFlowAsync`（[CommandHandler.cs:831](../../src/AiTeam.Bot/Discord/CommandHandler.cs)）邏輯看起來正確：line 845 建 Group、line 863 `GroupId = group.Id`
-- `ExecuteProposalApprovedAsync`（line 1705）檢查分支看起來正確：line 1744 `task.GroupId.HasValue` → line 1746 取現有 Group，不走 `else` 新建
-
-程式碼表面邏輯是 Stage 28b 修正後的版本，但實際運行結果不符。需要實際 log 才能定位。
-
-### 待查項目
-
-1. `CreateGroupAsync` 在一次 `/mock` 流程中被呼叫幾次、從哪個堆疊呼叫
-2. `ExecuteProposalApprovedAsync` 是否被重複觸發（Discord 按鈕事件可能重複，Stage 12 曾踩過坑）
-3. 是否有其他路徑（如 `FireStepsAsync` 或 Kickoff 處理器）在某分支獨立建立 Group
-4. 是否有「遺漏的 MockMode 分支」未被 Stage 28b 的修正涵蓋
-
-### 優先級
-
-🔴 高 — 不影響功能正確性，但會造成流程追蹤資料混亂，影響 Dashboard 可觀察性；MockMode 是驗收主要管道，問題會被反覆踩到
 
 ---
 
@@ -822,6 +780,7 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 零 | Dashboard 歸檔報告折疊面板 | ✅ Stage 29-1（v3.16.0）— `TaskGroup.ArchiveContent` 欄位 + EF Migration、DocAgentService 完成後寫入 DB、PipelineView 第七折疊面板、MockMode 也補寫供 Dashboard 驗收 |
 | 零-A | 任務列表右側 Log 顯示統一化 | ✅ Stage 29-2（v3.16.0）— Kickoff/Design/Petra 補 running + done/failed、Dev/QA/Reviewer/Doc MockMode 統一由 Processor 寫 final done、消除過時 running 殘影 |
 | 零-C | 通知類互動卡在待處理區無法消化（Bug） | ✅ Stage 29-5 搭車修（v3.16.0）— `InteractionService.NotifyActionsJson`「我知道了」按鈕；`merge_notify` / `intervention` / `ceo_reply` 三處統一套用；`ProcessBossResponseAsync` default 分支無動作（純 UI 確認） |
+| 零-B | MockMode 新提案流程產生重複 TaskGroup（Bug） | ✅ v3.16.1 hotfix（2026-04-19）— Stage 28b 驗收修正只做了一半：`ExecuteProposalApprovedAsync`（Discord 路徑）有 GroupId 防護，但 `ProcessProposalApprovedAsync`（Dashboard 路徑）無條件 `CreateGroupAsync`。兩處對齊後 MockMode 從 Discord 或 Dashboard 核准提案都只產生 1 個 TaskGroup |
 
 ---
 
@@ -878,3 +837,4 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 2026-04-19 | v7.10：新增十五（Dashboard 與 Discord 功能平等）— Christ 於 Stage 29-5 驗收時提出核心原則：Discord 可執行的每個指令未來 Dashboard 也都要能觸發；首要子項為 `/mock` Dashboard 化，其餘含 `/pause`、`/stop-all` 等佇列控制 |
 | 2026-04-19 | v7.11：新增十六（Dashboard 錯誤處理與提示 UX 打磨）— A. MudBlazor 元件內部例外的接住機制（等官方提供 OnValidationError hook 或自建包裝）；B. 錯誤訊息同時顯示 MudAlert + Snackbar（雙通道提示，不依賴使用者視線） |
 | 2026-04-19 | v7.12：Stage 29 結案 — 零（Dashboard 歸檔報告折疊面板）、零-A（TaskLog 顯示統一化）、零-C（通知類互動卡在待處理區 Bug）三項移入已完成項目摘要（對應 Stage 29-1 / 29-2 / 29-5 搭車修，v3.16.0）；零-B（MockMode 重複 TaskGroup Bug）仍待重現保留在待處理區 |
+| 2026-04-19 | v7.13：零-B 查明並修復（v3.16.1 hotfix）— Dashboard 路徑 `ProcessProposalApprovedAsync` 無條件 CreateGroup，Stage 28b 驗收修正只做了 Discord 路徑；加上對稱 GroupId 檢查後從 Dashboard 核准 MockMode 提案也只會產生 1 個 TaskGroup；零-B 移入已完成項目摘要 |

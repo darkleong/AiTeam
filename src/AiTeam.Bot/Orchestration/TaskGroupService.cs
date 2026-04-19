@@ -2369,7 +2369,23 @@ public class TaskGroupService(
             Status    = "done"
         });
 
-        var group = await CreateGroupAsync(task.Title, project, WorkflowType.NewFeature, cancellationToken: ct);
+        // Stage 29 hotfix（零-B）：對齊 Discord 路徑 ExecuteProposalApprovedAsync 的 GroupId 防護——
+        // MockMode /mock 新功能（含提案）會預建 Group 並把 CEO TaskItem 掛上 GroupId，
+        // Dashboard 核准路徑若無條件 CreateGroup，會產生「孤兒 CEO TaskItem 的 Group A」+
+        // 「Kickoff 流程的 Group B」兩筆 TaskGroup，流程追蹤出現重複項。
+        TaskGroup group;
+        if (task.GroupId.HasValue && task.GroupId != Guid.Empty)
+        {
+            var existingGroup = await taskRepo.GetGroupByIdAsync(task.GroupId.Value, ct);
+            if (existingGroup is null)
+                throw new InvalidOperationException($"ProcessProposalApprovedAsync：找不到 TaskGroup（Id={task.GroupId}）");
+            group = existingGroup;
+        }
+        else
+        {
+            group = await CreateGroupAsync(task.Title, project, WorkflowType.NewFeature, cancellationToken: ct);
+        }
+
         await FireStepsAsync(group, [new WorkflowStep(AgentNames.Kickoff)], ct);
     }
 

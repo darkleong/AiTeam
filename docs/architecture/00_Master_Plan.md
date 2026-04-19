@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.5
+> 版本：v7.6
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -122,6 +122,7 @@
 | v7.3 | 2026-04-18 | Hotfix：操作中心日期範圍篩選 `AddDays(1)` 重複（UI 層與資料層各加一次，選 04/17 會撈到 04/18 的資料）；移除 `InteractionCenter.razor.cs` UI 層的 `.AddDays(1)`，日界邏輯集中於 `DashboardTaskService.GetInteractionHistoryAsync` 一處 |
 | v7.4 | 2026-04-18 | Stage 29 規劃書建立（v3.16.0）— Dashboard 操作性收尾 + CEO 指令通道擴充：歸檔報告折疊面板、TaskLog 顯示統一化、Cache Reload 按鈕、系統設定獨立頁、Dashboard 下達指令給 Victoria（含圖片附件，對應 FF 零、零-A、十部分） |
 | v7.5 | 2026-04-19 | Stage 29 實作完成並驗收通過（v3.16.0）：五項全部交付 + FF 零-C（通知卡片「我知道了」按鈕）順手修完；驗收期間五個關鍵修正：Discord 端圖片提示 + `BossCommandLog.Images` camelCase（`8ac7aac`）、**CEO 指令改 fire-and-forget**（`eccf525`，解決 Claude Code subprocess > HttpClient timeout）、`QuickCommandCard` 改用 `MudFileUpload` + 拖移支援（`a4a7921`，修 JSRuntime JS 表達式拋例外）、移除 `MaximumFileCount` 改自行過濾（`39ff81b`）、補前端 MIME 驗證（`1aa8ff3`）；Future_Feature 新增 FF 十五（Dashboard 與 Discord 功能平等）+ FF 十六（Dashboard 錯誤處理 UX 打磨）|
+| v7.6 | 2026-04-19 | Hotfix v3.16.1：零-B（MockMode 新提案流程產生重複 TaskGroup Bug）查明並修復 — Stage 28b 驗收修正只改了 Discord 路徑（`ExecuteProposalApprovedAsync` 有 GroupId 防護），Dashboard 路徑（`TaskGroupService.ProcessProposalApprovedAsync`）無條件 `CreateGroupAsync`，導致從 Dashboard 核准 MockMode 提案時產生兩筆 TaskGroup（一筆孤兒 CEO TaskItem、一筆 Kickoff/Design 流程）；兩處對稱化 GroupId 檢查後修復 |
 
 ---
 
