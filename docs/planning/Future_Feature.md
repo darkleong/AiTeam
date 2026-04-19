@@ -840,6 +840,54 @@ Stage 29 結案後盤點 Agent 執行的可靠性，發現 Q1 / Q2 / Q3 三問�
 
 ---
 
+## 十八、Appeal 對抗紀錄 UI 呈現
+
+> 狀態：🟡 待實作 — 方向已定
+> 提出日期：2026-04-20（Stage 30 驗收時，Christ 問起「對抗資訊有沒有存 DB」時浮現）
+
+### 背景
+
+Stage 23（Review Appeal）與 Stage 24（Dev_plan Appeal）建立了 Agent 之間的對抗/反駁機制，**完整的逐輪 JSON 對話紀錄都落在 DB**：
+
+| 欄位 | 內容 |
+|------|------|
+| `TaskGroup.ReviewAppealLog` | 每輪 Cody 回應 JSON + Vera 重評 JSON + Petra 仲裁 JSON（Markdown）|
+| `TaskGroup.ReviewAppealRoundA` | Review Appeal 輪次計數 |
+| `TaskGroup.DevPlanAppealLog` | 每輪 Cody 反駁 JSON + Petra 重評 JSON（Markdown）|
+| `TaskGroup.DevPlanAppealRoundA` | Dev_plan Appeal 輪次計數 |
+
+**但 Dashboard 完全沒呈現這些欄位**（Grep Dashboard + Shared DTOs 零引用）。老闆只能靠 Bot log 或 SQL 直查才能看到對抗過程。
+
+### 為什麼該做
+
+> 「我的確也想看對抗的過程，這樣未來需要調整 Agent 時，才有資訊可以參考」—— Christ 2026-04-20
+
+對抗紀錄是 AI 團隊透明度與 Agent 調校的關鍵依據：
+- **調整 Agent 行為**：看 Cody 什麼情況會 disagree、Vera 哪些 Critical 判斷會被反駁、Petra 仲裁的偏向——用來調 prompt / 擴 context / 改規則
+- **觀察團隊健康度**：健康對抗（有根據的技術討論）vs 無意義內耗（互相空轉）
+- **追溯異常決策**：為什麼這個 Critical 被撤銷？為什麼 Dev_plan 被打回又放行？
+
+Stage 23/24 設計時重點放在「記錄給程式用」（仲裁時不失憶、給 Dev_fix 參考），沒考慮「呈現給老闆」——這是 Feature Gap，不是 bug。
+
+### 實作方向
+
+1. **`TaskGroupDto` 擴充 4 個欄位**：`ReviewAppealLog` / `ReviewAppealRoundA` / `DevPlanAppealLog` / `DevPlanAppealRoundA`
+2. **Dashboard 流程詳情頁面加折疊面板**（與既有歸檔報告 / 驗收報告 / 測試報告同一區塊）：
+   - 「🗣️ Review Appeal 對抗紀錄」（有資料才顯示）
+   - 「🗣️ Dev_plan Appeal 對抗紀錄」（有資料才顯示）
+   - 內容用 `MudText` 或 Markdown renderer 直接吐 `ReviewAppealLog` / `DevPlanAppealLog` 全文
+3. 無需改 DB / Migration（欄位早已存在）
+
+### 預期成本
+
+S 級：1 個 DTO 改動 + 1 個 UI 折疊面板 × 2（Review + Dev_plan）。主要工作是 Markdown 呈現的排版（JSON code block 顯示要清楚、長文截斷與展開等 UX 細節）。
+
+### 優先級
+
+🟡 中 — 不阻礙流程，但是老闆 dogfooding 與調校 Agent 的基礎工具。Stage 30 上線後對抗資訊量會增加（Cody / Vera / Petra 都帶 codebase 脈絡進場，反駁會更有料），沒 UI 呈現就白白浪費這些資料。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
