@@ -301,9 +301,79 @@ FF 八完成後，Petra 的角色會更重要。她對「這個 TaskGroup 之前
 
 ---
 
+## 實作紀錄（2026-04-20）
+
+### 實作完成項目
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| Helper 抽取 | ✅ | `PrepareClaudeCodeEnv`（同步方法，CloneOrPull + 讀 model/apiKey）+ `BuildAppealContextSectionAsync`（組 TaskPlan/DesignPlan/DevPlan/ImplementationNote + PR diff best-effort）|
+| 環節 1 Cody 修正 Dev_plan | ✅ | `RunCodyDevPlanAppealAsync` → 新開 session，`[APPEAL:dev_plan_cody]` 標籤 |
+| 環節 2 Petra 再評估 Dev_plan | ✅ | `ReassessDevPlanAsync` → 新開 session，`[APPEAL:dev_plan_petra]` 標籤 |
+| 環節 3 Cody 反駁 Review | ✅ | `RunCodyAppealAsync` → 新增 `TaskGroup group` 參數 + 新開 session，`[APPEAL:review_cody]` 標籤 |
+| 環節 4 Vera 再評估 Review | ✅ | `RunVeraAppealAsync` → 新增 `TaskGroup group` 參數 + 新開 session，`[APPEAL:review_vera]` 標籤 |
+| 環節 5 Petra 仲裁 Review Appeal | ✅ | `ArbitrateReviewAppealAsync` → 新增 `TaskGroup group` 參數 + 新開 session，`[APPEAL:review_arbitration]` 標籤 |
+| MockClaudeCodeService 5 種分支 | ✅ | 在 `RunMeetingSessionAsync` 的 agentName switch 之前加 5 個 `[APPEAL:*]` early return |
+| PmAgentService 依賴擴充 | ✅ | 注入 `GitHubService` + `IOptions<GitHubSettings>` |
+| TaskGroupService 3 個呼叫點 | ✅ | line 927/944/1030 補傳 `group` 參數 |
+| 版本號 | ✅ | v3.16.1 → v3.17.0 |
+| 文件更新 | ✅ | `docs/agents/software team/PM_Agent.md`（申訴環節改走 Claude Code CLI）|
+
+### 關鍵設計調整（規劃書建議採納）
+
+1. **`PrepareClaudeCodeEnv` 改為同步方法**（規劃書 Step 2 原寫 async + `await Task.CompletedTask`，Aria review 建議改為同步以誠實反映行為）
+2. **`BuildAppealContextSectionAsync` XML 註解標註 PR diff 跳過邏輯**（Dev_plan Appeal 場景 PR 尚未建立，`TryParsePrNumber` 自動返回 false，避免未來維護者困惑）
+
+### 驗收後修正（2026-04-20）
+
+**commit `c2e088e`**：MockMode 第一次驗收發現 `/mock fail_review` 與 `/mock fail_dev_plan` 只覆蓋 1/5 個新 CLI 分支。
+
+**根因**：`FailScenario` 狀態機提早結束迴圈：
+- `FailScenario` 在第一次觸發後會設為 null
+- 導致第 2 輪起 Cody/Vera/Petra 都走一般 mock 路徑（而非 appeal 路徑）
+- 結果 5 個新 `[APPEAL:*]` 分支只有 1 個被觸發
+
+**修法**：MockClaudeCodeService 依 prompt 內容動態判斷輪次：
+- 含「前幾輪對話紀錄」關鍵字 → 判定為後續輪
+- 含 `"disagree"` → 判定為 Vera 重評場景
+- 含 `[MOCK-FAIL] Dev_plan 不夠詳細` → 判定為 Dev_plan Appeal 場景
+
+修正後 `/mock fail_review` + `/mock fail_dev_plan` 走完整迴圈，5/5 新 CLI 分支全觸發。
+
+### 搭車發現（記入 Future_Feature）
+
+**FF 十八：Appeal 對抗紀錄 UI 呈現**
+- 驗收時 Christ 問「對抗資訊有沒有存 DB」→ 檢查發現 `ReviewAppealLog` / `DevPlanAppealLog` 都完整存在
+- 但 Dashboard 完全沒呈現這些資料
+- Stage 30 上線後對抗資訊量會增加（Cody/Vera/Petra 都帶 codebase 脈絡進場，反駁更有料），沒 UI 呈現會白白浪費資料
+- 🟡 中優先級，記入 Future_Feature 十八
+
+### Mock 下驗收覆蓋情況
+
+**已驗** ✅：
+- `/mock fail_review`：Cody disagree → Vera maintain → 超過 `ReviewAppealMaxRounds` → Petra 仲裁 → 通過。`[APPEAL:review_cody]` / `[APPEAL:review_vera]` / `[APPEAL:review_arbitration]` 3 個分支全觸發
+- `/mock fail_dev_plan`：Petra revise → Cody disagree → Petra 再評 → approve。`[APPEAL:dev_plan_cody]` / `[APPEAL:dev_plan_petra]` 2 個分支全觸發
+- `dotnet build AiTeam.slnx` 零 error
+
+**未驗**（Mock 下無意義，待真實運行觀察）：
+- 真實 Claude Code CLI 的 codebase 讀取效果（Cody/Vera/Petra 實際用 Read/Glob/Grep 驗證推論的品質）
+- Prompt Caching 實際命中率
+- PR diff 取得對 Review Appeal 品質的實際貢獻
+
+**品質觀察計畫**（規劃書已記）：上線後 2~4 週追蹤 Cody/Vera/Petra appeal 品質指標，累積資料後決定是否補「session 摘要」或升級到 Resume。
+
+### 踩坑紀錄
+
+1. **`FailScenario` 狀態機提早結束迴圈** — MockMode 只觸發 1/5 新分支（見「驗收後修正」）
+2. **Octokit `PullRequestFile` 屬性名** — 規劃書預防性提醒「可能需確認版本」，實測 `FileName` 正確（Octokit 9.x）
+3. **同 group 多個 appeal session 的 CloneOrPull suffix 衝突** — `$"appeal-{group.Id:N}"[..12]` 同一個 group 固定，好處是多個 appeal 共用 clone 不重複 clone，壞處是 cleanup 時機要每個方法各自 `finally` 處理（已在 5 個方法的 `finally` 中 `CleanupLocalRepo`）
+
+---
+
 ## 版本歷史
 
 | 日期 | 版本 | 內容 |
 |------|------|------|
 | 2026-04-19 | v0.1 | Aria 撰寫初版（討論稿）；提出 4 個待 Christ 拍板的設計決策 |
 | 2026-04-19 | v1.0 | 4 個設計決策全部定案（方式 A：新開 CLI session + 強化 Prompt）；補 Token 成本估算與品質觀察計畫；狀態由「討論稿」改為「待實作」|
+| 2026-04-20 | v2.0 | Stage 30 實作完成並驗收通過；補「實作紀錄」「驗收後修正」「Mock 驗收覆蓋」「踩坑紀錄」四個章節；搭車發現對抗紀錄存 DB 但 UI 未呈現 → 記入 FF 十八 |
