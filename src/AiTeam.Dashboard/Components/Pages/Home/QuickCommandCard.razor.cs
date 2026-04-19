@@ -33,27 +33,38 @@ public partial class QuickCommandCard
     /// <summary>
     /// MudFileUpload 的 @bind-Files:after 回呼：在 _selectedFiles 更新後檢查上限與大小，
     /// 違規時剔除不合規的檔並顯示錯誤訊息。
+    /// 刻意不設 MudFileUpload.MaximumFileCount — 該屬性超量時會拋例外，改由此處自行過濾。
     /// </summary>
     private void OnFilesValidated()
     {
         _error = null;
         if (_selectedFiles is null) return;
 
-        // 超量（MaximumFileCount 理論上擋住，保險起見再驗）
-        if (_selectedFiles.Count > MaxFiles)
+        var messages = new List<string>();
+
+        // 先剔除過大
+        var oversized = _selectedFiles.Where(f => f.Size > MaxFileSize).ToList();
+        var valid     = _selectedFiles.Where(f => f.Size <= MaxFileSize).ToList();
+
+        if (oversized.Count > 0)
         {
-            _error = $"最多只能附加 {MaxFiles} 張圖片，已保留前 {MaxFiles} 張";
-            _selectedFiles = _selectedFiles.Take(MaxFiles).ToList();
-            return;
+            var names = string.Join("、", oversized.Select(f => $"「{f.Name}」"));
+            messages.Add($"{names} 超過 5MB 限制，已略過");
         }
 
-        // 過大
-        var tooBig = _selectedFiles.FirstOrDefault(f => f.Size > MaxFileSize);
-        if (tooBig is not null)
+        // 再壓到 5 張上限
+        if (valid.Count > MaxFiles)
         {
-            _error = $"「{tooBig.Name}」超過 5MB 限制，已略過";
-            _selectedFiles = _selectedFiles.Where(f => f.Size <= MaxFileSize).ToList();
+            messages.Add($"圖片超過 {MaxFiles} 張上限（共 {valid.Count} 張），已保留前 {MaxFiles} 張");
+            valid = valid.Take(MaxFiles).ToList();
         }
+
+        if (messages.Count > 0)
+            _error = string.Join("；", messages);
+
+        // 只在真的需要時才重新賦值，避免觸發不必要的 re-bind
+        if (valid.Count != _selectedFiles.Count)
+            _selectedFiles = valid.Count == 0 ? null : valid;
     }
 
     private void RemoveFile(int index)
