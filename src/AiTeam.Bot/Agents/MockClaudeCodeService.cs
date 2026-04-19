@@ -116,12 +116,28 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
 
         // Stage 30：申訴環節 mock 分支（優先於 agentName 判斷）
         // FailScenario 失敗路徑已在 PmAgentService 早返回，不會到達此處
+        //
+        // 設計：Mock 分支依 prompt 內容動態判斷輪次，確保 fail_* 場景能走完
+        // 整個迴圈，觸發 maxRounds 上限的仲裁 / 重評路徑，覆蓋所有新 CLI 分支。
         if (prompt.Contains("[APPEAL:review_cody]"))
+        {
+            // Round 2+ 的 Cody Appeal prompt 含「前幾輪對話紀錄」（priorContext），此時持續 disagree
+            // 逼到 maxRounds 上限觸發 Petra 仲裁；Round 1 永不走此分支（FailScenario 早返回）。
+            if (prompt.Contains("前幾輪對話紀錄"))
+                return new ClaudeCodeResult(true,
+                    "{\"items\":[{\"id\":1,\"response\":\"disagree\",\"reason\":\"[MOCK] 仍持反對意見，逼到 maxRounds 觸發 Petra 仲裁\"}]}", 0, "");
             return new ClaudeCodeResult(true,
                 "{\"items\":[{\"id\":1,\"response\":\"agree\",\"reason\":\"[MOCK] 同意修正\"}]}", 0, "");
+        }
         if (prompt.Contains("[APPEAL:review_vera]"))
+        {
+            // Cody 持續 disagree 時維持 Critical（搭配 review_cody 的 Round 2+ 邏輯，讓仲裁被觸發）
+            if (prompt.Contains("\"disagree\""))
+                return new ClaudeCodeResult(true,
+                    "{\"accepted_ids\":[],\"maintained_ids\":[1],\"updated_summary\":\"[MOCK] Vera 維持 Critical，不接受 Cody 反駁\"}", 0, "");
             return new ClaudeCodeResult(true,
                 "{\"accepted_ids\":[],\"maintained_ids\":[],\"updated_summary\":\"[MOCK] Vera 接受 Cody 反駁，全數撤銷 Critical\"}", 0, "");
+        }
         if (prompt.Contains("[APPEAL:review_arbitration]"))
             return new ClaudeCodeResult(true,
                 "{\"decision\":\"support_cody_full\",\"final_criticals\":[],\"reasoning\":\"[MOCK] 支持 Cody 反駁，Critical 全數撤銷\"}", 0, "");
@@ -129,8 +145,15 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
             return new ClaudeCodeResult(true,
                 "{\"position\":\"accept\",\"reasoning\":\"[MOCK] 接受 Petra 意見，依建議修正\"}", 0, "");
         if (prompt.Contains("[APPEAL:dev_plan_petra]"))
+        {
+            // Round 1 的 previousReview 帶有 Petra 初審的 MOCK-FAIL 關鍵字 → 回 revise，推進到 Round 2
+            // 讓 Cody Dev_plan CLI 分支也被觸發；Round 2+ 的 previousReview 不含此字樣 → approve 結束
+            if (prompt.Contains("[MOCK-FAIL] Dev_plan 不夠詳細"))
+                return new ClaudeCodeResult(true,
+                    "{\"decision\":\"revise\",\"summary\":\"[MOCK] 維持修改意見，請 Cody 再次評估\",\"issues\":[{\"severity\":\"blocking\",\"description\":\"[MOCK] 計劃仍需補充\"}],\"revision_instructions\":\"[MOCK] 請再想想\"}", 0, "");
             return new ClaudeCodeResult(true,
                 "{\"decision\":\"approve\",\"summary\":\"[MOCK] 接受 Cody 反駁，核准 Dev_plan\",\"issues\":[],\"revision_instructions\":null}", 0, "");
+        }
 
         // Stage 26：改用 prompt 內容判斷角色（各 prompt builder 均以「你是 {Name}，」開頭）
         // 原本用 sessionId.Split('-').Last() 無法正確匹配純 UUID 格式的 session ID
