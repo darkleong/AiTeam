@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.13
+> 版本：v7.14
 > 建立日期：2026-04-01
 > 最後更新：2026-04-19
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -747,6 +747,99 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 
 ---
 
+## 十七、可靠性補強：失敗重試 + 會議 Crash Recovery
+
+> 狀態：🟡 待實作 — 方案已定，等排入 Stage
+> 提出日期：2026-04-19（Christ 在 Stage 29 結案後盤點三個可靠性問題時釐清）
+
+### 背景
+
+Stage 29 結案後盤點 Agent 執行的可靠性，發現 Q1 / Q2 / Q3 三問答對應的覆蓋情況：
+
+| 問題 | 現況 | 缺口 |
+|------|------|------|
+| Q1 Agent 輸入是否存 DB | ✅ 90%+ 都在 DB（Stage 23~26 的「文件存 DB」成果） | 無 |
+| Q2 失敗任務能否重試 | ⚠️ 技術可行（DB 資訊完整）但無使用者入口 | Dashboard 沒有重試按鈕 |
+| Q3 Bot 重啟後能否恢復 | ⚠️ 走佇列的 Agent 有 Crash Recovery（Stage 27a），但 Kickoff/Design 會議不走佇列 | 會議卡住要人工介入 |
+
+本項目補 Q2、Q3 的缺口。
+
+### A. Dashboard 重試按鈕
+
+**問題**：TaskItem 失敗或取消後，目前沒有便利的重試路徑：
+- Discord 重發 `/task` 會建新 TaskItem，不繼承失敗的
+- 只能改 DB：`UPDATE task_items SET status='queued', queue_status='queued' WHERE id=?` + 喚醒佇列
+
+**實作方式**：
+1. 流程追蹤頁 / 任務列表頁，`failed` / `cancelled` 的 TaskItem 旁新增「🔁 重試」按鈕
+2. 後端新增 `AgentQueueService.RequeueTaskAsync(taskId, ct)`
+   - 驗證當前 status ∈ {failed, cancelled}
+   - `UpdateStatus(task, "queued")` + `SetQueueStatus(task.Id, "queued")`
+   - `WaitForSignal(0)` 喚醒 AgentQueueProcessor 主迴圈
+3. Dashboard 推送 SignalR queue update
+
+**為什麼可以直接重試**：Q1 已保證 Agent 輸入全部在 DB（TaskItem + TaskGroup 所有欄位），不需要重新組裝上下文。
+
+### B. 會議 Crash Recovery（方案 2：TaskGroup 欄位追蹤）
+
+**問題**：Kickoff / Design / Petra 同步會議不走 AgentQueueProcessor，不在 Stage 27a `RecoverStuckTasksAsync` 的掃描範圍，Bot 重啟時中斷的會議會永遠卡在 running。
+
+**方案對比（已討論）**：
+- **方案 1（統一走佇列）**：把會議包裝成 `IAgentExecutor` 進 AgentQueueProcessor。方向正確但範圍大，且牽涉 Semaphore 爭用、`/pause` 語意、executor key 設計等**執行模型層級的抉擇**。屬於 FF 九「PM / 會議走佇列」的議題範圍，不該搭車 Crash Recovery 處理。
+- **方案 2（本方案，TaskGroup 欄位）**：保守補丁，不動執行模型。
+
+**Christ 決策**：採方案 2。理由：「Bot 重啟本來就不常發生，會議重跑（幾分鐘成本）可接受」——Crash Recovery 的痛點是「卡住要人工介入」，自動重跑已足夠解決，不需要為此升級架構。
+
+**實作方式**：
+1. `TaskGroup` Entity 新增 `ActiveMeetingType` 欄位
+   - 型別：`string?`
+   - 值：`"Kickoff"` / `"Design"` / `null`
+2. EF Migration
+3. `TaskGroupService.HandleKickoffAsync` / `HandleDesignAsync` 開始時 set、結束時（成功 / 失敗 / 例外 finally）clear
+4. 新增 `RecoverStuckMeetingsAsync`（Bot 啟動時跑，類似 AgentQueueProcessor 的 Crash Recovery）：
+   - 掃 `ActiveMeetingType != null` 的 TaskGroup
+   - 針對每個 Group 呼叫對應的 `HandleKickoffAsync` / `HandleDesignAsync` 重跑
+   - Log warning 標示數量
+
+### C. 重跑語意：從頭開始，不做中斷點續跑
+
+兩個方案都是**整場重開**——Kickoff 會議跑到第 2 輪被中斷，重跑從第 1 輪開始。
+
+理論上可以讀 `KickoffMeetingLog`（Stage 25a）重建 session 狀態做「續跑」，但：
+- 會議通常幾分鐘內跑完，重開成本可接受
+- 續跑需要 Claude Code CLI session 管理 + 對話歷史重建，實作複雜度高
+- 不值得為低頻事件做這層
+
+明確放棄續跑，此項目不涵蓋。
+
+### D. CEO 對話中斷（不涵蓋）
+
+`ProcessWithClaudeCodeAsync`（Victoria 單次分析請求）重啟中斷影響小——使用者重發指令即可，沒有卡住的狀態。不需特殊處理。
+
+### 涵蓋範圍總結
+
+| 場景 | 處理方式 |
+|------|---------|
+| 失敗 / 取消的 TaskItem | Dashboard「重試」按鈕（A）|
+| Bot 重啟時執行中的普通 Agent 任務 | Stage 27a 既有 `RecoverStuckTasksAsync`（無需改）|
+| Bot 重啟時執行中的會議（Kickoff / Design）| `RecoverStuckMeetingsAsync` 自動重跑整場（B）|
+| Bot 重啟時 Victoria CEO 對話 | 無需處理，使用者重發（D）|
+| Bot 重啟時 Petra 審核（同步跑在 TaskGroupService 內）| 落入會議 Recovery 範圍，或 Petra 直接在重跑會議中被帶起 |
+
+### 不涵蓋的議題（屬於 FF 九，獨立處理）
+
+- 會議在 Dashboard 佇列視覺化可見
+- `/pause Petra` 能攔截會議
+- 統一所有執行入口走佇列
+
+這些是「架構一致性」議題，獨立價值，不因本項目觸發。
+
+### 優先級
+
+🟡 中 — Q2（失敗重試）是 dogfooding 時必然遇到的便利性缺口；Q3（會議 Recovery）屬於低頻但卡住要人工介入的場景。兩者合併實作成本不大（一個新欄位 + Migration + 兩個方法 + 一個按鈕）。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -838,3 +931,4 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 2026-04-19 | v7.11：新增十六（Dashboard 錯誤處理與提示 UX 打磨）— A. MudBlazor 元件內部例外的接住機制（等官方提供 OnValidationError hook 或自建包裝）；B. 錯誤訊息同時顯示 MudAlert + Snackbar（雙通道提示，不依賴使用者視線） |
 | 2026-04-19 | v7.12：Stage 29 結案 — 零（Dashboard 歸檔報告折疊面板）、零-A（TaskLog 顯示統一化）、零-C（通知類互動卡在待處理區 Bug）三項移入已完成項目摘要（對應 Stage 29-1 / 29-2 / 29-5 搭車修，v3.16.0）；零-B（MockMode 重複 TaskGroup Bug）仍待重現保留在待處理區 |
 | 2026-04-19 | v7.13：零-B 查明並修復（v3.16.1 hotfix）— Dashboard 路徑 `ProcessProposalApprovedAsync` 無條件 CreateGroup，Stage 28b 驗收修正只做了 Discord 路徑；加上對稱 GroupId 檢查後從 Dashboard 核准 MockMode 提案也只會產生 1 個 TaskGroup；零-B 移入已完成項目摘要 |
+| 2026-04-19 | v7.14：新增十七（可靠性補強：失敗重試 + 會議 Crash Recovery）— Stage 29 結案後盤點 Q1/Q2/Q3 可靠性三問所釐清的缺口；A. Dashboard 重試按鈕（failed/cancelled TaskItem）；B. 會議 Crash Recovery 採方案 2（TaskGroup.ActiveMeetingType 欄位 + 啟動 hook 重跑，不動執行模型）；Christ 決策「會議重跑可接受」，不追求 FF 九的架構統一；明確放棄中斷點續跑 |
