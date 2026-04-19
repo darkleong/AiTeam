@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.10
+> 版本：v7.11
 > 建立日期：2026-04-01
 > 最後更新：2026-04-19
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -849,6 +849,54 @@ Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#
 
 ---
 
+## 十六、Dashboard 錯誤處理與提示 UX 打磨
+
+> 狀態：⚪ 低優先 — 現行功能可用，屬體驗優化
+> 提出日期：2026-04-19（Christ 於 Stage 29-5 快速下達指令驗收時提出）
+
+### 背景
+
+Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以「夠用就好」的版本實作，列入後續統一打磨：
+
+### A. MudBlazor 元件內部例外的接住機制
+
+**現況**：`MudFileUpload.MaximumFileCount` 超量時會從元件內部拋 `NotifyChange` 例外，Blazor circuit 只能印到 log，使用者看不到上下文。目前採「預防」作法——移除 `MaximumFileCount`、由 `@bind-Files:after` 自行驗證。
+
+**想改善的點**：若 MudBlazor 未來提供 `OnValidationError` 或類似事件，可考慮切回「元件內建驗證 + 我方接住顯示」模式，讓錯誤處理與顯示更集中、不用每個 MudFileUpload 使用點都各自實作驗證邏輯。
+
+**追蹤要素**：
+- MudBlazor GitHub issue / release notes 中是否有新的 error hook
+- 若社群有成熟的 `<ErrorBoundary>` 局部攔截 pattern 可沿用
+- 自己包一層 `ValidatedFileUpload` component 統一管理（若使用點變多時再做）
+
+### B. 錯誤訊息同時顯示 MudAlert + Snackbar
+
+**現況**：快速下達指令卡的違規提示只顯示在送出區上方的 `MudAlert`，使用者若視線在其他地方會錯過。
+
+**想改善的點**：
+- 表單內保留 `MudAlert`（inline，緊貼違規來源）
+- **同時**彈出右下角 `Snackbar`，確保使用者不依賴視線也能注意到
+- 兩者訊息一致，Snackbar 自動消失（3-5 秒）避免干擾
+
+**涵蓋範圍**（未來擴大時考慮）：
+- 快速下達指令卡（首頁）
+- 系統設定頁的「儲存失敗」回饋
+- 操作中心卡片回覆失敗（樂觀鎖衝突 409）
+- Agent 設定 / 規則管理的儲存錯誤
+
+### 實作策略
+
+這不是新功能，是既有訊息機制的統一化。建議在下一次 Dashboard UI 整輪打磨（類似十一的「第五批」）時一起做：
+1. 列出所有顯示錯誤訊息的點
+2. 定義統一的 `DashboardNotificationService`（wrap `ISnackbar` + 元件內 `MudAlert` 呼叫）
+3. 批量改造
+
+### 優先級
+
+⚪ 低 — 不影響正確性，純 UX 改善。Stage 29-5 當下的 inline `MudAlert` 已足夠傳達訊息。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -933,3 +981,4 @@ Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#
 | 2026-04-18 | v7.8：新增零-C（通知類互動卡在待處理區無法消化 Bug）— merge_notify / intervention 用 EmptyActionsJson 但 Status 預設 pending，導致卡片無按鈕可操作；採方案 3（加「我知道了」按鈕），Christ 已確認 |
 | 2026-04-18 | v7.9：四（多 LLM 供應商）大幅擴充 — 加入 CLI 層共存戰略（Gemini CLI 可與 Claude Code 並存、per-Agent 選擇）；修正「Claude Code 綁定」過時論述；加入 1M context 認知澄清；分兩階段實作策略（API 層先行、CLI 層需 spike）；優先級從 🔵 升為 🟡 |
 | 2026-04-19 | v7.10：新增十五（Dashboard 與 Discord 功能平等）— Christ 於 Stage 29-5 驗收時提出核心原則：Discord 可執行的每個指令未來 Dashboard 也都要能觸發；首要子項為 `/mock` Dashboard 化，其餘含 `/pause`、`/stop-all` 等佇列控制 |
+| 2026-04-19 | v7.11：新增十六（Dashboard 錯誤處理與提示 UX 打磨）— A. MudBlazor 元件內部例外的接住機制（等官方提供 OnValidationError hook 或自建包裝）；B. 錯誤訊息同時顯示 MudAlert + Snackbar（雙通道提示，不依賴使用者視線） |

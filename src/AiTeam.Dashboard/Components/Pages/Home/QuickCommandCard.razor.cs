@@ -41,18 +41,27 @@ public partial class QuickCommandCard
         if (_selectedFiles is null) return;
 
         var messages = new List<string>();
+        var valid    = _selectedFiles.ToList();
 
-        // 先剔除過大
-        var oversized = _selectedFiles.Where(f => f.Size > MaxFileSize).ToList();
-        var valid     = _selectedFiles.Where(f => f.Size <= MaxFileSize).ToList();
+        // 非圖片格式（accept 屬性只是 picker hint，拖移時 browser 不看）
+        var nonImage = valid.Where(f => !f.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (nonImage.Count > 0)
+        {
+            var names = string.Join("、", nonImage.Select(f => $"「{f.Name}」"));
+            messages.Add($"{names} 不是有效的圖片格式，已略過");
+            valid = valid.Except(nonImage).ToList();
+        }
 
+        // 過大
+        var oversized = valid.Where(f => f.Size > MaxFileSize).ToList();
         if (oversized.Count > 0)
         {
             var names = string.Join("、", oversized.Select(f => $"「{f.Name}」"));
             messages.Add($"{names} 超過 5MB 限制，已略過");
+            valid = valid.Except(oversized).ToList();
         }
 
-        // 再壓到 5 張上限
+        // 超量
         if (valid.Count > MaxFiles)
         {
             messages.Add($"圖片超過 {MaxFiles} 張上限（共 {valid.Count} 張），已保留前 {MaxFiles} 張");
@@ -62,7 +71,6 @@ public partial class QuickCommandCard
         if (messages.Count > 0)
             _error = string.Join("；", messages);
 
-        // 只在真的需要時才重新賦值，避免觸發不必要的 re-bind
         if (valid.Count != _selectedFiles.Count)
             _selectedFiles = valid.Count == 0 ? null : valid;
     }
