@@ -3,8 +3,8 @@
 > 對應 Future Feature：零、零-A、十（部分）
 > 對應版本：v3.16.0
 > 建立日期：2026-04-18
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-19）
+> 文件版本：v2.0
 
 ---
 
@@ -466,8 +466,70 @@ Victoria 使用 Claude Code CLI（Stage 15），而 Claude Code CLI 支援傳圖
 
 ---
 
+## 實作紀錄（2026-04-18 ~ 2026-04-19）
+
+### 實作完成項目
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| 29-1 歸檔報告折疊面板 | ✅ | `TaskGroup.ArchiveContent`、EF Migration、PipelineView 第七面板、MockMode 補寫 ArchiveContent 供 Dashboard 驗收 |
+| 29-2 TaskLog 顯示統一化 | ✅ | Kickoff/Design/Petra 補寫 running + done/failed；Dev/QA/Reviewer/Doc MockMode 統一由 Processor 寫 final done；消除 QA/Reviewer 過時 running 殘影 |
+| 29-3 Dashboard Cache Reload 按鈕 | ✅ | Bot `/internal/reload-cache`（scope: rules/agents/all）、規則管理頁 + 系統設定頁「套用變更」按鈕（`CloudSync` icon） |
+| 29-4 系統設定獨立頁 | ✅ | `/system-settings` 新頁、NavMenu 連結、跳過 CEO 派工確認 + Mock Mode + CEO 指令預設頻道 + Christ Discord User ID、`IsValidSnowflakeId` helper 共用 |
+| 29-5 Dashboard 下達指令給 Victoria | ✅ | `BossCommandLog` Entity + Migration、`ClaudeCodeService.RunVictoriaAsync` 圖片支援（stdin stream-json）、`CommandHandler.HandleCeoResponseFromDashboardAsync`（reply/propose/delegate/cancel 四路徑）、Bot/Dashboard 雙層 API、`QuickCommandCard` MudFileUpload + 拖移支援 |
+| FF 零-C 通知卡片「我知道了」按鈕 | ✅ | 29-5 搭車修 — `InteractionService.NotifyActionsJson`、`merge_notify`/`intervention`/`ceo_reply` 三處統一套用、`InteractionProcessor.GetActionLabel` 補 `ack` case |
+
+### 關鍵設計決策
+
+1. **`triggeredBy` 參數化重構**（29-5）— `ShowProposalAsync` / `ShowDirectAgentConfirmAsync` 加 `triggeredBy` 參數，Dashboard 路徑直接複用這兩個私有方法（不必暴露也不必複製），`TaskItem.TriggeredBy` 正確反映來源。
+2. **Fire-and-forget 架構**（29-5 驗收修正）— Bot `CeoCommandController` 驗證 + 存 `BossCommandLog` 後立即回 `202 Accepted`；Victoria 呼叫 + Discord 路由於 `Task.Run` 背景執行，新 DI scope + `CancellationToken.None`；解決 Claude Code subprocess 動輒數十秒至數分鐘、Dashboard HttpClient 30s timeout 的架構衝突。
+3. **圖片 stream-json stdin**（29-5）— `--input-format stream-json --output-format stream-json --verbose`，stdin 寫入 `{"type":"user","message":{...}}` 後 close；`ParseJsonOutput` 找 `"type":"result"` 行邏輯仍可用，不必改。
+4. **`NotifyActionsJson` 共用模式**（29-5 + FF 零-C）— 單一 `ack` 動作覆蓋三種通知類互動，`ProcessBossResponseAsync` default 分支無動作（純 UI 確認），「我知道了」按鈕解決 Stage 28a 遺留的「通知卡片卡在待處理區」bug。
+5. **Model 選擇校準**（Stage 29 回顧）— 29-1~29-4 用 Sonnet 200K 順利；29-5 規模大（20 檔）+ spike + 跨 Stage 28b 脈絡 + 雙通道設計判斷，改用 Opus 1M，抓住關鍵設計方向（propose 保留 Discord 按鈕、reply 建 BossInteraction）。
+
+### 驗收後修正（2026-04-18 ~ 2026-04-19）
+
+| Commit | 修正內容 | Why |
+|--------|---------|-----|
+| `8ac7aac` | Discord 端圖片提示 `📎 （附 N 張圖片）` + `BossCommandLog.Images` camelCase 序列化 | 雙通道對等、註解與實際序列化格式一致 |
+| `eccf525` | **CEO 指令改 fire-and-forget**（驗收首次測試時 Dashboard 穩死 30s timeout） | Claude Code subprocess 處理時間 > HttpClient timeout |
+| `a4a7921` | `QuickCommandCard` 改用 `MudFileUpload`（原本 `InputFile` + `JSRuntime.InvokeVoidAsync("getElementById.click")` 拋例外） | JSRuntime 把 JS 表達式當函數名找；順勢補拖移支援 |
+| `39ff81b` | 移除 `MaximumFileCount` 改自行過濾（超量時元件會拋 `NotifyChange` 例外） | MudBlazor 元件內部例外無法接住，改「預防」作法 |
+| `1aa8ff3` | 前端補 MIME 驗證擋非圖片檔 + 記錄 FF 十六 | `accept` 屬性只是檔案選擇器的 hint，拖移時 browser 不檢查 |
+
+### 踩坑紀錄
+
+1. **`JSRuntime.InvokeVoidAsync("document.getElementById(...).click")`** — 不能用 JS 表達式當函數名，會拋 unhandled exception 中斷 Blazor circuit。改用 MudBlazor 原生元件或 `<label for>` 模式。
+2. **`MudFileUpload.MaximumFileCount` 超量拋例外** — 不是過濾，是拋 `NotifyChange` exception。Blazor circuit 接不到元件內部例外，只能採「預防」作法（移除屬性 + `@bind-Files:after` 自行驗證）。
+3. **`accept` 屬性只是 picker hint** — 拖移時 browser 完全不檢查 MIME，前端 MIME 驗證必須在 code-behind 做（`ContentType.StartsWith("image/")`）。
+4. **Fire-and-forget 的 `CancellationToken` 處理** — 不能用 HTTP request 的 CancellationToken（response 一回就會被 cancel），必須用 `CancellationToken.None` + 新 DI scope；例外必須 try-catch 吃掉（Task.Run 無人等候，throw 會變 unobserved task exception）。
+5. **Docker 容器 Up N hours 不等於沒部署** — 檢查容器 Up 時間 vs commit 時間要對齊；有時舊容器跑新 code（docker compose up 未觸發 rebuild），有時相反。
+
+### Mock 下驗收覆蓋
+
+**已驗**：
+- Dashboard 指令 → 202 → 背景 Victoria → Discord 訊息 + `ceo_reply` BossInteraction 出現在 /interactions
+- 「我知道了」按鈕 + 雙通道同步（Dashboard 回覆 → Discord 顯示「已知道了」）
+- 提案確認 / Kickoff 確認從 Dashboard 按
+- 全流程完成 `merge_notify` 卡片有「我知道了」按鈕（零-C 生效）
+- 前端圖片驗證：6 張超量 / > 5MB / 非圖片拖移擋下
+
+**未驗（Mock 下無意義，待真實 Victoria 驗收）**：
+- Victoria 真看懂圖片內容
+- Session 連續性（Dashboard ↔ Discord 共用對話歷史）
+- `TaskItem.TriggeredBy = "Dashboard"`（Mock Victoria 永遠 reply，走不到 propose/delegate）
+- Design 確認按鈕（Mock Petra 永遠 consensus，走不到 escalate）
+
+### Future_Feature 追加（Stage 29 期間產出）
+
+- **FF 十五**：Dashboard 與 Discord 功能平等（Christ 在 29-5 驗收時提出核心原則）
+- **FF 十六**：Dashboard 錯誤處理與提示 UX 打磨（A. MudBlazor 元件內部例外的接住機制；B. MudAlert + Snackbar 雙通道提示）
+
+---
+
 ## 版本歷史
 
 | 日期 | 版本 | 內容 |
 |------|------|------|
 | 2026-04-18 | v1.0 | Aria 撰寫初版規劃書，5 項（29-1 ~ 29-5），v3.16.0 |
+| 2026-04-19 | v2.0 | Stage 29 實作完成並驗收通過；補充「實作紀錄」「驗收後修正」「踩坑」「Mock 驗收覆蓋」四個章節；順手修 FF 零-C、新增 FF 十五 / 十六 |

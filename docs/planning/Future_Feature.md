@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.11
+> 版本：v7.12
 > 建立日期：2026-04-01
 > 最後更新：2026-04-19
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -46,114 +46,6 @@ Discord 對 Victoria 下 `/mock 新功能（含提案）`，Victoria 產生提�
 ### 優先級
 
 🔴 高 — 不影響功能正確性，但會造成流程追蹤資料混亂，影響 Dashboard 可觀察性；MockMode 是驗收主要管道，問題會被反覆踩到
-
----
-
-## 零-C、通知類互動卡在待處理區無法消化（Bug）
-
-> 狀態：🟡 待修 — 方案已定，等排入 hotfix 或下個 Stage
-> 發現日期：2026-04-18（Christ 使用時回報）
-
-### 症狀
-
-`/mock` 流程跑完後，操作中心「待處理」區出現「全流程完成」卡片（互動類型 `merge_notify`），但卡片上**沒有任何按鈕**可以操作，導致使用者無法將其標記為已處理。`intervention`（Boss 介入）類型有相同問題。
-
-### 根本原因
-
-Stage 28a 設計 `BossInteraction` 時，`merge_notify` 和 `intervention` 這兩類「通知型」互動用了 `EmptyActionsJson = "[]"`（無動作），但建立時 Status 預設為 `"pending"`，因此：
-
-- 會出現在「待處理」區（status = pending 的篩選條件）
-- InteractionCard 渲染時沒有按鈕可顯示
-- Christ 無法主動標記為已處理，卡片永久停留
-
-參考 [TaskGroupService.cs:500-514](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs)（merge_notify）和 line 535（intervention）。
-
-### 決議方案（方案 3 — UI 加「我知道了」按鈕）
-
-Christ 已確認採用方案 3：
-
-替通知類互動的 `AvailableActionsJson` 加入單一動作：
-
-```csharp
-public const string NotifyActionsJson = """[{"id":"ack","label":"我知道了","color":"default","requiresInput":false}]""";
-```
-
-- `merge_notify` 改用 `NotifyActionsJson`（可再用 "前往 PR" 之類的 Icon 按鈕搭配）
-- `intervention` 改用 `NotifyActionsJson`（標籤可改「已處理」）
-
-點下去走既有的 `InteractionRespondService.RespondAsync` 流程，標為 responded、進已處理區。Bot 端 `InteractionProcessor` 看到 `action=ack` 不需要後續處理（純 UI 確認）。
-
-### 考慮過的替代方案
-
-- **方案 1**：`merge_notify` 建立時直接設 `Status = "notified"`。缺點：繞過「待處理」機制，但使用者又少了確認看過的主控權。
-- **方案 2**：通知類根本不寫 BossInteraction，改走獨立「通知 Feed」。缺點：工程量大，Discord 那邊也要同步。
-
-### 優先級
-
-🟡 中 — 不影響功能正確性，但每次 MockMode 流程跑完都會累積無法消化的卡片，讓操作中心「待處理」區失真。是使用者體驗障礙，非資料正確性問題。
-
-### 臨時處理
-
-現有卡在待處理區的項目，可直接跑 SQL 手動消化：
-
-```sql
-UPDATE boss_interactions 
-SET status = 'responded', 
-    response_action = 'dismissed',
-    response_source = 'manual',
-    responded_at = NOW()
-WHERE interaction_type IN ('merge_notify', 'intervention') 
-  AND status = 'pending';
-```
-
----
-
-## 零-A、任務列表右側 Log 顯示統一化
-
-> 狀態：🟡 待確認 — 需逐一核查每種 Agent 任務的 Log 顯示行為
-
-### 背景
-
-在「任務列表」頁面點擊任務後，右側會展開顯示 TaskLog 記錄。目前各 Agent 的 MockMode 寫 Log 風格不一致：
-
-- **QA / Reviewer**：寫兩筆 Log（`running` → `done`），完成後點開仍看到第一筆「執行中」
-- **Doc**：只寫一筆 `done` Log，第一筆即「完成」
-- **PM（Petra）/ Design**：未寫任何 TaskLog，顯示「尚無 Log 記錄」
-
-### 待確認項目
-
-1. 逐一確認每種 Agent 任務（Kickoff / Design / Dev / Reviewer / PM / QA / Doc）右側顯示的 Log 內容與期望是否一致
-2. 決定統一規格：所有 Agent 要不要都補 `running` Log？或 PM / Design 是否要補寫 TaskLog？
-3. 若有不一致的 Agent，逐一修正 MockMode 的 Log 寫入邏輯
-
-### 優先級
-
-🟡 中優先級 — 不影響流程正確性，但影響 Dashboard 可觀察性
-
----
-
-## 零、Dashboard 歸檔報告折疊面板
-
-> 狀態：🟡 待實作 — 技術條件已釐清，預計納入下個 Stage
-
-### 背景
-
-Pipeline View 的流程文件折疊面板（Stage 26 追加）目前顯示：提案書、任務計劃書、設計規劃書、實作計劃書、驗收報告、測試報告，共六份文件。
-
-**歸檔報告**（Sage 產出的 `docs/archive/pr{N}-archive.md`）目前只寫入 Git 檔案，沒有存回 DB，所以 Dashboard 無法顯示。
-
-### 實作方式
-
-1. `TaskGroup` Entity 新增 `ArchiveContent string?` 欄位
-2. 新增 EF Core Migration
-3. `DocAgentService` 完成後，將歸檔報告全文存入 `TaskGroup.ArchiveContent`
-4. `TaskGroupDto` 新增 `ArchiveContent` 欄位
-5. `DashboardTaskService` 三個 LINQ 投影補上此欄位
-6. `PipelineView.razor` 新增 `📦 歸檔報告（Sage）` 折疊面板
-
-### 優先級
-
-🟡 中優先級 — 小工程，可納入下個 Stage 一起做
 
 ---
 
@@ -927,6 +819,9 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 十五 | 版本號集中管理（Directory.Build.props） | ✅ Stage 26（2026-04-14）— src/Directory.Build.props 集中四項版本屬性，Bot/Dashboard csproj 移除個別 Version 標籤，CI/CD + CLAUDE.md 同步更新 |
 | 十（核心） | Agent 任務序列（Per-Agent Queue + 狀態管理 + Dashboard 視覺化） | ✅ Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）— DB-as-Queue、AgentQueueProcessor、Agent 狀態管理（Active/Paused/Stopped）、Discord 五指令、Dashboard 佇列視覺化 |
 | 九 | Dashboard 雙向操作中心（Discord + Dashboard 雙通道） | ✅ Stage 28a（v3.14.0）+ Stage 28b（v3.15.0）— BossInteraction Entity、8 個確認點 pure additive 寫入、樂觀鎖先到先贏、InteractionProcessor 輪詢、操作中心 /interactions、文字輸入互動（修改意見）、歷史紀錄篩選 |
+| 零 | Dashboard 歸檔報告折疊面板 | ✅ Stage 29-1（v3.16.0）— `TaskGroup.ArchiveContent` 欄位 + EF Migration、DocAgentService 完成後寫入 DB、PipelineView 第七折疊面板、MockMode 也補寫供 Dashboard 驗收 |
+| 零-A | 任務列表右側 Log 顯示統一化 | ✅ Stage 29-2（v3.16.0）— Kickoff/Design/Petra 補 running + done/failed、Dev/QA/Reviewer/Doc MockMode 統一由 Processor 寫 final done、消除過時 running 殘影 |
+| 零-C | 通知類互動卡在待處理區無法消化（Bug） | ✅ Stage 29-5 搭車修（v3.16.0）— `InteractionService.NotifyActionsJson`「我知道了」按鈕；`merge_notify` / `intervention` / `ceo_reply` 三處統一套用；`ProcessBossResponseAsync` default 分支無動作（純 UI 確認） |
 
 ---
 
@@ -982,3 +877,4 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 2026-04-18 | v7.9：四（多 LLM 供應商）大幅擴充 — 加入 CLI 層共存戰略（Gemini CLI 可與 Claude Code 並存、per-Agent 選擇）；修正「Claude Code 綁定」過時論述；加入 1M context 認知澄清；分兩階段實作策略（API 層先行、CLI 層需 spike）；優先級從 🔵 升為 🟡 |
 | 2026-04-19 | v7.10：新增十五（Dashboard 與 Discord 功能平等）— Christ 於 Stage 29-5 驗收時提出核心原則：Discord 可執行的每個指令未來 Dashboard 也都要能觸發；首要子項為 `/mock` Dashboard 化，其餘含 `/pause`、`/stop-all` 等佇列控制 |
 | 2026-04-19 | v7.11：新增十六（Dashboard 錯誤處理與提示 UX 打磨）— A. MudBlazor 元件內部例外的接住機制（等官方提供 OnValidationError hook 或自建包裝）；B. 錯誤訊息同時顯示 MudAlert + Snackbar（雙通道提示，不依賴使用者視線） |
+| 2026-04-19 | v7.12：Stage 29 結案 — 零（Dashboard 歸檔報告折疊面板）、零-A（TaskLog 顯示統一化）、零-C（通知類互動卡在待處理區 Bug）三項移入已完成項目摘要（對應 Stage 29-1 / 29-2 / 29-5 搭車修，v3.16.0）；零-B（MockMode 重複 TaskGroup Bug）仍待重現保留在待處理區 |
