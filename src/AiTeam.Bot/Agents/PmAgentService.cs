@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AiTeam.Bot.Configuration;
+using AiTeam.Bot.GitHub;
 using AiTeam.Data;
+using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Agents;
 
@@ -14,14 +17,19 @@ namespace AiTeam.Bot.Agents;
 /// - ReviewRosa / ReviewDemi / ReviewDevPlan：Claude Code RunReadOnlyAsync（帶 codebase context）
 ///   若 Claude Code 失敗，fallback 到 LLM 直呼叫
 /// - ReviewVera：LLM 直呼叫（只看 review 報告，不需 codebase）
+/// - 申訴環節（Stage 30）：RunMeetingSessionAsync（新 session，唯讀工具）
 /// </summary>
 public class PmAgentService(
     LlmProviderFactory providerFactory,
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
+    GitHubService gitHubService,
+    IOptions<GitHubSettings> gitHubSettings,
     ILogger<PmAgentService> logger)
 {
     private const string AgentName = "PM";
+
+    private readonly GitHubSettings _gitHub = gitHubSettings.Value;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -110,6 +118,106 @@ public class PmAgentService(
     {
         var prompt = BuildVeraReviewPrompt(taskTitle, reviewBody);
         return await RunLlmDirectAsync(prompt, ct);
+    }
+
+    // ────────────── Stage 30：申訴共用輔助方法 ──────────────
+
+    /// <summary>
+    /// Clone/Pull repo 並讀取 model + API key，供 5 個申訴環節共用。
+    /// CloneOrPull 失敗時 workingDir 回傳空字串（各方法的 finally 不會清理空路徑）。
+    /// </summary>
+    private (string workingDir, string model, string apiKey) PrepareClaudeCodeEnv(
+        TaskGroup group, string agentConfigKey)
+    {
+        var model  = configuration[$"Agents:{agentConfigKey}:Model"]
+                  ?? configuration["Anthropic:DefaultModel"]
+                  ?? "claude-haiku-4-5";
+        var apiKey = configuration["Anthropic:ApiKey"] ?? "";
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+        var workingDir = "";
+        try
+        {
+            workingDir = gitHubService.CloneOrPull(owner, repo, $"appeal-{group.Id:N}"[..12]);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "PrepareClaudeCodeEnv CloneOrPull 失敗，workingDir 為空（group={Id}）", group.Id);
+        }
+        return (workingDir, model, apiKey);
+    }
+
+    /// <summary>
+    /// 組建「任務背景脈絡」區塊，供 5 個申訴 prompt 共用。
+    /// 含 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff（best-effort）。
+    /// Dev_plan Appeal 場景通常尚未建 PR，TryParsePrNumber 會自動返回 false 跳過。
+    /// </summary>
+    private async Task<string> BuildAppealContextSectionAsync(TaskGroup group)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("## 任務背景脈絡（供閱讀 codebase 時參考）");
+        sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(group.TaskPlan))
+        {
+            sb.AppendLine("### TaskPlan（Kickoff 會議產出）");
+            sb.AppendLine(group.TaskPlan.Length > 2000 ? group.TaskPlan[..2000] + "\n...（截斷）" : group.TaskPlan);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(group.DesignPlan))
+        {
+            sb.AppendLine("### DesignPlan（設計規劃書）");
+            sb.AppendLine(group.DesignPlan.Length > 2000 ? group.DesignPlan[..2000] + "\n...（截斷）" : group.DesignPlan);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(group.DevPlan))
+        {
+            sb.AppendLine("### DevPlan（實作計畫書）");
+            sb.AppendLine(group.DevPlan.Length > 2000 ? group.DevPlan[..2000] + "\n...（截斷）" : group.DevPlan);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(group.ImplementationNote))
+        {
+            sb.AppendLine("### ImplementationNote（Cody 實作自述）");
+            sb.AppendLine(group.ImplementationNote.Length > 2000 ? group.ImplementationNote[..2000] + "\n...（截斷）" : group.ImplementationNote);
+            sb.AppendLine();
+        }
+
+        if (TryParsePrNumber(group.DevPrUrl, out var prNumber))
+        {
+            try
+            {
+                var owner = _gitHub.Owner;
+                var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+                var files = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
+                if (files.Count > 0)
+                {
+                    sb.AppendLine($"### PR #{prNumber} 變更摘要（{files.Count} 個檔案）");
+                    foreach (var f in files.Take(15))
+                    {
+                        sb.AppendLine($"**{f.FileName}** (+{f.Additions}/-{f.Deletions})");
+                        if (!string.IsNullOrWhiteSpace(f.Patch))
+                            sb.AppendLine($"```diff\n{(f.Patch.Length > 400 ? f.Patch[..400] + "\n..." : f.Patch)}\n```");
+                    }
+                    sb.AppendLine();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "BuildAppealContextSectionAsync 取得 PR diff 失敗（PR#{N}），略過", prNumber);
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool TryParsePrNumber(string? prUrl, out int prNumber)
+    {
+        prNumber = 0;
+        if (string.IsNullOrWhiteSpace(prUrl)) return false;
+        var parts = prUrl.TrimEnd('/').Split('/');
+        return parts.Length > 0 && int.TryParse(parts[^1], out prNumber);
     }
 
     // ────────────── Claude Code 執行（主路徑）──────────────
@@ -471,10 +579,11 @@ public class PmAgentService(
     // ────────────── 23-1：Review Appeal ──────────────
 
     /// <summary>
-    /// 模擬 Cody 針對 Vera Critical Issues 的逐條回應（agree / disagree + 具體理由）。
+    /// Stage 30：Cody 針對 Vera Critical Issues 的逐條回應（Claude Code CLI，唯讀工具）。
     /// 第二輪起附上累計對話紀錄，讓 Cody 只針對剩餘 criticals 回應。
     /// </summary>
     public async Task<CodyAppeal> RunCodyAppealAsync(
+        TaskGroup group,
         string reviewBody,
         string taskTitle,
         IReadOnlyList<int> remainingCriticalIds,
@@ -492,27 +601,41 @@ public class PmAgentService(
             return new CodyAppeal(disagreeItems);
         }
 
-        var prompt       = BuildCodyAppealPrompt(reviewBody, taskTitle, remainingCriticalIds, priorContext);
-        var provider     = providerFactory.Create(AgentName);
-        var systemPrompt = BuildCodyAppealSystemPrompt();
+        var context        = await BuildAppealContextSectionAsync(group);
+        var userPrompt     = BuildCodyAppealPrompt(reviewBody, taskTitle, remainingCriticalIds, priorContext);
+        var combinedPrompt = $"[APPEAL:review_cody]\n{BuildCodyAppealSystemPrompt()}\n\n---\n\n{context}\n\n{userPrompt}";
+        var sessionId      = Guid.NewGuid().ToString();
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var (workingDir, model, apiKey) = PrepareClaudeCodeEnv(group, "Dev");
+        try
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var response = await provider.CompleteAsync(systemPrompt, prompt, ct);
-                var appeal   = TryParseCodyAppeal(response.Content);
-                if (appeal is not null)
+                try
                 {
-                    logger.LogInformation("Cody Appeal 解析成功（{Count} 項回應）", appeal.Items.Count);
-                    return appeal;
+                    var result = await claudeCodeService.RunMeetingSessionAsync(
+                        workingDir, sessionId, combinedPrompt, model, apiKey,
+                        isFirstMessage: true, maxTurns: 10,
+                        allowedTools: ["Glob", "Grep", "Read"], ct);
+                    var appeal = TryParseCodyAppeal(result.Output);
+                    if (appeal is not null)
+                    {
+                        logger.LogInformation("Cody Appeal 解析成功（{Count} 項回應）", appeal.Items.Count);
+                        return appeal;
+                    }
+                    logger.LogWarning("Cody Appeal 回應解析失敗（第 {Attempt} 次）", attempt);
                 }
-                logger.LogWarning("Cody Appeal 回應解析失敗（第 {Attempt} 次）", attempt);
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "RunCodyAppealAsync CLI 呼叫失敗（第 {Attempt} 次）", attempt);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "RunCodyAppealAsync LLM 呼叫失敗（第 {Attempt} 次）", attempt);
-            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(workingDir))
+                try { gitHubService.CleanupLocalRepo(workingDir); }
+                catch (Exception ex) { logger.LogWarning(ex, "RunCodyAppealAsync cleanup 失敗"); }
         }
 
         logger.LogError("RunCodyAppealAsync 失敗，fallback agree all");
@@ -523,9 +646,10 @@ public class PmAgentService(
     }
 
     /// <summary>
-    /// 模擬 Vera 基於程式碼事實重新評估 Cody 反駁的 disagree 項目。
+    /// Stage 30：Vera 基於程式碼事實重新評估 Cody 反駁（Claude Code CLI，唯讀工具）。
     /// </summary>
     public async Task<VeraAppealResponse> RunVeraAppealAsync(
+        TaskGroup group,
         string reviewBody,
         string codyAppealJson,
         CancellationToken ct = default)
@@ -538,29 +662,43 @@ public class PmAgentService(
             return new VeraAppealResponse([], [1], "[MOCK-FAIL] Vera 審查架構後確認：此問題不在 global handler 涵蓋範圍內，屬必修項目。");
         }
 
-        var prompt       = BuildVeraAppealPrompt(reviewBody, codyAppealJson);
-        var provider     = providerFactory.Create(AgentName);
-        var systemPrompt = BuildVeraAppealSystemPrompt();
+        var context        = await BuildAppealContextSectionAsync(group);
+        var userPrompt     = BuildVeraAppealPrompt(reviewBody, codyAppealJson);
+        var combinedPrompt = $"[APPEAL:review_vera]\n{BuildVeraAppealSystemPrompt()}\n\n---\n\n{context}\n\n{userPrompt}";
+        var sessionId      = Guid.NewGuid().ToString();
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var (workingDir, model, apiKey) = PrepareClaudeCodeEnv(group, "Reviewer");
+        try
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var response     = await provider.CompleteAsync(systemPrompt, prompt, ct);
-                var veraResponse = TryParseVeraAppealResponse(response.Content);
-                if (veraResponse is not null)
+                try
                 {
-                    logger.LogInformation(
-                        "Vera Appeal 重評完成（接受 {AcceptCount} 項，維持 {MaintainCount} 項）",
-                        veraResponse.AcceptedIds.Count, veraResponse.MaintainedIds.Count);
-                    return veraResponse;
+                    var result       = await claudeCodeService.RunMeetingSessionAsync(
+                        workingDir, sessionId, combinedPrompt, model, apiKey,
+                        isFirstMessage: true, maxTurns: 10,
+                        allowedTools: ["Glob", "Grep", "Read"], ct);
+                    var veraResponse = TryParseVeraAppealResponse(result.Output);
+                    if (veraResponse is not null)
+                    {
+                        logger.LogInformation(
+                            "Vera Appeal 重評完成（接受 {AcceptCount} 項，維持 {MaintainCount} 項）",
+                            veraResponse.AcceptedIds.Count, veraResponse.MaintainedIds.Count);
+                        return veraResponse;
+                    }
+                    logger.LogWarning("Vera Appeal 回應解析失敗（第 {Attempt} 次）", attempt);
                 }
-                logger.LogWarning("Vera Appeal 回應解析失敗（第 {Attempt} 次）", attempt);
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "RunVeraAppealAsync CLI 呼叫失敗（第 {Attempt} 次）", attempt);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "RunVeraAppealAsync LLM 呼叫失敗（第 {Attempt} 次）", attempt);
-            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(workingDir))
+                try { gitHubService.CleanupLocalRepo(workingDir); }
+                catch (Exception ex) { logger.LogWarning(ex, "RunVeraAppealAsync cleanup 失敗"); }
         }
 
         logger.LogError("RunVeraAppealAsync 失敗，fallback 維持所有 critical");
@@ -568,36 +706,51 @@ public class PmAgentService(
     }
 
     /// <summary>
-    /// Petra 仲裁 Cody-Vera 爭議，決定最終 Critical Issues 清單。
+    /// Stage 30：Petra 仲裁 Cody-Vera 爭議（Claude Code CLI，唯讀工具）。
     /// </summary>
     public async Task<AppealArbitration> ArbitrateReviewAppealAsync(
+        TaskGroup group,
         string reviewBody,
         string appealLog,
         CancellationToken ct = default)
     {
-        var prompt       = BuildArbitrationPrompt(reviewBody, appealLog);
-        var provider     = providerFactory.Create(AgentName);
-        var systemPrompt = BuildArbitrationSystemPrompt();
+        var context        = await BuildAppealContextSectionAsync(group);
+        var userPrompt     = BuildArbitrationPrompt(reviewBody, appealLog);
+        var combinedPrompt = $"[APPEAL:review_arbitration]\n{BuildArbitrationSystemPrompt()}\n\n---\n\n{context}\n\n{userPrompt}";
+        var sessionId      = Guid.NewGuid().ToString();
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var (workingDir, model, apiKey) = PrepareClaudeCodeEnv(group, "PM");
+        try
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var response    = await provider.CompleteAsync(systemPrompt, prompt, ct);
-                var arbitration = TryParseArbitration(response.Content);
-                if (arbitration is not null)
+                try
                 {
-                    logger.LogInformation(
-                        "Petra 仲裁完成：{Decision}，最終 {Count} 個 Critical",
-                        arbitration.Decision, arbitration.FinalCriticals.Count);
-                    return arbitration;
+                    var result      = await claudeCodeService.RunMeetingSessionAsync(
+                        workingDir, sessionId, combinedPrompt, model, apiKey,
+                        isFirstMessage: true, maxTurns: 10,
+                        allowedTools: ["Glob", "Grep", "Read"], ct);
+                    var arbitration = TryParseArbitration(result.Output);
+                    if (arbitration is not null)
+                    {
+                        logger.LogInformation(
+                            "Petra 仲裁完成：{Decision}，最終 {Count} 個 Critical",
+                            arbitration.Decision, arbitration.FinalCriticals.Count);
+                        return arbitration;
+                    }
+                    logger.LogWarning("Petra 仲裁回應解析失敗（第 {Attempt} 次）", attempt);
                 }
-                logger.LogWarning("Petra 仲裁回應解析失敗（第 {Attempt} 次）", attempt);
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "ArbitrateReviewAppealAsync CLI 呼叫失敗（第 {Attempt} 次）", attempt);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "ArbitrateReviewAppealAsync LLM 呼叫失敗（第 {Attempt} 次）", attempt);
-            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(workingDir))
+                try { gitHubService.CleanupLocalRepo(workingDir); }
+                catch (Exception ex) { logger.LogWarning(ex, "ArbitrateReviewAppealAsync cleanup 失敗"); }
         }
 
         logger.LogError("ArbitrateReviewAppealAsync 失敗，fallback support_vera");
@@ -955,7 +1108,7 @@ public class PmAgentService(
     // ────────────── 24-2：Dev_plan Appeal ──────────────
 
     /// <summary>
-    /// 模擬 Cody 針對 Petra 的 Dev_plan revise 決定發起反駁（或接受）。
+    /// Stage 30：Cody 針對 Petra 的 Dev_plan revise 決定發起反駁（Claude Code CLI，唯讀工具）。
     /// </summary>
     public async Task<CodyDevPlanAppeal> RunCodyDevPlanAppealAsync(
         TaskGroup group,
@@ -972,27 +1125,41 @@ public class PmAgentService(
                 "[MOCK-FAIL] 計劃書中已有錯誤處理章節（見第 3.2 節），回滾計劃透過 DB Transaction 保證，不需額外補充。");
         }
 
-        var prompt       = BuildCodyDevPlanAppealPrompt(group, petraReview, priorContext);
-        var provider     = providerFactory.Create(AgentName);
-        var systemPrompt = BuildCodyDevPlanAppealSystemPrompt();
+        var context        = await BuildAppealContextSectionAsync(group);
+        var userPrompt     = BuildCodyDevPlanAppealPrompt(group, petraReview, priorContext);
+        var combinedPrompt = $"[APPEAL:dev_plan_cody]\n{BuildCodyDevPlanAppealSystemPrompt()}\n\n---\n\n{context}\n\n{userPrompt}";
+        var sessionId      = Guid.NewGuid().ToString();
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var (workingDir, model, apiKey) = PrepareClaudeCodeEnv(group, "Dev");
+        try
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var response = await provider.CompleteAsync(systemPrompt, prompt, ct);
-                var appeal   = TryParseCodyDevPlanAppeal(response.Content);
-                if (appeal is not null)
+                try
                 {
-                    logger.LogInformation("Cody Dev_plan Appeal 完成（第 {Attempt} 次）：{Position}", attempt, appeal.Position);
-                    return appeal;
+                    var result = await claudeCodeService.RunMeetingSessionAsync(
+                        workingDir, sessionId, combinedPrompt, model, apiKey,
+                        isFirstMessage: true, maxTurns: 10,
+                        allowedTools: ["Glob", "Grep", "Read"], ct);
+                    var appeal = TryParseCodyDevPlanAppeal(result.Output);
+                    if (appeal is not null)
+                    {
+                        logger.LogInformation("Cody Dev_plan Appeal 完成（第 {Attempt} 次）：{Position}", attempt, appeal.Position);
+                        return appeal;
+                    }
+                    logger.LogWarning("Cody Dev_plan Appeal 解析失敗（第 {Attempt} 次）", attempt);
                 }
-                logger.LogWarning("Cody Dev_plan Appeal 解析失敗（第 {Attempt} 次）：{Content}", attempt, response.Content);
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "RunCodyDevPlanAppealAsync CLI 呼叫失敗（第 {Attempt} 次）", attempt);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Cody Dev_plan Appeal LLM 呼叫失敗（第 {Attempt} 次）", attempt);
-            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(workingDir))
+                try { gitHubService.CleanupLocalRepo(workingDir); }
+                catch (Exception ex) { logger.LogWarning(ex, "RunCodyDevPlanAppealAsync cleanup 失敗"); }
         }
 
         logger.LogError("Cody Dev_plan Appeal 所有路徑均失敗，fallback accept（不阻礙流程）");
@@ -1000,7 +1167,7 @@ public class PmAgentService(
     }
 
     /// <summary>
-    /// Petra 基於 Cody 的反駁重新評估 Dev_plan。
+    /// Stage 30：Petra 基於 Cody 的反駁重新評估 Dev_plan（Claude Code CLI，唯讀工具）。
     /// </summary>
     public async Task<PetraReview> ReassessDevPlanAsync(
         TaskGroup group,
@@ -1008,27 +1175,41 @@ public class PmAgentService(
         PetraReview previousReview,
         CancellationToken ct = default)
     {
-        var prompt       = BuildReassessDevPlanPrompt(group, codyAppeal, previousReview);
-        var provider     = providerFactory.Create(AgentName);
-        var systemPrompt = BuildSystemPrompt(); // 復用原有 Petra 角色 system prompt
+        var context        = await BuildAppealContextSectionAsync(group);
+        var userPrompt     = BuildReassessDevPlanPrompt(group, codyAppeal, previousReview);
+        var combinedPrompt = $"[APPEAL:dev_plan_petra]\n{BuildSystemPrompt()}\n\n---\n\n{context}\n\n{userPrompt}";
+        var sessionId      = Guid.NewGuid().ToString();
 
-        for (var attempt = 1; attempt <= 2; attempt++)
+        var (workingDir, model, apiKey) = PrepareClaudeCodeEnv(group, "PM");
+        try
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var response = await provider.CompleteAsync(systemPrompt, prompt, ct);
-                var review   = TryParseReview(response.Content);
-                if (review is not null)
+                try
                 {
-                    logger.LogInformation("Petra Dev_plan 重評完成（第 {Attempt} 次）：{Decision}", attempt, review.Decision);
-                    return review;
+                    var result = await claudeCodeService.RunMeetingSessionAsync(
+                        workingDir, sessionId, combinedPrompt, model, apiKey,
+                        isFirstMessage: true, maxTurns: 10,
+                        allowedTools: ["Glob", "Grep", "Read"], ct);
+                    var review = TryParseReview(result.Output);
+                    if (review is not null)
+                    {
+                        logger.LogInformation("Petra Dev_plan 重評完成（第 {Attempt} 次）：{Decision}", attempt, review.Decision);
+                        return review;
+                    }
+                    logger.LogWarning("Petra Dev_plan 重評解析失敗（第 {Attempt} 次）", attempt);
                 }
-                logger.LogWarning("Petra Dev_plan 重評解析失敗（第 {Attempt} 次）：{Content}", attempt, response.Content);
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "ReassessDevPlanAsync CLI 呼叫失敗（第 {Attempt} 次）", attempt);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Petra Dev_plan 重評 LLM 呼叫失敗（第 {Attempt} 次）", attempt);
-            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(workingDir))
+                try { gitHubService.CleanupLocalRepo(workingDir); }
+                catch (Exception ex) { logger.LogWarning(ex, "ReassessDevPlanAsync cleanup 失敗"); }
         }
 
         logger.LogError("Petra Dev_plan 重評所有路徑均失敗，fallback approve（不卡流程）");

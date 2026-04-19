@@ -925,7 +925,7 @@ public class TaskGroupService(
             // Cody 逐條回應（第二輪起帶入累計紀錄，讓 Cody 只針對剩餘 criticals 回應）
             var priorContext = group.ReviewAppealRoundA > 0 ? group.ReviewAppealLog : null;
             var codyAppeal   = await pmService.RunCodyAppealAsync(
-                reviewBody, group.Title, currentCriticalIds, priorContext, cancellationToken);
+                group, reviewBody, group.Title, currentCriticalIds, priorContext, cancellationToken);
             var codyJson     = JsonSerializer.Serialize(codyAppeal, indentedOptions);
 
             var disagrees = codyAppeal.Items.Where(i => i.Response == "disagree").ToList();
@@ -941,7 +941,7 @@ public class TaskGroupService(
             }
 
             // Vera 基於程式碼事實重新評估 disagree 項目
-            var veraResponse = await pmService.RunVeraAppealAsync(reviewBody, codyJson, cancellationToken);
+            var veraResponse = await pmService.RunVeraAppealAsync(group, reviewBody, codyJson, cancellationToken);
             var veraJson     = JsonSerializer.Serialize(veraResponse, indentedOptions);
 
             // 更新剩餘 critical 清單（移除 Vera 接受的）
@@ -1028,7 +1028,7 @@ public class TaskGroupService(
 
         logger.LogInformation("Appeal 達上限，啟動 Petra 仲裁（Group={Id}）", group.Id);
         var arbitration = await pmService.ArbitrateReviewAppealAsync(
-            group.LastReviewBody ?? "", group.ReviewAppealLog ?? "", cancellationToken);
+            group, group.LastReviewBody ?? "", group.ReviewAppealLog ?? "", cancellationToken);
         var arbitrationJson = JsonSerializer.Serialize(arbitration,
             new JsonSerializerOptions { WriteIndented = true });
 

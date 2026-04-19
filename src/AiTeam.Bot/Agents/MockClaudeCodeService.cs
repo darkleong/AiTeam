@@ -114,6 +114,24 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
             sessionId, isFirstMessage);
         await Task.Delay(Random.Shared.Next(30000, 60000), ct);
 
+        // Stage 30：申訴環節 mock 分支（優先於 agentName 判斷）
+        // FailScenario 失敗路徑已在 PmAgentService 早返回，不會到達此處
+        if (prompt.Contains("[APPEAL:review_cody]"))
+            return new ClaudeCodeResult(true,
+                "{\"items\":[{\"id\":1,\"response\":\"agree\",\"reason\":\"[MOCK] 同意修正\"}]}", 0, "");
+        if (prompt.Contains("[APPEAL:review_vera]"))
+            return new ClaudeCodeResult(true,
+                "{\"accepted_ids\":[],\"maintained_ids\":[],\"updated_summary\":\"[MOCK] Vera 接受 Cody 反駁，全數撤銷 Critical\"}", 0, "");
+        if (prompt.Contains("[APPEAL:review_arbitration]"))
+            return new ClaudeCodeResult(true,
+                "{\"decision\":\"support_cody_full\",\"final_criticals\":[],\"reasoning\":\"[MOCK] 支持 Cody 反駁，Critical 全數撤銷\"}", 0, "");
+        if (prompt.Contains("[APPEAL:dev_plan_cody]"))
+            return new ClaudeCodeResult(true,
+                "{\"position\":\"accept\",\"reasoning\":\"[MOCK] 接受 Petra 意見，依建議修正\"}", 0, "");
+        if (prompt.Contains("[APPEAL:dev_plan_petra]"))
+            return new ClaudeCodeResult(true,
+                "{\"decision\":\"approve\",\"summary\":\"[MOCK] 接受 Cody 反駁，核准 Dev_plan\",\"issues\":[],\"revision_instructions\":null}", 0, "");
+
         // Stage 26：改用 prompt 內容判斷角色（各 prompt builder 均以「你是 {Name}，」開頭）
         // 原本用 sessionId.Split('-').Last() 無法正確匹配純 UUID 格式的 session ID
         var agentName = prompt.Contains("你是 Petra") ? "petra"

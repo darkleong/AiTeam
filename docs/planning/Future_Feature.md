@@ -374,15 +374,15 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 目前流程中多個審核/申訴環節使用 LLM API（純文字問答），導致 Agent 在修正、反駁、再評估時**失去 codebase 存取能力**，品質明顯低於 Claude Code CLI。應全面升級為 Claude Code CLI + `--session-id` / `--resume`，讓 Agent 在迴圈中保留原始 session 的 codebase 上下文。會議機制（Kickoff / Design）已驗證此模式可行。
 
-**應改（影響最大）：**
+**已完成（Stage 30，v3.17.0，2026-04-20）：**
 
-| 環節 | Agent | 目前 | 改為 |
+| 環節 | Agent | 舊方式 | 新方式 |
 |------|-------|------|------|
-| Dev_plan 申訴 — 修正 | Cody | LLM API | Resume Dev_plan session |
-| Dev_plan 申訴 — 再評估 | Petra | LLM API | Resume 或新開 CLI |
-| Review 申訴 — 反駁 | Cody | LLM API | Resume Dev session |
-| Review 申訴 — 再評估 | Vera | LLM API | Resume Review session |
-| Review 申訴 — 仲裁 | Petra | LLM API | 可選改 CLI |
+| Dev_plan 申訴 — 修正 | Cody | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
+| Dev_plan 申訴 — 再評估 | Petra | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
+| Review 申訴 — 反駁 | Cody | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
+| Review 申訴 — 再評估 | Vera | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
+| Review 申訴 — 仲裁 | Petra | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
 
 **不需改（純文字分析，無 codebase 需求）：**
 
@@ -399,7 +399,7 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 | Phase | 包含內容 | 狀態 |
 |-------|---------|------|
 | **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 全部完成（Stage 23~25b，v3.7.0~v3.10.0） |
-| **Phase 2** | 循環偵測 + 新鮮視角 + LLM API → CLI 全面升級 | 🔵 待後續 Stage |
+| **Phase 2** | 循環偵測 + 新鮮視角 + LLM API → CLI 全面升級 | 🟡 部分完成（LLM→CLI 升級已完成 Stage 30；循環偵測 + 新鮮視角 待後續）|
 
 ### 優先級
 

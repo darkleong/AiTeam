@@ -44,7 +44,7 @@
 | [Stage_28a_Roadmap.md](../planning/Stage_28a_Roadmap.md) | Stage 28a：Dashboard 雙向操作中心 — 基礎架構與按鈕回覆 | v3.14.0 | ✅ 已完成（2026-04-17） |
 | [Stage_28b_Roadmap.md](../planning/Stage_28b_Roadmap.md) | Stage 28b：Dashboard 雙向操作中心 — 文字輸入互動與歷史紀錄 | v3.15.0 | ✅ 已完成（2026-04-17） |
 | [Stage_29_Roadmap.md](../planning/Stage_29_Roadmap.md) | Stage 29：Dashboard 操作性收尾 + CEO 指令通道擴充 | v3.16.0 | ✅ 已完成（2026-04-19） |
-| [Stage_30_Roadmap.md](../planning/Stage_30_Roadmap.md) | Stage 30：申訴迴圈 LLM API → Claude Code CLI 全面升級 | v3.17.0 | 🟡 待實作 |
+| [Stage_30_Roadmap.md](../planning/Stage_30_Roadmap.md) | Stage 30：申訴迴圈 LLM API → Claude Code CLI 全面升級 | v3.17.0 | ✅ 已完成（2026-04-20） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -125,6 +125,7 @@
 | v7.5 | 2026-04-19 | Stage 29 實作完成並驗收通過（v3.16.0）：五項全部交付 + FF 零-C（通知卡片「我知道了」按鈕）順手修完；驗收期間五個關鍵修正：Discord 端圖片提示 + `BossCommandLog.Images` camelCase（`8ac7aac`）、**CEO 指令改 fire-and-forget**（`eccf525`，解決 Claude Code subprocess > HttpClient timeout）、`QuickCommandCard` 改用 `MudFileUpload` + 拖移支援（`a4a7921`，修 JSRuntime JS 表達式拋例外）、移除 `MaximumFileCount` 改自行過濾（`39ff81b`）、補前端 MIME 驗證（`1aa8ff3`）；Future_Feature 新增 FF 十五（Dashboard 與 Discord 功能平等）+ FF 十六（Dashboard 錯誤處理 UX 打磨）|
 | v7.6 | 2026-04-19 | Hotfix v3.16.1：零-B（MockMode 新提案流程產生重複 TaskGroup Bug）查明並修復 — Stage 28b 驗收修正只改了 Discord 路徑（`ExecuteProposalApprovedAsync` 有 GroupId 防護），Dashboard 路徑（`TaskGroupService.ProcessProposalApprovedAsync`）無條件 `CreateGroupAsync`，導致從 Dashboard 核准 MockMode 提案時產生兩筆 TaskGroup（一筆孤兒 CEO TaskItem、一筆 Kickoff/Design 流程）；兩處對稱化 GroupId 檢查後修復 |
 | v7.7 | 2026-04-19 | Stage 30 規劃書建立（v3.17.0）— 申訴迴圈 LLM API → Claude Code CLI 全面升級：5 個環節（Cody 修正 Dev_plan、Petra 再評估 Dev_plan、Cody 反駁 Review、Vera 再評估 Review、Petra 仲裁）從 LLM API 純文字問答升級為 Claude Code CLI（保留 codebase 存取能力）；決策：每 appeal 新開 session + 強化 Prompt（Stage 23 的 ImplementationNote 已涵蓋 ~80% 價值，Resume 工程量大 40% 且 Token 成本反而更高），對應 FF 八 Phase 2 第三項 |
+| v7.8 | 2026-04-20 | Stage 30 實作完成（v3.17.0）：5 個申訴環節全面改寫為 `RunMeetingSessionAsync`（新開 session，唯讀工具 Glob/Grep/Read）；新增 `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` 共用輔助方法（帶入 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff 脈絡）；3 個 Review Appeal 方法新增 `TaskGroup group` 參數；MockClaudeCodeService 5 種新 `[APPEAL:*]` 分支；FF 八 Phase 2 第三項完成 |
 
 ---
 

@@ -84,7 +84,7 @@ PM 不是由老闆直接呼叫，而是由 WorkflowEngine 在以下時機自動�
 | 項目 | 建議 |
 |------|------|
 | 模型 | Claude Haiku（審核是比對性質，不需頂級推理）|
-| 執行模式 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read）|
+| 執行模式 | Claude Code `RunReadOnlyAsync`（Glob / Grep / Read）；申訴環節（Stage 30）：`RunMeetingSessionAsync`（新 session，唯讀工具）|
 | Timeout | 10 分鐘 |
 | Max Turns | 10 |
 | System Prompt | `CLAUDE_Petra.md` |
