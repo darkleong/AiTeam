@@ -1,9 +1,110 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.6
+> 版本：v7.10
 > 建立日期：2026-04-01
-> 最後更新：2026-04-18
+> 最後更新：2026-04-19
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
+
+---
+
+## 零-B、MockMode 新提案流程產生重複 TaskGroup（Bug）
+
+> 狀態：🔴 待重現 — 需撈 Bot log 確認兩個 TaskGroup 的建立來源
+> 發現日期：2026-04-18（Christ 使用時回報）
+
+### 症狀
+
+Discord 對 Victoria 下 `/mock 新功能（含提案）`，Victoria 產生提案 → Christ 點核准 → **流程追蹤頁面出現兩筆 TaskGroup**，兩筆標題與時間戳完全相同：
+
+- **第 1 筆**：顯示 Kick-off + 設計規劃（執行中）— 看起來是正常核准後的流程
+- **第 2 筆**：只顯示 CEO 完成 15 秒 — 獨立的 Group，只含 CEO 階段
+
+兩筆時間戳都是同一秒，確定是兩個獨立的 TaskGroup 被建立。
+
+### 預期行為
+
+依 Stage 28b 驗收修正「MockMode GroupId 重複建立防護」：
+
+- `HandleMockProposalFlowAsync` 建立 Group A + CEO TaskItem（`GroupId = A.Id`）
+- `ExecuteProposalApprovedAsync` 檢查 `task.GroupId.HasValue` → 取得 Group A，**不新建**
+- 全程只有 1 個 TaskGroup
+
+### 初步程式碼檢視
+
+- `HandleMockProposalFlowAsync`（[CommandHandler.cs:831](../../src/AiTeam.Bot/Discord/CommandHandler.cs)）邏輯看起來正確：line 845 建 Group、line 863 `GroupId = group.Id`
+- `ExecuteProposalApprovedAsync`（line 1705）檢查分支看起來正確：line 1744 `task.GroupId.HasValue` → line 1746 取現有 Group，不走 `else` 新建
+
+程式碼表面邏輯是 Stage 28b 修正後的版本，但實際運行結果不符。需要實際 log 才能定位。
+
+### 待查項目
+
+1. `CreateGroupAsync` 在一次 `/mock` 流程中被呼叫幾次、從哪個堆疊呼叫
+2. `ExecuteProposalApprovedAsync` 是否被重複觸發（Discord 按鈕事件可能重複，Stage 12 曾踩過坑）
+3. 是否有其他路徑（如 `FireStepsAsync` 或 Kickoff 處理器）在某分支獨立建立 Group
+4. 是否有「遺漏的 MockMode 分支」未被 Stage 28b 的修正涵蓋
+
+### 優先級
+
+🔴 高 — 不影響功能正確性，但會造成流程追蹤資料混亂，影響 Dashboard 可觀察性；MockMode 是驗收主要管道，問題會被反覆踩到
+
+---
+
+## 零-C、通知類互動卡在待處理區無法消化（Bug）
+
+> 狀態：🟡 待修 — 方案已定，等排入 hotfix 或下個 Stage
+> 發現日期：2026-04-18（Christ 使用時回報）
+
+### 症狀
+
+`/mock` 流程跑完後，操作中心「待處理」區出現「全流程完成」卡片（互動類型 `merge_notify`），但卡片上**沒有任何按鈕**可以操作，導致使用者無法將其標記為已處理。`intervention`（Boss 介入）類型有相同問題。
+
+### 根本原因
+
+Stage 28a 設計 `BossInteraction` 時，`merge_notify` 和 `intervention` 這兩類「通知型」互動用了 `EmptyActionsJson = "[]"`（無動作），但建立時 Status 預設為 `"pending"`，因此：
+
+- 會出現在「待處理」區（status = pending 的篩選條件）
+- InteractionCard 渲染時沒有按鈕可顯示
+- Christ 無法主動標記為已處理，卡片永久停留
+
+參考 [TaskGroupService.cs:500-514](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs)（merge_notify）和 line 535（intervention）。
+
+### 決議方案（方案 3 — UI 加「我知道了」按鈕）
+
+Christ 已確認採用方案 3：
+
+替通知類互動的 `AvailableActionsJson` 加入單一動作：
+
+```csharp
+public const string NotifyActionsJson = """[{"id":"ack","label":"我知道了","color":"default","requiresInput":false}]""";
+```
+
+- `merge_notify` 改用 `NotifyActionsJson`（可再用 "前往 PR" 之類的 Icon 按鈕搭配）
+- `intervention` 改用 `NotifyActionsJson`（標籤可改「已處理」）
+
+點下去走既有的 `InteractionRespondService.RespondAsync` 流程，標為 responded、進已處理區。Bot 端 `InteractionProcessor` 看到 `action=ack` 不需要後續處理（純 UI 確認）。
+
+### 考慮過的替代方案
+
+- **方案 1**：`merge_notify` 建立時直接設 `Status = "notified"`。缺點：繞過「待處理」機制，但使用者又少了確認看過的主控權。
+- **方案 2**：通知類根本不寫 BossInteraction，改走獨立「通知 Feed」。缺點：工程量大，Discord 那邊也要同步。
+
+### 優先級
+
+🟡 中 — 不影響功能正確性，但每次 MockMode 流程跑完都會累積無法消化的卡片，讓操作中心「待處理」區失真。是使用者體驗障礙，非資料正確性問題。
+
+### 臨時處理
+
+現有卡在待處理區的項目，可直接跑 SQL 手動消化：
+
+```sql
+UPDATE boss_interactions 
+SET status = 'responded', 
+    response_action = 'dismissed',
+    response_source = 'manual',
+    responded_at = NOW()
+WHERE interaction_type IN ('merge_notify', 'intervention') 
+  AND status = 'pending';
+```
 
 ---
 
@@ -164,24 +265,63 @@ Agent 個性對話、心情文字、互動描述等屬於**低複雜度文字生
 "Doc":  { "Provider": "Gemini",    "Model": "gemini-2.5-flash"  }
 ```
 
-### 重要限制：Claude Code 綁定
+### 兩層抽象：API 層 + CLI 層
 
-透過 Claude Code CLI 運作的 Agent（Victoria / Cody / Rosa / Demi / Vera / Sage）**只能使用 Claude 模型**，因為 `claude -p` 是 Anthropic 的工具。
+AiTeam 目前有兩層 LLM 架構，多供應商支援要分層討論：
 
-多供應商支援僅適用於**直接 API 呼叫路徑**的 Agent：
-- ✅ 可換供應商：Rena（Release）、Maya（Ops）
-- ❌ 綁定 Claude：Victoria、Cody、Rosa、Demi、Vera、Quinn、Sage
+| 層級 | 介面 | 使用的 Agent | 替換方案 |
+|------|------|-------------|---------|
+| **API 層** | `ILlmProvider` | Rosa / Demi / Sage / Release / Ops | `GeminiProvider` / `OpenAiProvider` |
+| **CLI 層** | `IClaudeCodeService` | Victoria / Cody / Vera / Quinn / Petra | `GeminiCliService`（Gemini CLI 可並存） |
 
-### 實作重點
+**原本的認知（「Claude Code 綁定」）已過時**——Google 推出 **Gemini CLI**（subprocess-based，介面對標 Claude Code CLI），CLI 層也可以做供應商抽象。
 
-- `LlmProviderFactory.Create()` 的 switch 只需新增 `"GEMINI"` / `"OPENAI"` case
-- `GeminiProvider` / `OpenAiProvider` 需支援 Vision（CEO / QA 可能傳入圖片）
+### 目標擴充：Claude Code + Gemini CLI 共存（Christ 決策 2026-04-18）
+
+不走「替換」路線，走「**共存 + per-Agent 選擇**」路線：
+- Dashboard Agent 設定頁的 Provider 選單，針對每個 Agent 選擇 Claude Code CLI 或 Gemini CLI
+- 例如：Cody 用 Claude Code、Vera 用 Gemini CLI 做 Code Review 交叉驗證；或依成本/額度策略調配
+- 風險分散（不把雞蛋全放 Anthropic 一家）
+
+### 1M context 的認知澄清
+
+Gemini 行銷主打 1M context 確實誘人，但對 AiTeam 現狀不是主要動機：
+- **Claude Sonnet 4.6+ 也支援 1M context**（API header `anthropic-beta: context-1m-2025-08-07`）
+- Agent 實際任務通常用 20-100K（改 bug、審 PR），離 1M 還很遠
+- 真正 1M 發揮的場景是「一次塞整個 codebase 做 holistic 分析」——AiTeam 沒這種 use case
+
+**真正動機應該是**：① 成本（Gemini Flash 免費額度）② 供應商分散 ③ 不同 Agent 品質交叉驗證
+
+### 實作策略（建議分階段）
+
+#### 第一階段（工程量小、價值清楚）
+
+1. `GeminiProvider : ILlmProvider` — 照抄 `AnthropicProvider` 改 API call
+2. Dashboard Agent 設定頁 Provider 選單加 `Gemini` 選項
+3. API 層 Agent（Rosa / Demi / Sage / Release / Ops）可選 Gemini
+4. 搭配 Gemini 2.5 Flash 免費額度用在低複雜度任務（Sage 歸檔摘要、個性對話）
+
+#### 第二階段（需要 spike 評估）
+
+5. `GeminiCliService : IClaudeCodeService` — 評估 Gemini CLI 的 session 延續、工具調用、輸出格式是否能對齊
+6. 主要挑戰：
+   - Session 延續機制不同（Claude Code `--resume UUID` vs Gemini CLI 自己的 session 管理）
+   - 工具調用格式、輸出解析格式不同
+   - `MockClaudeCodeService` 模擬的是 Claude 輸出，Gemini 要另做一套
+   - `CLAUDE.md` 對應的 `GEMINI.md` 兩套記憶檔並存維護成本
+7. CLI 層 Agent（Victoria / Cody / Vera / Quinn / Petra）可選 Claude Code 或 Gemini CLI
+
+### 實作重點（技術細節）
+
+- `LlmProviderFactory.Create()` 的 switch 新增 `"GEMINI"` / `"OPENAI"` case
+- `GeminiProvider` 需支援 Vision（Victoria / Quinn 可能傳入圖片）
 - Token 追蹤（`TokenTrackingProvider`）包裝層不需改動，對供應商透明
-- Dashboard Agent 設定頁面的 Provider 下拉選單需新增選項
+- CLI 層若做 `GeminiCliService`，需抽象出 `ICliAgentService`（原 `IClaudeCodeService` 重命名）或直接並列兩個實作
+- `MockClaudeCodeService` 若為 Gemini CLI 做對應模擬，考慮抽出 `MockCliAgentService` 共用 MockMode 邏輯
 
 ### 優先級
 
-🔵 低優先級 — 可換供應商的 Agent（Rena/Maya）消耗量本就不高，投資報酬率有限
+🟡 中優先級（升級）— 原本 🔵 低是因為只想到 API 層替換；加入「CLI 層共存 + 交叉驗證」戰略後，與 Future Feature 二（Agent 個性/Gemini Flash 路由）形成完整的多供應商策略
 
 ---
 
@@ -665,6 +805,50 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 
 ---
 
+## 十五、Dashboard 與 Discord 功能平等（Feature Parity）
+
+> 狀態：⚪ 待討論 — 逐一擴充，`/mock` 為首要
+> 提出日期：2026-04-19（Christ 於 Stage 29-5 驗收時提出）
+
+### 核心原則
+
+**Discord 可執行的每個指令與流程，Dashboard 最終也都要能觸發。** 讓 Dashboard 成為完整的操作入口，驗收 / 日常使用不需要在兩個介面之間切換。
+
+Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#victoria-ceo` 的自由文字訊息），是此方向的第一步。後續還有多個 Discord slash commands 需要 Dashboard 化。
+
+### Discord-only 指令清單 + Dashboard 對應現況
+
+| Discord 指令 | 用途 | Dashboard 現況 |
+|--------------|------|----------------|
+| `/mock <情境>` | 觸發 Mock Mode 模擬流程（新功能 / bug fix / 含提案 等） | ❌ 不支援 — 文字輸入會被 Victoria 當普通訊息吞掉 |
+| `/pause <agent>` / `/resume <agent>` | 暫停 / 恢復特定 Agent 佇列（Stage 27b） | ❌ 不支援（與十「Dashboard pause/resume 按鈕」重疊） |
+| `/stop-all` / `/resume-all` | 全域暫停 / 恢復所有佇列 | ❌ 不支援 |
+| `/queue` | 查看佇列狀態 | ✅ 首頁 Agent 狀態卡已顯示（Stage 27b） |
+| `/reload-rules` | 刷新規則 + AppSettings cache | ✅ 規則管理 / 系統設定頁「套用變更」（Stage 29-3） |
+
+### 實作方向
+
+- 對應 Discord command 各自暴露 Bot internal API 端點（仿 Stage 29-3 `/internal/reload-cache` / 29-5 `/internal/ceo/command`）
+- Bot CommandHandler 中 Discord-only 的處理邏輯（如 `HandleMockProposalFlowAsync`）抽成 shared service，讓 Discord 與 Dashboard 兩路徑共用
+- Dashboard 提供對應 UI：
+  - **`/mock` 觸發**：專屬「驗收工具」頁面或首頁小卡，下拉選單（新功能 / bug fix / 含提案 / 等）+ 觸發按鈕
+  - **佇列控制**：Agent 狀態卡上加 pause/resume 小按鈕
+
+### 首要條目：`/mock` 觸發（Christ 明確要求）
+
+驗收時每次都要切回 Discord 輸入 `/mock ...` 很麻煩。優先做這一個。實作時順便把 `HandleMockProposalFlowAsync` 等私有方法重構成可被 controller 直接呼叫的 shared service。
+
+### 與其他項目的關係
+
+- 和 **十（Agent 任務序列 — Dashboard pause/resume 待討論議題）** 部分重疊，實作時一併考慮
+- 與 **Stage 29-5 的 fire-and-forget 模式** 同構，`/mock` 也應走背景任務 + BossInteraction 推送
+
+### 優先級
+
+⚪ 待討論 — 視實際驗收 / 開發使用頻率決定優先順序。`/mock` 子項有明確需求，可先單獨排入小 Stage。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -745,3 +929,7 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 | 2026-04-16 | v7.4：十一新增「Agent 角色設定 Dashboard 化」— 角色描述 + 行為準則從 C# 硬碼抽至 DB，Dashboard Agent 設定頁可編輯；復用規則系統 Cache 機制；流程邏輯模板留在 C# 不動 |
 | 2026-04-17 | v7.5：十一新增「Dashboard Cache Reload 按鈕」— 規則/Agent 設定修改後免跑 Discord 指令，Dashboard 直接呼叫 Bot internal API 刷新 Cache |
 | 2026-04-18 | v7.6：九（Dashboard 雙向操作中心）移入已完成摘要 — Stage 28a（v3.14.0）+ Stage 28b（v3.15.0）實作完成；原 FF 十～十五重新編號為九～十四；修正所有跨項目引用（原十一→十、原十二→十一） |
+| 2026-04-18 | v7.7：新增零-B（MockMode 新提案流程產生重複 TaskGroup Bug）— Christ 使用時回報，待撈 log 確認兩個 Group 的建立來源；程式碼表面邏輯是 Stage 28b 修正後的版本但實際結果不符 |
+| 2026-04-18 | v7.8：新增零-C（通知類互動卡在待處理區無法消化 Bug）— merge_notify / intervention 用 EmptyActionsJson 但 Status 預設 pending，導致卡片無按鈕可操作；採方案 3（加「我知道了」按鈕），Christ 已確認 |
+| 2026-04-18 | v7.9：四（多 LLM 供應商）大幅擴充 — 加入 CLI 層共存戰略（Gemini CLI 可與 Claude Code 並存、per-Agent 選擇）；修正「Claude Code 綁定」過時論述；加入 1M context 認知澄清；分兩階段實作策略（API 層先行、CLI 層需 spike）；優先級從 🔵 升為 🟡 |
+| 2026-04-19 | v7.10：新增十五（Dashboard 與 Discord 功能平等）— Christ 於 Stage 29-5 驗收時提出核心原則：Discord 可執行的每個指令未來 Dashboard 也都要能觸發；首要子項為 `/mock` Dashboard 化，其餘含 `/pause`、`/stop-all` 等佇列控制 |
