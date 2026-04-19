@@ -54,14 +54,10 @@ public class DashboardCeoCommandService(
                 return new CeoCommandResult(false, null, null, errorMsg ?? "指令發送失敗，請確認設定是否完整。");
             }
 
-            var json = await response.Content.ReadAsStringAsync(ct);
-            using var resultDoc = JsonDocument.Parse(json);
-            var root   = resultDoc.RootElement;
-            var action = root.TryGetProperty("action", out var a) ? a.GetString() : null;
-            var reply  = root.TryGetProperty("reply",  out var r) ? r.GetString() : null;
-
-            logger.LogInformation("Dashboard 指令已送達 Victoria（action={Action}）", action);
-            return new CeoCommandResult(true, action, reply, null);
+            // Bot 採 fire-and-forget：202 Accepted 代表指令已入隊背景處理，
+            // Victoria 實際回應以 BossInteraction 形式出現於操作中心（經 SignalR 推送）。
+            logger.LogInformation("Dashboard 指令已送達 Bot（status={Code}）", (int)response.StatusCode);
+            return new CeoCommandResult(true, null, null, null);
         }
         catch (Exception ex)
         {

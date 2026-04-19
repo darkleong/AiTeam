@@ -4,7 +4,6 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
-using Discord.WebSocket;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -14,12 +13,15 @@ namespace AiTeam.Bot.Api;
 /// <summary>
 /// Stage 29-5：Dashboard 下達指令給 Victoria 的 Bot 端端點。
 /// Dashboard → POST /internal/ceo/command → Victoria → BossInteraction
+///
+/// Fire-and-forget 模式：驗證 + 存 BossCommandLog 後立即回 202 Accepted；
+/// Victoria 處理（耗時數十秒至數分鐘）於背景 Task 中進行，結果透過 BossInteraction + SignalR
+/// 推送至 Dashboard 操作中心，避免 Dashboard HttpClient 逾時。
 /// </summary>
 [ApiController]
 [Route("internal/ceo")]
 public class CeoCommandController(
     AppSettingsService appSettings,
-    CeoAgentService ceoService,
     CommandHandler commandHandler,
     RulesService rulesService,
     IServiceScopeFactory scopeFactory,
@@ -34,10 +36,6 @@ public class CeoCommandController(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    /// <summary>
-    /// 接收來自 Dashboard 的指令，轉交 Victoria 處理後路由至 Discord + BossInteraction。
-    /// Body：{ text, images?: [{base64Data, mediaType}][] }
-    /// </summary>
     [HttpPost("command")]
     public async Task<IActionResult> SendCommandAsync(
         [FromBody] DashboardCeoCommandRequest request,
@@ -49,8 +47,8 @@ public class CeoCommandController(
             return BadRequest(new { error = "指令文字不可為空" });
 
         // 讀 AppSettings：CEO 頻道 ID + Christ Discord User ID
-        var channelIdStr  = await appSettings.GetAsync("CeoDefaultChannelId",  cancellationToken);
-        var christUserId  = await appSettings.GetAsync("ChristDiscordUserId",   cancellationToken);
+        var channelIdStr = await appSettings.GetAsync("CeoDefaultChannelId", cancellationToken);
+        var christUserId = await appSettings.GetAsync("ChristDiscordUserId", cancellationToken);
 
         if (string.IsNullOrWhiteSpace(channelIdStr))
             return BadRequest(new { error = "尚未設定 CEO 指令預設頻道，請先至「系統設定」頁面配置。" });
@@ -59,72 +57,100 @@ public class CeoCommandController(
         if (!ulong.TryParse(channelIdStr, out var ceoChannelId))
             return BadRequest(new { error = "CEO 指令預設頻道 ID 格式錯誤，請重新設定。" });
 
-        // 轉換圖片
+        // 轉換圖片（stream-json stdin 用）
         var images = request.Images?
             .Select(i => new ImageAttachment(i.Base64Data, i.MediaType))
-            .ToList() as IReadOnlyList<ImageAttachment>;
+            .ToList();
 
-        // 取規則與 Agent 清單（與 Discord 路徑一致）
-        await using var scope    = scopeFactory.CreateAsyncScope();
-        var agentRepo            = scope.ServiceProvider.GetRequiredService<Data.Repositories.AgentRepository>();
-        var taskRepo             = scope.ServiceProvider.GetRequiredService<Data.Repositories.TaskRepository>();
-        var logRepo              = scope.ServiceProvider.GetRequiredService<BossCommandLogRepository>();
-
-        var rules            = await rulesService.GetRulesAsync("CEO");
-        var activeAgents     = await agentRepo.GetActiveExecutorAgentsAsync();
-        var agentList        = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
-        var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
-
-        // 儲存指令記錄
-        var commandLog = new Data.BossCommandLog
+        // 儲存 BossCommandLog（同步做完，確認寫入成功後才回 202；失敗讓 Dashboard 能看到錯誤）
+        Guid commandLogId;
+        await using (var scope = scopeFactory.CreateAsyncScope())
         {
-            Text   = request.Text,
-            Images = request.Images?.Count > 0
-                ? JsonSerializer.Serialize(request.Images, ImagesJsonOptions)
-                : null,
-            Source = "dashboard"
-        };
-        logRepo.Add(commandLog);
-        await logRepo.SaveAsync(cancellationToken);
+            var logRepo = scope.ServiceProvider.GetRequiredService<BossCommandLogRepository>();
+            var commandLog = new Data.BossCommandLog
+            {
+                Text   = request.Text,
+                Images = request.Images?.Count > 0
+                    ? JsonSerializer.Serialize(request.Images, ImagesJsonOptions)
+                    : null,
+                Source = "dashboard"
+            };
+            logRepo.Add(commandLog);
+            await logRepo.SaveAsync(cancellationToken);
+            commandLogId = commandLog.Id;
+        }
 
         logger.LogInformation(
-            "Dashboard 下達指令（logId={Id}，images={Count}）：{Text}",
-            commandLog.Id, request.Images?.Count ?? 0, request.Text);
+            "Dashboard 指令已接收（logId={Id}，images={Count}），背景交給 Victoria 處理",
+            commandLogId, images?.Count ?? 0);
 
-        // 呼叫 Victoria（Claude Code 模式，延續 christUserId 的 session）
-        CeoResponse ceoResponse;
+        // 背景處理 Victoria 呼叫 + Discord/BossInteraction 路由。
+        // 不能用 HTTP 請求的 CancellationToken（response 一回就會被 cancel），改用 None。
+        _ = Task.Run(() => ProcessVictoriaInBackgroundAsync(
+            request.Text, christUserId, ceoChannelId, images, commandLogId));
+
+        return Accepted(new
+        {
+            success = true,
+            message = "指令已送達，Victoria 的回應將出現在操作中心。"
+        });
+    }
+
+    /// <summary>
+    /// 背景執行 Victoria 分析，完成後將回應透過 CommandHandler 路由至 Discord + BossInteraction。
+    /// 例外只 log，不向外拋（Task.Run 無人等候 Task.Wait）。
+    /// </summary>
+    private async Task ProcessVictoriaInBackgroundAsync(
+        string text,
+        string christUserId,
+        ulong ceoChannelId,
+        IReadOnlyList<ImageAttachment>? images,
+        Guid commandLogId)
+    {
         try
         {
-            ceoResponse = await ceoService.ProcessWithClaudeCodeAsync(
-                request.Text,
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var ceoService    = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
+            var agentRepo     = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+            var taskRepo      = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var db            = scope.ServiceProvider.GetRequiredService<Data.AppDbContext>();
+
+            var rules             = await rulesService.GetRulesAsync("CEO");
+            var activeAgents      = await agentRepo.GetActiveExecutorAgentsAsync();
+            var agentList         = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
+            var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
+
+            var ceoResponse = await ceoService.ProcessWithClaudeCodeAsync(
+                text,
                 christUserId,
                 projectName:       availableProjects.FirstOrDefault() ?? "",
                 agentList:         agentList,
                 rules:             rules,
-                cancellationToken: cancellationToken,
+                cancellationToken: CancellationToken.None,
                 images:            images?.Count > 0 ? images : null,
                 availableProjects: availableProjects);
+
+            // 更新 BossCommandLog 的 CeoResponseRaw
+            var existing = await db.BossCommandLogs.FindAsync(commandLogId);
+            if (existing is not null)
+            {
+                existing.CeoResponseRaw = JsonSerializer.Serialize(ceoResponse);
+                await db.SaveChangesAsync();
+            }
+
+            // 路由至 Discord + BossInteraction
+            await commandHandler.HandleCeoResponseFromDashboardAsync(
+                ceoResponse, text, ceoChannelId, images);
+
+            logger.LogInformation(
+                "Dashboard 指令背景處理完成（logId={Id}，action={Action}）",
+                commandLogId, ceoResponse.Action);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Dashboard 指令：Victoria 處理失敗");
-            return StatusCode(500, new { error = "Victoria 處理指令時發生錯誤，請查看 Bot log。" });
+            logger.LogError(ex,
+                "Dashboard 指令背景處理失敗（logId={Id}）", commandLogId);
         }
-
-        // 持久化 Victoria 原始回應供追溯
-        commandLog.CeoResponseRaw = JsonSerializer.Serialize(ceoResponse);
-        await logRepo.SaveAsync(cancellationToken);
-
-        // 路由至 Discord + BossInteraction（與 Discord 路徑使用相同邏輯）
-        _ = commandHandler.HandleCeoResponseFromDashboardAsync(
-            ceoResponse, request.Text, ceoChannelId, images);
-
-        return Ok(new
-        {
-            success = true,
-            action  = ceoResponse.Action,
-            reply   = ceoResponse.Reply
-        });
     }
 
     private bool IsAuthorized()
