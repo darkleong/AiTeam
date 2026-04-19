@@ -26,32 +26,48 @@
                       Class="mb-3"
                       Disabled="@_isSubmitting" />
 
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
-            附加圖片（選填，最多 5 張，每張 ≤ 5MB，支援 PNG / JPEG / GIF / WebP）
-        </MudText>
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                       @bind-Files="_selectedFiles"
+                       @bind-Files:after="OnFilesValidated"
+                       Accept=".png, .jpg, .jpeg, .gif, .webp"
+                       MaximumFileCount="5"
+                       AppendMultipleFiles="true"
+                       Hidden="@false"
+                       InputClass="absolute mud-width-full mud-height-full overflow-hidden z-20"
+                       InputStyle="opacity:0"
+                       Disabled="@_isSubmitting"
+                       Class="mb-3"
+                       @ondragenter="@(() => _dragActive = true)"
+                       @ondragleave="@(() => _dragActive = false)"
+                       @ondragend="@(() => _dragActive = false)"
+                       @ondrop="@(() => _dragActive = false)">
+            <ActivatorContent>
+                <MudPaper Height="120px" Outlined="true"
+                          Class="d-flex align-center justify-center"
+                          Style="@($"border: 2px dashed {(_dragActive ? "var(--mud-palette-primary)" : "var(--mud-palette-lines-default)")}; background: {(_dragActive ? "var(--mud-palette-action-default-hover)" : "transparent")}; cursor:pointer; transition: all 0.15s ease-in-out;")">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2">點擊選擇或拖移圖片到此處</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            最多 5 張，每張 ≤ 5MB，支援 PNG / JPEG / GIF / WebP
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </ActivatorContent>
+        </MudFileUpload>
 
-        <InputFile id="quickcmd-files" multiple OnChange="OnFilesChangedAsync"
-                   accept="image/png,image/jpeg,image/gif,image/webp"
-                   style="display:none" />
-
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            @foreach (var (file, index) in _selectedFiles.Select((f, i) => (f, i)))
-            {
-                <MudChip T="string" OnClose="@(() => RemoveFile(index))"
-                         Color="Color.Default" Size="Size.Small">
-                    @file.Name (@(Math.Round(file.Size / 1024.0, 1)) KB)
-                </MudChip>
-            }
-            @if (_selectedFiles.Count < 5)
-            {
-                <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.AttachFile"
-                           OnClick="TriggerFilePicker"
-                           Disabled="@_isSubmitting">
-                    新增圖片
-                </MudButton>
-            }
-        </div>
+        @if (_selectedFiles is { Count: > 0 })
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var (file, index) in _selectedFiles.Select((f, i) => (f, i)))
+                {
+                    <MudChip T="string" OnClose="@(() => RemoveFile(index))"
+                             Color="Color.Default" Size="Size.Small">
+                        @file.Name (@(Math.Round(file.Size / 1024.0, 1)) KB)
+                    </MudChip>
+                }
+            </div>
+        }
 
         <div class="d-flex justify-end gap-2">
             <MudButton Variant="Variant.Text" OnClick="Reset" Disabled="@_isSubmitting">取消</MudButton>

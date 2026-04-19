@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.JSInterop;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
 
@@ -13,9 +12,6 @@ public partial class QuickCommandCard
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
-    [Inject]
-    private IJSRuntime Js { get; set; } = null!;
-
     #endregion
 
     #region Private State
@@ -23,8 +19,9 @@ public partial class QuickCommandCard
     private string _text         = "";
     private bool   _isSubmitting;
     private bool   _submitted;
+    private bool   _dragActive;
     private string? _error;
-    private List<IBrowserFile> _selectedFiles = [];
+    private IReadOnlyList<IBrowserFile>? _selectedFiles;
 
     private const int  MaxFiles    = 5;
     private const long MaxFileSize = 5 * 1024 * 1024; // 5MB
@@ -33,39 +30,43 @@ public partial class QuickCommandCard
 
     #region Event Handlers
 
-    private async Task OnFilesChangedAsync(InputFileChangeEventArgs e)
+    /// <summary>
+    /// MudFileUpload 的 @bind-Files:after 回呼：在 _selectedFiles 更新後檢查上限與大小，
+    /// 違規時剔除不合規的檔並顯示錯誤訊息。
+    /// </summary>
+    private void OnFilesValidated()
     {
         _error = null;
-        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        if (_selectedFiles is null) return;
+
+        // 超量（MaximumFileCount 理論上擋住，保險起見再驗）
+        if (_selectedFiles.Count > MaxFiles)
         {
-            if (_selectedFiles.Count >= MaxFiles)
-            {
-                _error = $"最多只能附加 {MaxFiles} 張圖片";
-                break;
-            }
-            if (file.Size > MaxFileSize)
-            {
-                _error = $"「{file.Name}」超過 5MB 限制，已略過";
-                continue;
-            }
-            if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-            {
-                _error = $"「{file.Name}」不是有效的圖片格式，已略過";
-                continue;
-            }
-            _selectedFiles.Add(file);
+            _error = $"最多只能附加 {MaxFiles} 張圖片，已保留前 {MaxFiles} 張";
+            _selectedFiles = _selectedFiles.Take(MaxFiles).ToList();
+            return;
+        }
+
+        // 過大
+        var tooBig = _selectedFiles.FirstOrDefault(f => f.Size > MaxFileSize);
+        if (tooBig is not null)
+        {
+            _error = $"「{tooBig.Name}」超過 5MB 限制，已略過";
+            _selectedFiles = _selectedFiles.Where(f => f.Size <= MaxFileSize).ToList();
         }
     }
 
     private void RemoveFile(int index)
     {
-        if (index >= 0 && index < _selectedFiles.Count)
-            _selectedFiles.RemoveAt(index);
+        if (_selectedFiles is null) return;
+        var list = _selectedFiles.ToList();
+        if (index >= 0 && index < list.Count)
+        {
+            list.RemoveAt(index);
+            _selectedFiles = list.Count == 0 ? null : list;
+        }
         _error = null;
     }
-
-    private async Task TriggerFilePicker()
-        => await Js.InvokeVoidAsync("document.getElementById('quickcmd-files').click");
 
     private async Task SubmitAsync()
     {
@@ -73,22 +74,24 @@ public partial class QuickCommandCard
         _isSubmitting = true;
         _error        = null;
 
-        // 讀取圖片 bytes → base64
         var images = new List<ImageUploadDto>();
-        foreach (var file in _selectedFiles)
+        if (_selectedFiles is { Count: > 0 })
         {
-            try
+            foreach (var file in _selectedFiles)
             {
-                using var stream = file.OpenReadStream(MaxFileSize);
-                var bytes = new byte[file.Size];
-                await stream.ReadExactlyAsync(bytes);
-                images.Add(new ImageUploadDto(Convert.ToBase64String(bytes), file.ContentType));
-            }
-            catch
-            {
-                _error = $"讀取圖片「{file.Name}」失敗，請重試。";
-                _isSubmitting = false;
-                return;
+                try
+                {
+                    using var stream = file.OpenReadStream(MaxFileSize);
+                    var bytes = new byte[file.Size];
+                    await stream.ReadExactlyAsync(bytes);
+                    images.Add(new ImageUploadDto(Convert.ToBase64String(bytes), file.ContentType));
+                }
+                catch
+                {
+                    _error = $"讀取圖片「{file.Name}」失敗，請重試。";
+                    _isSubmitting = false;
+                    return;
+                }
             }
         }
 
@@ -105,7 +108,6 @@ public partial class QuickCommandCard
         }
 
         _submitted = true;
-        // 3 秒後導向操作中心
         _ = Task.Delay(3000).ContinueWith(_ =>
             InvokeAsync(() => Navigation.NavigateTo("/interactions")));
     }
@@ -113,7 +115,7 @@ public partial class QuickCommandCard
     private void Reset()
     {
         _text          = "";
-        _selectedFiles = [];
+        _selectedFiles = null;
         _error         = null;
         _submitted     = false;
     }
