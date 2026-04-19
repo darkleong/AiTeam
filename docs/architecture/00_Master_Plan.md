@@ -126,6 +126,7 @@
 | v7.6 | 2026-04-19 | Hotfix v3.16.1：零-B（MockMode 新提案流程產生重複 TaskGroup Bug）查明並修復 — Stage 28b 驗收修正只改了 Discord 路徑（`ExecuteProposalApprovedAsync` 有 GroupId 防護），Dashboard 路徑（`TaskGroupService.ProcessProposalApprovedAsync`）無條件 `CreateGroupAsync`，導致從 Dashboard 核准 MockMode 提案時產生兩筆 TaskGroup（一筆孤兒 CEO TaskItem、一筆 Kickoff/Design 流程）；兩處對稱化 GroupId 檢查後修復 |
 | v7.7 | 2026-04-19 | Stage 30 規劃書建立（v3.17.0）— 申訴迴圈 LLM API → Claude Code CLI 全面升級：5 個環節（Cody 修正 Dev_plan、Petra 再評估 Dev_plan、Cody 反駁 Review、Vera 再評估 Review、Petra 仲裁）從 LLM API 純文字問答升級為 Claude Code CLI（保留 codebase 存取能力）；決策：每 appeal 新開 session + 強化 Prompt（Stage 23 的 ImplementationNote 已涵蓋 ~80% 價值，Resume 工程量大 40% 且 Token 成本反而更高），對應 FF 八 Phase 2 第三項 |
 | v7.8 | 2026-04-20 | Stage 30 實作完成（v3.17.0）：5 個申訴環節全面改寫為 `RunMeetingSessionAsync`（新開 session，唯讀工具 Glob/Grep/Read）；新增 `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` 共用輔助方法（帶入 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff 脈絡）；3 個 Review Appeal 方法新增 `TaskGroup group` 參數；MockClaudeCodeService 5 種新 `[APPEAL:*]` 分支；FF 八 Phase 2 第三項完成 |
+| v7.9 | 2026-04-20 | Stage 30 驗收通過（v3.17.0）：`/mock fail_review` 與 `/mock fail_dev_plan` 兩個場景實測完整走完，5 個新 CLI 分支全數觸發（Cody/Vera/Petra Arbitration × Dev_plan Cody/Petra Reassess）；搭車補丁：MockMode 第一次驗收只覆蓋 1/5 分支（FailScenario 狀態機提早結束迴圈），修正為依 prompt 內容動態判斷輪次（「前幾輪對話紀錄」/`"disagree"`/`[MOCK-FAIL] Dev_plan 不夠詳細`）後 5/5 全覆蓋；搭車發現對抗紀錄完整存在 DB（`ReviewAppealLog` / `DevPlanAppealLog`）但 Dashboard 完全沒呈現 → 記入 FF 十八（Appeal 對抗紀錄 UI 呈現）|
 
 ---
 
