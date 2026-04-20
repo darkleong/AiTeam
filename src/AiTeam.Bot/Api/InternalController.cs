@@ -189,6 +189,39 @@ public class InternalController(
         return Ok(new { message = "已重新入佇列" });
     }
 
+    /// <summary>
+    /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
+    /// 後續進度透過 SignalR push 給 Dashboard 任務中心。
+    /// </summary>
+    [HttpPost("mock/scenario")]
+    public IActionResult TriggerMockScenario([FromBody] MockScenarioRequest request)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.Scenario))
+            return BadRequest(new { message = "scenario 欄位必填" });
+
+        logger.LogInformation("/internal/mock/scenario 觸發：scenario={Scenario}", request.Scenario);
+
+        // Fire-and-forget：另開 scope 執行，避免阻塞 HTTP 回應
+        Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var mockService = scope.ServiceProvider.GetRequiredService<MockScenarioService>();
+                var (ok, message) = await mockService.RunScenarioAsync(
+                    request.Scenario, request.Title, request.Project);
+                logger.LogInformation("/internal/mock/scenario 背景完成：ok={Ok}，message={Message}", ok, message);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "/internal/mock/scenario 背景執行失敗（scenario={Scenario}）", request.Scenario);
+            }
+        });
+
+        return Accepted(new { message = "Mock 情境已觸發，請至任務中心觀察進度" });
+    }
+
     private bool IsAuthorized()
     {
         if (string.IsNullOrEmpty(_apiKey)) return false;
@@ -203,3 +236,5 @@ public record DeploymentRecordRequest(
     string? Sha,
     string? Status,
     string? TriggeredBy);
+
+public record MockScenarioRequest(string Scenario, string? Title, string? Project);

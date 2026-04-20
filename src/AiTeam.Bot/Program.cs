@@ -29,6 +29,7 @@ builder.Services.Configure<AgentSettings>(o =>
 builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection("GitHub"));
 builder.Services.Configure<OpsSettings>(builder.Configuration.GetSection("OpsSettings"));
 builder.Services.Configure<WorkflowSettings>(builder.Configuration.GetSection("WorkflowSettings"));
+builder.Services.AddSingleton<WorkflowSettingsResolver>();
 
 // Anthropic
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";
@@ -100,6 +101,7 @@ builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentQueueProcessor>());
 builder.Services.AddSingleton<TaskGroupService>();
+builder.Services.AddSingleton<MockScenarioService>();
 
 // Stage 28a：Dashboard 回覆消費器
 builder.Services.AddSingleton<InteractionProcessor>();

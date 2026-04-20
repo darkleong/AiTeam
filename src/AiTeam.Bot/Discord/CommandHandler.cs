@@ -858,159 +858,18 @@ public class CommandHandler(
     /// Stage 17：/mock — MockMode 限定指令，直接注入模擬 TaskGroup 觸發指定工作流程。
     /// 繞過 Victoria 分類與所有提案流程，讓測試者可立即驗證完整 Agent 執行鏈。
     /// </summary>
+    /// <summary>
+    /// Stage 32：本方法已重構為薄 wrapper，核心邏輯移至 <see cref="MockScenarioService"/>，
+    /// 讓 Dashboard Internal API 可共用同一份情境實作（FF 十五）。
+    /// </summary>
     private async Task HandleMockCommandAsync(SocketSlashCommand command)
     {
-        // 確認 MockMode 已啟用
-        if (!await appSettings.GetBoolAsync("MockMode", false))
-        {
-            await command.FollowupAsync(
-                "⚠️ `/mock` 指令僅在 **Mock Mode 啟用**時有效。\n" +
-                "請至 Dashboard → Agent 設定 → 啟用 Mock Mode 後再試。");
-            return;
-        }
-
         var workflowStr = command.Data.Options.First(o => o.Name == "workflow").Value.ToString()!;
         var customTitle = command.Data.Options.FirstOrDefault(o => o.Name == "title")?.Value?.ToString();
 
-        // 失敗測試情境：設定 FailScenario 並對應到適合的起始步驟
-        if (workflowStr == "fail_review")
-            MockClaudeCodeService.FailScenario = "review_appeal";
-        else if (workflowStr == "fail_qa")
-            MockClaudeCodeService.FailScenario = "qa_failure";
-        else if (workflowStr == "fail_dev_plan")
-            MockClaudeCodeService.FailScenario = "dev_plan_appeal";
-
-        var (workflowType, workflowLabel, initialStep) = workflowStr switch
-        {
-            "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",           "Dev"),
-            "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",           "Dev_plan"),
-            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）",    "Dev_plan"),
-            "fail_review"               => (WorkflowType.NewFeature,      "失敗測試-ReviewAppeal", "Dev"),
-            "fail_qa"                   => (WorkflowType.NewFeature,      "失敗測試-QA失敗",      "Dev"),
-            "fail_dev_plan"             => (WorkflowType.NewFeature,      "失敗測試-DevPlanAppeal", "Dev_plan"),
-            _                           => (WorkflowType.NewFeature,      "新功能",              "Dev_plan")
-        };
-
-        var title   = customTitle ?? $"[MOCK] 模擬{workflowLabel}任務（{DateTime.Now:HH:mm:ss}）";
-        var project = _gitHubSettings.DefaultRepo;
-
-        logger.LogInformation("[MockMode] /mock 觸發：workflow={Workflow}，title={Title}", workflowStr, title);
-
-        if (workflowStr == "new_feature_with_proposal")
-        {
-            // 含提案流程：模擬完整 ShowProposalAsync，包含 Embed 確認 + 自動確認
-            await HandleMockProposalFlowAsync(command, title, project, workflowType);
-            return;
-        }
-
-        // 一般流程：建立 TaskGroup，直接觸發起始步驟
-        var group = await taskGroupService.CreateGroupAsync(
-            title, project, workflowType,
-            issueUrlsJson: "[\"https://github.com/mock/repo/issues/1\"]",
-            uiSpecContent: "[MOCK] 模擬 UI 規格，供 Mock Mode 測試使用。");
-
-        _ = Task.Run(() => taskGroupService.FireStepsAsync(
-            group, [new WorkflowStep(initialStep)]));
-
-        var emoji = workflowStr switch
-        {
-            "bug_fix"          => "🐛",
-            "tech_improvement" => "🔧",
-            _                  => "✨"
-        };
-
-        await command.FollowupAsync(
-            $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +
-            $"任務：`{title}`\n" +
-            $"起始步驟：`{initialStep}` → 後續由 Orchestrator 自動推進\n" +
-            $"請至 Dashboard → 任務中心 觀察流程進度，所有輸出將標記 `[MOCK]`。");
-    }
-
-    /// <summary>
-    /// Stage 25b：/mock workflow:new_feature_with_proposal 的提案流程模擬（簡化版）。
-    /// 提案階段已移除 Rosa/Demi，直接建立提案 Embed 並自動確認後觸發 Kickoff 會議。
-    /// </summary>
-    private async Task HandleMockProposalFlowAsync(
-        SocketSlashCommand command,
-        string title,
-        string project,
-        WorkflowType workflowType)
-    {
-        var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-        if (ceoChannel is null)
-        {
-            await command.FollowupAsync("❌ 找不到 CEO 頻道，無法發送提案書。");
-            return;
-        }
-
-        // ── 1. 建立 TaskGroup（無 issueUrls/uiSpec，設計階段再填入）──
-        var group = await taskGroupService.CreateGroupAsync(title, project, workflowType);
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo     = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var pushService  = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-
-        var projectId = string.IsNullOrWhiteSpace(project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(project);
-
-        // ── 2. 建立 CEO 主任務（pending，掛 GroupId）──
-        var ceoTask = new TaskItem
-        {
-            Title         = title,
-            Description   = "[MOCK] 模擬新功能提案流程",
-            TriggeredBy   = "Discord",
-            AssignedAgent = "CEO",
-            Status        = "pending",
-            GroupId       = group.Id,
-            ProjectId     = projectId,
-        };
-        taskRepo.Add(ceoTask);
-        await taskRepo.SaveAsync();
-        var ceoTaskId = ceoTask.Id;
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = ceoTask.Id,
-            GroupId   = group.Id,
-            Title     = ceoTask.Title,
-            AgentName = ceoTask.AssignedAgent,
-            Status    = "pending"
-        });
-
-        // ── 3. 傳送與真實流程相同的提案 Embed + 確認按鈕 ──
-        var proposalEmbed = BuildProposalEmbed(title, "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。");
-        var proposalMsg   = await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: BuildProposalConfirmButtons());
-
-        // ── 4. 登記 _pendingConfirmations，讓按鈕回調可以路由 ──
-        RegisterProposalConfirmation(proposalMsg.Id, ceoTaskId, project,
-            "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。");
-
-        // ── 5. 建立 BossInteraction，讓 Dashboard 操作中心顯示待處理卡片 ──
-        await using var interactionScope = serviceProvider.CreateAsyncScope();
-        var interactionSvc = interactionScope.ServiceProvider.GetRequiredService<InteractionService>();
-        _ = interactionSvc.CreateInteractionAsync(
-            "proposal",
-            title:                title,
-            description:          "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。",
-            project:              project,
-            agentName:            null,
-            availableActionsJson: InteractionService.ProposalActionsJson,
-            contextJson:          JsonSerializer.Serialize(new
-            {
-                channelId = ceoChannel.Id.ToString(),
-                taskId    = ceoTaskId.ToString(),
-                project,
-                description = "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。"
-            }),
-            discordMessageId: (decimal)proposalMsg.Id,
-            taskItemId:       ceoTaskId);
-
-        // ── 6. 回應 /mock 指令 ──
-        await command.FollowupAsync(
-            $"📋 **[MOCK] 新功能（含提案）流程已啟動**\n" +
-            $"任務：`{title}`\n" +
-            $"請至 <#{ceoChannel.Id}> 或 Dashboard 操作中心點擊確認，流程才會繼續。");
+        var mockService = serviceProvider.GetRequiredService<MockScenarioService>();
+        var (_, message) = await mockService.RunScenarioAsync(workflowStr, customTitle);
+        await command.FollowupAsync(message);
     }
 
     private async Task HandleReloadRulesAsync(SocketSlashCommand command)
@@ -1876,7 +1735,7 @@ public class CommandHandler(
     /// Stage 25b：提案書 Embed（簡化版，僅顯示需求描述，不含 Issues/UI 規格）。
     /// Issues 和 UI 規格由設計階段產出。
     /// </summary>
-    private static Embed BuildProposalEmbed(string title, string? description)
+    internal static Embed BuildProposalEmbed(string title, string? description)
     {
         var descPreview = string.IsNullOrWhiteSpace(description)
             ? "（無描述）"
@@ -2269,7 +2128,7 @@ public class CommandHandler(
             .Build();
 
     /// <summary>Stage 10：提案書確認按鈕（三個：核准 / 需調整 / 取消）。</summary>
-    private static MessageComponent BuildProposalConfirmButtons()
+    internal static MessageComponent BuildProposalConfirmButtons()
         => new ComponentBuilder()
             .WithButton("✅ 核准，開始開發", "propose_yes",    ButtonStyle.Success)
             .WithButton("✏️ 需要調整",       "propose_adjust", ButtonStyle.Primary)

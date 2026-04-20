@@ -35,7 +35,7 @@ public class LlmProviderFactory(
     {
         // MockMode：有意不包裝 TokenTrackingProvider，避免假統計資料
         if (appSettings.GetBoolAsync("MockMode", false).GetAwaiter().GetResult())
-            return new MockLlmProvider();
+            return new MockLlmProvider(appSettings);
 
         if (!_settings.Agents.TryGetValue(agentName, out var config))
             throw new InvalidOperationException($"找不到 Agent 設定：{agentName}");

@@ -1,22 +1,38 @@
+using AiTeam.Bot.Services;
+
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// Stage 17：MockMode 模擬 LLM 直接呼叫，回傳預設 JSON 結果，不消耗 API。
 /// 有意跳過 TokenTrackingProvider 包裝，避免產生假的 Token 統計資料污染 Dashboard 監控頁。
 /// 依 systemPrompt 偵測呼叫情境，回傳對應格式的 JSON。
+///
+/// Stage 32：延遲範圍改由 AppSettings（Mock:DelayMinMs / Mock:DelayMaxMs）動態讀取。
 /// </summary>
-public class MockLlmProvider : ILlmProvider
+public class MockLlmProvider(AppSettingsService appSettings) : ILlmProvider
 {
+    private const int DefaultDelayMinMs = 30000;
+    private const int DefaultDelayMaxMs = 60000;
+
     public async Task<LlmResponse> CompleteAsync(
         string systemPrompt,
         string userMessage,
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null)
     {
-        await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
+        await Task.Delay(await GetMockDelayMsAsync(cancellationToken), cancellationToken);
 
         var content = BuildMockResponse(systemPrompt);
         return new LlmResponse(content, InputTokens: 0, OutputTokens: 0);
+    }
+
+    private async Task<int> GetMockDelayMsAsync(CancellationToken ct)
+    {
+        var minRaw = await appSettings.GetAsync("Mock:DelayMinMs", ct);
+        var maxRaw = await appSettings.GetAsync("Mock:DelayMaxMs", ct);
+        var min = int.TryParse(minRaw, out var m) && m >= 0 ? m : DefaultDelayMinMs;
+        var max = int.TryParse(maxRaw, out var x) && x > min ? x : Math.Max(min + 1, DefaultDelayMaxMs);
+        return Random.Shared.Next(min, max);
     }
 
     /// <summary>

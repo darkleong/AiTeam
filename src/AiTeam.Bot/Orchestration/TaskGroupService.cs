@@ -27,7 +27,7 @@ public class TaskGroupService(
     DiscordSocketClient discordClient,
     IOptions<DiscordSettings> discordSettings,
     IOptions<GitHubSettings> gitHubSettings,
-    IOptions<WorkflowSettings> workflowSettings,
+    WorkflowSettingsResolver workflowResolver,
     WorkflowEngine workflowEngine,
     MeetingService meetingService,
     AgentQueueService agentQueueService,
@@ -35,9 +35,8 @@ public class TaskGroupService(
     IHostApplicationLifetime appLifetime,
     ILogger<TaskGroupService> logger)
 {
-    private readonly DiscordSettings  _discord          = discordSettings.Value;
-    private readonly GitHubSettings   _gitHub           = gitHubSettings.Value;
-    private readonly WorkflowSettings _workflowSettings = workflowSettings.Value;
+    private readonly DiscordSettings _discord = discordSettings.Value;
+    private readonly GitHubSettings  _gitHub  = gitHubSettings.Value;
 
     // ---- 任務群組建立 ----
 
@@ -822,7 +821,8 @@ public class TaskGroupService(
         }
 
         // failed → Petra 判斷根本原因
-        if (group.QaFixRound >= _workflowSettings.QaFixMaxRounds)
+        var qaFixMaxRounds = await workflowResolver.GetQaFixMaxRoundsAsync(cancellationToken);
+        if (group.QaFixRound >= qaFixMaxRounds)
         {
             logger.LogWarning("QA 修復超過上限（Round={Round}），升級老闆（Group={Id}）",
                 group.QaFixRound, group.Id);
@@ -901,7 +901,7 @@ public class TaskGroupService(
         if (result.CriticalReviewCount == 0)
             return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
 
-        var maxRounds  = _workflowSettings.ReviewAppealMaxRounds;
+        var maxRounds  = await workflowResolver.GetReviewAppealMaxRoundsAsync(cancellationToken);
         var reviewBody = group.LastReviewBody ?? result.ReviewBody ?? "";
 
         await using var scope = serviceProvider.CreateAsyncScope();
@@ -1131,7 +1131,7 @@ public class TaskGroupService(
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
-        var maxRounds     = _workflowSettings.DevPlanAppealMaxRounds;
+        var maxRounds     = await workflowResolver.GetDevPlanAppealMaxRoundsAsync(cancellationToken);
         var currentReview = initialReview;
         var priorContext  = $"Petra 初審意見：{initialReview.Summary}";
 

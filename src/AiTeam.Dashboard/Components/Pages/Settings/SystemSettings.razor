@@ -56,6 +56,36 @@
     </div>
 </div>
 
+<div class="system-config-card">
+    <div style="flex:1">
+        <strong>Mock Mode 延遲範圍</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 12px">
+            模擬 Agent 執行的隨機延遲範圍（毫秒）。預設 30000–60000（30–60 秒），模擬真實 Claude Code 執行時間。<br/>
+            複驗單一缺失時可調小（如 1000–3000）加快速度。修改後 5 分鐘內自動生效。
+        </p>
+        <div class="d-flex align-center gap-3">
+            <MudNumericField T="int" @bind-Value="_mockDelayMin"
+                             Label="最小延遲 (ms)" Variant="Variant.Outlined"
+                             Min="0" Max="600000" Step="1000" Style="max-width:180px" />
+            <MudText>–</MudText>
+            <MudNumericField T="int" @bind-Value="_mockDelayMax"
+                             Label="最大延遲 (ms)" Variant="Variant.Outlined"
+                             Min="1" Max="600000" Step="1000" Style="max-width:180px" />
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                       OnClick="SaveMockDelayAsync"
+                       Disabled="@(_isSavingMockDelay || !IsMockDelayValid())">
+                @(_isSavingMockDelay ? "儲存中..." : "儲存")
+            </MudButton>
+        </div>
+        @if (!IsMockDelayValid())
+        {
+            <MudText Color="Color.Error" Typo="Typo.caption" Style="margin-top:6px">
+                需滿足：0 ≤ 最小 &lt; 最大 ≤ 600000
+            </MudText>
+        }
+    </div>
+</div>
+
 <MudDivider Style="margin: 32px 0" />
 
 <h3 style="margin-bottom:16px">CEO 指令通道</h3>
@@ -101,6 +131,77 @@
                        OnClick="SaveChristUserIdAsync"
                        Disabled="@_isSavingUserId">
                 @(_isSavingUserId ? "儲存中..." : "儲存")
+            </MudButton>
+        </div>
+    </div>
+</div>
+
+<MudDivider Style="margin: 32px 0" />
+
+<h3 style="margin-bottom:16px">流程輪次上限</h3>
+
+<div class="system-config-card">
+    <div style="flex:1">
+        <p class="text-muted" style="font-size:0.85rem; margin:0 0 16px">
+            各流程輪次上限設定。修改後 5 分鐘內自動生效，新任務會採用新設定（執行中任務沿用開始時讀取的數值）。<br/>
+            值留空或設為 0 時，fallback 到 <code>appsettings.json</code> 預設值（目前皆為 3）。
+        </p>
+
+        <strong>Review Appeal 最大輪次</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 8px">
+            Cody 反駁 Vera Review 的最大輪次。拉高讓討論更充分，拉低（例如 1）加速驗收。超過此輪次後自動 escalate 給 Petra 仲裁。
+        </p>
+        <MudNumericField T="int" @bind-Value="_reviewAppealMaxRounds"
+                         Label="輪次（1–10）" Variant="Variant.Outlined"
+                         Min="1" Max="10" Style="max-width:180px" />
+
+        <MudDivider Style="margin: 16px 0" />
+
+        <strong>QA Fix 最大輪次</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 8px">
+            Petra 判定為 code_bug 後，Dev_fix + QA 重跑的最大輪次。超過後升級老闆人工介入。
+        </p>
+        <MudNumericField T="int" @bind-Value="_qaFixMaxRounds"
+                         Label="輪次（1–10）" Variant="Variant.Outlined"
+                         Min="1" Max="10" Style="max-width:180px" />
+
+        <MudDivider Style="margin: 16px 0" />
+
+        <strong>Dev_plan Appeal 最大輪次</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 8px">
+            Cody 反駁 Petra Dev_plan 初審的最大輪次（純 LLM 迴圈）。超過後升級給老闆。
+        </p>
+        <MudNumericField T="int" @bind-Value="_devPlanAppealMaxRounds"
+                         Label="輪次（1–10）" Variant="Variant.Outlined"
+                         Min="1" Max="10" Style="max-width:180px" />
+
+        <MudDivider Style="margin: 16px 0" />
+
+        <strong>Kick-off 會議最大輪次</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 8px">
+            Rosa/Demi/Cody/Quinn + Petra 討論需求的最大輪次。超過後 Petra 直接產出任務計劃書。
+        </p>
+        <MudNumericField T="int" @bind-Value="_kickoffMaxRounds"
+                         Label="輪次（1–10）" Variant="Variant.Outlined"
+                         Min="1" Max="10" Style="max-width:180px" />
+
+        <MudDivider Style="margin: 16px 0" />
+
+        <strong>設計會議最大輪次</strong>
+        <p class="text-muted" style="font-size:0.85rem; margin:4px 0 8px">
+            設計會議（含調整重開）的最大輪次。超過後 escalate 給 Christ 裁決。
+        </p>
+        <MudNumericField T="int" @bind-Value="_designMeetingMaxRounds"
+                         Label="輪次（1–10）" Variant="Variant.Outlined"
+                         Min="1" Max="10" Style="max-width:180px" />
+
+        <MudDivider Style="margin: 20px 0" />
+
+        <div class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                       OnClick="SaveWorkflowRoundsAsync"
+                       Disabled="@_isSavingWorkflow">
+                @(_isSavingWorkflow ? "儲存中..." : "儲存全部")
             </MudButton>
         </div>
     </div>

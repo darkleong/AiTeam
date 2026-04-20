@@ -1,12 +1,31 @@
+using AiTeam.Bot.Services;
+
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// Stage 17：MockMode 模擬 Claude Code subprocess 呼叫，回傳預設結果，不消耗 API。
 /// 各方法的 mock output 格式設計為能通過對應 Agent 的 JSON parser，
 /// 無法解析時由 Agent fallback 到 MockLlmProvider。
+///
+/// Stage 32：延遲範圍改由 AppSettings（Mock:DelayMinMs / Mock:DelayMaxMs）動態讀取，
+/// 預設 30000-60000 ms，可於 Dashboard 系統設定調整以加速複驗。
 /// </summary>
-public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : IClaudeCodeService
+public class MockClaudeCodeService(
+    AppSettingsService appSettings,
+    ILogger<MockClaudeCodeService> logger) : IClaudeCodeService
 {
+    private const int DefaultDelayMinMs = 30000;
+    private const int DefaultDelayMaxMs = 60000;
+
+    private async Task<int> GetMockDelayMsAsync(CancellationToken ct)
+    {
+        var minRaw = await appSettings.GetAsync("Mock:DelayMinMs", ct);
+        var maxRaw = await appSettings.GetAsync("Mock:DelayMaxMs", ct);
+        var min = int.TryParse(minRaw, out var m) && m >= 0 ? m : DefaultDelayMinMs;
+        var max = int.TryParse(maxRaw, out var x) && x > min ? x : Math.Max(min + 1, DefaultDelayMaxMs);
+        return Random.Shared.Next(min, max);
+    }
+
     /// <summary>
     /// 強制失敗情境（供 /mock fail_* 指令使用）。
     /// 各 Agent 的 MockMode 區塊會依據此值決定是否回傳失敗結果。
@@ -32,7 +51,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
         const string output = "[MOCK] 開發完成，程式碼已實作並通過 build\nhttps://github.com/mock/repo/pull/999";
         return new ClaudeCodeResult(true, output, 0, "");
     }
@@ -47,7 +66,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
         const string output =
             "[MOCK] 探索完成\n" +
             "[{\"title\":\"[MOCK] 模擬需求功能\",\"body\":\"這是 Mock Mode 產生的模擬需求，用於測試流程。\",\"labels\":[\"enhancement\"]}]";
@@ -63,7 +82,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunVictoriaAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
         const string output =
             "[MOCK] Victoria 分析完成\n" +
             "<ACTION>{\"action\":\"reply\",\"reply\":\"[MOCK] Victoria 已完成分析，這是模擬模式回應。\",\"require_confirmation\":false,\"docs_committed\":false}</ACTION>";
@@ -78,7 +97,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunQaAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
         const string output =
             "[MOCK] QA 完成\n" +
             "{\"generated\":[\"[MOCK] MockFeatureTest.cs\"],\"summary\":\"[MOCK] QA 測試通過，0 個失敗\"}";
@@ -93,7 +112,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReviewAsync 回傳模擬結果");
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
         const string output =
             "[MOCK] 審查完成\n" +
             "{\"critical\":[],\"warning\":[],\"info\":[],\"summary\":\"[MOCK] 模擬審查通過，程式碼品質符合要求\",\"impact\":\"[MOCK] 無影響範圍\"}";
@@ -112,7 +131,7 @@ public class MockClaudeCodeService(ILogger<MockClaudeCodeService> logger) : ICla
         logger.LogInformation(
             "[MockMode] MockClaudeCodeService.RunMeetingSessionAsync（sessionId={Id}，isFirst={IsFirst}）",
             sessionId, isFirstMessage);
-        await Task.Delay(Random.Shared.Next(30000, 60000), ct);
+        await Task.Delay(await GetMockDelayMsAsync(ct), ct);
 
         // Stage 30：申訴環節 mock 分支（優先於 agentName 判斷）
         // FailScenario 失敗路徑已在 PmAgentService 早返回，不會到達此處

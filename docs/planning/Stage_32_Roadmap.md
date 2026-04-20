@@ -3,8 +3,9 @@
 > 對應 Future Feature：十五（Dashboard 與 Discord 功能平等 — `/mock` 子項）+ 系統設定頁擴充（Mock Delay + 各流程輪次上限）
 > 對應版本：v3.19.0
 > 建立日期：2026-04-20
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 完成日期：2026-04-20
+> 狀態：✅ 已完成
+> 文件版本：v2.0
 
 ---
 
@@ -215,8 +216,60 @@ A + B 同源（系統設定頁擴充），先一起做；C 是重構 + 新 UI，
 
 ---
 
+## 實作紀錄
+
+**完成日期**：2026-04-20
+**版本**：v3.18.0 → v3.19.0（minor bump，集中在 `src/Directory.Build.props`）
+
+### 子項 A：Mock Delay 可調整 — ✅
+
+- `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs`：primary constructor 新增 `AppSettingsService` 依賴，加入 `GetMockDelayMsAsync` helper，6 處 `Task.Delay(Random.Shared.Next(30000, 60000), ct)` 改為 `Task.Delay(await GetMockDelayMsAsync(ct), ct)`
+- `src/AiTeam.Bot/Agents/MockLlmProvider.cs`：同樣改造，1 處延遲點
+- `src/AiTeam.Bot/Agents/LlmProviderFactory.cs`：`new MockLlmProvider()` → `new MockLlmProvider(appSettings)`
+- `src/AiTeam.Dashboard/Components/Pages/Settings/SystemSettings.razor` + `.cs`：在 Mock Mode 開關下方新增「Mock Mode 延遲範圍」卡片（兩個 `MudNumericField`，`Min=0 Max=600000`），附灰色說明小字；`SaveMockDelayAsync` 儲存 `Mock:DelayMinMs` / `Mock:DelayMaxMs`；前端驗證 `0 ≤ min < max ≤ 600000`
+
+### 子項 B：各流程輪次上限動態化 — ✅
+
+- 新增 `src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs`：5 個 async getter（Review / QA / DevPlan / Kickoff / Design），AppSettings 優先、`IOptions<WorkflowSettings>`（appsettings.json）fallback；無值或非正整數自動 fallback
+- `src/AiTeam.Bot/Program.cs`：`AddSingleton<WorkflowSettingsResolver>()`
+- `src/AiTeam.Bot/Orchestration/MeetingService.cs`：建構子把 `IOptions<WorkflowSettings>` 換成 `WorkflowSettingsResolver`；`RunKickoffMeetingAsync` / `RunDesignMeetingAsync` 方法開頭各讀一次 local 變數（`kickoffMaxRounds` / `designMaxRounds`），7 處原 `_workflow.*MaxRounds` 用法全改 local（執行中任務沿用開始時的數值）
+- `src/AiTeam.Bot/Orchestration/TaskGroupService.cs`：同樣把 `IOptions<WorkflowSettings>` 換成 `WorkflowSettingsResolver`；QA Fix 路徑讀 local `qaFixMaxRounds`（line ~825），Review Appeal / Dev_plan Appeal 路徑的既有 `maxRounds` local 改為 await resolver
+- `src/AiTeam.Dashboard/Components/Pages/Settings/SystemSettings.razor` + `.cs`：新增「流程輪次上限」區塊（5 個 `MudNumericField`，`Min=1 Max=10`），每欄獨立灰色說明小字（Review/QA/DevPlan/Kickoff/Design）；`SaveWorkflowRoundsAsync` 一次儲存 5 個 `Workflow:*MaxRounds`
+
+### 子項 C：/mock Dashboard 化 — ✅
+
+- 新增 `src/AiTeam.Bot/Services/MockScenarioService.cs`（Singleton）：將 CommandHandler.`HandleMockCommandAsync` + `HandleMockProposalFlowAsync` 核心邏輯搬進來；`RunScenarioAsync(scenario, title?, project?, ct)` 回傳 `(bool ok, string message)` 供 Discord / Dashboard 共用訊息
+- `src/AiTeam.Bot/Discord/CommandHandler.cs`：`HandleMockCommandAsync` 重構為薄 wrapper（6 行）；`BuildProposalEmbed` / `BuildProposalConfirmButtons` 由 `private static` 改 `internal static`（供 MockScenarioService 呼叫）；`RegisterProposalConfirmation` 維持 public instance（Stage 28b 已公開，無需改）；舊 `HandleMockProposalFlowAsync` 方法移除
+- `src/AiTeam.Bot/Program.cs`：`AddSingleton<MockScenarioService>()`
+- `src/AiTeam.Bot/Api/InternalController.cs`：新增 `POST /internal/mock/scenario` 端點，fire-and-forget（`Task.Run` + 另開 scope）、立即回 `202 Accepted`；body `MockScenarioRequest { Scenario, Title?, Project? }`
+- `src/AiTeam.Dashboard/Services/DashboardBotService.cs`：新增 `TriggerMockScenarioAsync(scenario, title?, project?)`，仿既有 pattern（`X-Api-Key` header + `JsonContent.Create`），回 `bool`
+- 新增 `src/AiTeam.Dashboard/Components/Pages/Home/MockScenarioCard.razor` + `.razor.cs`：MudPaper 卡片，7 個情境 `MudSelect`、Title/Project 兩個 optional `MudTextField`、「🎬 觸發」按鈕、MockMode 未啟用時顯示 `MudAlert Warning` 禁用；Snackbar 回饋
+- `src/AiTeam.Dashboard/Components/Pages/Home/Home.razor`：`<QuickCommandCard />` 下方插入 `<MockScenarioCard />`
+
+### 踩坑紀錄
+
+1. **WorkflowType / WorkflowStep namespace**：一開始誤寫 `AiTeam.Bot.Workflow`，實際在 `AiTeam.Bot.Orchestration.WorkflowEngine.cs`。移除錯誤 `using` 即可
+2. **`Discord.IMessageChannel` 名稱衝突**：MockScenarioService 在 `AiTeam.Bot.Services` 命名空間下，`Discord.*` 被誤解為 `AiTeam.Bot.Discord`。加入 `using Discord;` 並改用 `IMessageChannel` 未限定名稱解決（避免 `global::` 前綴）
+3. **`TaskUpdateViewModel` using 漏掉**：位於 `AiTeam.Shared.ViewModels`，需 `using AiTeam.Shared.ViewModels;`（不是 `AiTeam.Shared.Dtos`）
+4. **CommandHandler ↔ MockScenarioService 潛在循環依賴**：MockScenarioService 要呼叫 `CommandHandler.RegisterProposalConfirmation` 登記 `_pendingConfirmations`，CommandHandler 也要呼叫 `MockScenarioService.RunScenarioAsync`。雙方都是 Singleton，若直接建構子注入會循環。解法：MockScenarioService 改為 `IServiceProvider.GetRequiredService<CommandHandler>()` 延遲解析（Dashboard 按鈕回調與 Discord 按鈕回調共用同一份 `_pendingConfirmations` dict）
+
+### 驗收
+
+- `dotnet build AiTeam.slnx` ✅（無 error；warning 皆為既有 Playwright / MailKit，與本 Stage 無關）
+- Discord `/mock` 既有指令：重構為薄 wrapper（6 行）後仍走同一份 `MockScenarioService.RunScenarioAsync`，行為等價
+- Dashboard 首頁：`<MockScenarioCard />` 已插入，MockMode 未啟用時自動 disable
+- 系統設定頁：Mock Delay 區塊 + 流程輪次上限區塊（5 欄）已呈現，每欄都有灰色說明小字（Christ 2026-04-20 要求）
+
+### 結案分工
+
+- **Stage 32 Session（本次）**：完成本 Roadmap 的「實作紀錄」章節、header 狀態改 ✅ / 版本 v2.0、版本歷史追加一行、commit
+- **Aria 接手**：Master Plan header / 索引 / changelog + Future_Feature 十五移入已完成 / changelog
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |------|------|------|
 | v1.0 | 2026-04-20 | 初版規劃書，三子項（Mock Delay / 輪次上限動態化 / `/mock` Dashboard 化）合併為「Dashboard 老闆控制中心擴充」；Opus 1M + high（取 Stage 31 校準教訓）|
+| v2.0 | 2026-04-20 | 實作完成：補「實作紀錄」章節 + header 狀態 ✅ / 版本 v2.0；踩坑四件組（namespace / Discord 名稱衝突 / using 遺漏 / CommandHandler 循環依賴）|

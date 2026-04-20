@@ -17,13 +17,12 @@ namespace AiTeam.Bot.Orchestration;
 public class MeetingService(
     IClaudeCodeService claudeCode,
     GitHubService gitHubService,
-    IOptions<WorkflowSettings> workflowSettings,
+    WorkflowSettingsResolver workflowResolver,
     IOptions<GitHubSettings> gitHubSettings,
     IConfiguration configuration,
     ILogger<MeetingService> logger)
 {
-    private readonly WorkflowSettings _workflow = workflowSettings.Value;
-    private readonly GitHubSettings   _gitHub   = gitHubSettings.Value;
+    private readonly GitHubSettings _gitHub = gitHubSettings.Value;
 
     private static readonly string[] ReadOnlyTools = ["Glob", "Grep", "Read"];
 
@@ -50,6 +49,10 @@ public class MeetingService(
         var logBuilder = new StringBuilder();
         var totalRounds = 0;
         string? lastPetraOutput = null;
+
+        // Stage 32：方法開頭讀一次輪次上限（AppSettings 優先、appsettings.json fallback），
+        // 避免每輪都 await AppSettings；執行中任務沿用開始時的數值。
+        var kickoffMaxRounds = await workflowResolver.GetKickoffMaxRoundsAsync(ct);
 
         // 各 Agent 的 session ID：
         // Petra 使用 group.Id（固定，供後續 Christ 修改流程 resume 使用）
@@ -82,7 +85,7 @@ public class MeetingService(
 
         try
         {
-            for (var round = 1; round <= _workflow.KickoffMaxRounds; round++)
+            for (var round = 1; round <= kickoffMaxRounds; round++)
             {
                 totalRounds = round;
                 var isFirstMessage = round == 1;
@@ -158,9 +161,9 @@ public class MeetingService(
                 }
 
                 // needs_discussion → 繼續下一輪
-                if (round == _workflow.KickoffMaxRounds)
+                if (round == kickoffMaxRounds)
                 {
-                    logger.LogInformation("MeetingService：已達最大輪次 {Max}，強制結束", _workflow.KickoffMaxRounds);
+                    logger.LogInformation("MeetingService：已達最大輪次 {Max}，強制結束", kickoffMaxRounds);
                 }
             }
 
@@ -267,6 +270,9 @@ public class MeetingService(
         var apiKey     = GetApiKey();
         var logBuilder = new StringBuilder();
         var totalRounds = 0;
+
+        // Stage 32：方法開頭讀一次設計會議輪次上限（AppSettings 優先、appsettings.json fallback）。
+        var designMaxRounds = await workflowResolver.GetDesignMeetingMaxRoundsAsync(ct);
 
         // Session IDs：Petra UUID（不能用 group.Id，避免 resume Kickoff session）
         // Rosa/Demi session 跨前置作業 + 會議 + 調整全程使用
@@ -384,7 +390,7 @@ public class MeetingService(
             string? finalDesignPlan = null;
             var finalDecision = "consensus";
             string? escalateReason = null;
-            for (var round = 1; round <= _workflow.DesignMeetingMaxRounds; round++)
+            for (var round = 1; round <= designMaxRounds; round++)
             {
                 totalRounds = round;
                 logger.LogInformation("MeetingService：設計會議第 {Round} 輪開始（groupId={Id}）", round, group.Id);
@@ -501,7 +507,7 @@ public class MeetingService(
 
                     // needs_meeting：遞增輪次，判斷是否超上限
                     totalRounds++;
-                    if (totalRounds > _workflow.DesignMeetingMaxRounds)
+                    if (totalRounds > designMaxRounds)
                     {
                         finalDecision  = "escalate";
                         escalateReason = "多輪調整後仍需重開會議，已達設計會議上限";
@@ -515,9 +521,9 @@ public class MeetingService(
                 }
 
                 // needs_discussion：繼續下一輪
-                if (round == _workflow.DesignMeetingMaxRounds)
+                if (round == designMaxRounds)
                 {
-                    logger.LogInformation("MeetingService：設計會議已達最大輪次 {Max}，強制結束", _workflow.DesignMeetingMaxRounds);
+                    logger.LogInformation("MeetingService：設計會議已達最大輪次 {Max}，強制結束", designMaxRounds);
                     finalDesignPlan = await GenerateDesignPlanAsync(
                         sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, ct);
                     logBuilder.AppendLine("## 設計規劃書");

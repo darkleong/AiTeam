@@ -1,0 +1,66 @@
+@using AiTeam.Dashboard.Services
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+        <MudText Typo="Typo.h6">🎬 Mock 情境觸發</MudText>
+        @if (!_mockModeEnabled)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                Mock Mode 未啟用
+            </MudChip>
+        }
+    </MudStack>
+
+    <p class="text-muted" style="font-size:0.85rem; margin:0 0 12px">
+        等同於 Discord <code>/mock &lt;scenario&gt;</code> 指令。僅在系統設定啟用 Mock Mode 時可用。<br/>
+        觸發後任務會出現在任務中心，所有輸出標記 <code>[MOCK]</code>、不建立真實 GitHub PR。
+    </p>
+
+    @if (!_mockModeEnabled)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-2">
+            請先至
+            <MudLink Href="/system-settings">系統設定</MudLink>
+            啟用 Mock Mode 後再觸發情境。
+        </MudAlert>
+    }
+
+    <MudGrid Spacing="2" Class="mb-2">
+        <MudItem xs="12" md="4">
+            <MudSelect T="string" @bind-Value="_scenario"
+                       Label="情境" Variant="Variant.Outlined"
+                       Disabled="@(!_mockModeEnabled || _isSubmitting)">
+                <MudSelectItem Value="@("new_feature")">✨ 新功能（無提案）</MudSelectItem>
+                <MudSelectItem Value="@("new_feature_with_proposal")">📋 新功能（含提案）</MudSelectItem>
+                <MudSelectItem Value="@("bug_fix")">🐛 Bug 修復</MudSelectItem>
+                <MudSelectItem Value="@("tech_improvement")">🔧 技術改善</MudSelectItem>
+                <MudSelectItem Value="@("fail_review")">❌ 失敗測試 — Review Appeal 失敗</MudSelectItem>
+                <MudSelectItem Value="@("fail_qa")">❌ 失敗測試 — QA 失敗</MudSelectItem>
+                <MudSelectItem Value="@("fail_dev_plan")">❌ 失敗測試 — Dev_plan Appeal 失敗</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField T="string" @bind-Value="_title"
+                          Label="標題（選填）"
+                          Placeholder="留空自動帶入 timestamp"
+                          Variant="Variant.Outlined"
+                          Disabled="@(!_mockModeEnabled || _isSubmitting)" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField T="string" @bind-Value="_project"
+                          Label="Project（選填）"
+                          Placeholder="留空使用預設 repo"
+                          Variant="Variant.Outlined"
+                          Disabled="@(!_mockModeEnabled || _isSubmitting)" />
+        </MudItem>
+    </MudGrid>
+
+    <div class="d-flex justify-end">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="TriggerAsync"
+                   Disabled="@(!_mockModeEnabled || _isSubmitting || string.IsNullOrWhiteSpace(_scenario))">
+            @(_isSubmitting ? "觸發中..." : "🎬 觸發")
+        </MudButton>
+    </div>
+</MudPaper>

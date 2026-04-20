@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+
 namespace AiTeam.Dashboard.Services;
 
 /// <summary>
@@ -49,6 +51,33 @@ public class DashboardBotService(
         catch (Exception ex)
         {
             logger.LogError(ex, "送出重新入佇列指令失敗（TaskId={Id}）", taskId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Stage 32：呼叫 /internal/mock/scenario，觸發 Mock 情境（fire-and-forget）。
+    /// scenario 對應 Discord /mock workflow 選項（new_feature / bug_fix / tech_improvement /
+    /// new_feature_with_proposal / fail_review / fail_qa / fail_dev_plan）。
+    /// </summary>
+    public async Task<bool> TriggerMockScenarioAsync(
+        string scenario, string? title, string? project, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/mock/scenario");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            request.Content = JsonContent.Create(new { scenario, title, project });
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("Mock 情境觸發指令已送出（scenario={Scenario}）", scenario);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出 Mock 情境觸發指令失敗（scenario={Scenario}）", scenario);
             return false;
         }
     }

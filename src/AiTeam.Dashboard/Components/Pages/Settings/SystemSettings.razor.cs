@@ -23,9 +23,18 @@ public partial class SystemSettings
     private bool    _mockMode;
     private string  _ceoChannelId  = "";
     private string  _christUserId  = "";
+    private int     _mockDelayMin  = 30000;
+    private int     _mockDelayMax  = 60000;
+    private int     _reviewAppealMaxRounds  = 3;
+    private int     _qaFixMaxRounds         = 3;
+    private int     _devPlanAppealMaxRounds = 3;
+    private int     _kickoffMaxRounds       = 3;
+    private int     _designMeetingMaxRounds = 3;
     private bool    _isReloading;
     private bool    _isSavingChannel;
     private bool    _isSavingUserId;
+    private bool    _isSavingMockDelay;
+    private bool    _isSavingWorkflow;
     private string? _saveMessage;
 
     #endregion
@@ -45,6 +54,26 @@ public partial class SystemSettings
 
         var userIdSetting = await AppSettingsService.GetAsync("ChristDiscordUserId");
         _christUserId = userIdSetting?.Value ?? "";
+
+        var delayMinSetting = await AppSettingsService.GetAsync("Mock:DelayMinMs");
+        if (int.TryParse(delayMinSetting?.Value, out var delayMin) && delayMin >= 0)
+            _mockDelayMin = delayMin;
+
+        var delayMaxSetting = await AppSettingsService.GetAsync("Mock:DelayMaxMs");
+        if (int.TryParse(delayMaxSetting?.Value, out var delayMax) && delayMax > 0)
+            _mockDelayMax = delayMax;
+
+        _reviewAppealMaxRounds  = await LoadWorkflowRoundsAsync("Workflow:ReviewAppealMaxRounds", 3);
+        _qaFixMaxRounds         = await LoadWorkflowRoundsAsync("Workflow:QaFixMaxRounds", 3);
+        _devPlanAppealMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DevPlanAppealMaxRounds", 3);
+        _kickoffMaxRounds       = await LoadWorkflowRoundsAsync("Workflow:KickoffMaxRounds", 3);
+        _designMeetingMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DesignMeetingMaxRounds", 3);
+    }
+
+    private async Task<int> LoadWorkflowRoundsAsync(string key, int fallback)
+    {
+        var setting = await AppSettingsService.GetAsync(key);
+        return int.TryParse(setting?.Value, out var v) && v > 0 ? v : fallback;
     }
 
     #endregion
@@ -98,6 +127,36 @@ public partial class SystemSettings
     /// <summary>Discord Snowflake ID 格式驗證：空字串（代表清除）或 17-20 位純數字。</summary>
     private static bool IsValidSnowflakeId(string value)
         => string.IsNullOrEmpty(value) || System.Text.RegularExpressions.Regex.IsMatch(value, @"^\d{17,20}$");
+
+    private bool IsMockDelayValid()
+        => _mockDelayMin >= 0 && _mockDelayMax > _mockDelayMin && _mockDelayMax <= 600000;
+
+    private async Task SaveMockDelayAsync()
+    {
+        if (!IsMockDelayValid())
+        {
+            _saveMessage = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
+            return;
+        }
+
+        _isSavingMockDelay = true;
+        await AppSettingsService.UpsertAsync("Mock:DelayMinMs", _mockDelayMin.ToString());
+        await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
+        _isSavingMockDelay = false;
+        _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
+    }
+
+    private async Task SaveWorkflowRoundsAsync()
+    {
+        _isSavingWorkflow = true;
+        await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
+        await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
+        await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
+        await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
+        await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
+        _isSavingWorkflow = false;
+        _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
+    }
 
     private async Task ReloadCacheAsync()
     {
