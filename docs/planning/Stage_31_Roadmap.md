@@ -91,9 +91,12 @@ Kickoff / Design / Petra 同步會議**不走 AgentQueueProcessor**，不在 Sta
 
 ### 驗收情境
 
-- 手動製造中斷：MockMode 觸發 Kickoff，在會議跑到一半時 Ctrl+C 殺 Bot（或改 ActiveMeetingType 欄位後重啟）
-- Bot 啟動後觀察 log，確認 `RecoverStuckMeetingsAsync` 有掃到並重跑
-- 會議跑完後 `ActiveMeetingType` 應被 clear
+1. 觸發 MockMode 新提案，讓流程跑到 Kickoff 階段（會議開始執行中）
+2. 會議執行中時 Ctrl+C 殺 Bot（或停止 Docker 容器）
+3. 確認 DB `task_groups.active_meeting_type = 'Kickoff'` 仍留存（未被 clear）
+4. 重啟 Bot
+5. 觀察 log 出現 `會議 Crash Recovery：N 個卡住的會議等待重跑`
+6. 會議跑完後確認 `active_meeting_type` 自動回到 null
 
 ---
 
@@ -194,11 +197,15 @@ Sonnet 200K 完全勝任。無需 Opus。
 
 4. **ISnackbar 注入（項目一）**：`PipelineView.razor.cs` 直接 `[Inject] ISnackbar Snackbar`，無需額外包裝，符合 MudBlazor 8.x 規範。
 
+5. **TaskCenter 重試按鈕 row click 隔離**：TaskCenter.razor 的 MudTable 使用 `OnRowClick` 開啟 Log Drawer。按鈕所在的 `<MudTd @onclick:stopPropagation>` 可阻止 click 往上冒泡觸發 row click，確保點「🔁 重試」不會同時打開 Drawer。
+
 ### 踩坑
 
 1. **`dotnet ef database update` 連不到 PostgreSQL**：PostgreSQL 在 Docker 內，宿主機 localhost:5432 無法直連。Migration 檔案已建立，Bot 啟動時 `Program.cs` 的 `db.Database.MigrateAsync()` 自動套用，無需手動跑 `database update`。
 
 2. **`using Microsoft.EntityFrameworkCore` 未引入**：`ExecuteUpdateAsync` 是 EF Core extension method，`TaskGroupService.cs` 原本未 import 此 namespace，編譯時需補上。
+
+3. **驗收情境「手動改 DB」行不通**：初稿驗收情境寫「手動將 ActiveMeetingType 設為 Kickoff 後重啟」，但此 TaskGroup 缺乏真實 Kickoff 脈絡（無 IssueUrls / UiSpec 等），重跑會立即失敗。正確驗法是讓 MockMode 真的跑到 Kickoff 階段再殺 Bot。規劃書驗收情境已修正為六步驟實境測試。
 
 ---
 
@@ -208,3 +215,4 @@ Sonnet 200K 完全勝任。無需 Opus。
 |------|------|------|
 | v1.0 | 2026-04-20 | 初版規劃書，合併 FF 十七 + FF 十八，三大項目 |
 | v2.0 | 2026-04-20 | 實作完成結案；狀態改 ✅；補充實作紀錄（關鍵決策 4 條 + 踩坑 2 條） |
+| v2.1 | 2026-04-20 | 補上 TaskCenter 任務列表頁重試按鈕（PipelineView 外第二個入口）；關鍵決策 +1（stopPropagation）、踩坑 +1（驗收情境修正）；驗收情境 #5 改為六步驟實境測試 |

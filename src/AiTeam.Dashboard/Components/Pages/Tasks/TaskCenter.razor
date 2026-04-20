@@ -43,6 +43,7 @@
         <MudTh>建立時間</MudTh>
         <MudTh>完成時間</MudTh>
         <MudTh>執行耗時</MudTh>
+        <MudTh>操作</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd><StatusBadge Status="@context.Status" /></MudTd>
@@ -57,6 +58,14 @@
         <MudTd>@context.CreatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@FormatDuration(context.Duration)</MudTd>
+        <MudTd @onclick:stopPropagation>
+            @if (context.Status is "failed" or "cancelled")
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="@(() => HandleRequeueAsync(context.Id))">🔁 重試</MudButton>
+            }
+        </MudTd>
     </RowTemplate>
     <PagerContent>
         <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />

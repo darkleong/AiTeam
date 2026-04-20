@@ -14,6 +14,12 @@ public partial class TaskCenter : IAsyncDisposable
     private DashboardTaskService TaskService { get; set; } = null!;
 
     [Inject]
+    private DashboardBotService BotService { get; set; } = null!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
+    [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
     [Inject]
@@ -101,6 +107,14 @@ public partial class TaskCenter : IAsyncDisposable
 
     private async Task OnStatusFilterChangedAsync()
         => await (_tableRef?.ReloadServerData() ?? Task.CompletedTask);
+
+    private async Task HandleRequeueAsync(Guid taskId)
+    {
+        var success = await BotService.RequeueTaskAsync(taskId);
+        Snackbar.Add(
+            success ? "任務已重新入佇列" : "重新入佇列失敗，請稍後再試",
+            success ? Severity.Success : Severity.Error);
+    }
 
     private static Color TriggeredByColor(string? triggeredBy) => triggeredBy switch
     {
