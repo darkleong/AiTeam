@@ -173,7 +173,7 @@ else
                                        OnClick="@(() => LoadLogsAsync(step))">載入 Log</MudButton>
                         }
                         @* Stage 31：失敗 / 取消任務重試按鈕 *@
-                        @if (step.Task.Status is "failed" or "cancelled")
+                        @if (step.Task.Status is "failed" or "cancelled" && step.Task.AssignedAgent is not ("Kickoff" or "Design"))
                         {
                             <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
                                        StartIcon="@Icons.Material.Filled.Refresh"
