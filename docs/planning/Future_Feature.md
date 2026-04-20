@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.16
+> 版本：v7.17
 > 建立日期：2026-04-01
 > 最後更新：2026-04-20
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -749,7 +749,7 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 
 ## 十七、可靠性補強：失敗重試 + 會議 Crash Recovery
 
-> 狀態：🟡 待實作 — 方案已定，等排入 Stage
+> 狀態：🟡 已排入 Stage 31（v3.18.0）— 方案已定
 > 提出日期：2026-04-19（Christ 在 Stage 29 結案後盤點三個可靠性問題時釐清）
 
 ### 背景
@@ -842,7 +842,7 @@ Stage 29 結案後盤點 Agent 執行的可靠性，發現 Q1 / Q2 / Q3 三問�
 
 ## 十八、Appeal 對抗紀錄 UI 呈現
 
-> 狀態：🟡 待實作 — 方向已定
+> 狀態：🟡 已排入 Stage 31（v3.18.0）— 方向已定
 > 提出日期：2026-04-20（Stage 30 驗收時，Christ 問起「對抗資訊有沒有存 DB」時浮現）
 
 ### 背景
@@ -982,3 +982,4 @@ S 級：1 個 DTO 改動 + 1 個 UI 折疊面板 × 2（Review + Dev_plan）。�
 | 2026-04-19 | v7.14：新增十七（可靠性補強：失敗重試 + 會議 Crash Recovery）— Stage 29 結案後盤點 Q1/Q2/Q3 可靠性三問所釐清的缺口；A. Dashboard 重試按鈕（failed/cancelled TaskItem）；B. 會議 Crash Recovery 採方案 2（TaskGroup.ActiveMeetingType 欄位 + 啟動 hook 重跑，不動執行模型）；Christ 決策「會議重跑可接受」，不追求 FF 九的架構統一；明確放棄中斷點續跑 |
 | 2026-04-20 | v7.15：Stage 30 結案（v3.17.0）— 八 Phase 2「LLM API → CLI 全面升級」子項移入已完成摘要；Phase 2 整體狀態改為 🟡 部分完成（循環偵測 + 新鮮視角 待 Stage 30 實際運行資料累積後評估）|
 | 2026-04-20 | v7.16：新增十八（Appeal 對抗紀錄 UI 呈現）— Stage 30 驗收時搭車發現：ReviewAppealLog / DevPlanAppealLog 完整存在 DB，但 Dashboard 完全沒呈現；老闆 dogfooding 與調校 Agent 需要觀察這些對抗資料 |
+| 2026-04-20 | v7.17：十七 + 十八 合併排入 Stage 31（v3.18.0）— 兩項都屬 dogfooding 缺口（可靠性補強 + 對抗紀錄可視化），合計 S-M 規模；FF 狀態從「🟡 待實作」改為「🟡 已排入 Stage 31」 |

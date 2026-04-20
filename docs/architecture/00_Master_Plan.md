@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.9
+> 版本：v7.10
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -45,6 +45,7 @@
 | [Stage_28b_Roadmap.md](../planning/Stage_28b_Roadmap.md) | Stage 28b：Dashboard 雙向操作中心 — 文字輸入互動與歷史紀錄 | v3.15.0 | ✅ 已完成（2026-04-17） |
 | [Stage_29_Roadmap.md](../planning/Stage_29_Roadmap.md) | Stage 29：Dashboard 操作性收尾 + CEO 指令通道擴充 | v3.16.0 | ✅ 已完成（2026-04-19） |
 | [Stage_30_Roadmap.md](../planning/Stage_30_Roadmap.md) | Stage 30：申訴迴圈 LLM API → Claude Code CLI 全面升級 | v3.17.0 | ✅ 已完成（2026-04-20） |
+| [Stage_31_Roadmap.md](../planning/Stage_31_Roadmap.md) | Stage 31：可靠性補強 + Appeal 對抗紀錄 UI | v3.18.0 | 🟡 待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -127,6 +128,7 @@
 | v7.7 | 2026-04-19 | Stage 30 規劃書建立（v3.17.0）— 申訴迴圈 LLM API → Claude Code CLI 全面升級：5 個環節（Cody 修正 Dev_plan、Petra 再評估 Dev_plan、Cody 反駁 Review、Vera 再評估 Review、Petra 仲裁）從 LLM API 純文字問答升級為 Claude Code CLI（保留 codebase 存取能力）；決策：每 appeal 新開 session + 強化 Prompt（Stage 23 的 ImplementationNote 已涵蓋 ~80% 價值，Resume 工程量大 40% 且 Token 成本反而更高），對應 FF 八 Phase 2 第三項 |
 | v7.8 | 2026-04-20 | Stage 30 實作完成（v3.17.0）：5 個申訴環節全面改寫為 `RunMeetingSessionAsync`（新開 session，唯讀工具 Glob/Grep/Read）；新增 `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` 共用輔助方法（帶入 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff 脈絡）；3 個 Review Appeal 方法新增 `TaskGroup group` 參數；MockClaudeCodeService 5 種新 `[APPEAL:*]` 分支；FF 八 Phase 2 第三項完成 |
 | v7.9 | 2026-04-20 | Stage 30 驗收通過（v3.17.0）：`/mock fail_review` 與 `/mock fail_dev_plan` 兩個場景實測完整走完，5 個新 CLI 分支全數觸發（Cody/Vera/Petra Arbitration × Dev_plan Cody/Petra Reassess）；搭車補丁：MockMode 第一次驗收只覆蓋 1/5 分支（FailScenario 狀態機提早結束迴圈），修正為依 prompt 內容動態判斷輪次（「前幾輪對話紀錄」/`"disagree"`/`[MOCK-FAIL] Dev_plan 不夠詳細`）後 5/5 全覆蓋；搭車發現對抗紀錄完整存在 DB（`ReviewAppealLog` / `DevPlanAppealLog`）但 Dashboard 完全沒呈現 → 記入 FF 十八（Appeal 對抗紀錄 UI 呈現）|
+| v7.10 | 2026-04-20 | Stage 31 規劃書建立（v3.18.0）— 可靠性補強 + Appeal 對抗紀錄 UI：合併 FF 十七（Dashboard 失敗任務重試按鈕 + 會議 Crash Recovery）+ FF 十八（Appeal 對抗紀錄 UI 呈現）；三項規模 S-M，共用一次 Migration（`TaskGroup.ActiveMeetingType`）；Model 建議 Sonnet 200K（Stage 27a / 29-3 / 26 皆有範本可抄）|
 
 ---
 
