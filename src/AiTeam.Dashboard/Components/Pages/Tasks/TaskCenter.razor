@@ -59,7 +59,7 @@
         <MudTd>@context.CompletedAt?.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd>@FormatDuration(context.Duration)</MudTd>
         <MudTd @onclick:stopPropagation>
-            @if (context.Status is "failed" or "cancelled")
+            @if (context.Status is "failed" or "cancelled" && context.AssignedAgent is not ("Kickoff" or "Design"))
             {
                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
                            StartIcon="@Icons.Material.Filled.Refresh"
