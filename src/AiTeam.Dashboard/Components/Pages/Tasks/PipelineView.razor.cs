@@ -13,6 +13,12 @@ public partial class PipelineView : IAsyncDisposable
     [Inject]
     private DashboardTaskService TaskService { get; set; } = null!;
 
+    [Inject]
+    private DashboardBotService BotService { get; set; } = null!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Parameters
@@ -148,17 +154,30 @@ public partial class PipelineView : IAsyncDisposable
     private void ApplyGroupContent(TaskGroupDto? freshGroup)
     {
         if (Group is null || freshGroup is null) return;
-        Group.KickoffMeetingLog = freshGroup.KickoffMeetingLog;
-        Group.TaskPlan          = freshGroup.TaskPlan;
-        Group.KickoffRound      = freshGroup.KickoffRound;
-        Group.DesignMeetingLog  = freshGroup.DesignMeetingLog;
-        Group.DesignPlan        = freshGroup.DesignPlan;
-        Group.DesignRound       = freshGroup.DesignRound;
-        Group.DevPrUrl          = freshGroup.DevPrUrl;
-        Group.DevPlan           = freshGroup.DevPlan;
-        Group.LastReviewBody    = freshGroup.LastReviewBody;
-        Group.TestReport        = freshGroup.TestReport;
-        Group.ArchiveContent    = freshGroup.ArchiveContent;
+        Group.KickoffMeetingLog  = freshGroup.KickoffMeetingLog;
+        Group.TaskPlan           = freshGroup.TaskPlan;
+        Group.KickoffRound       = freshGroup.KickoffRound;
+        Group.DesignMeetingLog   = freshGroup.DesignMeetingLog;
+        Group.DesignPlan         = freshGroup.DesignPlan;
+        Group.DesignRound        = freshGroup.DesignRound;
+        Group.DevPrUrl           = freshGroup.DevPrUrl;
+        Group.DevPlan            = freshGroup.DevPlan;
+        Group.LastReviewBody     = freshGroup.LastReviewBody;
+        Group.TestReport         = freshGroup.TestReport;
+        Group.ArchiveContent     = freshGroup.ArchiveContent;
+        // Stage 31：Appeal 對抗紀錄
+        Group.ReviewAppealLog    = freshGroup.ReviewAppealLog;
+        Group.ReviewAppealRoundA = freshGroup.ReviewAppealRoundA;
+        Group.DevPlanAppealLog   = freshGroup.DevPlanAppealLog;
+        Group.DevPlanAppealRoundA = freshGroup.DevPlanAppealRoundA;
+    }
+
+    private async Task HandleRequeueAsync(Guid taskId)
+    {
+        var success = await BotService.RequeueTaskAsync(taskId);
+        Snackbar.Add(
+            success ? "任務已重新入佇列" : "重新入佇列失敗，請稍後再試",
+            success ? Severity.Success : Severity.Error);
     }
 
     private async Task LoadLogsAsync(PipelineStepViewModel step)

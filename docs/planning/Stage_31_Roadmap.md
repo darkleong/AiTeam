@@ -3,8 +3,8 @@
 > 對應 Future Feature：十七（可靠性補強）+ 十八（Appeal 對抗紀錄 UI 呈現）
 > 對應版本：v3.18.0
 > 建立日期：2026-04-20
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-20）
+> 文件版本：v2.0
 
 ---
 
@@ -182,8 +182,29 @@ Sonnet 200K 完全勝任。無需 Opus。
 
 ---
 
+## 實作紀錄（v2.0，2026-04-20）
+
+### 關鍵決策
+
+1. **try/finally 包裝範圍（項目二）**：`RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 在 scope 建立後、現有邏輯之前先 set `ActiveMeetingType`，再用 `try { 現有全部邏輯 } finally { clear }` 包裝。set 不在 try 內部，確保例外時 finally 一定能 clear（而非 set 失敗後 finally 也跑不到）。
+
+2. **RecoverStuckMeetingsAsync 改 sequential await（項目二）**：規劃書初稿用 `Task.Run` fire-and-forget，評審後改為 sequential `await foreach`，避免多個卡住的會議同時呼叫 Claude Code subprocess 造成資源競爭。單次重啟通常只有 0–1 個卡住會議，成本無差異。
+
+3. **ExecuteUpdateAsync 不需 LoadAsync（項目二）**：`TaskGroupService` 使用 `db.TaskGroups.Where(...).ExecuteUpdateAsync` bulk 更新，不需要先載入 entity，避免 tracked entity 衝突。`CancellationToken.None` 確保 Bot 被取消時 finally 仍能 clear。
+
+4. **ISnackbar 注入（項目一）**：`PipelineView.razor.cs` 直接 `[Inject] ISnackbar Snackbar`，無需額外包裝，符合 MudBlazor 8.x 規範。
+
+### 踩坑
+
+1. **`dotnet ef database update` 連不到 PostgreSQL**：PostgreSQL 在 Docker 內，宿主機 localhost:5432 無法直連。Migration 檔案已建立，Bot 啟動時 `Program.cs` 的 `db.Database.MigrateAsync()` 自動套用，無需手動跑 `database update`。
+
+2. **`using Microsoft.EntityFrameworkCore` 未引入**：`ExecuteUpdateAsync` 是 EF Core extension method，`TaskGroupService.cs` 原本未 import 此 namespace，編譯時需補上。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |------|------|------|
 | v1.0 | 2026-04-20 | 初版規劃書，合併 FF 十七 + FF 十八，三大項目 |
+| v2.0 | 2026-04-20 | 實作完成結案；狀態改 ✅；補充實作紀錄（關鍵決策 4 條 + 踩坑 2 條） |

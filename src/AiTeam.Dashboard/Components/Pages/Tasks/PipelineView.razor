@@ -42,7 +42,8 @@ else
     @if (!string.IsNullOrEmpty(Group.TaskPlan) || !string.IsNullOrEmpty(Group.KickoffMeetingLog)
          || !string.IsNullOrEmpty(Group.DesignPlan) || !string.IsNullOrEmpty(Group.DesignMeetingLog)
          || !string.IsNullOrEmpty(Group.DevPlan) || !string.IsNullOrEmpty(Group.LastReviewBody)
-         || !string.IsNullOrEmpty(Group.TestReport) || !string.IsNullOrEmpty(Group.ArchiveContent))
+         || !string.IsNullOrEmpty(Group.TestReport) || !string.IsNullOrEmpty(Group.ArchiveContent)
+         || !string.IsNullOrEmpty(Group.ReviewAppealLog) || !string.IsNullOrEmpty(Group.DevPlanAppealLog))
     {
         <MudExpansionPanels Class="mb-3" MultiExpansion="true">
             @if (!string.IsNullOrEmpty(Group.TaskPlan))
@@ -91,6 +92,19 @@ else
             {
                 <MudExpansionPanel Text="📦 歸檔報告（Sage）">
                     <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.ArchiveContent</MudText>
+                </MudExpansionPanel>
+            }
+            @* Stage 31：Appeal 對抗紀錄（Review / Dev_plan） *@
+            @if (!string.IsNullOrEmpty(Group.ReviewAppealLog))
+            {
+                <MudExpansionPanel Text="@($"🗣️ Review Appeal 對抗紀錄（共 {Group.ReviewAppealRoundA} 輪）")">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.ReviewAppealLog</MudText>
+                </MudExpansionPanel>
+            }
+            @if (!string.IsNullOrEmpty(Group.DevPlanAppealLog))
+            {
+                <MudExpansionPanel Text="@($"🗣️ Dev_plan Appeal 對抗紀錄（共 {Group.DevPlanAppealRoundA} 輪）")">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@Group.DevPlanAppealLog</MudText>
                 </MudExpansionPanel>
             }
         </MudExpansionPanels>
@@ -157,6 +171,14 @@ else
                             <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
                                        Class="mt-1"
                                        OnClick="@(() => LoadLogsAsync(step))">載入 Log</MudButton>
+                        }
+                        @* Stage 31：失敗 / 取消任務重試按鈕 *@
+                        @if (step.Task.Status is "failed" or "cancelled")
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.Refresh"
+                                       Class="mt-1 ml-1"
+                                       OnClick="@(() => HandleRequeueAsync(step.Task.Id))">🔁 重試</MudButton>
                         }
                     </div>
                 </ChildContent>

@@ -124,6 +124,34 @@ public class AgentQueueService(
         await db.SaveChangesAsync(ct);
     }
 
+    // ---- 重試 ----
+
+    /// <summary>
+    /// 將 failed / cancelled 的 TaskItem 重新推入佇列（Stage 31 重試按鈕）。
+    /// </summary>
+    public async Task<(bool Success, string? Reason)> RequeueTaskAsync(
+        Guid taskId, CancellationToken ct = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var task = await db.Set<TaskItem>().FindAsync([taskId], ct);
+        if (task is null) return (false, "任務不存在");
+        if (task.Status is not ("failed" or "cancelled"))
+            return (false, $"任務狀態 {task.Status} 不允許重試");
+
+        task.Status      = "queued";
+        task.QueueStatus = "queued";
+        task.QueuedAt    = DateTime.UtcNow;
+        task.CompletedAt = null;
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("AgentQueueService：TaskItem {Id}（{Agent}）已重新入佇列", taskId, task.AssignedAgent);
+        _signal.Set();
+        _ = pushService.PushQueueUpdateAsync();
+        return (true, null);
+    }
+
     // ---- 群組取消 ----
 
     /// <summary>

@@ -64,6 +64,8 @@ public class AgentQueueProcessor(
     {
         // 27a-3：啟動掃描，恢復被中斷的任務
         await RecoverStuckTasksAsync(stoppingToken);
+        // Stage 31：啟動掃描，恢復被中斷的 Kickoff / Design 會議
+        await taskGroupService.RecoverStuckMeetingsAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {

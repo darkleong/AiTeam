@@ -28,4 +28,10 @@ public class TaskGroupDto
 
     // Stage 29-1：歸檔報告折疊面板
     public string?  ArchiveContent   { get; set; }  // Sage 歸檔報告
+
+    // Stage 31：Appeal 對抗紀錄折疊面板
+    public string? ReviewAppealLog     { get; set; }
+    public int     ReviewAppealRoundA  { get; set; }
+    public string? DevPlanAppealLog    { get; set; }
+    public int     DevPlanAppealRoundA { get; set; }
 }

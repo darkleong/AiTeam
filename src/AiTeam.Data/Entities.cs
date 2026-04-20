@@ -91,6 +91,8 @@ public class TaskGroup
     public int DesignRound { get; set; } = 0;
     /// <summary>Stage 29-1：Sage 歸檔報告全文（docs/archive/pr{N}-archive.md）。</summary>
     public string? ArchiveContent { get; set; }
+    /// <summary>Stage 31：會議 Crash Recovery — 紀錄目前進行中的會議類型（Kickoff / Design / null）。Bot 重啟後掃描此欄位自動重跑。</summary>
+    public string? ActiveMeetingType { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

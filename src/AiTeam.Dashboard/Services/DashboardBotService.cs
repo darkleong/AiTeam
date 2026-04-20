@@ -32,6 +32,27 @@ public class DashboardBotService(
         }
     }
 
+    /// <summary>呼叫 /internal/tasks/{taskId}/requeue，將失敗 / 取消的任務重新入佇列。</summary>
+    public async Task<bool> RequeueTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/tasks/{taskId}/requeue");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("TaskItem {Id} 重新入佇列指令已送出", taskId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出重新入佇列指令失敗（TaskId={Id}）", taskId);
+            return false;
+        }
+    }
+
     /// <summary>呼叫 /internal/restart，回傳是否成功。</summary>
     public async Task<bool> RestartBotAsync(CancellationToken cancellationToken = default)
     {

@@ -1,4 +1,5 @@
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -21,6 +22,7 @@ public class InternalController(
     IHostApplicationLifetime appLifetime,
     AppSettingsService appSettings,
     RulesService rulesService,
+    AgentQueueService queueService,
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
@@ -170,6 +172,21 @@ public class InternalController(
             AgentSummaries  = agentSummaries,
             DailyDataPoints = dailyPoints
         });
+    }
+
+    /// <summary>
+    /// 將 failed / cancelled TaskItem 重新推入佇列（供 Dashboard 重試按鈕呼叫）。
+    /// </summary>
+    [HttpPost("tasks/{taskId}/requeue")]
+    public async Task<IActionResult> RequeueTask(Guid taskId, CancellationToken cancellationToken)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        var (success, reason) = await queueService.RequeueTaskAsync(taskId, cancellationToken);
+        if (!success) return BadRequest(new { message = reason });
+
+        logger.LogInformation("TaskItem {Id} 重新入佇列（透過 Dashboard）", taskId);
+        return Ok(new { message = "已重新入佇列" });
     }
 
     private bool IsAuthorized()

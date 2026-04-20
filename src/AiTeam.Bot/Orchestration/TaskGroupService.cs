@@ -9,6 +9,7 @@ using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -1457,9 +1458,15 @@ public class TaskGroupService(
         await using var scope   = serviceProvider.CreateAsyncScope();
         var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var db                  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var owner = _gitHub.Owner;
         var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        // Stage 31：標記會議進行中，供 Bot 重啟時 Crash Recovery 掃描重跑
+        await db.TaskGroups
+            .Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, "Kickoff"), CancellationToken.None);
 
         logger.LogInformation("TaskGroupService：Kick-off 會議開始（Group={Id}）", group.Id);
 
@@ -1621,6 +1628,51 @@ public class TaskGroupService(
                 Status    = "error",
                 CurrentTaskTitle = $"Kick-off 失敗：{ex.Message}"
             });
+        }
+        finally
+        {
+            // Stage 31：清除進行中標記（CancellationToken.None：即使任務被取消也必須 clear）
+            await db.TaskGroups
+                .Where(g => g.Id == group.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, (string?)null),
+                    CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Stage 31：Bot 啟動時掃描 ActiveMeetingType != null 的 TaskGroup，自動重跑被中斷的會議。
+    /// 順序執行（不並行），避免同時喚起大量 Claude Code subprocess。
+    /// </summary>
+    public async Task RecoverStuckMeetingsAsync(CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var stuckGroups = await db.TaskGroups
+            .Where(g => g.ActiveMeetingType != null)
+            .ToListAsync(ct);
+
+        if (stuckGroups.Count == 0) return;
+
+        logger.LogWarning("會議 Crash Recovery：{N} 個卡住的會議等待重跑：{Details}",
+            stuckGroups.Count,
+            string.Join(", ", stuckGroups.Select(g => $"{g.ActiveMeetingType} × {g.Id}")));
+
+        foreach (var group in stuckGroups)
+        {
+            var meetingType = group.ActiveMeetingType;
+            try
+            {
+                if (meetingType == "Kickoff")
+                    await RunKickoffMeetingAndWaitAsync(group, ct);
+                else if (meetingType == "Design")
+                    await RunDesignPhaseAsync(group, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "會議恢復失敗（GroupId={Id}，MeetingType={Type}）",
+                    group.Id, meetingType);
+            }
         }
     }
 
@@ -1808,9 +1860,15 @@ public class TaskGroupService(
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var db          = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var owner = _gitHub.Owner;
         var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        // Stage 31：標記會議進行中，供 Bot 重啟時 Crash Recovery 掃描重跑
+        await db.TaskGroups
+            .Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, "Design"), CancellationToken.None);
 
         logger.LogInformation("TaskGroupService：設計規劃會議開始（Group={Id}）", group.Id);
 
@@ -1969,6 +2027,12 @@ public class TaskGroupService(
         }
         finally
         {
+            // Stage 31：清除進行中標記（CancellationToken.None：即使任務被取消也必須 clear）
+            await db.TaskGroups
+                .Where(g => g.Id == group.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, (string?)null),
+                    CancellationToken.None);
+
             await pushService.PushAgentStatusAsync(new Shared.ViewModels.AgentStatusViewModel
             {
                 AgentName        = AgentNames.Pm,
