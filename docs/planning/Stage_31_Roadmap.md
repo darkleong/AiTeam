@@ -4,7 +4,7 @@
 > 對應版本：v3.18.0
 > 建立日期：2026-04-20
 > 狀態：✅ 已完成（2026-04-20）
-> 文件版本：v2.0
+> 文件版本：v2.2
 
 ---
 
@@ -207,6 +207,12 @@ Sonnet 200K 完全勝任。無需 Opus。
 
 3. **驗收情境「手動改 DB」行不通**：初稿驗收情境寫「手動將 ActiveMeetingType 設為 Kickoff 後重啟」，但此 TaskGroup 缺乏真實 Kickoff 脈絡（無 IssueUrls / UiSpec 等），重跑會立即失敗。正確驗法是讓 MockMode 真的跑到 Kickoff 階段再殺 Bot。規劃書驗收情境已修正為六步驟實境測試。
 
+4. **Crash Recovery 驗收需用 SIGKILL，不能用 `docker stop`**：`docker stop` 送 SIGTERM，.NET 優雅關機會執行 finally 清掉 `ActiveMeetingType`（這是正確行為）。真正模擬崩潰需用 `docker kill`（SIGKILL）或直接手動注入 DB 值。驗收時採 DB 直接注入方式確認 Recovery 機制觸發。
+
+5. **Kickoff/Design 的重試按鈕顯示卻無效（commit 18cd81b）**：Kickoff / Design TaskItem 由 `RunKickoffMeetingAndWaitAsync` / `RunDesignPhaseAsync` 直接建立（`Status = "running"`），從不走 AgentQueueProcessor，`WorkflowAgentKey = null`。若按重試，Processor 撿到後找不到 executor，任務再次失敗而不重跑會議。修正：按鈕條件加 `&& task.AssignedAgent is not ("Kickoff" or "Design")` 排除這兩種任務類型。
+
+6. **PipelineView Group.Status 不隨 DB 載入更新（commit d4829be）**：`ApplyGroupContent` 只同步 content 欄位，`Group.Status` 停留在父元件傳入的快照。在 Stage 31 加入 4 個 Appeal 欄位時才順帶發現。修正：`ApplyGroupContent` 最前面補 `Group.Status = freshGroup.Status`，確保開啟 Drawer 或重新載入時狀態徽章也正確。
+
 ---
 
 ## 版本歷史
@@ -216,3 +222,4 @@ Sonnet 200K 完全勝任。無需 Opus。
 | v1.0 | 2026-04-20 | 初版規劃書，合併 FF 十七 + FF 十八，三大項目 |
 | v2.0 | 2026-04-20 | 實作完成結案；狀態改 ✅；補充實作紀錄（關鍵決策 4 條 + 踩坑 2 條） |
 | v2.1 | 2026-04-20 | 補上 TaskCenter 任務列表頁重試按鈕（PipelineView 外第二個入口）；關鍵決策 +1（stopPropagation）、踩坑 +1（驗收情境修正）；驗收情境 #5 改為六步驟實境測試 |
+| v2.2 | 2026-04-20 | 驗收期間兩項修正補入實作紀錄：踩坑 +3（SIGKILL 驗法）、踩坑 +4（Kickoff/Design 重試按鈕無效）、踩坑 +5（Group.Status 載入不更新） |
