@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.20
+> 版本：v7.21
 > 建立日期：2026-04-01
 > 最後更新：2026-04-20
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -747,6 +747,8 @@ Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#
 
 驗收時每次都要切回 Discord 輸入 `/mock ...` 很麻煩。優先做這一個。實作時順便把 `HandleMockProposalFlowAsync` 等私有方法重構成可被 controller 直接呼叫的 shared service。
 
+> **已排入 Stage 32（v3.19.0）** — 與 Mock Delay / 輪次上限動態化一起合併為「Dashboard 老闆控制中心擴充」主題。其他 FF 十五子項（`/pause`、`/stop-all` 等佇列控制）留待未來單獨處理。
+
 ### 與其他項目的關係
 
 - 和 **十（Agent 任務序列 — Dashboard pause/resume 待討論議題）** 部分重疊，實作時一併考慮
@@ -803,6 +805,44 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 ### 優先級
 
 ⚪ 低 — 不影響正確性，純 UX 改善。Stage 29-5 當下的 inline `MudAlert` 已足夠傳達訊息。
+
+---
+
+## 十九、Agent maxTurns 動態化（Dashboard 可調）
+
+> 狀態：⚪ 待觀察 — 等 AiTeam 架構穩定（例如 Codex CLI / Gemini CLI 整合後）再評估
+> 提出日期：2026-04-20（Stage 32 規劃時釐清）
+
+### 背景
+
+Stage 32 規劃「系統設定頁擴充」時考慮過把 Claude Code CLI 的 `maxTurns` 抽出成動態設定，但發現**不可行**：
+
+- `maxTurns` 散落在 `MeetingService` 等多處，對應**不同角色**有不同值：
+  - Rosa / Demi / 設計會議 Agent：25
+  - 其他特定場景：12
+  - Victoria 預設：40
+- 不是單一「全域 maxTurns」設定，要放 UI 就得「每個 Agent 一個欄位」，Dashboard UI 會爆炸
+- 強抽單一值會造成行為不一致（會議被截斷 / 探索不夠深 / 浪費 Token）
+
+### 為什麼值得保留為候選
+
+Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxTurns 是其中一個——未來 Dashboard 上把每個 Agent 的 maxTurns / Model / 行為準則都整合成一個完整的「Agent 設定頁」時，maxTurns 應該放進去。
+
+### 觸發條件
+
+以下任一發生時，重新評估：
+
+- 多 CLI 供應商整合完成（FF 四 第二階段），此時「每個 Agent 的 CLI 設定」自然擴充到需要包含 maxTurns
+- Agent 角色設定 Dashboard 化（FF 十「Agent 角色設定 Dashboard 化」子項），此時順帶把 maxTurns 加入同一個設定區塊
+- 老闆實際遇到「會議被截斷」或「探索不夠深」等事故，需要臨時調 maxTurns 又無法動設定檔
+
+### 不建議單獨做的原因
+
+目前 AiTeam 還在建置 / 測試期（CLI 供應商、Agent 角色設定都可能大改），架構穩定前單獨抽 maxTurns 會踩到重複工作。等 FF 四 / FF 十的「Agent 角色設定 Dashboard 化」開工時順帶做最經濟。
+
+### 優先級
+
+⚪ 待觀察 — 屬於 AiTeam 架構穩定後的「Dashboard 控制中心」願景拼圖之一，不急
 
 ---
 
@@ -906,3 +946,4 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 2026-04-20 | v7.18：Stage 31 結案（v3.18.0）— 十七（重試按鈕 + 會議 Crash Recovery）+ 十八（Appeal 對抗紀錄 UI）全部完成，移入已完成項目摘要 |
 | 2026-04-20 | v7.19：四（多 LLM 供應商）新增「CLI 三家能力研究（2026-04-20）」小節 — Aria 查官方文件 + GitHub issue 彙整 Claude Code / Gemini CLI / Codex CLI 能力對照；關鍵發現：Gemini CLI 不支援預設 UUID（FR #20847 open），但 Stage 30「新開 session」路線恰好繞開；Codex CLI 有 SDK + `--output-schema` native 支援，工程體驗最完整；建議 spike 順序：Codex → Gemini；屬研究階段，不是實作計劃 |
 | 2026-04-20 | v7.20：Stage 31 驗收通過 — header 同步、條目註明本次首次實踐「Stage 結案兩段式分工」（實作 Session 寫 Roadmap 實作紀錄、Aria 收尾 Master Plan + Future_Feature）|
+| 2026-04-20 | v7.21：新增十九（Agent maxTurns 動態化）— Stage 32 規劃時釐清「maxTurns 散落各處、每個 Agent 不同值」，不適合單抽為全域設定；記錄為未來項目，等 FF 四（多 CLI 整合）或 FF 十（Agent 角色設定 Dashboard 化）開工時順帶做 |

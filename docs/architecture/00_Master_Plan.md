@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.12
+> 版本：v7.13
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -46,6 +46,7 @@
 | [Stage_29_Roadmap.md](../planning/Stage_29_Roadmap.md) | Stage 29：Dashboard 操作性收尾 + CEO 指令通道擴充 | v3.16.0 | ✅ 已完成（2026-04-19） |
 | [Stage_30_Roadmap.md](../planning/Stage_30_Roadmap.md) | Stage 30：申訴迴圈 LLM API → Claude Code CLI 全面升級 | v3.17.0 | ✅ 已完成（2026-04-20） |
 | [Stage_31_Roadmap.md](../planning/Stage_31_Roadmap.md) | Stage 31：可靠性補強 + Appeal 對抗紀錄 UI | v3.18.0 | ✅ 已完成（2026-04-20） |
+| [Stage_32_Roadmap.md](../planning/Stage_32_Roadmap.md) | Stage 32：/mock Dashboard 化 + 系統設定擴充 | v3.19.0 | 🟡 待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -131,6 +132,7 @@
 | v7.10 | 2026-04-20 | Stage 31 規劃書建立（v3.18.0）— 可靠性補強 + Appeal 對抗紀錄 UI：合併 FF 十七（Dashboard 失敗任務重試按鈕 + 會議 Crash Recovery）+ FF 十八（Appeal 對抗紀錄 UI 呈現）；三項規模 S-M，共用一次 Migration（`TaskGroup.ActiveMeetingType`）；Model 建議 Sonnet 200K（Stage 27a / 29-3 / 26 皆有範本可抄）|
 | v7.11 | 2026-04-20 | Stage 31 實作完成（v3.18.0）：項目三（Appeal 對抗紀錄 UI — TaskGroupDto 擴充 4 欄位 + PipelineView 兩個折疊面板）、項目一（Dashboard 🔁 重試按鈕 — AgentQueueService.RequeueTaskAsync + Bot internal API + ISnackbar 回饋）、項目二（會議 Crash Recovery — ActiveMeetingType 欄位 + EF Migration + RunKickoffMeetingAndWaitAsync/RunDesignPhaseAsync set/finally clear + RecoverStuckMeetingsAsync 啟動掃描）；FF 十七 + 十八 移入已完成項目摘要 |
 | v7.12 | 2026-04-20 | Stage 31 驗收通過（v3.18.0）：三項全數實測通過；驗收期間兩項補強 — TaskCenter 任務列表頁補「🔁 重試」按鈕（PipelineView 外第二個入口，含 stopPropagation 防誤觸 Drawer）+ Kickoff/Design TaskItem 隱藏重試按鈕（不走 AgentQueueProcessor 按了無效，由 spawn_task chip 啟動的獨立 PR #101 處理）+ PipelineView ApplyGroupContent 補同步 Group.Status；Roadmap 驗收情境 #5 從「手動改 DB」改為實境六步驟測試（Mock 跑 Kickoff → Ctrl+C → 重啟看 Crash Recovery log）；本次首次實踐「Stage 結案兩段式分工」（實作 Session 寫 Roadmap 實作紀錄、Aria 收尾 Master Plan + Future_Feature） |
+| v7.13 | 2026-04-20 | Stage 32 規劃書建立（v3.19.0）— /mock Dashboard 化 + 系統設定擴充：A. Mock Delay 可調整（7 處硬碼改動態 AppSettings）B. 各流程輪次上限動態化（WorkflowSettings 升級「AppSettings 優先 + appsettings.json fallback」，仿 FF 十一 Token 守門模式）C. /mock Dashboard 化（FF 十五核心，抽 shared service + Internal API + UI 卡片）；Model 建議 Opus 1M + high（取 Stage 31 Sonnet 200K 用到 75% context 的校準教訓，三子項一氣呵成需要大 context）；新增設定欄位要求統一附灰字說明（Christ 明確要求）|
 
 ---
 
