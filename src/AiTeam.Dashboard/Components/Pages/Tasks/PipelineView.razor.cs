@@ -154,6 +154,7 @@ public partial class PipelineView : IAsyncDisposable
     private void ApplyGroupContent(TaskGroupDto? freshGroup)
     {
         if (Group is null || freshGroup is null) return;
+        Group.Status             = freshGroup.Status;
         Group.KickoffMeetingLog  = freshGroup.KickoffMeetingLog;
         Group.TaskPlan           = freshGroup.TaskPlan;
         Group.KickoffRound       = freshGroup.KickoffRound;
