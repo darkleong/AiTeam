@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.18
+> 版本：v7.20
 > 建立日期：2026-04-01
 > 最後更新：2026-04-20
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -168,6 +168,65 @@ Gemini 行銷主打 1M context 確實誘人，但對 AiTeam 現狀不是主要�
 - Token 追蹤（`TokenTrackingProvider`）包裝層不需改動，對供應商透明
 - CLI 層若做 `GeminiCliService`，需抽象出 `ICliAgentService`（原 `IClaudeCodeService` 重命名）或直接並列兩個實作
 - `MockClaudeCodeService` 若為 Gemini CLI 做對應模擬，考慮抽出 `MockCliAgentService` 共用 MockMode 邏輯
+
+### CLI 三家能力研究（2026-04-20 Aria 查官方文件 + GitHub issue 彙整）
+
+> 屬研究階段，不是實作計劃。紀錄當下查到的能力對照 + 技術風險，供未來 spike 排入時的起點。
+
+#### 三家 CLI 能力對照（2026-04 現況）
+
+| 能力 | Claude Code | Gemini CLI | Codex CLI |
+|---|---|---|---|
+| **Session resume** | `--session-id UUID` + `--resume` | `--resume <UUID>` | `codex exec resume <SESSION_ID>` |
+| **預先指定 UUID** | ✅ | ❌ **UUID 由 CLI 自己生**（FR #20847 2026-03 仍 open）| 不確定（SDK 提供 `resumeThread(id)` 可程式化控制）|
+| **Headless / 非互動** | ✅ | ✅ | ✅ (`codex exec`) |
+| **Stream JSON** | ✅ stream-json | ✅ `--output-format stream-json`（NDJSON）| ✅ `--json`（JSONL）|
+| **Structured Output Schema** | prompt 約束 | prompt 約束 | ✅ **`--output-schema` native**（不能和 resume 合用）|
+| **官方 SDK** | — | — | ✅ TypeScript SDK |
+| **記憶檔** | `CLAUDE.md` | `GEMINI.md` | `AGENTS.md` |
+| **Session 存放** | 容器內 `~/.claude/sessions/` | `~/.gemini/tmp/<project_hash>/chats/` | 類似機制 |
+
+#### 對 AiTeam 的三個關鍵發現
+
+1. **Gemini CLI 的 UUID 預設是唯一嚴重技術風險**
+   - AiTeam 從 Stage 25a 起用「預先產 UUID → 傳給 CLI → 追蹤 session」模式，Gemini CLI 目前做不到
+   - **但 Stage 30 已驗證「新開 session + 強化 prompt」路線可行**，恰好繞開 Gemini 的 UUID 限制，影響 < 預期
+
+2. **Codex CLI 程式化介面是三家最完整的**
+   - `--output-schema` 指定 JSON Schema 拿結構化結果（AiTeam 到處「請 Agent 回 JSON」，native 支援省去 prompt 工程）
+   - TypeScript SDK 有 `resumeThread(id)` API，thread ID 管理明確
+   - JSONL event stream 完整（init / user msg / tool use / tool result / assistant msg / final）
+   - 對 AiTeam 可能是工程體驗最好的整合對象
+
+3. **三家 stream JSON 格式不同 → Adapter 必做**
+   - 格式 schema 三家各有各的，`ICliAgentService` 的 Adapter 要各自寫 parser 把事件映射成 AiTeam 共用 model（`AgentMessage` / `ToolCall` / `FinalResult`）
+
+#### 修正後的抽象策略（沿用原「策略 A + 策略 C」）
+
+**`ICliAgentService` 定義最小共通 API：**
+```csharp
+// 不暴露 Session ID 管理細節
+Task<CliResult> RunOneShotAsync(string prompt, CliOptions opts);
+
+// Session 延續：回傳 adapter 自管的 session token
+Task<(CliResult, SessionToken)> RunWithSessionAsync(
+    SessionToken? previousToken, string prompt, CliOptions opts);
+```
+
+- **不強求預設 UUID**（Gemini 做不到）
+- **讓 Adapter 自管 session token**（Claude 給 UUID、Gemini 給檔案路徑、Codex 給 thread id），AiTeam 只存 opaque string
+- **Stage 30 的「新開 session」模式成為 AiTeam 預設策略**，session 延續只保留給需要跨輪累積 context 的會議（Kickoff / Design）
+
+#### 建議 Spike 排入時的順序
+
+1. **先做 Codex CLI spike**（程式化最完整、SDK + schema 是驚喜）
+2. **再做 Gemini CLI spike**（免費額度誘因，但 UUID 限制要處理）
+3. **共用 `AGENTS.md` 方向**（或兩份記憶檔同步，研究 Gemini / Codex 是否都能讀）
+
+#### 延伸資料來源
+
+- Gemini CLI：[Session management](https://geminicli.com/docs/cli/session-management/) / [Headless mode](https://geminicli.com/docs/cli/headless/) / [FR #20847 --session-id flag](https://github.com/google-gemini/gemini-cli/issues/20847)
+- Codex CLI：[Features](https://developers.openai.com/codex/cli/features) / [Non-interactive mode](https://developers.openai.com/codex/noninteractive) / [SDK](https://developers.openai.com/codex/sdk) / [Command line reference](https://developers.openai.com/codex/cli/reference)
 
 ### 優先級
 
@@ -845,3 +904,5 @@ Stage 29-5 實作快速下達指令卡時遇到兩個 UX 觀察點，目前以�
 | 2026-04-20 | v7.16：新增十八（Appeal 對抗紀錄 UI 呈現）— Stage 30 驗收時搭車發現：ReviewAppealLog / DevPlanAppealLog 完整存在 DB，但 Dashboard 完全沒呈現；老闆 dogfooding 與調校 Agent 需要觀察這些對抗資料 |
 | 2026-04-20 | v7.17：十七 + 十八 合併排入 Stage 31（v3.18.0）— 兩項都屬 dogfooding 缺口（可靠性補強 + 對抗紀錄可視化），合計 S-M 規模；FF 狀態從「🟡 待實作」改為「🟡 已排入 Stage 31」 |
 | 2026-04-20 | v7.18：Stage 31 結案（v3.18.0）— 十七（重試按鈕 + 會議 Crash Recovery）+ 十八（Appeal 對抗紀錄 UI）全部完成，移入已完成項目摘要 |
+| 2026-04-20 | v7.19：四（多 LLM 供應商）新增「CLI 三家能力研究（2026-04-20）」小節 — Aria 查官方文件 + GitHub issue 彙整 Claude Code / Gemini CLI / Codex CLI 能力對照；關鍵發現：Gemini CLI 不支援預設 UUID（FR #20847 open），但 Stage 30「新開 session」路線恰好繞開；Codex CLI 有 SDK + `--output-schema` native 支援，工程體驗最完整；建議 spike 順序：Codex → Gemini；屬研究階段，不是實作計劃 |
+| 2026-04-20 | v7.20：Stage 31 驗收通過 — header 同步、條目註明本次首次實踐「Stage 結案兩段式分工」（實作 Session 寫 Roadmap 實作紀錄、Aria 收尾 Master Plan + Future_Feature）|
