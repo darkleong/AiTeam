@@ -190,6 +190,67 @@ public class InternalController(
     }
 
     /// <summary>
+    /// Stage 33：暫停指定 Agent 的佇列消費（Dashboard 用）。fire-and-forget。
+    /// </summary>
+    [HttpPost("queue/{agent}/pause")]
+    public IActionResult PauseAgent(string agent)
+        => FireAndForgetQueueControl($"pause {agent}", scope =>
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
+            return svc.PauseAgentAsync(agent);
+        });
+
+    /// <summary>Stage 33：恢復指定 Agent 的佇列消費（Dashboard 用）。fire-and-forget。</summary>
+    [HttpPost("queue/{agent}/resume")]
+    public IActionResult ResumeAgent(string agent)
+        => FireAndForgetQueueControl($"resume {agent}", scope =>
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
+            return svc.ResumeAgentAsync(agent);
+        });
+
+    /// <summary>Stage 33：緊急停止所有 Agent（Dashboard 用）。fire-and-forget。</summary>
+    [HttpPost("queue/stop-all")]
+    public IActionResult StopAll()
+        => FireAndForgetQueueControl("stop-all", scope =>
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
+            return svc.StopAllAsync();
+        });
+
+    /// <summary>Stage 33：恢復所有 Agent 的佇列消費（Dashboard 用）。fire-and-forget。</summary>
+    [HttpPost("queue/resume-all")]
+    public IActionResult ResumeAll()
+        => FireAndForgetQueueControl("resume-all", scope =>
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
+            return svc.ResumeAllAsync();
+        });
+
+    private IActionResult FireAndForgetQueueControl(string action, Func<AsyncServiceScope, Task<(bool ok, string message)>> work)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        logger.LogInformation("/internal/queue/{Action} 觸發", action);
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var (ok, message) = await work(scope);
+                logger.LogInformation("/internal/queue/{Action} 背景完成：ok={Ok}，message={Message}", action, ok, message);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "/internal/queue/{Action} 背景執行失敗", action);
+            }
+        });
+
+        return Accepted(new { message = "已送出指令" });
+    }
+
+    /// <summary>
     /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
     /// 後續進度透過 SignalR push 給 Dashboard 任務中心。
     /// </summary>

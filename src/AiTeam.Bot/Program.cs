@@ -102,6 +102,8 @@ builder.Services.AddSingleton<AgentQueueProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentQueueProcessor>());
 builder.Services.AddSingleton<TaskGroupService>();
 builder.Services.AddSingleton<MockScenarioService>();
+// Stage 33：佇列控制 shared service（Discord 指令 + Dashboard Internal API 共用）
+builder.Services.AddSingleton<AgentQueueControlService>();
 
 // Stage 28a：Dashboard 回覆消費器
 builder.Services.AddSingleton<InteractionProcessor>();

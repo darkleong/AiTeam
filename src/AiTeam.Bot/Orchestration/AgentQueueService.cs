@@ -122,6 +122,10 @@ public class AgentQueueService(
 
         task.QueueStatus = null;
         await db.SaveChangesAsync(ct);
+
+        // Stage 33：任務離開佇列（完成 / 失敗 / 取消）後通知 Dashboard，
+        // 讓 Agent 狀態卡 expand 清單即時移除該項。
+        _ = pushService.PushQueueUpdateAsync();
     }
 
     // ---- 重試 ----

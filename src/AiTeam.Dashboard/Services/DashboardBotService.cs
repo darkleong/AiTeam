@@ -82,6 +82,42 @@ public class DashboardBotService(
         }
     }
 
+    /// <summary>Stage 33：暫停指定 Agent 佇列消費（Dashboard 用）。</summary>
+    public Task<bool> PauseAgentAsync(string agent, CancellationToken cancellationToken = default)
+        => PostQueueControlAsync($"queue/{agent}/pause", $"pause {agent}", cancellationToken);
+
+    /// <summary>Stage 33：恢復指定 Agent 佇列消費（Dashboard 用）。</summary>
+    public Task<bool> ResumeAgentAsync(string agent, CancellationToken cancellationToken = default)
+        => PostQueueControlAsync($"queue/{agent}/resume", $"resume {agent}", cancellationToken);
+
+    /// <summary>Stage 33：緊急停止所有 Agent（Dashboard 用）。</summary>
+    public Task<bool> StopAllAsync(CancellationToken cancellationToken = default)
+        => PostQueueControlAsync("queue/stop-all", "stop-all", cancellationToken);
+
+    /// <summary>Stage 33：恢復所有 Agent 佇列消費（Dashboard 用）。</summary>
+    public Task<bool> ResumeAllAsync(CancellationToken cancellationToken = default)
+        => PostQueueControlAsync("queue/resume-all", "resume-all", cancellationToken);
+
+    private async Task<bool> PostQueueControlAsync(string path, string actionForLog, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/{path}");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("佇列控制指令已送出（{Action}）", actionForLog);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出佇列控制指令失敗（{Action}）", actionForLog);
+            return false;
+        }
+    }
+
     /// <summary>呼叫 /internal/restart，回傳是否成功。</summary>
     public async Task<bool> RestartBotAsync(CancellationToken cancellationToken = default)
     {

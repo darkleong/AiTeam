@@ -2,6 +2,7 @@ using AiTeam.Data.Hubs;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.WebUtilities;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks;
@@ -42,6 +43,25 @@ public partial class PipelineList : IAsyncDisposable
     protected override async Task OnInitializedAsync()
     {
         await ConnectSignalRAsync();
+        await TryPreselectFromQueryStringAsync();
+    }
+
+    /// <summary>
+    /// Stage 33：深層連結支援 — 從 AgentStatusCard 待辦清單點擊可帶 ?groupId={Guid} 進來，
+    /// 直接預選該 TaskGroup 並開啟 Pipeline Drawer。
+    /// </summary>
+    private async Task TryPreselectFromQueryStringAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (!query.TryGetValue("groupId", out var raw)) return;
+        if (!Guid.TryParse(raw.ToString(), out var groupId)) return;
+
+        var group = await TaskService.GetTaskGroupByIdAsync(groupId);
+        if (group is null) return;
+
+        _selectedGroup        = group;
+        _isPipelineDrawerOpen = true;
     }
 
     #endregion

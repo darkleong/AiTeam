@@ -142,22 +142,6 @@ public partial class Home : IAsyncDisposable
         }
     }
 
-    private static string GetAgentStateLabel(string state) => state switch
-    {
-        "paused"   => "暫停",
-        "stopping" => "停止中",
-        "stopped"  => "已停止",
-        _          => state
-    };
-
-    private static Color GetAgentStateColor(string state) => state switch
-    {
-        "paused"   => Color.Warning,
-        "stopping" => Color.Warning,
-        "stopped"  => Color.Error,
-        _          => Color.Default
-    };
-
     private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
     {
         "new_feature"      => "新功能",

@@ -295,12 +295,12 @@ public class DashboardTaskService(AppDbContext db)
                 .Where(s => s.Key.StartsWith("AgentState:"))
                 .ToDictionaryAsync(s => s.Key, s => s.Value, cancellationToken);
 
-            // 查詢所有排隊中 / 執行中的任務
+            // 查詢所有排隊中 / 執行中的任務（Stage 33：加入 GroupId 供待辦清單導航）
             var queuedTasks = await db.Tasks
                 .AsNoTracking()
                 .Where(t => t.QueueStatus == "queued" || t.QueueStatus == "processing")
                 .OrderBy(t => t.QueuedAt)
-                .Select(t => new { t.Id, t.Title, t.AssignedAgent, t.QueueStatus, t.QueuedAt })
+                .Select(t => new { t.Id, t.GroupId, t.Title, t.AssignedAgent, t.QueueStatus, t.QueuedAt })
                 .ToListAsync(cancellationToken);
 
             // Dev group 包含 Dev_plan
@@ -317,13 +317,17 @@ public class DashboardTaskService(AppDbContext db)
 
                 result.Add(new AgentQueueDto
                 {
-                    AgentName        = executorKey,
-                    AgentState       = state,
-                    QueueDepth       = waitingTasks.Count,
-                    CurrentTaskTitle = processingTask?.Title,
-                    QueuedTasks      = waitingTasks.Select(t => new QueuedTaskItemDto
+                    AgentName            = executorKey,
+                    AgentState           = state,
+                    QueueDepth           = waitingTasks.Count,
+                    CurrentTaskTitle     = processingTask?.Title,
+                    CurrentTaskId        = processingTask?.Id,
+                    CurrentTaskGroupId   = processingTask?.GroupId,
+                    CurrentTaskQueuedAt  = processingTask?.QueuedAt,
+                    QueuedTasks          = waitingTasks.Select(t => new QueuedTaskItemDto
                     {
                         TaskId   = t.Id,
+                        GroupId  = t.GroupId,
                         Title    = t.Title,
                         QueuedAt = t.QueuedAt
                     }).ToList()

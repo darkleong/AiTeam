@@ -25,10 +25,10 @@ public class CommandHandler(
     IServiceProvider serviceProvider,
     RulesService rulesService,
     AppSettingsService appSettings,
-    DashboardPushService dashboardPush,
     ConversationContextStore contextStore,
     TaskGroupService taskGroupService,
     InteractionService interactionService,
+    AgentQueueControlService agentQueueControl,
     ILogger<CommandHandler> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
@@ -893,44 +893,30 @@ public class CommandHandler(
 
     // 27b-1：Agent 佇列操作指令
 
-    private static readonly string[] QueueExecutorKeys =
-    [
-        AgentNames.Dev, AgentNames.Reviewer, AgentNames.Qa, AgentNames.Doc,
-        AgentNames.Requirements, AgentNames.Designer, AgentNames.Release, AgentNames.Ops
-    ];
-
     private async Task HandlePauseCommandAsync(SocketSlashCommand command)
     {
         var agent = command.Data.Options.First(o => o.Name == "agent").Value.ToString()!;
-        await appSettings.SetAsync($"AgentState:{agent}", "paused");
-        _ = dashboardPush.PushQueueUpdateAsync();
-        await command.FollowupAsync($"⏸️ **{agent}** 已暫停佇列消費，正在執行的任務不受影響。\n使用 `/resume agent:{agent}` 恢復。");
+        var (_, message) = await agentQueueControl.PauseAgentAsync(agent);
+        await command.FollowupAsync(message);
     }
 
     private async Task HandleResumeCommandAsync(SocketSlashCommand command)
     {
         var agent = command.Data.Options.First(o => o.Name == "agent").Value.ToString()!;
-        await appSettings.SetAsync($"AgentState:{agent}", "active");
-        _ = dashboardPush.PushQueueUpdateAsync();
-        await command.FollowupAsync($"▶️ **{agent}** 已恢復佇列消費。");
+        var (_, message) = await agentQueueControl.ResumeAgentAsync(agent);
+        await command.FollowupAsync(message);
     }
 
     private async Task HandleStopAllCommandAsync(SocketSlashCommand command)
     {
-        foreach (var key in QueueExecutorKeys)
-            await appSettings.SetAsync($"AgentState:{key}", "stopping");
-
-        _ = dashboardPush.PushQueueUpdateAsync();
-        await command.FollowupAsync("🛑 所有 Agent 已進入 **Stopping** 狀態，完成手頭任務後將自動停止。\n使用 `/resume` 指定個別 Agent 恢復，或 `/resume-all` 全部恢復。");
+        var (_, message) = await agentQueueControl.StopAllAsync();
+        await command.FollowupAsync(message);
     }
 
     private async Task HandleResumeAllCommandAsync(SocketSlashCommand command)
     {
-        foreach (var key in QueueExecutorKeys)
-            await appSettings.SetAsync($"AgentState:{key}", "active");
-
-        _ = dashboardPush.PushQueueUpdateAsync();
-        await command.FollowupAsync("▶️ 所有 Agent 已恢復佇列消費。");
+        var (_, message) = await agentQueueControl.ResumeAllAsync();
+        await command.FollowupAsync(message);
     }
 
     private async Task HandleQueueCommandAsync(SocketSlashCommand command)

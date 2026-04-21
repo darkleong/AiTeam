@@ -1,0 +1,116 @@
+@* Stage 33：Agent 狀態卡元件。
+    子項 A：pause/resume 控制；子項 B：expand 展開看待辦清單（running + queued）。
+    資料全部來自 Parameter QueueInfo（AgentQueueDto），無需額外查詢，SignalR 推送會自動帶來新資料。*@
+
+<MudPaper Elevation="1" Class="pa-2"
+          Style="@($"min-height:60px;{(IsPaused ? "background-color: rgba(255,193,7,0.08);" : "")}")">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <div style="flex:1; overflow:hidden">
+            <MudText Typo="Typo.body2" Style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                @Agent.AgentName
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                今日完成 @Agent.TodayCompletedCount
+            </MudText>
+        </div>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            @if (QueueInfo is not null && QueueInfo.AgentState != "active")
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                         Color="@GetAgentStateColor(QueueInfo.AgentState)"
+                         Style="margin:0; height:20px; font-size:0.7rem">
+                    @GetAgentStateLabel(QueueInfo.AgentState)
+                </MudChip>
+            }
+            @if (QueueInfo is not null && QueueInfo.QueueDepth > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                         Style="margin:0; height:20px; font-size:0.7rem">
+                    佇列 @QueueInfo.QueueDepth
+                </MudChip>
+            }
+            <StatusBadge Status="@Agent.Status" />
+
+            @* 子項 A：pause / resume 按鈕（左） *@
+            @if (IsKnownExecutor)
+            {
+                @if (IsPaused)
+                {
+                    <MudTooltip Text="恢復佇列消費">
+                        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                       Size="Size.Small" Color="Color.Success"
+                                       Disabled="@_loading"
+                                       OnClick="ResumeAsync" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudTooltip Text="暫停佇列消費（不影響執行中任務）">
+                        <MudIconButton Icon="@Icons.Material.Filled.Pause"
+                                       Size="Size.Small" Color="Color.Default"
+                                       Disabled="@_loading"
+                                       OnClick="PauseAsync" />
+                    </MudTooltip>
+                }
+
+                @* 子項 B：expand 按鈕（右） *@
+                <MudTooltip Text="@(_expanded ? "收起待辦清單" : "展開待辦清單")">
+                    <MudIconButton Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                   Size="Size.Small" Color="Color.Default"
+                                   OnClick="@(() => _expanded = !_expanded)" />
+                </MudTooltip>
+            }
+        </MudStack>
+    </MudStack>
+
+    @* 子項 B：展開待辦清單（running + queued） *@
+    @if (IsKnownExecutor)
+    {
+        <MudCollapse Expanded="_expanded">
+            <div style="margin-top:8px; border-top:1px solid var(--mud-palette-divider); padding-top:6px">
+                @if (!HasAnyTodo)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style:italic">
+                        無待辦
+                    </MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" Class="py-0">
+                        @if (QueueInfo!.CurrentTaskTitle is not null)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.DirectionsRun" IconColor="Color.Primary"
+                                         OnClick="@(() => NavigateToGroup(QueueInfo.CurrentTaskGroupId))"
+                                         Style="cursor:pointer">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <span style="flex:1; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                                        🏃 @QueueInfo.CurrentTaskTitle
+                                    </span>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        已跑 @FormatDuration(QueueInfo.CurrentTaskQueuedAt)
+                                    </MudText>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                        @foreach (var queued in QueueInfo!.QueuedTasks)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.HourglassEmpty" IconColor="Color.Secondary"
+                                         OnClick="@(() => NavigateToGroup(queued.GroupId))"
+                                         Style="cursor:pointer">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <span style="flex:1; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+                                        ⏳ @queued.Title
+                                    </span>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        等候 @FormatDuration(queued.QueuedAt)
+                                    </MudText>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </div>
+        </MudCollapse>
+    }
+</MudPaper>
