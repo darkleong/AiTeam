@@ -119,11 +119,13 @@ public partial class Home : IAsyncDisposable
 
     private void UpdateAgentStatus(AgentStatusViewModel updated)
     {
+        // Stage 33：白名單過濾 — 只更新初始從 DB agent_configs 撈出來的真 Agent。
+        // Bot 端 AgentQueueProcessor 推送時 AgentName 直接用 task.AssignedAgent，
+        // 會包含 workflow-only 的階段名（Dev_plan / Kickoff / Design）。
+        // 若盲接 Add 會在首頁多出 runtime ghost 卡。
         var idx = _agentStatuses.FindIndex(a => a.AgentName == updated.AgentName);
-        if (idx >= 0)
-            _agentStatuses[idx] = updated;
-        else
-            _agentStatuses.Add(updated);
+        if (idx < 0) return;
+        _agentStatuses[idx] = updated;
     }
 
     /// <summary>測試 SignalR 推送管道：POST /internal/agent-status/test → Hub → 頁面更新。</summary>
