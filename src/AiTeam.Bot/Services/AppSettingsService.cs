@@ -72,6 +72,21 @@ public class AppSettingsService(
     /// <summary>強制清除快取，下次讀取時重新從 DB 載入。</summary>
     public void InvalidateCache() => _cacheExpiry = DateTime.MinValue;
 
+    /// <summary>
+    /// Stage 32：Mock 模擬延遲的隨機時長（毫秒）。讀 Mock:DelayMinMs / Mock:DelayMaxMs，
+    /// 解析失敗或缺值時 fallback 到預設 30000–60000ms（對齊 Stage 17 原始行為）。
+    /// </summary>
+    public async Task<int> GetMockDelayMsAsync(CancellationToken ct = default)
+    {
+        const int defaultMin = 30000;
+        const int defaultMax = 60000;
+        var minRaw = await GetAsync("Mock:DelayMinMs", ct);
+        var maxRaw = await GetAsync("Mock:DelayMaxMs", ct);
+        var min = int.TryParse(minRaw, out var m) && m >= 0 ? m : defaultMin;
+        var max = int.TryParse(maxRaw, out var x) && x > min ? x : Math.Max(min + 1, defaultMax);
+        return Random.Shared.Next(min, max);
+    }
+
     private async Task EnsureCacheAsync(CancellationToken cancellationToken)
     {
         if (DateTime.UtcNow < _cacheExpiry) return;

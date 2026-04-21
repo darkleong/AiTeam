@@ -55,7 +55,7 @@ public class QaAgentService(
                 AddLog(task, "[MOCK-FAIL] Quinn 模擬 QA 執行中...", "running");
                 await taskRepository.SaveAsync(cancellationToken);
                 await PushStatus("running", task.Title);
-                await Task.Delay(Random.Shared.Next(10000, 20000), cancellationToken);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
                 AddLog(task, "[MOCK-FAIL] Quinn 模擬 QA 完成，1 個測試失敗", "failed");
                 taskRepository.UpdateStatus(task, "failed");
                 await taskRepository.SaveAsync(cancellationToken);
@@ -74,7 +74,7 @@ public class QaAgentService(
             AddLog(task, "[MOCK] Quinn 模擬 QA 執行中...", "running");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("running", task.Title);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
+            await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
             var mockReport = new QaReport { Status = "passed", PassedTests = ["[MOCK] MockTest.cs"], Summary = "[MOCK] QA 完成，0 個失敗" };
             return new AgentExecutionResult(true, "[MOCK] QA 完成，測試 0 個失敗",
                 TestReport: JsonSerializer.Serialize(mockReport, JsonOptions));

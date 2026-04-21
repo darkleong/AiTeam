@@ -677,7 +677,7 @@ public class DevAgentService(
             logger.LogInformation("[MockMode] DevAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Dev Agent 模擬執行中...", "running");
             await taskRepository.SaveAsync(cancellationToken);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
+            await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
             return new AgentExecutionResult(true, "[MOCK] PR 已開啟：" + mockPrUrl, mockPrUrl);
         }
 

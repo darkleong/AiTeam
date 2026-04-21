@@ -41,7 +41,7 @@ public class DocAgentService(
             AddLog(task, "[MOCK] Sage 模擬歸檔中...", "running");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("running", task.Title);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
+            await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
             // Stage 29-1：MockMode 也存入 ArchiveContent，供 Dashboard 折疊面板驗收
             if (task.GroupId is not null)
             {

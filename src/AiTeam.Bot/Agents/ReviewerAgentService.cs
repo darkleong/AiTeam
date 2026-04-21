@@ -59,7 +59,7 @@ public class ReviewerAgentService(
                 AddLog(task, "[MOCK-FAIL] Vera 模擬審查中...", "running");
                 await taskRepository.SaveAsync(cancellationToken);
                 await PushStatus("running", task.Id, task.Title);
-                await Task.Delay(Random.Shared.Next(10000, 20000), cancellationToken);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
                 AddLog(task, "[MOCK-FAIL] Vera 模擬審查完成，發現 1 個 Critical Issue", "revision");
                 taskRepository.UpdateStatus(task, "revision");
                 await taskRepository.SaveAsync(cancellationToken);
@@ -76,7 +76,7 @@ public class ReviewerAgentService(
             AddLog(task, "[MOCK] Vera 模擬審查中...", "running");
             await taskRepository.SaveAsync(cancellationToken);
             await PushStatus("running", task.Id, task.Title);
-            await Task.Delay(Random.Shared.Next(30000, 60000), cancellationToken);
+            await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
             const string mockBody = "[MOCK] 程式碼審查通過，無 Critical 問題。這是模擬模式產生的審查報告。";
             return new AgentExecutionResult(true, "[MOCK] Vera 審查完成：0 個必修", ReviewBody: mockBody);
         }

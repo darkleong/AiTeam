@@ -11,28 +11,16 @@ namespace AiTeam.Bot.Agents;
 /// </summary>
 public class MockLlmProvider(AppSettingsService appSettings) : ILlmProvider
 {
-    private const int DefaultDelayMinMs = 30000;
-    private const int DefaultDelayMaxMs = 60000;
-
     public async Task<LlmResponse> CompleteAsync(
         string systemPrompt,
         string userMessage,
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null)
     {
-        await Task.Delay(await GetMockDelayMsAsync(cancellationToken), cancellationToken);
+        await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
 
         var content = BuildMockResponse(systemPrompt);
         return new LlmResponse(content, InputTokens: 0, OutputTokens: 0);
-    }
-
-    private async Task<int> GetMockDelayMsAsync(CancellationToken ct)
-    {
-        var minRaw = await appSettings.GetAsync("Mock:DelayMinMs", ct);
-        var maxRaw = await appSettings.GetAsync("Mock:DelayMaxMs", ct);
-        var min = int.TryParse(minRaw, out var m) && m >= 0 ? m : DefaultDelayMinMs;
-        var max = int.TryParse(maxRaw, out var x) && x > min ? x : Math.Max(min + 1, DefaultDelayMaxMs);
-        return Random.Shared.Next(min, max);
     }
 
     /// <summary>
