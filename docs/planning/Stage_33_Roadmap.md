@@ -284,11 +284,23 @@ A 和 B 可平行，但動同一元件時有衝突風險。建議順序：
 
 - `dotnet build AiTeam.slnx` 兩段皆 0 errors（子項 A 綠燈 → 子項 B 綠燈）
 - 原規劃書中擔心的「Agent 狀態卡 UI 整合衝突」避免成功：子項 A 先完全完成（pause/resume 按鈕定位右側、loading state、淡黃背景）再加 B（expand 按鈕緊接其後 + MudCollapse），無 UI 排版衝突
-- 剩餘人工驗收（待 push 後自動部署完成）：
-  - Dashboard Cody 卡片 pause/resume 切換 → Discord `/queue` 驗證 AgentState
-  - 全域「緊急停止」→ 確認 Dialog → 所有 Agent stopping
-  - Discord `/pause Cody` / `/stop-all` 等回歸正常
-  - `/mock new_feature` 觸發後展開 Cody 卡片看 🏃 + ⏳ 清單、點擊跳 PipelineView
+- **驗收 2026-04-21 全數通過**：
+  - 子項 A：per-agent pause/resume、全域「緊急停止」+ 確認 Dialog、「全部恢復」直觸發、Discord `/pause` / `/stop-all` 等回歸正常 ✅
+  - 子項 B：先 Pause Cody 再觸發 `/mock` 看到 ⏳ 排隊中、Resume 後轉 🏃、完成後自動移除、「無待辦」empty state、點清單項跳 `/pipeline?groupId=` Drawer 自動預選 ✅
+
+### 驗收期間修正
+
+1. **State Chip / Status Badge 顯示策略優化**（`228ebd7`）— Christ 驗收時觀察到「已停止+閒置」兩個負面詞疊加屬於視覺冗餘。查實證確認兩者正交（AgentState 是佇列控制、Status 是執行狀態），不是 bug。採「方案 1' + 方案 2」疊加：
+   - 非 active + idle 時隱藏 Status Badge（消除「已停止+閒置」冗餘）
+   - 非 active + running 時 State chip 改 `Variant.Filled` 強調「按了停但手頭任務還在跑」這個重要衝突狀態
+   - running / error 永遠顯示 Badge，確保「停止中+執行中」組合不會被藏
+2. **Dev_plan ghost 卡修正**（`b915bf3`）— Christ 驗收時發現首頁多出「Dev_plan」獨立 Agent 卡（Agent 設定頁卻沒有）。查實證：`DashboardAgentService.GetAllAgentStatusesAsync` 初始從 `agent_configs` 撈真 Agent（無 Dev_plan），但 `Home.UpdateAgentStatus` 對 SignalR 推進來的未知 AgentName **盲接 Add**（`Home.razor.cs:120-127`）；而 `AgentQueueProcessor.ExecuteTaskAsync` 推送 AgentStatus 時 `AgentName = task.AssignedAgent` 會帶 workflow-only 的階段名（Dev_plan / Kickoff / Design）→ runtime ghost 卡。修法：`UpdateAgentStatus` 加白名單過濾，只接受初始 DB 撈出的真 Agent 更新，未知 AgentName 忽略。Kickoff / Design 同機制覆蓋。
+   - **推論錯誤紀錄**：初判為「DB agent_configs 孤兒資料」，請 Christ 去刪；Christ 截圖 Agent 設定頁打臉（無 Dev_plan）後重查才找到真正 root cause。教訓：SignalR 動態 Add 路徑要單獨驗證，別只看初始 DB 撈邏輯。
+
+### 後續建議（給 Aria 收尾時評估是否記入 FF）
+
+- **AgentConfigService 新增守門**：禁止建立名稱在 `{Dev_plan, Kickoff, Design}` 等 workflow-only 保留字的 Agent（目前是人為紀律維持，無 code guard）。本 stage 未做，因與主題弱相關。
+- **Bot 端 PushAgentStatusAsync 名稱語意**：目前直接用 `task.AssignedAgent` 作為 AgentName，語意模糊（工作階段名 vs 真 Agent 名）。長期 refactor 可考慮在 push 前做映射（Dev_plan → Dev），但影響面大（StatusBadge / Pipeline View 都可能仰賴 raw 階段名顯示），需整體評估。
 
 ---
 
@@ -298,3 +310,4 @@ A 和 B 可平行，但動同一元件時有衝突風險。建議順序：
 |------|------|------|
 | v1.0 | 2026-04-21 | 初版規劃書，兩子項（佇列控制 + 待辦清單）合併為「Agent 狀態卡 2.0」；Session 邊界拆兩段（Sonnet 200K × 2）或 Opus 1M 一氣呵成二選一 |
 | v2.0 | 2026-04-21 | 實作完成（v3.20.0）：**子項 A** 抽出 `AgentQueueControlService`（搬 4 個 CommandHandler handler，積少成多為 FF 二十-B）、Internal API 4 端點 + 共用 `FireAndForgetQueueControl` helper、Agent 狀態卡抽成獨立元件 `AgentStatusCard.razor` + per-card pause/resume 按鈕、`GlobalQueueControlCard` 全域緊急停止（附確認 Dialog）；**子項 B** 重用既有 `AgentQueueDto` 擴充 4 欄位（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代規劃書原案的新增 `AgentTodoDto`、`AgentStatusCard` expand + MudCollapse 待辦清單（🏃 running + ⏳ queued + 無待辦提示）、`ClearQueueStatusAsync` 補 `PushQueueUpdateAsync` 讓清單完成時即時刷新、`PipelineList` 支援 `?groupId=` 深層連結；順帶清理 `Components/Shared/AgentStatusCard.razor` 舊版殘留解決 Razor tag 命名衝突 |
+| v2.1 | 2026-04-21 | 驗收期間修正兩項：**(1) State Chip / Status Badge 顯示策略優化**（`228ebd7`）— 非 active + idle 隱藏 Badge 消除「已停止+閒置」冗餘，非 active + running 時 State chip 改 Filled 強調「按了停但還在跑」衝突狀態；**(2) Dev_plan ghost 卡修正**（`b915bf3`）— `Home.UpdateAgentStatus` 對 SignalR 未知 AgentName 盲接 Add 導致 workflow 階段名（Dev_plan / Kickoff / Design）出現為 runtime ghost 卡，改為白名單過濾只接受初始 DB 撈出的真 Agent 更新（Kickoff / Design 同覆蓋）。推論教訓：初判為 DB 孤兒資料被 Christ 截圖打臉後重查才找到 SignalR 動態 Add 路徑是真因 |
