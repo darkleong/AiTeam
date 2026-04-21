@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.21
+> 版本：v7.24
 > 建立日期：2026-04-01
-> 最後更新：2026-04-20
+> 最後更新：2026-04-21
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -747,7 +747,7 @@ Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#
 
 驗收時每次都要切回 Discord 輸入 `/mock ...` 很麻煩。優先做這一個。實作時順便把 `HandleMockProposalFlowAsync` 等私有方法重構成可被 controller 直接呼叫的 shared service。
 
-> **已排入 Stage 32（v3.19.0）** — 與 Mock Delay / 輪次上限動態化一起合併為「Dashboard 老闆控制中心擴充」主題。其他 FF 十五子項（`/pause`、`/stop-all` 等佇列控制）留待未來單獨處理。
+> **✅ `/mock` 子項已完成（Stage 32，v3.19.0，2026-04-21）** — 與 Mock Delay / 輪次上限動態化一起合併為「Dashboard 老闆控制中心擴充」主題。Dashboard 首頁 `MockScenarioCard` 7 種情境 + Project 下拉 + Title 選填；`MockScenarioService` shared service 抽出後 Discord 與 Dashboard 共用。其他 FF 十五子項（`/pause`、`/stop-all`、`/queue` 等佇列控制 Dashboard 化）留待未來單獨處理。
 
 ### 與其他項目的關係
 
@@ -843,6 +843,119 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 ### 優先級
 
 ⚪ 待觀察 — 屬於 AiTeam 架構穩定後的「Dashboard 控制中心」願景拼圖之一，不急
+
+---
+
+## 二十、大檔案拆解技術債（合集）
+
+> 狀態：🟡 待觀察 — 優先搭車未來動到各檔的 Stage 一起拆
+> 提出日期：2026-04-20（Stage 32 規劃後 Christ 觀察到 TaskGroupService 2000 行、Aria 掃 wc -l 發現 Top 4 全破千行）
+
+### 背景（統一動機）
+
+按「Session 類型 Context 消耗模式」分析（見 `feedback_impl_session_briefing.md` 第二節），**大檔案是實作 Session context 殺手**：
+
+- 每行 C# ≈ 20 tokens，2000 行檔案 Read 一次 ≈ 40K tokens
+- 同樣「S-M 工程」動大檔案 vs 小檔案，context 消耗差 **4-5 倍**
+- Stage 31 Sonnet 200K 跑到 75% 主因就是動了 TaskGroupService
+
+### Top 4 怪物級檔案（2026-04-20 現況）
+
+| 排名 | 檔案 | 行數 | Read 成本 |
+|---|---|---|---|
+| 1 | `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | 2617 | ~52K |
+| 2 | `src/AiTeam.Bot/Discord/CommandHandler.cs` | 2327 | ~46K |
+| 3 | `src/AiTeam.Bot/Orchestration/MeetingService.cs` | 1415 | ~28K |
+| 4 | `src/AiTeam.Bot/Agents/PmAgentService.cs` | 1388 | ~28K |
+
+第 5 名以下（DevAgentService 958 行等）尚在可接受範圍，不列入。
+
+---
+
+### 子項 A：`TaskGroupService.cs` 拆解（最大、最迫切）
+
+**現有職責**（9 大項）：Kickoff Orchestration / Design Orchestration / Review Appeal 雙迴圈 + 仲裁 / Dev_plan Appeal 迴圈 / QA Fix 迴圈 + Petra 路由 / Crash Recovery / Proposal 確認路由（Discord + Dashboard）/ 多個按鈕 handler / TaskGroup CRUD 包裝
+
+**拆解方向**：
+
+| 拆出的 Service | 職責 | 預估行數 |
+|---|---|---|
+| `MeetingOrchestrationService` | Kickoff + Design + Crash Recovery | ~600 |
+| `AppealOrchestrationService` | Review Appeal（雙迴圈 + 仲裁）+ Dev_plan Appeal | ~500 |
+| `QaCoordinationService` | QA Fix 迴圈 + Petra 四路由判斷 | ~300 |
+| `ProposalConfirmationService` | Proposal 按鈕路由（Discord + Dashboard，與子項 B CommandHandler 拆解連動）| ~300 |
+| `TaskGroupService`（瘦身）| CRUD + 流程入口 dispatcher | ~300 |
+
+**風險**：依賴切分、`serviceProvider.CreateAsyncScope()` scope 管理、Meeting↔Appeal 循環依賴、按鈕回調 dispatcher 重新設計
+
+---
+
+### 子項 B：`CommandHandler.cs` 拆解
+
+**現有職責**：Slash command dispatcher、按鈕回調、Proposal/Kickoff/Design 確認、`_pendingConfirmations` 狀態、/mock 指令、/pause /stop-all 等佇列指令、CEO Dashboard 路由
+
+**拆解方向**：
+- `SlashCommandRouter` — dispatcher + 各 slash command handler
+- `ButtonCallbackRouter` — 按鈕回調 + `_pendingConfirmations` 狀態
+- `ProposalConfirmationHandler` / `KickoffConfirmationHandler` / `DesignConfirmationHandler`（與子項 A 的 `ProposalConfirmationService` 連動，合併設計）
+- `PendingConfirmationStore` — 把字典抽成獨立 Singleton 供多方共用
+
+**風險**：`_pendingConfirmations` dictionary 所有權移轉要仔細；CommandHandler 與 Discord.Net 框架緊耦合，拆完要保持 event binding 完整
+
+---
+
+### 子項 C：`MeetingService.cs` 拆解（最乾淨、風險最低）
+
+**現有職責**：Kickoff 會議流程 + Design 會議流程 + Rosa/Demi 前置 + 迴圈 orchestration
+
+**拆解方向（職責界線清楚、推薦優先做）**：
+- `KickoffMeetingService` — ~500 行
+- `DesignMeetingService` — ~700 行
+- `MeetingCommons` — shared helper（prompt building、round orchestration 共用邏輯）~200 行
+
+**優勢**：Kickoff vs Design 幾乎沒有共用狀態，拆解風險最低
+
+---
+
+### 子項 D：`PmAgentService.cs` 拆解（Stage 30 剛膨脹）
+
+**現有職責**：5 個 appeal 方法（Stage 30 升級為 Claude Code CLI）+ QA 路由 + Dev_plan 審核 + `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` helper
+
+**拆解方向**：
+- `PetraReviewAppealService` — Petra 仲裁 Review Appeal + 審 Review 品質
+- `PetraDevPlanAppealService` — Petra 審 Dev_plan + 再評估
+- `PetraQaRouterService` — Petra QA 四路由判斷
+- `CodyAppealService` — Cody 反駁 Review / Dev_plan
+- `PmAgentCommons` — `PrepareClaudeCodeEnv` / `BuildAppealContextSectionAsync`
+
+**觀察**：Stage 30 之前 ~900 行，升級後膨脹 50%。**趁記憶猶新拆最有效率**（Stage 30 實作 Session 的脈絡還在近期）
+
+---
+
+### 搭車優先順序建議
+
+按「風險 × 迫切 × 動到機率」綜合評估：
+
+1. **子項 C MeetingService**（職責清楚、風險低）→ **未來若修會議流程 bug / 加新會議類型** 搭車
+2. **子項 D PmAgentService**（Stage 30 剛膨脹）→ **若 FF 八 Phase 2 繼續做循環偵測 / 新鮮視角** 搭車
+3. **子項 B CommandHandler** + **子項 A TaskGroupService**（兩者互相耦合）→ 合併一次做最乾淨，**等真的 compact 過一次** 再下決心
+
+### 不建議做法
+
+- ❌ **不要** 獨立開「大檔案拆解 Stage」做全部四個—— M-L × 4 = 3-4 個月，業務停滯
+- ❌ **不要** 一次只拆一個但搭不到車—— 拆完別的 Stage 會撞重構衝突
+- ✅ **要** 每個子項搭對的車，累積 1-2 年自然完成
+
+### 共通拆解策略（四個子項通用）
+
+- **Migration pattern**：新 service 建立後，舊 service 先保留並做 thin wrapper 轉發，確認行為一致後再刪除舊方法
+- **DI 註冊**：全部 Singleton（沿用現有模式）
+- **Context 共享**：需要跨 service 的狀態（如 `_pendingConfirmations`）抽成獨立 Singleton store
+- **測試**：拆解前建議有一輪 Playwright 測試過，確保拆解後迴歸可驗
+
+### 整體優先級
+
+🟡 中 — 累積中的技術債，搭車做最經濟。完成一個算一個。若被迫獨立做任一子項，建議 **Opus 1M + ultrathink**（需要整體架構視角）。
 
 ---
 
@@ -947,3 +1060,6 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 | 2026-04-20 | v7.19：四（多 LLM 供應商）新增「CLI 三家能力研究（2026-04-20）」小節 — Aria 查官方文件 + GitHub issue 彙整 Claude Code / Gemini CLI / Codex CLI 能力對照；關鍵發現：Gemini CLI 不支援預設 UUID（FR #20847 open），但 Stage 30「新開 session」路線恰好繞開；Codex CLI 有 SDK + `--output-schema` native 支援，工程體驗最完整；建議 spike 順序：Codex → Gemini；屬研究階段，不是實作計劃 |
 | 2026-04-20 | v7.20：Stage 31 驗收通過 — header 同步、條目註明本次首次實踐「Stage 結案兩段式分工」（實作 Session 寫 Roadmap 實作紀錄、Aria 收尾 Master Plan + Future_Feature）|
 | 2026-04-20 | v7.21：新增十九（Agent maxTurns 動態化）— Stage 32 規劃時釐清「maxTurns 散落各處、每個 Agent 不同值」，不適合單抽為全域設定；記錄為未來項目，等 FF 四（多 CLI 整合）或 FF 十（Agent 角色設定 Dashboard 化）開工時順帶做 |
+| 2026-04-20 | v7.22：新增二十（TaskGroupService 拆解 — 技術債）— Stage 32 開始實作後 Christ 觀察到該檔 2000+ 行過龐大，分析 Stage 30/31 context 緊繃的根因；方向：拆為 MeetingOrchestrationService / AppealOrchestrationService / QaCoordinationService / ProposalConfirmationService + 瘦身後 TaskGroupService 五個服務；建議搭車未來動到該檔的 Stage 一起做，避免獨立技術債 Stage 排後面 |
+| 2026-04-20 | v7.23：二十擴充為「大檔案拆解技術債（合集）」— Aria 掃 wc -l 發現 Top 4 全破千行（TaskGroupService 2617 / CommandHandler 2327 / MeetingService 1415 / PmAgentService 1388），合併管理更有意義；新增子項 B（CommandHandler）/ C（MeetingService 最乾淨、最推薦優先）/ D（PmAgentService，Stage 30 剛膨脹）；搭車優先順序：C → D → B+A 合併 |
+| 2026-04-21 | v7.24：Stage 32 驗收通過（v3.19.0）— 十五「/mock Dashboard 化」子項標記為已完成（其他子項 /pause / /stop-all / /queue 留待未來）；本次第二次實踐「Stage 結案兩段式分工」順利，驗收期間三項補強（Project 下拉 / DbContext 並行 / 補齊 Agent services 遺漏延遲點）由 Aria 順手補進 Roadmap v2.1 |

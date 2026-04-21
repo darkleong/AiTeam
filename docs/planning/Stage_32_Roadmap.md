@@ -260,10 +260,18 @@ A + B 同源（系統設定頁擴充），先一起做；C 是重構 + 新 UI，
 - Dashboard 首頁：`<MockScenarioCard />` 已插入，MockMode 未啟用時自動 disable
 - 系統設定頁：Mock Delay 區塊 + 流程輪次上限區塊（5 欄）已呈現，每欄都有灰色說明小字（Christ 2026-04-20 要求）
 
+### 驗收後修正（2026-04-20 ~ 04-21）
+
+驗收期間發現並修復三項：
+
+1. **MockScenarioCard Project 欄位改下拉選單**（commit `b59b926`）：Christ 觀察原本 `MudTextField` 純文字輸入是照抄 Discord `/mock` 行為，但 Dashboard 應該利用既有 `DashboardProjectService` 讀 DB Project 清單，改為 `MudSelect` + 預設選項。欄位位置同時移至最左（情境選單之前），使用者先選 Project 再選情境更符合直覺。
+2. **MockScenarioCard 用自建 scope 避免 DbContext 並行衝突**（commit `d93f772`）：Dashboard 元件 DI 注入的 scoped service 若在 async OnClick 同時觸發多請求，會撞到 `AppDbContext` 的 concurrent usage 例外。改用 `IServiceScopeFactory.CreateAsyncScope()` 每次建立獨立 scope，與其他 Dashboard 元件（如 SystemSettings）模式對齊。
+3. **Agent services 內遺漏的 Mock 延遲點補齊**（commit `f4d5314`）：本 Stage 子項 A 只改了 `MockClaudeCodeService` + `MockLlmProvider`，漏了 `DevAgentService` / `QaAgentService` / `ReviewerAgentService` / `DocAgentService` 等在 MockMode 區塊內**自帶的** `Task.Delay(Random.Shared.Next(...))`，共 6 處補上 `GetMockDelayMsAsync` helper（或注入 `AppSettingsService` 後沿用）。否則 Mock Delay 設定只生效一半，Stage 流程中段仍卡 30-60 秒。
+
 ### 結案分工
 
-- **Stage 32 Session（本次）**：完成本 Roadmap 的「實作紀錄」章節、header 狀態改 ✅ / 版本 v2.0、版本歷史追加一行、commit
-- **Aria 接手**：Master Plan header / 索引 / changelog + Future_Feature 十五移入已完成 / changelog
+- **Stage 32 Session**：完成本 Roadmap 的「實作紀錄」章節、header 狀態改 ✅ / 版本 v2.0、版本歷史追加一行、commit
+- **Aria 接手**：Master Plan header / 索引 / changelog + Future_Feature 十五 `/mock` 子項標記已完成 / changelog；順手補本 Roadmap 驗收後修正小節 + v2.1 版本歷史條目
 
 ---
 
@@ -273,3 +281,4 @@ A + B 同源（系統設定頁擴充），先一起做；C 是重構 + 新 UI，
 |------|------|------|
 | v1.0 | 2026-04-20 | 初版規劃書，三子項（Mock Delay / 輪次上限動態化 / `/mock` Dashboard 化）合併為「Dashboard 老闆控制中心擴充」；Opus 1M + high（取 Stage 31 校準教訓）|
 | v2.0 | 2026-04-20 | 實作完成：補「實作紀錄」章節 + header 狀態 ✅ / 版本 v2.0；踩坑四件組（namespace / Discord 名稱衝突 / using 遺漏 / CommandHandler 循環依賴）|
+| v2.1 | 2026-04-21 | 驗收後補充：新增「驗收後修正」小節記錄三個 follow-up commits（MockScenarioCard Project 下拉 + DbContext 並行修正 + Agent services 遺漏延遲點補齊）|
