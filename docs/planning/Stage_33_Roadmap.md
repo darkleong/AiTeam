@@ -1,0 +1,251 @@
+# Stage 33：Agent 狀態卡 2.0 — 佇列控制 + 待辦清單
+
+> 對應 Future Feature：十五（Dashboard 與 Discord 功能平等 — 佇列控制子項）+ 二十一（Agent 狀態卡 expand 展開看待辦清單）
+> 對應版本：v3.20.0
+> 建立日期：2026-04-21
+> 狀態：🟡 待實作
+> 文件版本：v1.0
+
+---
+
+## 概述
+
+主題「**Agent 狀態卡 2.0**」——把首頁 Agent 狀態卡從「狀態展示」升級為「互動控制中心」，兩個子項動同一個 UI 元件、共用資料源與 SignalR 推送：
+
+| 子項 | 對應 FF | 目的 |
+|----|---------|------|
+| A | 十五（剩餘子項）| 佇列控制 Dashboard 化（per-agent pause/resume + 全域 stop-all/resume-all）|
+| B | 二十一 | Agent 狀態卡 expand 展開看待辦清單（執行中 + 排隊中的 TaskItem）|
+
+兩子項合併理由：都動 Agent 狀態卡元件、都需要 TaskItem + Agent 狀態資料源、SignalR 推送邏輯可以一起升級。分兩個 Stage 會造成元件被動兩次。
+
+---
+
+## 子項 A：佇列控制 Dashboard 化
+
+### 背景
+
+Discord 有 `/pause <agent>` / `/resume <agent>` / `/stop-all` / `/resume-all` 指令可控制 Agent 佇列（Stage 27b 實作），但 **Dashboard 沒有對應入口**。老闆要緊急停全部或暫停特定 Agent 時，要切到 Discord 輸入指令。
+
+沿用 Stage 32 `MockScenarioService` pattern——抽 shared service + Internal API + UI 按鈕。這也能順手為 **FF 二十-B（CommandHandler 拆解）** 積少成多。
+
+### 實作步驟
+
+1. **抽 `AgentQueueControlService`（shared service）**
+   - 位置：`src/AiTeam.Bot/Services/AgentQueueControlService.cs`
+   - 搬 `CommandHandler` 中 `/pause` / `/resume` / `/stop-all` / `/resume-all` 的處理邏輯
+   - API：
+     ```csharp
+     Task<(bool ok, string message)> PauseAgentAsync(string agent, CancellationToken ct = default);
+     Task<(bool ok, string message)> ResumeAgentAsync(string agent, CancellationToken ct = default);
+     Task<(bool ok, string message)> StopAllAsync(CancellationToken ct = default);
+     Task<(bool ok, string message)> ResumeAllAsync(CancellationToken ct = default);
+     ```
+   - 回傳 `(bool, string)` 供 Discord Followup + Dashboard Snackbar 共用訊息（對齊 `MockScenarioService` 模式）
+
+2. **`CommandHandler` 對應 slash command 改為薄 wrapper**
+   - `HandlePauseCommandAsync` 等改為：驗證參數 → 呼叫 `AgentQueueControlService.PauseAgentAsync(agent, ct)` → `command.FollowupAsync(message)`
+
+3. **Bot Internal API 新增 4 個端點**（`src/AiTeam.Bot/Api/InternalController.cs`）
+   - `POST /internal/queue/{agent}/pause`
+   - `POST /internal/queue/{agent}/resume`
+   - `POST /internal/queue/stop-all`
+   - `POST /internal/queue/resume-all`
+   - 驗證 Authorization + agent 參數 + fire-and-forget 呼叫 service（仿 `/internal/mock/scenario`）
+
+4. **`DashboardBotService` 新增 4 個方法**（仿 `TriggerMockScenarioAsync` / `RequeueTaskAsync`）
+   - `PauseAgentAsync(string agent, ...)` / `ResumeAgentAsync(...)` / `StopAllAsync(...)` / `ResumeAllAsync(...)`
+   - 回傳 `bool`（送出是否成功）
+
+5. **Dashboard UI — Agent 狀態卡上加 pause/resume 按鈕**
+   - 位置：Agent 狀態卡右上角（expand 按鈕旁邊）
+   - 顯示邏輯：
+     - Agent 狀態為 `paused` → 顯示 ▶️ 「恢復」按鈕（MudIconButton `PlayArrow`）
+     - Agent 狀態為其他（idle / running / error）→ 顯示 ⏸️ 「暫停」按鈕（MudIconButton `Pause`）
+   - 點擊後呼叫 `DashboardBotService.PauseAgentAsync` / `ResumeAgentAsync`
+   - Snackbar 回饋 + SignalR 推送狀態變更
+
+6. **Dashboard UI — 全域控制按鈕區**
+   - 位置：首頁 Agent 狀態區域上方（或獨立 `GlobalQueueControlCard`）
+   - 兩個按鈕：「🛑 緊急停止」（MudButton Color Error）+ 「▶️ 全部恢復」（MudButton Color Success）
+   - 危險操作 → 點擊後彈 `MudDialog` 確認（「確定要暫停所有 Agent？進行中任務會跑完當輪」）
+   - 確認後呼叫 `DashboardBotService.StopAllAsync` / `ResumeAllAsync`
+
+---
+
+## 子項 B：Agent 狀態卡 expand 展開看待辦清單
+
+### 背景
+
+Agent 狀態卡目前只顯示「忙碌 / 閒置」+「今日完成 N」+ 佇列深度數字，**看不到具體是哪些 TaskItem 在排隊或正在跑**。
+
+Christ 決策（2026-04-21）：採**解讀 B**（該 Agent 尚未完成的全部 TaskItem）= 正在跑的 running（最多 1 個，per-agent Semaphore 限制）+ 排隊的 queued（N 個）+ 不含歷史（done / failed / cancelled）。
+
+### 目標 UI
+
+```
+┌─ Cody (Dev) ────────────────── ⏸️  🔽 ┐
+│ 🏃 執行中                 今日完成 5   │
+└───────────────────────────────────────┘
+   展開後 ↓
+┌───────────────────────────────────────┐
+│ 🏃 執行中：[Stage 33 實作]  已跑 3:20  │
+│ ⏳ 排隊中：[FF 十八 UI 調整] 等候 30s  │
+│ ⏳ 排隊中:[Bug 修復 #42]     等候 10s  │
+└───────────────────────────────────────┘
+```
+
+- 清單為空時顯示灰字「無待辦」
+- 每個 item 點擊 → 跳到 PipelineView（該 TaskGroup）
+- SignalR 即時更新（新任務加入、完成後移除、running → queued 轉換）
+
+### 實作步驟
+
+1. **`DashboardTaskService` 新增查詢方法**
+   - `Task<List<AgentTodoDto>> GetAgentTodosAsync(string agentName, CancellationToken ct)`
+   - SQL：`WHERE AssignedAgent = ? AND Status IN ('queued', 'running')`
+   - Order：`Status = 'running' DESC, QueuedAt ASC`
+   - 回傳 DTO 含 TaskId / GroupId / Title / Status / CreatedAt / QueuedAt / StartedAt
+
+2. **`AgentTodoDto` 新增**（`src/AiTeam.Shared/Dtos/AgentTodoDto.cs`）
+   - 欄位：TaskId / GroupId / Title / Status（"running" | "queued"）/ QueuedAt / StartedAt
+
+3. **Agent 狀態卡元件改造**
+   - 元件位置：`src/AiTeam.Dashboard/Components/Pages/Home/AgentStatusCard.razor` + `.razor.cs`（若元件結構不同，請 grep 確認實際檔名）
+   - 新增 `_expanded` 狀態 + `_todos` 清單欄位
+   - 右上角加 `MudIconButton` `ExpandMore` / `ExpandLess`（與 pause/resume 按鈕同排）
+   - 展開時條件渲染 `<MudCollapse>` 內包 `<MudList>`，列出 `_todos`
+   - 點擊 expand 時：`_expanded = true` + 若 `_todos` 空則觸發 load
+   - 每個 item 顯示：icon（🏃 running / ⏳ queued）+ Title + 時間戳（等候 / 已跑 時間）
+   - 點 item → `NavigationManager.NavigateTo($"/pipeline/{groupId}")`
+
+4. **SignalR 推送升級**
+   - 現有 `DashboardPushService.PushAgentStatusAsync` 僅推狀態 + 今日完成數
+   - 新增 `PushAgentTodosAsync(string agentName, List<AgentTodoDto> todos)`
+   - 觸發時機：TaskItem 建立（queued 進入）/ dequeue（queued → running）/ 完成（running → done）/ 取消 / 失敗
+   - Client 端（AgentStatusCard）訂閱 → 更新 `_todos` + `StateHasChanged`
+
+### 效能考量
+
+- 每個 Agent 平均待辦 < 10 個，8 個 Agent 共 ~80 筆以內，單次 query 無壓力
+- 展開時才 load（不展開不發請求），若所有 Agent 狀態卡都展開也只 8 次 query，可接受
+- SignalR 推送限節流（每個 Agent 100ms debounce 合併多次 push）—— 視實作是否有效能問題再加
+
+---
+
+## 共通設計：Agent 狀態卡 UI/UX 整合
+
+兩子項都動 Agent 狀態卡，**設計上要一致**：
+
+```
+┌─ {Agent 名} ({角色}) ──── [⏸️/▶️] [🔽/🔼] ┐
+│ {狀態 emoji + 文字}      今日完成 N       │
+└────────────────────────────────────────────┘
+```
+
+按鈕順序建議：pause/resume（操作）在左、expand（檢視）在右。
+
+**暫停狀態的視覺標示**：
+- Agent 狀態為 `paused` 時，卡片 border 或背景加淡黃色提示
+- 按鈕變成 ▶️「恢復」
+
+**載入狀態**：
+- expand 展開時若 query 未回，顯示 `MudProgressCircular` 骨架
+- pause/resume 點擊後按鈕進入 loading state，防重複點擊
+
+---
+
+## 子項順序建議
+
+A 和 B 可平行，但動同一元件時有衝突風險。建議順序：
+
+1. **子項 A 全部做完**（後端抽 service + Internal API + DashboardBotService + 狀態卡 pause/resume 按鈕 + 全域控制區）
+2. **子項 B**（狀態卡 expand 展開 + 待辦清單 + SignalR 推送升級）
+
+分開做可避免 pause/resume 按鈕和 expand 按鈕的 UI 整合干擾。
+
+---
+
+## 驗收情境
+
+### A. 佇列控制
+1. Dashboard 首頁 Agent 狀態卡按「⏸️」Pause → 該 Agent 狀態轉為 paused、Discord `/queue` 查詢該 Agent 為暫停中、若有新任務指派會留在佇列不執行
+2. 按「▶️」Resume → Agent 恢復、佇列任務開始執行
+3. 全域「🛑 緊急停止」→ 彈確認 Dialog → 確認後所有 Agent 轉 paused
+4. 全域「▶️ 全部恢復」→ 所有 Agent 恢復
+5. Discord 仍可用 `/pause Cody` / `/stop-all` 等指令（回歸測試）
+
+### B. 待辦清單
+1. 觸發 `/mock new_feature` → Cody 卡片「🔽 展開」→ 看到「🏃 執行中：[任務 A]」+ 若有排隊看到「⏳ 排隊中」
+2. 任務完成後清單自動移除該 item（SignalR 推送）
+3. 新任務加入時清單自動新增（SignalR 推送）
+4. 點清單 item → 跳到 PipelineView 該 TaskGroup
+5. 無待辦時顯示「無待辦」灰字
+
+### 回歸
+- Discord `/pause` / `/resume` / `/stop-all` / `/resume-all` 全部正常
+- 首頁原有 Agent 狀態、今日完成數、佇列深度顯示正常
+
+---
+
+## 版本
+
+`v3.19.0 → v3.20.0`（minor bump）
+
+修改位置：`src/Directory.Build.props`
+
+---
+
+## Model / Effort 建議
+
+**核心挑戰：CommandHandler 2327 行（~46K tokens）是主要 context 殺手。**
+
+按新「Context 預估法」（見 `feedback_impl_session_briefing.md` 第二節）粗估：
+- CommandHandler Read 一次 46K（子項 A 必動）
+- AgentQueueService / Processor ~14K
+- Home.razor + AgentStatusCard ~15K
+- DashboardTaskService + SignalR Hub ~10K
+- 新增 AgentQueueControlService + AgentTodoDto ~10K
+- 開場 CLAUDE.md / conventions 15K
+- Grep / Edit / Build 緩衝 20-30K
+
+**單 Session 估 130K**，吃 Sonnet 200K 的 65%，驗收多輪修正會再累積 → **高風險接近 Stage 31 的 75% 邊界**。
+
+### 兩個方案（Christ 選）
+
+**方案 A（推薦）：拆兩個 Session，各 Sonnet 200K + high**
+
+| Session | 範圍 | 估 context |
+|---|---|---|
+| **Session 1** | 子項 A 全部（後端抽 `AgentQueueControlService` + Internal API + DashboardBotService + 狀態卡 pause/resume 按鈕 + 全域控制區）| ~80K |
+| **Session 2** | 子項 B（狀態卡 expand + 待辦清單 + SignalR 推送）| ~50K |
+
+**好處**：0 額外成本、子項 B 啟動時 context 乾淨、順帶讓 Session 邊界與 UI 變更協調
+
+**方案 B：單 Session Opus 1M + high**
+
+一次做完，context 充裕。**壞處**：Opus 花錢比較多。
+
+---
+
+## 設計約定（本 Stage 共通）
+
+- 新增 UI 按鈕 / 展開區塊都要有 **hover tooltip**（`Title` 屬性或 `MudTooltip`），老闆一眼看懂按鈕用途
+- 危險操作（stop-all）**必須彈確認 Dialog**
+- pause / resume 點擊後進入 loading state 防重複觸發
+- SignalR 推送升級後，測試多客戶端同時開 Dashboard 的即時同步
+
+---
+
+## 結案檢查清單（兩段式分工）
+
+- **實作 Session 做**：Stage_33_Roadmap 補「實作紀錄」章節 + 狀態 ✅ + 文件版本 v2.0 + 版本歷史、commit
+- **Aria 做**：Master Plan header + 索引 ✅ + changelog；Future_Feature header + FF 十五「佇列控制子項」標 ✅ + FF 二十一 移入已完成 + changelog；掃 git log 把驗收期間 follow-up commits 補進 Roadmap（見 `feedback_impl_session_briefing.md` 第五節）
+
+---
+
+## 版本歷史
+
+| 版本 | 日期 | 內容 |
+|------|------|------|
+| v1.0 | 2026-04-21 | 初版規劃書，兩子項（佇列控制 + 待辦清單）合併為「Agent 狀態卡 2.0」；Session 邊界拆兩段（Sonnet 200K × 2）或 Opus 1M 一氣呵成二選一 |

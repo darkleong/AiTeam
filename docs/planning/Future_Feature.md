@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.24
+> 版本：v7.25
 > 建立日期：2026-04-01
 > 最後更新：2026-04-21
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -385,123 +385,68 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 
 ## 八、開發流程重構（多人會議制 + 糾錯機制）
 
-> **Phase 1 已全部完成。** 詳細流程設計請參閱各 Stage Roadmap 文件。
->
-> | 階段 | 內容 | 完成於 |
-> |------|------|--------|
-> | 第一階段（需求計劃） | Kick-off 會議機制 | Stage 25a（v3.9.0） |
-> | 第二階段（設計規劃） | 設計會議 + Rosa/Demi 移至設計階段 | Stage 25b（v3.10.0） |
-> | 第三階段（開發） | 實作說明、阻礙報告、Dev_plan Appeal | Stage 23（v3.7.0） |
-> | 第四階段（程式碼審查） | Review Appeal + Petra 仲裁 | Stage 23（v3.7.0） |
-> | 第五階段（QA 測試） | Petra 四路由判斷 + QA 修復迴圈 | Stage 24（v3.8.0） |
-> | 第六階段（收尾歸檔） | Sage 轉型為收尾歸檔員 | Stage 23（v3.7.0） |
-> | 第七階段（完成/上線） | Git Tag 自動化 | Stage 23（v3.7.0） |
+> **Phase 1 全部完成 + Phase 2 第三項（LLM→CLI）完成**，詳見 [已完成項目摘要]。
+> 本 FF 主體聚焦 Phase 2 剩餘兩個機制：循環偵測 + 新鮮視角。
 
-### 背景
+### 完成歷程快照
 
-**已知事故：**
-1. **Vera 誤判事故**：Vera 持續報告 false critical，Cody 無法反駁（單向權力結構），直到 Christ 手動介入才發現是 Vera 異常。
-2. **實作 Session 死循環事故**：Session 反覆做無效修正，沒有機制偵測循環模式。
+- **Phase 1**（七階段全流程：需求→設計→開發→審查→QA→歸檔→上線）：✅ Stage 23 / 24 / 25a / 25b（v3.7.0 → v3.10.0）
+- **Phase 2 第三項**（LLM API → Claude Code CLI 全面升級，5 個申訴環節保留 codebase 存取）：✅ Stage 30（v3.17.0）
+- **Phase 2 剩餘**：循環偵測 + 新鮮視角（本 FF 主體）
 
-**流程設計缺陷（2026-04-12 全盤討論後發現）：**
-- Agent 之間是單向串行，不能質疑上游輸入
-- 缺少 Kick-off 會議對齊認知
-- Code Review 是單向判決，現實中是雙向對話
+### 背景（原始動機，Phase 1/2 共用）
 
-### 核心設計原則（Phase 1 & 2 共用）
+兩起已知事故觸發本 FF：
+1. **Vera 誤判事故**：Vera 持續報告 false critical、Cody 無法反駁（單向權力結構），直到 Christ 手動介入才發現
+2. **實作 Session 死循環事故**：Session 反覆做無效修正，沒有機制偵測循環模式
 
-1. **Petra 是 PM 協調者**：主持會議、判斷流程走向、評估影響範圍
-2. **會議只對齊認知**：Agent 在會議中只提疑問與風險，不產出實際工作成果
-3. **所有輪次上限預設 3 輪**：未來可在 Dashboard 動態調整（依賴 FF 十一）
-4. **文件存入 DB**：各階段產出統一存入 DB，WorkflowEngine 啟動下游 Agent 前從 DB 取出
-5. **BugFix / TechImprovement 精簡路徑**：由 Petra 判斷可跳過哪些階段
-6. **Petra 工作量待觀察**：幾乎參與每個階段，Token 消耗需持續監控
+Phase 1 已用「多人會議 + 雙向 Review + Petra 仲裁」解決第 1 起；第 2 起則等 Phase 2 剩餘機制處理。
 
----
+### Phase 2 剩餘機制
 
-### Phase 2（待後續 Stage）
+**循環偵測（Loop Detection）**：追蹤每次修正的 diff，偵測是否在反覆修改同一段程式碼（oscillation）。比單純輪次計數更聰明——兩輪都在改同一行 vs 兩輪改不同區塊，前者要升級處理，後者是正常迭代。
 
-以下機制在 Phase 1 跑穩後再評估：
+**新鮮視角（Fresh Eyes）**：熔斷觸發後，啟動全新獨立 Session 診斷問題根因（不帶前面的對話歷史）。對標現實：叫一個不在脈絡中的同事過來看問題。Stage 30 的「新開 session + 強化 prompt」模式是此機制的前置技術。
 
-**循環偵測（Loop Detection）**：追蹤每次修正的 diff，偵測是否在反覆修改同一段程式碼（oscillation），比單純計數更聰明。
+### 觸發條件（評估是否真的需要做）
 
-**新鮮視角（Fresh Eyes）**：熔斷觸發後，啟動全新獨立 Session 診斷問題根因（不帶前面的對話歷史）。對標現實：叫一個不在脈絡中的同事過來看問題。
-
-**LLM API → Claude Code CLI 全面升級**：
-
-> **設計原則：預設使用 Claude Code CLI，只有確定不需要 codebase 存取時才選用 LLM API。**
-
-目前流程中多個審核/申訴環節使用 LLM API（純文字問答），導致 Agent 在修正、反駁、再評估時**失去 codebase 存取能力**，品質明顯低於 Claude Code CLI。應全面升級為 Claude Code CLI + `--session-id` / `--resume`，讓 Agent 在迴圈中保留原始 session 的 codebase 上下文。會議機制（Kickoff / Design）已驗證此模式可行。
-
-**已完成（Stage 30，v3.17.0，2026-04-20）：**
-
-| 環節 | Agent | 舊方式 | 新方式 |
-|------|-------|------|------|
-| Dev_plan 申訴 — 修正 | Cody | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
-| Dev_plan 申訴 — 再評估 | Petra | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
-| Review 申訴 — 反駁 | Cody | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
-| Review 申訴 — 再評估 | Vera | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
-| Review 申訴 — 仲裁 | Petra | LLM API | ✅ `RunMeetingSessionAsync`（新開 session，唯讀工具）|
-
-**不需改（純文字分析，無 codebase 需求）：**
-
-| 環節 | Agent | 理由 |
-|------|-------|------|
-| QA 失敗路由判斷 | Petra | 分析 TestReport JSON，不需看程式碼 |
-| QA no_tests 評估 | Petra | 判斷是否合理，純文字 |
-| 審閱 Vera Review 報告 | Petra | 分析 Review 品質，純文字 |
-
----
-
-### 實作分期
-
-| Phase | 包含內容 | 狀態 |
-|-------|---------|------|
-| **Phase 1** | 全流程重構（七階段：需求→設計→開發→審查→QA→歸檔→上線） | ✅ 全部完成（Stage 23~25b，v3.7.0~v3.10.0） |
-| **Phase 2** | 循環偵測 + 新鮮視角 + LLM API → CLI 全面升級 | 🟡 部分完成（LLM→CLI 升級已完成 Stage 30；循環偵測 + 新鮮視角 待後續）|
+- Stage 30 後觀察 2-4 週，看 Review Appeal / Dev_plan Appeal 是否仍有反覆修改同一段、無法收斂的案例
+- 若收斂性已夠（輪次上限 + Petra 仲裁已足），可能不需要循環偵測
+- 若仍有死循環，再評估本機制的投資報酬
 
 ### 優先級
 
-🔵 低優先級 — Phase 1 已全部完成，Phase 2 待 Phase 1 實際運行一段時間後再評估是否需要
-
----
+🔵 低 — 剩餘兩機制是「保險絲」類型，等實際運行數據觸發再做。
 
 ## 九、Agent 任務序列 — 後續議題
 
-> 核心機制已完成：Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）
-> 詳見已完成項目摘要
+> 核心機制已完成：Stage 27a（v3.12.0）+ Stage 27b（v3.13.0），詳見已完成項目摘要。
+> 本 FF 剩下 PM 佇列化 1 個議題 + 3 個未實作擴充方向。
 
-### 📌 待討論議題（2026-04-16）
-
-以下三個問題在 Stage 27b 實作過程中發現，需要後續討論：
-
-**1. PM（Petra）不走佇列，要怎麼控制她停止/恢復？**
+### 📌 PM（Petra）佇列化議題（待決策）
 
 Petra 是 `TaskGroupService` 中的 inline `await` 閘門，不在 `AgentQueueProcessor.SemaphoreGroups` 的 8 個 executor key 中。`/stop-all` 不影響她，Dashboard 也不顯示她的佇列狀態。
+
+**待討論**：
 - 把她納入 queue 機制？還是另外設計？
-- inline `await` 改成 queue 是否會造成流程阻塞？
-- 「Petra 暫停中，流程卡在審核點」是否合理？
+- inline `await` 改成 queue 是否會造成流程阻塞（Petra 上游等她時全部塞住）？
+- 「Petra 暫停中，流程卡在審核點」語意是否合理？
 
-**2. PM 的執行路徑確認**
+### ✅ 已釐清議題
 
-系統中 Agent 有兩種路徑：Claude Code CLI（Cody/Vera/Quinn/Rosa/Demi/Sage/Victoria）和直接 API call（Rena/Maya）。Petra 是哪一種？需確認後補入 FF 四的限制說明。
-
-**3. Dashboard pause/resume 操作按鈕**
-
-目前佇列操作只能透過 Discord 指令。Dashboard 只顯示狀態（Badge + 佇列深度），沒有操作按鈕。此需求已記錄在 FF 九（Dashboard 雙向操作中心）。
+- **PM 執行路徑**：Petra 確認走 Claude Code CLI（`PmAgentService` 用 `RunMeetingSessionAsync`），Stage 30 所有 5 個申訴環節已升級，詳見 FF 八 Phase 2 第三項
+- **Dashboard pause/resume 操作按鈕**：已移至 FF 十五（Dashboard 與 Discord 功能平等）剩餘子項處理
 
 ### 未實作的設計方向（保留供未來參考）
 
-以下項目在原始設計中規劃但尚未實作，保留作為未來擴充方向：
+原始設計規劃但尚未實作：
 - **Maya 自動化部署流程**：Maya 發送 Graceful Shutdown → 確認全員 Stopped → 執行部署 → 自動恢復
-- **Error 狀態阻塞 + 手動重試/取消**：Error 任務留在 queue 頭部，Dashboard 提供重試/取消按鈕（吸收原 API 餘額恢復需求）
+- **Error 狀態阻塞 + 手動重試/取消**：Error 任務留在 queue 頭部，Dashboard 提供重試/取消按鈕
 - **優先級支援**：修正任務優先、緊急上報可插隊、中斷恢復排入隊首
 
 ### 優先級
 
 🔵 低優先級 — 核心佇列已完成，剩餘為擴充性需求
-
----
 
 ## 十、Dashboard UI 細節打磨（第四批）
 
@@ -716,49 +661,40 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 
 ## 十五、Dashboard 與 Discord 功能平等（Feature Parity）
 
-> 狀態：⚪ 待討論 — 逐一擴充，`/mock` 為首要
-> 提出日期：2026-04-19（Christ 於 Stage 29-5 驗收時提出）
+> 狀態：🟡 部分完成 — `/mock` 子項已 Stage 32 完成，剩**佇列控制**（`/pause` / `/resume` / `/stop-all` / `/resume-all`）Dashboard 化
+> 提出日期：2026-04-19（Stage 29-5 驗收時提出）
 
 ### 核心原則
 
-**Discord 可執行的每個指令與流程，Dashboard 最終也都要能觸發。** 讓 Dashboard 成為完整的操作入口，驗收 / 日常使用不需要在兩個介面之間切換。
+**Discord 可執行的每個指令與流程，Dashboard 最終也都要能觸發。** 讓 Dashboard 成為完整操作入口，驗收 / 日常使用不需要在兩個介面切換。
 
-Stage 29-5 已完成「Dashboard 下達指令給 Victoria」（對應 Discord `#victoria-ceo` 的自由文字訊息），是此方向的第一步。後續還有多個 Discord slash commands 需要 Dashboard 化。
+### 完成進度
 
-### Discord-only 指令清單 + Dashboard 對應現況
+| Discord 指令 | Dashboard 對應 | 狀態 |
+|--------------|----------------|------|
+| `/mock <scenario>` | 首頁 MockScenarioCard | ✅ Stage 32（v3.19.0）|
+| `/queue` | 首頁 Agent 狀態卡 | ✅ Stage 27b（已有）|
+| `/reload-rules` | 規則管理 / 系統設定頁「套用變更」 | ✅ Stage 29-3 |
+| `/pause <agent>` / `/resume <agent>` | Agent 狀態卡按鈕 | ❌ 剩餘子項 |
+| `/stop-all` / `/resume-all` | 全域控制按鈕區 | ❌ 剩餘子項 |
 
-| Discord 指令 | 用途 | Dashboard 現況 |
-|--------------|------|----------------|
-| `/mock <情境>` | 觸發 Mock Mode 模擬流程（新功能 / bug fix / 含提案 等） | ❌ 不支援 — 文字輸入會被 Victoria 當普通訊息吞掉 |
-| `/pause <agent>` / `/resume <agent>` | 暫停 / 恢復特定 Agent 佇列（Stage 27b） | ❌ 不支援（與十「Dashboard pause/resume 按鈕」重疊） |
-| `/stop-all` / `/resume-all` | 全域暫停 / 恢復所有佇列 | ❌ 不支援 |
-| `/queue` | 查看佇列狀態 | ✅ 首頁 Agent 狀態卡已顯示（Stage 27b） |
-| `/reload-rules` | 刷新規則 + AppSettings cache | ✅ 規則管理 / 系統設定頁「套用變更」（Stage 29-3） |
+### 剩餘子項（待排 Stage）
 
-### 實作方向
+**佇列控制 Dashboard 化**：
+- Agent 狀態卡上加 pause/resume 小按鈕（per-agent 控制）
+- 新增全域「緊急停止」/「全部恢復」按鈕區塊（位置：系統設定頁 or Agent 狀態區上方）
+- 視覺設計：明確區分「暫停中」vs「執行中」兩種狀態（色彩 / icon 變化）
 
-- 對應 Discord command 各自暴露 Bot internal API 端點（仿 Stage 29-3 `/internal/reload-cache` / 29-5 `/internal/ceo/command`）
-- Bot CommandHandler 中 Discord-only 的處理邏輯（如 `HandleMockProposalFlowAsync`）抽成 shared service，讓 Discord 與 Dashboard 兩路徑共用
-- Dashboard 提供對應 UI：
-  - **`/mock` 觸發**：專屬「驗收工具」頁面或首頁小卡，下拉選單（新功能 / bug fix / 含提案 / 等）+ 觸發按鈕
-  - **佇列控制**：Agent 狀態卡上加 pause/resume 小按鈕
+### 實作方向（沿用 Stage 32 pattern）
 
-### 首要條目：`/mock` 觸發（Christ 明確要求）
-
-驗收時每次都要切回 Discord 輸入 `/mock ...` 很麻煩。優先做這一個。實作時順便把 `HandleMockProposalFlowAsync` 等私有方法重構成可被 controller 直接呼叫的 shared service。
-
-> **✅ `/mock` 子項已完成（Stage 32，v3.19.0，2026-04-21）** — 與 Mock Delay / 輪次上限動態化一起合併為「Dashboard 老闆控制中心擴充」主題。Dashboard 首頁 `MockScenarioCard` 7 種情境 + Project 下拉 + Title 選填；`MockScenarioService` shared service 抽出後 Discord 與 Dashboard 共用。其他 FF 十五子項（`/pause`、`/stop-all`、`/queue` 等佇列控制 Dashboard 化）留待未來單獨處理。
-
-### 與其他項目的關係
-
-- 和 **十（Agent 任務序列 — Dashboard pause/resume 待討論議題）** 部分重疊，實作時一併考慮
-- 與 **Stage 29-5 的 fire-and-forget 模式** 同構，`/mock` 也應走背景任務 + BossInteraction 推送
+- 抽 `CommandHandler` 中 `/pause` / `/resume` / `/stop-all` / `/resume-all` 處理邏輯為 shared service（暫稱 `AgentQueueControlService`）——這也能順手為 FF 二十-B（CommandHandler 拆解）積少成多
+- Bot internal API 端點：`/internal/queue/{agent}/pause` / `/resume` + `/internal/queue/stop-all` / `/resume-all`
+- `DashboardBotService` 對應 4 個方法
+- Dashboard UI 新增按鈕 + SignalR 即時狀態更新
 
 ### 優先級
 
-⚪ 待討論 — 視實際驗收 / 開發使用頻率決定優先順序。`/mock` 子項有明確需求，可先單獨排入小 Stage。
-
----
+🟡 中 — 驗收與日常使用都會遇到，規模 S-M
 
 ## 十六、Dashboard 錯誤處理與提示 UX 打磨
 
@@ -959,6 +895,46 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
+## 二十一、Agent 狀態卡 expand 展開看待辦清單
+
+> 狀態：🟡 已排入 Stage 33（v3.20.0）— 與 FF 十五剩餘子項合併實作
+> 提出日期：2026-04-21（Christ 問「Dashboard 怎麼看每個 Agent 的待辦」時浮現）
+
+### 背景
+
+首頁 Agent 狀態卡目前只顯示「忙碌 / 閒置」+「今日完成 N」+ 佇列深度數字，**看不到具體是哪些 TaskItem 在排隊或正在跑**。老闆要看具體清單需跳到 TaskCenter 手動篩 AssignedAgent。
+
+### 解讀與決策（Christ 2026-04-21）
+
+三種解讀中選 **B（該 Agent 尚未完成的全部 TaskItem）**：
+- 正在跑的 running TaskItem（per-agent Semaphore 限制最多 1 個）
+- 排隊等候的 queued TaskItem（N 個）
+- 不含歷史（done / failed / cancelled）
+
+### 目標 UI
+
+Agent 狀態卡右上角加 expand 按鈕（MudIconButton `ExpandMore`），點擊後在卡片下方展開：
+
+```
+🏃 執行中：[任務 A 標題]      已跑 3 分鐘
+⏳ 排隊中：[任務 B 標題]      等候 30 秒
+⏳ 排隊中：[任務 C 標題]      等候 10 秒
+```
+
+- 清單為空時顯示「無待辦」
+- 每個 item 可點擊 → 跳到 PipelineView 該 TaskGroup
+- SignalR 即時更新（新增 / 移除 / 狀態變更）
+
+### 為什麼搭車 Stage 33
+
+Stage 33 主題是「Agent 狀態卡加 pause/resume 按鈕」，都在動同一個 UI 元件 + 共用 TaskItem + Agent 狀態資料源 + SignalR 推送。兩件事一起做，UI 入口只開一次，比分兩個 Stage 經濟。
+
+### 優先級
+
+🟡 中 — 已排入 Stage 33
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1063,3 +1039,4 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 | 2026-04-20 | v7.22：新增二十（TaskGroupService 拆解 — 技術債）— Stage 32 開始實作後 Christ 觀察到該檔 2000+ 行過龐大，分析 Stage 30/31 context 緊繃的根因；方向：拆為 MeetingOrchestrationService / AppealOrchestrationService / QaCoordinationService / ProposalConfirmationService + 瘦身後 TaskGroupService 五個服務；建議搭車未來動到該檔的 Stage 一起做，避免獨立技術債 Stage 排後面 |
 | 2026-04-20 | v7.23：二十擴充為「大檔案拆解技術債（合集）」— Aria 掃 wc -l 發現 Top 4 全破千行（TaskGroupService 2617 / CommandHandler 2327 / MeetingService 1415 / PmAgentService 1388），合併管理更有意義；新增子項 B（CommandHandler）/ C（MeetingService 最乾淨、最推薦優先）/ D（PmAgentService，Stage 30 剛膨脹）；搭車優先順序：C → D → B+A 合併 |
 | 2026-04-21 | v7.24：Stage 32 驗收通過（v3.19.0）— 十五「/mock Dashboard 化」子項標記為已完成（其他子項 /pause / /stop-all / /queue 留待未來）；本次第二次實踐「Stage 結案兩段式分工」順利，驗收期間三項補強（Project 下拉 / DbContext 並行 / 補齊 Agent services 遺漏延遲點）由 Aria 順手補進 Roadmap v2.1 |
+| 2026-04-21 | v7.25：FF 整理策略 A（保守整理）— 八（壓縮 Phase 1 詳表 + Phase 2 已完成摘要化，主體聚焦循環偵測 + 新鮮視角）、九（#2 PM 執行路徑標記已釐清、#3 Dashboard pause/resume 註明已移至 FF 十五，主體聚焦 #1 PM 佇列化議題）、十五（剩餘子項從附註升為主體，建立完成進度表）— 為 Stage 33（FF 十五剩餘子項）做鋪墊 |
