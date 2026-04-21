@@ -27,6 +27,19 @@
 
     <MudGrid Spacing="2" Class="mb-2">
         <MudItem xs="12" md="4">
+            <MudSelect T="string" @bind-Value="_project"
+                       Label="Project（選填）" Variant="Variant.Outlined"
+                       Placeholder="留空使用預設 repo"
+                       Clearable="true"
+                       Disabled="@(!_mockModeEnabled || _isSubmitting)">
+                <MudSelectItem T="string" Value="@("")">（使用預設 repo）</MudSelectItem>
+                @foreach (var project in _projects)
+                {
+                    <MudSelectItem T="string" Value="@project.Name">@project.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
             <MudSelect T="string" @bind-Value="_scenario"
                        Label="情境" Variant="Variant.Outlined"
                        Disabled="@(!_mockModeEnabled || _isSubmitting)">
@@ -43,13 +56,6 @@
             <MudTextField T="string" @bind-Value="_title"
                           Label="標題（選填）"
                           Placeholder="留空自動帶入 timestamp"
-                          Variant="Variant.Outlined"
-                          Disabled="@(!_mockModeEnabled || _isSubmitting)" />
-        </MudItem>
-        <MudItem xs="12" md="4">
-            <MudTextField T="string" @bind-Value="_project"
-                          Label="Project（選填）"
-                          Placeholder="留空使用預設 repo"
                           Variant="Variant.Outlined"
                           Disabled="@(!_mockModeEnabled || _isSubmitting)" />
         </MudItem>

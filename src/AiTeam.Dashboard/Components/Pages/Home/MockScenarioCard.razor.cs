@@ -1,4 +1,5 @@
 using AiTeam.Dashboard.Services;
+using AiTeam.Shared.Dtos;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
@@ -11,6 +12,7 @@ public partial class MockScenarioCard
 {
     [Inject] private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
     [Inject] private DashboardBotService         BotService          { get; set; } = null!;
+    [Inject] private DashboardProjectService     ProjectService      { get; set; } = null!;
     [Inject] private ISnackbar                   Snackbar            { get; set; } = null!;
 
     private bool   _mockModeEnabled;
@@ -18,11 +20,15 @@ public partial class MockScenarioCard
     private string _scenario = "new_feature";
     private string _title    = "";
     private string _project  = "";
+    private List<ProjectDto> _projects = [];
 
     protected override async Task OnInitializedAsync()
     {
         var setting = await AppSettingsService.GetAsync("MockMode");
         _mockModeEnabled = bool.TryParse(setting?.Value, out var v) && v;
+
+        var all = await ProjectService.GetAllProjectsAsync();
+        _projects = all.Where(p => p.IsActive).OrderBy(p => p.Name).ToList();
     }
 
     private async Task TriggerAsync()
