@@ -10,10 +10,11 @@ namespace AiTeam.Dashboard.Components.Pages.Home;
 /// </summary>
 public partial class MockScenarioCard
 {
-    [Inject] private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
-    [Inject] private DashboardBotService         BotService          { get; set; } = null!;
-    [Inject] private DashboardProjectService     ProjectService      { get; set; } = null!;
-    [Inject] private ISnackbar                   Snackbar            { get; set; } = null!;
+    // DbContext 相關服務透過自建 scope 取得，避免與父組件（Home.razor）並行使用同一個
+    // circuit-scoped AppDbContext 觸發 EF Core "A second operation was started" 例外。
+    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+    [Inject] private DashboardBotService  BotService   { get; set; } = null!;
+    [Inject] private ISnackbar            Snackbar     { get; set; } = null!;
 
     private bool   _mockModeEnabled;
     private bool   _isSubmitting;
@@ -24,10 +25,14 @@ public partial class MockScenarioCard
 
     protected override async Task OnInitializedAsync()
     {
-        var setting = await AppSettingsService.GetAsync("MockMode");
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var appSettings    = scope.ServiceProvider.GetRequiredService<DashboardAppSettingsService>();
+        var projectService = scope.ServiceProvider.GetRequiredService<DashboardProjectService>();
+
+        var setting = await appSettings.GetAsync("MockMode");
         _mockModeEnabled = bool.TryParse(setting?.Value, out var v) && v;
 
-        var all = await ProjectService.GetAllProjectsAsync();
+        var all = await projectService.GetAllProjectsAsync();
         _projects = all.Where(p => p.IsActive).OrderBy(p => p.Name).ToList();
     }
 
