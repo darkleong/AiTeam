@@ -43,6 +43,21 @@ public partial class AgentStatusCard
         => QueueInfo is not null
            && (QueueInfo.CurrentTaskTitle is not null || QueueInfo.QueuedTasks.Count > 0);
 
+    /// <summary>
+    /// Stage 33：Status Badge 顯示策略
+    /// - active 或無 QueueInfo：永遠顯示（正常運行情境）
+    /// - 非 active + running/error：顯示（讓老闆看到「按了停但手頭還在跑」這類重要組合）
+    /// - 非 active + idle：隱藏（「已停止+閒置」兩個負面詞疊加屬於冗餘）
+    /// </summary>
+    private bool ShouldShowStatusBadge
+    {
+        get
+        {
+            if (QueueInfo is null || QueueInfo.AgentState == "active") return true;
+            return Agent.Status != "idle";
+        }
+    }
+
     private async Task PauseAsync()
     {
         _loading = true;

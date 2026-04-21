@@ -17,7 +17,9 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
             @if (QueueInfo is not null && QueueInfo.AgentState != "active")
             {
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                @* Stage 33 視覺強化：按了停但任務還在跑時，State chip 用 Filled 強調衝突狀態 *@
+                <MudChip T="string" Size="Size.Small"
+                         Variant="@(Agent.Status == "running" ? Variant.Filled : Variant.Outlined)"
                          Color="@GetAgentStateColor(QueueInfo.AgentState)"
                          Style="margin:0; height:20px; font-size:0.7rem">
                     @GetAgentStateLabel(QueueInfo.AgentState)
@@ -30,7 +32,12 @@
                     佇列 @QueueInfo.QueueDepth
                 </MudChip>
             }
-            <StatusBadge Status="@Agent.Status" />
+            @* Stage 33 精簡：非 active + idle 時隱藏 Badge（例如「已停止+閒置」純粹冗餘）；
+               running / error 永遠顯示，確保「停止中+執行中」的重要組合不會被藏 *@
+            @if (ShouldShowStatusBadge)
+            {
+                <StatusBadge Status="@Agent.Status" />
+            }
 
             @* 子項 A：pause / resume 按鈕（左） *@
             @if (IsKnownExecutor)
