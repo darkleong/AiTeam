@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.25
+> 版本：v7.26
 > 建立日期：2026-04-01
-> 最後更新：2026-04-21
+> 最後更新：2026-04-22
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -659,43 +659,6 @@ Maya（Ops）為純程式邏輯，不呼叫 LLM，不在範圍內。
 
 ---
 
-## 十五、Dashboard 與 Discord 功能平等（Feature Parity）
-
-> 狀態：🟡 部分完成 — `/mock` 子項已 Stage 32 完成，剩**佇列控制**（`/pause` / `/resume` / `/stop-all` / `/resume-all`）Dashboard 化
-> 提出日期：2026-04-19（Stage 29-5 驗收時提出）
-
-### 核心原則
-
-**Discord 可執行的每個指令與流程，Dashboard 最終也都要能觸發。** 讓 Dashboard 成為完整操作入口，驗收 / 日常使用不需要在兩個介面切換。
-
-### 完成進度
-
-| Discord 指令 | Dashboard 對應 | 狀態 |
-|--------------|----------------|------|
-| `/mock <scenario>` | 首頁 MockScenarioCard | ✅ Stage 32（v3.19.0）|
-| `/queue` | 首頁 Agent 狀態卡 | ✅ Stage 27b（已有）|
-| `/reload-rules` | 規則管理 / 系統設定頁「套用變更」 | ✅ Stage 29-3 |
-| `/pause <agent>` / `/resume <agent>` | Agent 狀態卡按鈕 | ❌ 剩餘子項 |
-| `/stop-all` / `/resume-all` | 全域控制按鈕區 | ❌ 剩餘子項 |
-
-### 剩餘子項（待排 Stage）
-
-**佇列控制 Dashboard 化**：
-- Agent 狀態卡上加 pause/resume 小按鈕（per-agent 控制）
-- 新增全域「緊急停止」/「全部恢復」按鈕區塊（位置：系統設定頁 or Agent 狀態區上方）
-- 視覺設計：明確區分「暫停中」vs「執行中」兩種狀態（色彩 / icon 變化）
-
-### 實作方向（沿用 Stage 32 pattern）
-
-- 抽 `CommandHandler` 中 `/pause` / `/resume` / `/stop-all` / `/resume-all` 處理邏輯為 shared service（暫稱 `AgentQueueControlService`）——這也能順手為 FF 二十-B（CommandHandler 拆解）積少成多
-- Bot internal API 端點：`/internal/queue/{agent}/pause` / `/resume` + `/internal/queue/stop-all` / `/resume-all`
-- `DashboardBotService` 對應 4 個方法
-- Dashboard UI 新增按鈕 + SignalR 即時狀態更新
-
-### 優先級
-
-🟡 中 — 驗收與日常使用都會遇到，規模 S-M
-
 ## 十六、Dashboard 錯誤處理與提示 UX 打磨
 
 > 狀態：⚪ 低優先 — 現行功能可用，屬體驗優化
@@ -895,46 +858,6 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
-## 二十一、Agent 狀態卡 expand 展開看待辦清單
-
-> 狀態：🟡 已排入 Stage 33（v3.20.0）— 與 FF 十五剩餘子項合併實作
-> 提出日期：2026-04-21（Christ 問「Dashboard 怎麼看每個 Agent 的待辦」時浮現）
-
-### 背景
-
-首頁 Agent 狀態卡目前只顯示「忙碌 / 閒置」+「今日完成 N」+ 佇列深度數字，**看不到具體是哪些 TaskItem 在排隊或正在跑**。老闆要看具體清單需跳到 TaskCenter 手動篩 AssignedAgent。
-
-### 解讀與決策（Christ 2026-04-21）
-
-三種解讀中選 **B（該 Agent 尚未完成的全部 TaskItem）**：
-- 正在跑的 running TaskItem（per-agent Semaphore 限制最多 1 個）
-- 排隊等候的 queued TaskItem（N 個）
-- 不含歷史（done / failed / cancelled）
-
-### 目標 UI
-
-Agent 狀態卡右上角加 expand 按鈕（MudIconButton `ExpandMore`），點擊後在卡片下方展開：
-
-```
-🏃 執行中：[任務 A 標題]      已跑 3 分鐘
-⏳ 排隊中：[任務 B 標題]      等候 30 秒
-⏳ 排隊中：[任務 C 標題]      等候 10 秒
-```
-
-- 清單為空時顯示「無待辦」
-- 每個 item 可點擊 → 跳到 PipelineView 該 TaskGroup
-- SignalR 即時更新（新增 / 移除 / 狀態變更）
-
-### 為什麼搭車 Stage 33
-
-Stage 33 主題是「Agent 狀態卡加 pause/resume 按鈕」，都在動同一個 UI 元件 + 共用 TaskItem + Agent 狀態資料源 + SignalR 推送。兩件事一起做，UI 入口只開一次，比分兩個 Stage 經濟。
-
-### 優先級
-
-🟡 中 — 已排入 Stage 33
-
----
-
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -971,6 +894,8 @@ Stage 33 主題是「Agent 狀態卡加 pause/resume 按鈕」，都在動同一
 | 零-B | MockMode 新提案流程產生重複 TaskGroup（Bug） | ✅ v3.16.1 hotfix（2026-04-19）— Stage 28b 驗收修正只做了一半：`ExecuteProposalApprovedAsync`（Discord 路徑）有 GroupId 防護，但 `ProcessProposalApprovedAsync`（Dashboard 路徑）無條件 `CreateGroupAsync`。兩處對齊後 MockMode 從 Discord 或 Dashboard 核准提案都只產生 1 個 TaskGroup |
 | 十七 | 可靠性補強：失敗重試 + 會議 Crash Recovery | ✅ Stage 31（v3.18.0，2026-04-20）— A. Dashboard「🔁 重試」按鈕（failed/cancelled TaskItem → AgentQueueService.RequeueTaskAsync → Bot internal API）；B. 會議 Crash Recovery（TaskGroup.ActiveMeetingType 欄位 + EF Migration + RunKickoffMeetingAndWaitAsync/RunDesignPhaseAsync set/finally clear + RecoverStuckMeetingsAsync 啟動掃描，採方案 2 不動執行模型） |
 | 十八 | Appeal 對抗紀錄 UI 呈現 | ✅ Stage 31（v3.18.0，2026-04-20）— TaskGroupDto 擴充 4 欄位（ReviewAppealLog/ReviewAppealRoundA/DevPlanAppealLog/DevPlanAppealRoundA）；DashboardTaskService 三個 Select 補 mapping；PipelineView 新增兩個「🗣️ Appeal 對抗紀錄」折疊面板（有資料才顯示） |
+| 十五 | Dashboard 與 Discord 功能平等（Feature Parity）| ✅ Stage 32（v3.19.0，`/mock` Dashboard 化 — `MockScenarioService` 抽出共用）+ Stage 33（v3.20.0，佇列控制 Dashboard 化 — `AgentQueueControlService` + Agent 狀態卡 pause/resume 按鈕 + `GlobalQueueControlCard` 全域緊急停止 + 確認 Dialog）— Discord 原指令透過薄 wrapper 共用同一 shared service |
+| 二十一 | Agent 狀態卡 expand 展開看待辦清單 | ✅ Stage 33（v3.20.0，2026-04-22）— 採解讀 B（running + queued TaskItem）；實作優化為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代原規劃 `AgentTodoDto`，重用既有 `PushQueueUpdateAsync` 鏈路；點 item 深層連結 `?groupId=` 自動 Drawer 預選 |
 
 ---
 
@@ -1040,3 +965,4 @@ Stage 33 主題是「Agent 狀態卡加 pause/resume 按鈕」，都在動同一
 | 2026-04-20 | v7.23：二十擴充為「大檔案拆解技術債（合集）」— Aria 掃 wc -l 發現 Top 4 全破千行（TaskGroupService 2617 / CommandHandler 2327 / MeetingService 1415 / PmAgentService 1388），合併管理更有意義；新增子項 B（CommandHandler）/ C（MeetingService 最乾淨、最推薦優先）/ D（PmAgentService，Stage 30 剛膨脹）；搭車優先順序：C → D → B+A 合併 |
 | 2026-04-21 | v7.24：Stage 32 驗收通過（v3.19.0）— 十五「/mock Dashboard 化」子項標記為已完成（其他子項 /pause / /stop-all / /queue 留待未來）；本次第二次實踐「Stage 結案兩段式分工」順利，驗收期間三項補強（Project 下拉 / DbContext 並行 / 補齊 Agent services 遺漏延遲點）由 Aria 順手補進 Roadmap v2.1 |
 | 2026-04-21 | v7.25：FF 整理策略 A（保守整理）— 八（壓縮 Phase 1 詳表 + Phase 2 已完成摘要化，主體聚焦循環偵測 + 新鮮視角）、九（#2 PM 執行路徑標記已釐清、#3 Dashboard pause/resume 註明已移至 FF 十五，主體聚焦 #1 PM 佇列化議題）、十五（剩餘子項從附註升為主體，建立完成進度表）— 為 Stage 33（FF 十五剩餘子項）做鋪墊 |
+| 2026-04-22 | v7.26：Stage 33 驗收通過（v3.20.0）— FF 十五（Dashboard 與 Discord 功能平等，`/mock` + 佇列控制兩子項全部完成）+ FF 二十一（Agent 狀態卡 expand 待辦清單）兩項整項移入已完成項目摘要；Roadmap v2.1 附帶兩項後續建議（AgentConfigService 命名守門 + Bot PushAgentStatus 名稱映射）暫不獨立開 FF，留待未來架構整理時一併評估 |
