@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.26
+> 版本：v7.27
 > 建立日期：2026-04-01
 > 最後更新：2026-04-22
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -858,6 +858,67 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
+## 二十二、Agent 命名一致性（守門 + 名稱映射）
+
+> 狀態：🔵 低 — 防呆類技術債，等搭車或獨立小 Stage
+> 提出日期：2026-04-22（Stage 33 Roadmap v2.1 Dev_plan ghost 卡 debug 時浮現）
+
+### 背景
+
+AiTeam 系統中存在**兩種「Agent 名稱」的混淆**，導致 Stage 33 驗收時出現「Dev_plan ghost 卡」bug：
+
+| 層面 | 什麼是 Agent 名稱 |
+|------|-------------------|
+| **DB `agent_configs` 表** | 真 Agent（Cody / Rosa / Demi / Vera / Quinn / Sage / Petra / Victoria / Maya / Rena）|
+| **TaskItem.AssignedAgent** | 工作階段名，**可能含 workflow-only 的階段名**（Dev_plan / Kickoff / Design 等）|
+
+**實際事故**：
+- `AgentQueueProcessor.ExecuteTaskAsync` 推送 `AgentStatus` 時，`AgentName = task.AssignedAgent`
+- 如果任務階段是「Dev_plan」，推送出去的 AgentName 就是 "Dev_plan"
+- Dashboard `Home.UpdateAgentStatus` 對 SignalR 推進來的未知 AgentName **盲接 Add**
+- → 首頁出現「Dev_plan」這個假 Agent 卡（實際沒有這個 Agent）
+- Stage 33 臨時修法：`UpdateAgentStatus` 加白名單過濾，只接受初始 DB 撈的真 Agent
+
+這個白名單是**症狀補丁**，根本的兩個議題留待本 FF 處理。
+
+### 子項 A：AgentConfigService 命名守門
+
+**現況**：建立 / 修改 `AgentConfig` 時，沒有任何檢查去擋「名稱是否為 workflow 保留字」。目前靠人為紀律維持，但只要 Dashboard Agent 設定頁有人手滑建了一個叫 "Dev_plan" 的 Agent，**整個 UI 會混亂**（SignalR push 無法區分真 Agent 更新 vs workflow 階段更新）。
+
+**實作方向**：
+- `AgentConfigService` 新增 `ReservedWorkflowNames` 常數：`{ "Dev_plan", "Kickoff", "Design" }`（未來有新 workflow 階段名再加）
+- 建立 / 改名時檢查，撞到保留字 → 拋例外 + Dashboard 顯示錯誤
+- 順便檢查 Agent 名稱是否與其他既有 Agent 重複
+
+**規模**：S（約 1 個 validation method + 對應 UI 錯誤處理）
+
+### 子項 B：Bot PushAgentStatus 名稱語意清理
+
+**現況**：`AgentQueueProcessor.ExecuteTaskAsync` 推送 AgentStatus 時直接用 `task.AssignedAgent`，語意模糊——「工作階段名」被當成「真 Agent 名」推到客戶端。Stage 33 白名單補丁雖然擋住了 ghost 卡，但根本問題沒解。
+
+**實作方向（兩種策略）**：
+
+1. **映射法**（推薦）：Bot 端 push 前做 `AssignedAgent → 真 Agent` 映射表（如 `Dev_plan → Cody` / `Kickoff → Petra` / `Design → Petra`），客戶端收到的 AgentName 一律是真 Agent
+   - 優點：客戶端程式碼最乾淨，不用懂 workflow 階段名
+   - 要處理的邊界：`StatusBadge` / `Pipeline View` 若需要顯示「目前在哪個階段」，要看 `CurrentTaskTitle` 或另傳 `Stage` 欄位
+
+2. **雙欄位法**：推送時明確分 `AgentName`（真 Agent）+ `WorkflowStage`（可選，階段名），客戶端依需要用
+   - 優點：語意清晰不失訊息
+   - 缺點：`AgentStatusViewModel` + `PushAgentStatusAsync` 介面變動面大
+
+**規模**：M（影響 `AgentStatusViewModel` + `PushAgentStatusAsync` + 客戶端 `UpdateAgentStatus` + StatusBadge / Pipeline View 可能的 fallback 邏輯；需要整體評估才不會破功能）
+
+### 搭車時機
+
+- **子項 A 可獨立做**：若未來做 Agent 設定頁 refactor（FF 十「Agent 角色設定 Dashboard 化」）時一起加守門最經濟
+- **子項 B 較大，建議搭車**：等未來 refactor SignalR push 層、或做 FF 八 Phase 2 時（循環偵測會觸及 Agent 狀態推送）再一起整理
+
+### 優先級
+
+🔵 低 — 白名單補丁已防住實際影響，本 FF 是架構清理。不急，但未來新增 workflow 階段時可能再次踩坑，屆時優先級升 🟡
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -966,3 +1027,4 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 | 2026-04-21 | v7.24：Stage 32 驗收通過（v3.19.0）— 十五「/mock Dashboard 化」子項標記為已完成（其他子項 /pause / /stop-all / /queue 留待未來）；本次第二次實踐「Stage 結案兩段式分工」順利，驗收期間三項補強（Project 下拉 / DbContext 並行 / 補齊 Agent services 遺漏延遲點）由 Aria 順手補進 Roadmap v2.1 |
 | 2026-04-21 | v7.25：FF 整理策略 A（保守整理）— 八（壓縮 Phase 1 詳表 + Phase 2 已完成摘要化，主體聚焦循環偵測 + 新鮮視角）、九（#2 PM 執行路徑標記已釐清、#3 Dashboard pause/resume 註明已移至 FF 十五，主體聚焦 #1 PM 佇列化議題）、十五（剩餘子項從附註升為主體，建立完成進度表）— 為 Stage 33（FF 十五剩餘子項）做鋪墊 |
 | 2026-04-22 | v7.26：Stage 33 驗收通過（v3.20.0）— FF 十五（Dashboard 與 Discord 功能平等，`/mock` + 佇列控制兩子項全部完成）+ FF 二十一（Agent 狀態卡 expand 待辦清單）兩項整項移入已完成項目摘要；Roadmap v2.1 附帶兩項後續建議（AgentConfigService 命名守門 + Bot PushAgentStatus 名稱映射）暫不獨立開 FF，留待未來架構整理時一併評估 |
+| 2026-04-22 | v7.27：新增二十二（Agent 命名一致性）— Stage 33 Roadmap v2.1 後續建議兩項正式記錄：子項 A（AgentConfigService 命名守門，擋 workflow 保留字 Dev_plan/Kickoff/Design）+ 子項 B（Bot PushAgentStatus 名稱語意清理，映射法 vs 雙欄位法兩策略）；子項 A 可獨立做或搭 FF 十 Agent 設定頁 refactor，子項 B 搭 SignalR push 層 refactor 或 FF 八 Phase 2；白名單補丁已擋住實際影響，本 FF 屬架構清理 |
