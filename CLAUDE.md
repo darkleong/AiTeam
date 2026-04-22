@@ -46,6 +46,7 @@ docs/conventions/
   mudblazor.md       ← MudBlazor 8.x 使用規範、常見陷阱（必讀）
   ef-core.md         ← EF Core 查詢優化、PostgreSQL 例外處理、Migration 流程
   api-design.md      ← RESTful API、Internal API、SignalR Hub 設計規範
+  refactor-sop.md    ← 服務層大檔案拆解守則（Stage 34-36 FF 二十實踐累積）
 ```
 
 > UI 元件庫為 **MudBlazor 8.x**。
