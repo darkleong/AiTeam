@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.28
+> 版本：v7.29
 > 建立日期：2026-04-01
 > 最後更新：2026-04-22
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -818,28 +818,31 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
-### 子項 D：`PmAgentService.cs` 拆解（Stage 30 剛膨脹）
+### 子項 D：`PmAgentService.cs` 拆解 — ✅ 已完成（Stage 35，v3.22.0，2026-04-22）
 
-**現有職責**：5 個 appeal 方法（Stage 30 升級為 Claude Code CLI）+ QA 路由 + Dev_plan 審核 + `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` helper
+**實際產出**（vs 原規劃）：
+- `PmAgentResults.cs` — **60 行**（10 個 public record 獨立檔，SOP 1）
+- `PmAgentCommons.cs` — **225 行**（`PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` + 共用 helper；範圍比原規劃略大）
+- `PmReviewService.cs` — **345 行**（4 個 Petra 審核 method：Rosa/Demi/DevPlan/Vera）
+- `ReviewAppealService.cs` — **345 行**（3 個 Stage 30 升級的三角互動）
+- `DevPlanAppealService.cs` — **207 行**（2 個 Stage 30 升級）
+- `PmRoutingService.cs` — **262 行**（3 個路由判斷）
+- 原 `PmAgentService.cs` 1389 行整檔刪除
+- **首次實踐 SOP 6 子資料夾**：`Agents/Pm/`，namespace `AiTeam.Bot.Agents.Pm`
 
-**拆解方向**：
-- `PetraReviewAppealService` — Petra 仲裁 Review Appeal + 審 Review 品質
-- `PetraDevPlanAppealService` — Petra 審 Dev_plan + 再評估
-- `PetraQaRouterService` — Petra QA 四路由判斷
-- `CodyAppealService` — Cody 反駁 Review / Dev_plan
-- `PmAgentCommons` — `PrepareClaudeCodeEnv` / `BuildAppealContextSectionAsync`
+**驗收**：4 個 Mock 情境全通過；驗收期間兩項 follow-up commits（`9b0b115` Dev_plan group status 重置 + `4f30d1f` Stage 25b dead code 清理）由 Aria 結案時補入 Roadmap v2.1。
 
-**觀察**：Stage 30 之前 ~900 行，升級後膨脹 50%。**趁記憶猶新拆最有效率**（Stage 30 實作 Session 的脈絡還在近期）
+**規劃階段修正**：實作 Session 探索階段抓出 Aria Roadmap 4 個錯誤（DI Scoped 非 Singleton / RequirementsAgentService 無依賴 / caller 動態解析 / record 10 個非 8 個）—— 之後 Aria 寫 Roadmap 時會勤勞 grep 驗證。
 
 ---
 
-### 搭車優先順序建議（Stage 34 後更新）
+### 搭車優先順序建議（Stage 35 後更新）
 
-子項 C 已完成，剩三個按「風險 × 迫切 × 動到機率」綜合評估：
+子項 C、D 已完成，剩兩個：
 
-1. ✅ ~~**子項 C MeetingService**~~ — Stage 34 已完成
-2. **子項 D PmAgentService**（Stage 30 剛膨脹）→ **若 FF 八 Phase 2 繼續做循環偵測 / 新鮮視角** 搭車；或獨立做（有 Stage 34 SOP 參考，風險可控）
-3. **子項 B CommandHandler** + **子項 A TaskGroupService**（兩者互相耦合）→ 合併一次做最乾淨，**等真的 compact 過一次** 再下決心
+1. ✅ ~~**子項 C MeetingService**~~ — Stage 34 完成
+2. ✅ ~~**子項 D PmAgentService**~~ — Stage 35 完成（首次實踐 SOP 6 子資料夾）
+3. **子項 B CommandHandler** + **子項 A TaskGroupService**（兩者互相耦合）→ 合併一次做最乾淨。Stage 34/35 已驗證拆解 SOP 可靠，可獨立排 Stage 或等搭車。
 
 ### 不建議做法
 
@@ -875,10 +878,16 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 - **只有 local state**（方法內變數）→ 無需共享，各方法自管
 - Stage 34 MeetingService 無共享 state，是最乾淨情況
 
-#### SOP 6：檔案夾組織原則
-- 單一 `Orchestration/` 資料夾：**檔案 ≤ 10 個時 OK**
-- 超過 10 個 或 3+ 個同主題 service → 建子資料夾（例：`Orchestration/Meeting/`，namespace 隨移）
-- 目前 `Orchestration/` 有 7 個，還沒到閾值
+#### SOP 6：檔案夾組織原則（Stage 35 首次實踐後增補）
+- 單一資料夾：**檔案 ≤ 10 個時 OK**
+- 超過 10 個 或 3+ 個同主題 service → 建子資料夾，namespace 隨移
+
+**Stage 35 實踐結論（Agents/Pm/ 首次）**：
+- **判斷原則**：「**決策主體（誰說話）= Agent 角色時放 `Agents/`；協調多個 Agent 的流程控制放 `Orchestration/`**」
+  - PmAgentService 拆完仍放 `Agents/Pm/`，因為 5 個 service 都是 Petra 角色在說話
+  - TaskGroupService 拆完會放 `Orchestration/`（子項 A），因為它協調多個 Agent
+- **搬家成本**：namespace 從 `AiTeam.Bot.Agents` → `AiTeam.Bot.Agents.Pm`，caller 的 `using` 要補加 `AiTeam.Bot.Agents.Pm;`（兩個 namespace 可並存，原 using 不用刪）
+- **當前狀況**：`Agents/` 15 個（PmAgentService 拆走後）；`Agents/Pm/` 6 個；`Orchestration/` 12 個（Meeting 拆後加三個）——`Orchestration/` 已超閾值，若下次做子項 A 可順便做 `Orchestration/Meeting/` 子資料夾歸納
 
 #### 通用流程
 - 測試：拆解前有一輪 Playwright / Mock Mode 驗證基線
@@ -1061,3 +1070,5 @@ AiTeam 系統中存在**兩種「Agent 名稱」的混淆**，導致 Stage 33 �
 | 2026-04-22 | v7.26：Stage 33 驗收通過（v3.20.0）— FF 十五（Dashboard 與 Discord 功能平等，`/mock` + 佇列控制兩子項全部完成）+ FF 二十一（Agent 狀態卡 expand 待辦清單）兩項整項移入已完成項目摘要；Roadmap v2.1 附帶兩項後續建議（AgentConfigService 命名守門 + Bot PushAgentStatus 名稱映射）暫不獨立開 FF，留待未來架構整理時一併評估 |
 | 2026-04-22 | v7.27：新增二十二（Agent 命名一致性）— Stage 33 Roadmap v2.1 後續建議兩項正式記錄：子項 A（AgentConfigService 命名守門，擋 workflow 保留字 Dev_plan/Kickoff/Design）+ 子項 B（Bot PushAgentStatus 名稱語意清理，映射法 vs 雙欄位法兩策略）；子項 A 可獨立做或搭 FF 十 Agent 設定頁 refactor，子項 B 搭 SignalR push 層 refactor 或 FF 八 Phase 2；白名單補丁已擋住實際影響，本 FF 屬架構清理 |
 | 2026-04-22 | v7.28：Stage 34 驗收通過（v3.21.0）— FF 二十 子項 C（MeetingService 拆解）✅ 完成：實際產出 4 檔（KickoffMeetingService 318 + DesignMeetingService 590 + MeetingCommons 62 + MeetingResults 27，原 1415 行 MeetingService 整檔刪除）；從本次實踐提煉「六項拆解 SOP」寫進 FF 二十 共通策略小節，供子項 D / B / A 參考；驗收期間零 follow-up commits 是目前最順利一次 Stage 結案 |
+
+| 2026-04-22 | v7.29：Stage 35 驗收通過（v3.22.0）— FF 二十 子項 D（PmAgentService 拆解）✅ 完成：實際產出 6 檔（PmAgentResults 60 + PmAgentCommons 225 + PmReviewService 345 + ReviewAppealService 345 + DevPlanAppealService 207 + PmRoutingService 262 = 1444 行 vs 原 1389）；**首次實踐 SOP 6 子資料夾**（Agents/Pm/，namespace AiTeam.Bot.Agents.Pm）；實踐結論「**決策主體 = Agent 時放 Agents/，協調流程放 Orchestration/**」已寫進六項 SOP 供子項 A 參考；搭車優先順序更新（剩 B + A 合併做）；Context 實際 261K / Opus 1M 26% 驗證 ×1.6 校準公式 |

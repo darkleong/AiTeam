@@ -342,7 +342,22 @@ Roadmap 原規劃 Commons 只放 2 個 helper（`PrepareClaudeCodeEnv` + `BuildA
 
 Mock Mode 情境的 code path 全部走通（FailScenario 狀態機在新 service 正確推進），程式碼層面已驗證；實際 Discord 流程驗收待 Christ 重啟容器後跑。
 
+### 驗收後修正（2026-04-22）
+
+驗收期間兩項 follow-up commits（實作 Session 未補至 Roadmap，由 Aria 結案時補上）：
+
+1. **Dev_plan Appeal 升級後按「繼續開發」未重置 group status**（commit `9b0b115`）
+   - `TaskGroupService.cs` 加 3 行，Dev_plan Appeal 結束並得到 Christ「繼續開發」按鈕確認後，漏了把 `group.Status` 從 `blocked` 或其他中繼狀態重置為 `running`，導致流程卡住
+   - Stage 30 把 Dev_plan Appeal 升級為 Claude Code CLI 時沒注意到的狀態轉移遺漏，本次拆解驗收時才浮現
+   - 3 行補丁（純 status 重置，無邏輯變更）
+
+2. **PmReviewService 中 Stage 25b 遺留的 dead code 刪除**（commit `4f30d1f`）
+   - PmReviewService.cs 刪掉 120 行（保留 2 行），是 Stage 25b 建立 ReviewDevPlan / ReviewVera 時遺留的 helper，實際已沒人用
+   - 拆解時順手清理——因為新 service 體積小、責任單純，dead code 特別顯眼
+
 ### 搭車修改
+
+
 
 無。本次拆解純粹 refactor，不帶任何 FF 子項或 bug fix。
 
@@ -359,3 +374,5 @@ Mock Mode 情境的 code path 全部走通（FailScenario 狀態機在新 servic
 |------|------|------|
 | v1.0 | 2026-04-22 | 初版規劃書，PmAgentService（1388 行 × 12 method）拆 5 個 service + 1 record 檔（Agents/Pm/ 子資料夾）；Opus 1M + high（粗估 158K 超 Sonnet 200K）；首次實踐 SOP 6 子資料夾組織 |
 | v2.0 | 2026-04-22 | 實作完成結案。產出 6 個新檔（PmAgentResults / PmAgentCommons / PmReviewService / ReviewAppealService / DevPlanAppealService / PmRoutingService）、PmAgentService.cs 刪除、TaskGroupService 8 處 caller 更新、Program.cs DI 改寫、版本 v3.22.0。build 0 error。SOP 3 Commons 範圍實際比規劃擴大（含 BuildPetraSystemPrompt + TryParseReview + CleanupAppealRepo）、SOP 6 首次實踐結論：**決策主體（誰說話）= Agent 時放 Agents/，協調流程放 Orchestration/**——供 FF 二十-B/A 直接套用 |
+
+| v2.1 | 2026-04-22 | 驗收後 Aria 順手補入兩項 follow-up commits 紀錄：(1) Dev_plan Appeal 升級後 group status 重置遺漏修正（`9b0b115`，TaskGroupService +3 行，Stage 30 升級時的盲點）(2) PmReviewService Stage 25b 遺留 dead code 清理（`4f30d1f`，-120 行，拆解時順手清）|
