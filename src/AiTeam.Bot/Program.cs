@@ -94,8 +94,10 @@ builder.Services.AddControllers();
 // Stage 10：CEO Orchestrator（WorkflowEngine 無狀態，TaskGroupService 管理群組流程）
 // TaskGroupService 所有建構子依賴均為 Singleton，可安全設為 Singleton（供 CommandHandler 直接注入）
 builder.Services.AddSingleton<WorkflowEngine>();
-// Stage 25a：Kick-off 會議引擎（依賴 GitHubService / IClaudeCodeService，均為 Singleton）
-builder.Services.AddSingleton<MeetingService>();
+// Stage 34：MeetingService 拆解（FF 二十-C）— MeetingCommons 先，Kickoff/Design 後（兩者依賴 Commons）
+builder.Services.AddSingleton<MeetingCommons>();
+builder.Services.AddSingleton<KickoffMeetingService>();
+builder.Services.AddSingleton<DesignMeetingService>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();

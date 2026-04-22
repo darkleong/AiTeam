@@ -29,7 +29,9 @@ public class TaskGroupService(
     IOptions<GitHubSettings> gitHubSettings,
     WorkflowSettingsResolver workflowResolver,
     WorkflowEngine workflowEngine,
-    MeetingService meetingService,
+    KickoffMeetingService kickoffMeetingService,
+    DesignMeetingService designMeetingService,
+    MeetingCommons meetingCommons,
     AgentQueueService agentQueueService,
     InteractionService interactionService,
     IHostApplicationLifetime appLifetime,
@@ -1511,7 +1513,7 @@ public class TaskGroupService(
             // 取得提案內容（從 group.Title 加 IssueUrls/UiSpec 組合，同 BuildTaskDescription）
             var proposalContent = BuildKickoffProposalContent(group);
 
-            var meetingResult = await meetingService.RunKickoffMeetingAsync(
+            var meetingResult = await kickoffMeetingService.RunKickoffMeetingAsync(
                 group, proposalContent, owner, repo, ct);
 
             // 重新載入 group（meeting 執行期間 group 物件可能過時）
@@ -1704,14 +1706,14 @@ public class TaskGroupService(
         {
             case "continue":
                 logger.LogInformation("TaskGroupService：Kick-off 確認繼續（Group={Id}）", groupId);
-                await meetingService.CloseAllSessionsAsync(groupId);
+                await meetingCommons.CloseAllSessionsAsync(groupId);
                 // Stage 25b：Kickoff 確認後進入設計規劃階段（Design），不直接進 Dev_plan
                 await FireStepsAsync(group, [new WorkflowStep(AgentNames.Design)], ct);
                 break;
 
             case "stop":
                 logger.LogInformation("TaskGroupService：Kick-off 確認停止（Group={Id}）", groupId);
-                await meetingService.CloseAllSessionsAsync(groupId);
+                await meetingCommons.CloseAllSessionsAsync(groupId);
                 taskRepo.UpdateGroupStatus(group, "cancelled");
                 await taskRepo.SaveAsync(ct);
 
@@ -1730,7 +1732,7 @@ public class TaskGroupService(
 
                 logger.LogInformation("TaskGroupService：Kick-off 計劃書修改（Group={Id}）", groupId);
 
-                var modifyResult = await meetingService.ModifyTaskPlanAsync(
+                var modifyResult = await kickoffMeetingService.ModifyTaskPlanAsync(
                     group, modifyContent, owner, repo, ct);
 
                 // 記錄修改過程（追加至 KickoffMeetingLog）
@@ -1834,7 +1836,7 @@ public class TaskGroupService(
             case "restart":
                 // 重新召開 Kick-off（大修改後 Christ 確認重開）
                 logger.LogInformation("TaskGroupService：Kick-off 重新召開（Group={Id}）", groupId);
-                await meetingService.CloseAllSessionsAsync(groupId);
+                await meetingCommons.CloseAllSessionsAsync(groupId);
                 // 重置輪次計數，重觸發 Kickoff 步驟
                 group.KickoffRound = 0;
                 await taskRepo.SaveAsync(ct);
@@ -1909,7 +1911,7 @@ public class TaskGroupService(
 
         try
         {
-            var designResult = await meetingService.RunDesignMeetingAsync(group, owner, repo, ct);
+            var designResult = await designMeetingService.RunDesignMeetingAsync(group, owner, repo, ct);
 
             // 重新載入 group
             await using var scope2 = serviceProvider.CreateAsyncScope();
@@ -2076,7 +2078,7 @@ public class TaskGroupService(
 
             case "stop":
                 logger.LogInformation("TaskGroupService：設計規劃確認停止（Group={Id}）", groupId);
-                await meetingService.CloseAllSessionsAsync(groupId);
+                await meetingCommons.CloseAllSessionsAsync(groupId);
                 taskRepo.UpdateGroupStatus(group, "cancelled");
                 await taskRepo.SaveAsync(ct);
 
@@ -2104,7 +2106,7 @@ public class TaskGroupService(
 
                 try
                 {
-                    var modifyResult = await meetingService.ModifyDesignPlanAsync(
+                    var modifyResult = await designMeetingService.ModifyDesignPlanAsync(
                         group, modifyContent, petraSessionId, owner, repo, ct);
 
                     // 追加修改紀錄

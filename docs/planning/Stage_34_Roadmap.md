@@ -3,8 +3,8 @@
 > 對應 Future Feature：二十（大檔案拆解技術債合集）子項 C
 > 對應版本：v3.21.0
 > 建立日期：2026-04-22
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 狀態：✅ 已完成
+> 文件版本：v2.0
 
 ---
 
@@ -223,8 +223,105 @@ Stage 34 完成後，Roadmap 實作紀錄要寫**清楚**這些決策，供後�
 
 ---
 
+## 實作紀錄
+
+### 完成日期
+2026-04-22
+
+### 實際產出
+
+| 檔案 | 行數（約）| 說明 |
+|------|----------|------|
+| `src/AiTeam.Bot/Orchestration/MeetingResults.cs` | 28 | public records：MeetingResult / ModifyResult / DesignMeetingResult |
+| `src/AiTeam.Bot/Orchestration/MeetingCommons.cs` | 62 | CloseAllSessionsAsync + RunAgentTurnAsync + ReadOnlyTools 靜態欄位 |
+| `src/AiTeam.Bot/Orchestration/KickoffMeetingService.cs` | 318 | RunKickoffMeetingAsync + ModifyTaskPlanAsync + Kickoff prompt builders + PetraDecision / ModifyDecision internal records |
+| `src/AiTeam.Bot/Orchestration/DesignMeetingService.cs` | 590 | RunDesignMeetingAsync + ModifyDesignPlanAsync + RunDesignAdjustmentAsync + GenerateDesignPlanAsync + Design prompt builders + Design internal DTOs |
+| ~~`src/AiTeam.Bot/Orchestration/MeetingService.cs`~~ | 1415（已刪） | 原始大檔，全數搬遷後刪除 |
+
+TaskGroupService.cs 建構子替換 1 處（`MeetingService` → 3 個新參數），8 處 call site 逐一更新。
+Program.cs DI：移除 `AddSingleton<MeetingService>()`，新增三個 Singleton（Commons 先於 Kickoff/Design）。
+Directory.Build.props：`v3.20.0 → v3.21.0`。
+
+### 踩坑記錄
+
+**踩坑一：`using AiTeam.Data` 遺漏**
+新建的 `KickoffMeetingService.cs` / `DesignMeetingService.cs` 原本未加 `using AiTeam.Data;`，導致 `TaskGroup` 找不到（CS0246）。Build 立刻發現並修正，無後續影響。
+
+---
+
+### 六項拆解 SOP 決策（供 FF 二十-D / B / A 後續子項參考）
+
+#### 決策一：Record 該不該共用 / 獨立檔
+
+**選擇**：Public record 搬獨立檔 `MeetingResults.cs`；internal DTO 留在各自 service 檔案。
+
+**理由**：
+- Public record（`MeetingResult` / `ModifyResult` / `DesignMeetingResult`）是 API 合約，TaskGroupService 需要直接使用，放獨立檔避免引入不必要的大型 namespace 依賴
+- Internal DTO（`PetraDecision`, `ModifyDecision`, `DesignPetraDecision` 等）是實作細節，各自的 service 私用；不共用可防止 Design 內部型別洩漏到 Kickoff（或反向）
+- 日後 record 異動時，修改獨立的 `MeetingResults.cs` 比在 service 大檔內翻找更直覺
+
+#### 決策二：thin wrapper 該不該做
+
+**選擇**：不做 thin wrapper，直接切換所有 caller。
+
+**理由**：
+- Caller 不多（TaskGroupService 8 處 + 1 個 DI 行），機械性替換，不需要 wrapper 過渡
+- Wrapper 會讓兩套名稱並存，未來維護容易搞混（wrapper 是哪個？新的是哪個？）
+- Git history 本身就是最好的追蹤：`MeetingService.cs` 在 commit 中被整檔刪除，搜尋即可找到完整遷移過程
+- 推廣原則：**caller 少於 15 處時直接切換**；超過 15 處再考慮 thin wrapper 過渡
+
+#### 決策三：Commons service 的範圍如何界定
+
+**選擇**：只放「Kickoff + Design 兩邊都直接呼叫」的東西（`RunAgentTurnAsync`, `CloseAllSessionsAsync`, `ReadOnlyTools` 靜態欄位）。
+
+**不放進 Commons 的**：
+- `GetApiKey()` / `GetModel()` — 雖然兩邊邏輯相同（各 3-5 行），但推進 Commons 需要額外的 `IConfiguration` 依賴，且每個 service 自己持有 `configuration` 更直覺；重複 3-5 行 vs. 新增一個建構子參數，選擇前者
+- Prompt builders — 完全不共用，各自私有
+- Internal DTOs — 各自的實作細節，不共用
+
+**推廣原則**：Commons 只放「呼叫方式完全相同、兩邊都用」的 helper；「邏輯相似但各自 private」的不放。
+
+#### 決策四：DI 註冊該如何安排
+
+**選擇**：`MeetingCommons` 先於 `KickoffMeetingService` / `DesignMeetingService` 註冊；三個都是 Singleton。
+
+```csharp
+builder.Services.AddSingleton<MeetingCommons>();
+builder.Services.AddSingleton<KickoffMeetingService>();
+builder.Services.AddSingleton<DesignMeetingService>();
+```
+
+**理由**：
+- DI 容器的 Singleton 解析本身不依賴宣告順序（ASP.NET Core DI 是 lazy resolved），但**順序代表依賴方向**，讓讀 Program.cs 的人一眼看出 Commons 是基礎層
+- 三個均 Singleton（對齊舊 MeetingService），因為它們的所有建構子依賴（IClaudeCodeService, GitHubService, WorkflowSettingsResolver 等）也都是 Singleton，安全
+
+#### 決策五：跨 service 的 session state 管理策略
+
+**選擇**：無需共享 session state，各方法自管 local state。
+
+**理由**：
+- `DesignSessionState` 是 `RunDesignMeetingAsync` 的 local 變數，在方法執行期間存活，方法結束即釋放
+- Kickoff 的 session ID（`petraSessionId = group.Id.ToString()`）是確定性函數，不需要儲存在 service 層級
+- 沒有跨 Kickoff / Design 共用的 session dictionary（舊 MeetingService 也沒有），所以 Commons 完全無狀態
+- **推廣原則**：如果要拆的大 service 有 singleton-level instance field（如 `ConcurrentDictionary<Guid, string>`），要特別評估歸屬；本次 MeetingService 沒有，直接乾淨分拆
+
+#### 決策六（補充）：檔案夾組織原則
+
+**選擇**：三個新 service 平放在 `Orchestration/` 下，不建子資料夾。
+
+**理由**：
+- 目前 `Orchestration/` 有 5 個檔案（TaskGroupService, WorkflowEngine, WorkflowSettingsResolver, 加上三個新 service = 約 7 個），尚未到「一眼看不清楚」的閾值
+- 建子資料夾（如 `Orchestration/Meeting/`）會讓 namespace 變成 `AiTeam.Bot.Orchestration.Meeting`，現有 using 全要改
+
+**後續建議（供 FF 二十-D/B/A 參考）**：
+- 當 `Orchestration/` 超過 **10 個檔案**，或有 3+ 個同主題 service 時，考慮建子資料夾
+- 建子資料夾時，namespace 隨著搬移（`AiTeam.Bot.Orchestration.Meeting` 之類），同時更新所有 `using`
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |------|------|------|
 | v1.0 | 2026-04-22 | 初版規劃書，MeetingService 拆三塊（KickoffMeetingService / DesignMeetingService / MeetingCommons）；Migration 策略為直接切換不做 thin wrapper；目的是累積拆解 SOP 供 FF 二十 後續子項 |
+| v2.0 | 2026-04-22 | 實作完成，補踩坑記錄 + 六項拆解 SOP 決策；MeetingService.cs 整檔刪除；dotnet build 0 error |
