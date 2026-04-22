@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.21
+> 版本：v7.22
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -49,6 +49,7 @@
 | [Stage_32_Roadmap.md](../planning/Stage_32_Roadmap.md) | Stage 32：/mock Dashboard 化 + 系統設定擴充 | v3.19.0 | ✅ 已完成（2026-04-21） |
 | [Stage_33_Roadmap.md](../planning/Stage_33_Roadmap.md) | Stage 33：Agent 狀態卡 2.0 — 佇列控制 + 待辦清單 | v3.20.0 | ✅ 已完成（2026-04-22） |
 | [Stage_34_Roadmap.md](../planning/Stage_34_Roadmap.md) | Stage 34：MeetingService 拆解（FF 二十-C） | v3.21.0 | ✅ 已完成（2026-04-22） |
+| [Stage_35_Roadmap.md](../planning/Stage_35_Roadmap.md) | Stage 35：PmAgentService 拆解（FF 二十-D）+ 子資料夾 SOP | v3.22.0 | 🟡 待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -143,6 +144,7 @@
 | v7.19 | 2026-04-22 | Stage 34 規劃書建立（v3.21.0）— MeetingService 拆解（FF 二十-C 首次正式實踐大檔案拆解 SOP）：`MeetingService.cs`（1415 行）拆為 `KickoffMeetingService`（~500）+ `DesignMeetingService`（~700）+ `MeetingCommons`（~200）；Migration 策略直接切換不做 thin wrapper；Record 搬獨立檔 `MeetingResults.cs`；Model 建議 Sonnet 200K + high（拆解首次、風險最低、context 估 ~85K）；預期產出：Roadmap 實作紀錄要寫「五項拆解決策」供後續 D/B/A 子項參考 |
 | v7.20 | 2026-04-22 | Stage 34 實作完成（v3.21.0）— MeetingService 拆解：`KickoffMeetingService`（318 行）+ `DesignMeetingService`（590 行）+ `MeetingCommons`（62 行）+ `MeetingResults.cs`（27 行）+ 刪除原 `MeetingService.cs`（1415 行）；Migration 直接切換、TaskGroupService 8 處 caller 全對齊、Program.cs DI 順序正確；踩坑僅一項（`using AiTeam.Data` 遺漏）|
 | v7.21 | 2026-04-22 | Stage 34 驗收通過（v3.21.0）— 全部 Mock Mode 流程驗證通過（`/mock new_feature_with_proposal` 走 Kickoff + Modify + Design + Modify 全程 / `/mock fail_review` 確認 CLI 層 `RunMeetingSessionAsync` 不受影響）；**驗收期間零 follow-up commits**（目前最順利一次 Stage 結案）；實作 Session 寫下「六項拆解 SOP」供 FF 二十 子項 D / B / A 參考，Aria 結案第二段將 SOP 提煉進 FF 二十 共通策略小節 |
+| v7.22 | 2026-04-22 | Stage 35 規劃書建立（v3.22.0）— PmAgentService 拆解（FF 二十-D）：1388 行 × 12 method 拆 5 個 service（PmAgentCommons + PmReviewService + ReviewAppealService + DevPlanAppealService + PmRoutingService）+ 1 record 獨立檔 PmAgentResults；首次實踐 SOP 6 子資料夾組織（Agents/ 已 20 檔案超閾值，建 Agents/Pm/，namespace 改 AiTeam.Bot.Agents.Pm）；Model 建議 Opus 1M + high（粗估 158K × 1.6 = 250K 遠超 Sonnet 200K，5 個 service 邏輯耦合契約一致性需 Opus 支援）|
 
 ---
 
