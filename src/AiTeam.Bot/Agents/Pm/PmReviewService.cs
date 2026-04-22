@@ -1,11 +1,10 @@
 using System.Text;
-using AiTeam.Data;
 
 namespace AiTeam.Bot.Agents.Pm;
 
 /// <summary>
-/// Stage 35：Petra 四大審核閘門（Stage 16/23/24 累積）。
-/// - ReviewRosa / ReviewDemi / ReviewDevPlan：Claude Code RunReadOnlyAsync（帶 codebase context），失敗 fallback 到 LLM 直呼叫
+/// Stage 35：Petra 兩大審核閘門（Stage 16/23/24 累積，Stage 25b 後 Rosa/Demi 改走會議，對應 Review 方法於 Stage 35 清理）。
+/// - ReviewDevPlan：Claude Code RunReadOnlyAsync（帶 codebase context），失敗 fallback 到 LLM 直呼叫
 /// - ReviewVera：LLM 直呼叫（只看 review 報告，不需 codebase）
 /// </summary>
 public class PmReviewService(
@@ -17,45 +16,6 @@ public class PmReviewService(
     private const string AgentName = "PM";
 
     // ────────────── 公開審核方法 ──────────────
-
-    /// <summary>
-    /// 審核 Rosa 產出的 Issues 規格（Claude Code + LLM fallback）。
-    /// </summary>
-    public async Task<PetraReview> ReviewRosaAsync(
-        TaskItem ceoTask,
-        IReadOnlyList<RequirementIssuePreview> issues,
-        string repoLocalPath,
-        CancellationToken ct = default)
-    {
-        var prompt = BuildRosaReviewPrompt(ceoTask, issues);
-        var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
-        if (review is not null)
-        {
-            logger.LogInformation("Petra Claude Code 審核 Rosa 完成：{Decision}", review.Decision);
-            return review;
-        }
-        return await RunLlmDirectAsync(prompt, ct);
-    }
-
-    /// <summary>
-    /// 審核 Demi 產出的 UI 規格（Claude Code + LLM fallback）。
-    /// </summary>
-    public async Task<PetraReview> ReviewDemiAsync(
-        TaskItem ceoTask,
-        IReadOnlyList<RequirementIssuePreview> issues,
-        string uiSpec,
-        string repoLocalPath,
-        CancellationToken ct = default)
-    {
-        var prompt = BuildDemiReviewPrompt(ceoTask, issues, uiSpec);
-        var review = await TryRunClaudeCodeAsync(repoLocalPath, prompt, ct);
-        if (review is not null)
-        {
-            logger.LogInformation("Petra Claude Code 審核 Demi 完成：{Decision}", review.Decision);
-            return review;
-        }
-        return await RunLlmDirectAsync(prompt, ct);
-    }
 
     /// <summary>
     /// 審核 Cody 產出的實作計畫書（Claude Code + LLM fallback）。
@@ -201,84 +161,6 @@ public class PmReviewService(
     }
 
     // ────────────── Prompt 組建 ──────────────
-
-    private static string BuildRosaReviewPrompt(
-        TaskItem ceoTask,
-        IReadOnlyList<RequirementIssuePreview> issues)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("## 審核類型");
-        sb.AppendLine("Rosa Requirements Agent 產出的 Issues 規格審核");
-        sb.AppendLine();
-        sb.AppendLine("## 原始需求");
-        sb.AppendLine(ceoTask.Title);
-        if (!string.IsNullOrWhiteSpace(ceoTask.Description) && ceoTask.Description != ceoTask.Title)
-        {
-            sb.AppendLine();
-            sb.AppendLine(ceoTask.Description);
-        }
-        sb.AppendLine();
-        sb.AppendLine("## Rosa 產出的 Issues 清單");
-        for (var i = 0; i < issues.Count; i++)
-        {
-            sb.AppendLine($"### Issue {i + 1}：{issues[i].Title}");
-            sb.AppendLine(issues[i].Body);
-            sb.AppendLine($"Labels: {string.Join(", ", issues[i].Labels)}");
-            sb.AppendLine();
-        }
-        sb.AppendLine("## 你的任務");
-        sb.AppendLine("只從需求面審核：");
-        sb.AppendLine("1. 原始需求中的功能點是否都有對應的 Issue？");
-        sb.AppendLine("2. 每個 Issue 是否有至少一條可從使用者角度測試的驗收條件？");
-        sb.AppendLine();
-        sb.AppendLine("**不要要求 Rosa 提供以下內容，這些不是她的責任：**");
-        sb.AppendLine("- Entity / DTO / 資料庫 schema（Cody 的工作）");
-        sb.AppendLine("- Service / API 架構（Cody 的工作）");
-        sb.AppendLine("- UI 元件或互動流程細節（Demi 的工作）");
-        sb.AppendLine("- 權限驗證、安全性、跨裝置 / 效能場景（非需求面）");
-        sb.AppendLine();
-        sb.AppendLine("**以下情況不構成 revise 理由：**");
-        sb.AppendLine("- 驗收條件「可以更精確」但已經能測試 → approve");
-        sb.AppendLine("- 文案用詞「可以更好」 → approve");
-        sb.AppendLine("- Issue 粒度「可以再拆」但目前可實作 → approve");
-        sb.AppendLine("- 「沒提到 XX 場景」但該場景非原始需求所述 → approve");
-        sb.AppendLine();
-        sb.AppendLine("**revise 的唯一理由：原始需求中明確提到的功能點，在 Issues 中完全找不到對應。**");
-        sb.AppendLine("輸出 JSON 審核結果。");
-        return sb.ToString();
-    }
-
-    private static string BuildDemiReviewPrompt(
-        TaskItem ceoTask,
-        IReadOnlyList<RequirementIssuePreview> issues,
-        string uiSpec)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("## 審核類型");
-        sb.AppendLine("Demi Designer Agent 產出的 UI 規格審核");
-        sb.AppendLine();
-        sb.AppendLine("## 原始需求");
-        sb.AppendLine(ceoTask.Title);
-        sb.AppendLine();
-        sb.AppendLine("## Rosa Issues 清單（UI 規格必須涵蓋所有 Issue）");
-        foreach (var issue in issues)
-            sb.AppendLine($"- {issue.Title}");
-        sb.AppendLine();
-        sb.AppendLine("## Demi 產出的 UI 規格");
-        sb.AppendLine(uiSpec);
-        sb.AppendLine();
-        sb.AppendLine("## 你的任務");
-        sb.AppendLine("只審核覆蓋率：每個 Issue 的功能點是否都有對應的 UI 設計？");
-        sb.AppendLine();
-        sb.AppendLine("**不要審以下內容：**");
-        sb.AppendLine("- 元件內部 props / event 設計（Cody 的工作）");
-        sb.AppendLine("- CSS 細節、responsive、accessibility（除非原始需求要求）");
-        sb.AppendLine("- 設計美感或文案用詞的主觀判斷");
-        sb.AppendLine();
-        sb.AppendLine("**revise 的唯一理由：某個 Issue 的功能點在 UI 規格中完全沒有對應的畫面設計。**");
-        sb.AppendLine("輸出 JSON 審核結果。");
-        return sb.ToString();
-    }
 
     private static string BuildDevPlanReviewPrompt(
         string taskTitle,
