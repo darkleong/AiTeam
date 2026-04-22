@@ -3,8 +3,9 @@
 > 對應 Future Feature：二十（大檔案拆解技術債合集）子項 A + B 合併
 > 對應版本：v3.23.0
 > 建立日期：2026-04-22
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 完成日期：2026-04-22
+> 狀態：✅ 已完成（實作 + build 綠，待 Christ 驗收 Mock Mode 8 情境）
+> 文件版本：v2.0
 
 ---
 
@@ -238,8 +239,72 @@ Mock Mode 全套（8 個情境，比前幾次都多）：
 
 ---
 
+## 實作紀錄（v2.0 追加）
+
+### 完成成果
+
+**檔案行數變化**：
+
+| 檔案 | 拆解前 | 拆解後 | 備註 |
+|---|---|---|---|
+| `TaskGroupService.cs` | 2623 | **716** | 瘦身 -73%（CRUD + dispatcher + FireSteps/Cancel + Dashboard 分派 + BuildTaskDescription/Notify 共用）|
+| `CommandHandler.cs` | 2172 | **556** | 瘦身 -74%（事件 wiring + 訊息路由 + Dashboard 入口）|
+| **合計** | **4795** | **1272** | **瘦身 -73.5%** |
+
+**新檔（10 個）**：
+
+```
+Orchestration/
+├── Meeting/MeetingOrchestrationService.cs     775
+├── Appeal/AppealOrchestrationService.cs       667
+├── Qa/QaCoordinationService.cs                164
+└── Proposal/ProposalConfirmationService.cs    319
+
+Discord/Routing/
+├── ButtonCallbackRouter.cs                   1091（含共用 UI flow helpers：ShowProposalAsync、ShowDirectAgentConfirmAsync、Build*Embed、Build*Buttons 等）
+├── SlashCommandRouter.cs                      410
+├── PendingConfirmationStore.cs                 82
+└── RoutingTypes.cs                             21
+```
+
+**Stage 34 搬家**：Meeting 4 檔（KickoffMeetingService / DesignMeetingService / MeetingCommons / MeetingResults）由 `Orchestration/` 根目錄搬至 `Orchestration/Meeting/`，namespace 從 `AiTeam.Bot.Orchestration` 升至 `AiTeam.Bot.Orchestration.Meeting`。TaskGroupService、Program.cs 兩處 `using` 補齊。
+
+### 設計決策紀錄
+
+**Q1 決定：`PendingConfirmationStore` 升級為 `ConcurrentDictionary`**
+- 探索發現：原 `_pendingConfirmations` 並非 ConcurrentDictionary（Roadmap v1.0 誤判）
+- Store 抽出後，Register 端（OrchestrationService 散於多 thread）與 Lookup/Remove 端（ButtonCallbackRouter）分散，原「都在 Discord event loop 單 thread」假設不成立
+- Store 內 6 個字典全用 ConcurrentDictionary + `TryRemove` 原子化
+
+**Q2 決定：Dev_plan Petra 審核鏈歸 `AppealOrchestrationService`**
+- `RunPetraDevPlanReviewAsync`、`FinalizePetraDevPlanTaskAsync`、`RunDevPlanAppealLoopAsync`、`NotifyBossDevPlanEscalationAsync`、`HandleDevPlanEscalationAsync` 五者邏輯連續（Petra 初審 disagree → 觸發 Appeal 迴圈 → 升級老闆）
+- 按 Christ 建議歸 Appeal 側（Dev_plan Appeal 本來就在 Appeal），Proposal service 瘦至 319 行只負責 Dashboard 路徑
+
+**Q3 決定：共用 UI flow helpers 放 `ButtonCallbackRouter` 而非另立 helper class**
+- `ShowProposalAsync` / `ShowDirectAgentConfirmAsync` / `BuildCeoDecisionEmbed` / `BuildConfirmButtons` 等跨 3 entry points（slash / button / 自然語言 / Dashboard）共用
+- 以 `internal` 標記暴露給 SlashCommandRouter 與 CommandHandler 使用，避免過度抽象為「第 4 個 helper service」
+
+**Q4 決定：循環依賴用 IServiceProvider 解決**
+- 4 個子 Orchestration service 需要回呼 TaskGroupService（FireSteps/NotifyBoss）
+- TaskGroupService 也需要注入 4 子 service
+- 子 service 透過 `serviceProvider.GetRequiredService<TaskGroupService>()` 在方法內取得，避免建構子循環
+
+### 踩坑紀錄
+
+| 踩坑 | 解法 |
+|---|---|
+| 初建 `QaCoordinationService.cs` 忘記 `using AiTeam.Bot.Agents`，AgentExecutionResult 解析失敗 | 補 using |
+| `_pendingConfirmations` 型別誤判（Roadmap 寫 Concurrent 實為普通 Dictionary） | 探索 Agent 實測確認 + 升級 Store |
+| Meeting/ 子資料夾搬家後，TaskGroupService + Program.cs 兩處失去 `KickoffMeetingService` 等型別 | 兩處補 `using AiTeam.Bot.Orchestration.Meeting` |
+| MockScenarioService 原呼叫 `CommandHandler.BuildProposalEmbed` / `BuildProposalConfirmButtons`（瘦身後 CommandHandler 不再持有） | 改呼 `ButtonCallbackRouter.BuildProposalEmbed` / `BuildProposalConfirmButtons`（internal 暴露） |
+
+### FF 二十 整項完成
+
+Stage 32（C）+ 33（D）+ 34（E，Meeting 拆解）+ **36（A+B 合併）** = FF 二十 **ABCDE 全部 ✅**，AiTeam 大檔案技術債清零。
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |------|------|------|
 | v1.0 | 2026-04-22 | 初版規劃書，FF 二十 A+B 合併（TaskGroupService 2623 + CommandHandler 2172 = 4795 行）拆 4+3+1 個 service/module + Store，含 Orchestration/Discord 子資料夾；`PendingConfirmationStore` 為核心解耦；Stage 34 Meeting 四檔搬子資料夾屬搭車工作；Opus 1M + high（粗估 241K × 1.6 = 386K，Sonnet 不可能）|
+| v2.0 | 2026-04-22 | **實作完成**。TaskGroupService 2623→716（-73%）、CommandHandler 2172→556（-74%）。新增 10 檔（4 Orchestration service + 4 Routing + Store + RoutingTypes）。Dev_plan Petra 審核鏈改歸 AppealOrchestrationService（與 Appeal 迴圈連續）。`PendingConfirmationStore` 升 ConcurrentDictionary × 6 組（探索發現原為普通 Dictionary）。共用 UI flow helpers（ShowProposalAsync 等）集中 ButtonCallbackRouter 以 internal 暴露。循環依賴用 IServiceProvider 解。FF 二十 整項完成。|

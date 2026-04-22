@@ -8,6 +8,7 @@ using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Ops;
 using AiTeam.Bot.Orchestration;
+using AiTeam.Bot.Orchestration.Meeting;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
@@ -104,6 +105,11 @@ builder.Services.AddSingleton<WorkflowEngine>();
 builder.Services.AddSingleton<MeetingCommons>();
 builder.Services.AddSingleton<KickoffMeetingService>();
 builder.Services.AddSingleton<DesignMeetingService>();
+// Stage 36：TaskGroupService 拆解（FF 二十-A/B 合併）— 4 子 Orchestration service 先註冊
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.MeetingOrchestrationService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Appeal.AppealOrchestrationService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Qa.QaCoordinationService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Proposal.ProposalConfirmationService>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();
@@ -127,6 +133,10 @@ builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
                    | Discord.GatewayIntents.MessageContent
 }));
 builder.Services.AddSingleton<ConversationContextStore>();
+// Stage 36：Discord Routing 拆解（FF 二十-A/B 合併）— Store 先 → ButtonRouter → SlashRouter → CommandHandler
+builder.Services.AddSingleton<AiTeam.Bot.Discord.Routing.PendingConfirmationStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Discord.Routing.ButtonCallbackRouter>();
+builder.Services.AddSingleton<AiTeam.Bot.Discord.Routing.SlashCommandRouter>();
 builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddHostedService<DiscordBotService>();
 

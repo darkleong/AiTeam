@@ -1,4 +1,4 @@
-namespace AiTeam.Bot.Orchestration;
+namespace AiTeam.Bot.Orchestration.Meeting;
 
 /// <summary>Stage 25a：Kick-off 會議執行結果。</summary>
 public record MeetingResult(

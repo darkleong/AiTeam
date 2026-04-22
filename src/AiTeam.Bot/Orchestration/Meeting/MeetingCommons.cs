@@ -1,6 +1,6 @@
 using AiTeam.Bot.Agents;
 
-namespace AiTeam.Bot.Orchestration;
+namespace AiTeam.Bot.Orchestration.Meeting;
 
 /// <summary>
 /// Stage 34：KickoffMeetingService / DesignMeetingService 共用的會議基礎設施。

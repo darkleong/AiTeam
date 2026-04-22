@@ -2,6 +2,7 @@ using System.Text.Json;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
+using AiTeam.Bot.Discord.Routing;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -153,8 +154,8 @@ public class MockScenarioService(
 
         // 3. 傳送與真實流程相同的提案 Embed + 確認按鈕
         const string description = "[MOCK] 模擬新功能需求，供 Mock Mode 測試流程使用。";
-        var proposalEmbed = CommandHandler.BuildProposalEmbed(title, description);
-        var proposalMsg   = await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: CommandHandler.BuildProposalConfirmButtons());
+        var proposalEmbed = ButtonCallbackRouter.BuildProposalEmbed(title, description);
+        var proposalMsg   = await ceoChannel.SendMessageAsync(embed: proposalEmbed, components: ButtonCallbackRouter.BuildProposalConfirmButtons());
 
         // 4. 登記 _pendingConfirmations（延遲解析 CommandHandler 避免循環依賴）
         var commandHandler = serviceProvider.GetRequiredService<CommandHandler>();

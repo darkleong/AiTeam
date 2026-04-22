@@ -6,7 +6,7 @@ using AiTeam.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace AiTeam.Bot.Orchestration;
+namespace AiTeam.Bot.Orchestration.Meeting;
 
 /// <summary>
 /// Stage 34：設計規劃會議引擎（從 MeetingService 拆解而來）。
