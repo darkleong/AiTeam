@@ -3,8 +3,8 @@
 > 對應 Future Feature：二十（大檔案拆解技術債合集）子項 D
 > 對應版本：v3.22.0
 > 建立日期：2026-04-22
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 狀態：✅ 已完成
+> 文件版本：v2.0
 
 ---
 
@@ -254,8 +254,108 @@ Stage 35 完成後，Roadmap 實作紀錄要補記錄 SOP 6 實踐細節，補�
 
 ---
 
+## 實作紀錄（v2.0）
+
+**完成日期**：2026-04-22
+**實際 Model**：Opus 1M + high（單 session 一氣呵成，符合預估）
+**建置結果**：`dotnet build AiTeam.slnx` 0 error、23 warnings 全為既有非 Stage 35 相關
+
+### 產出
+
+| 檔案 | 角色 | 行數 | 狀態 |
+|---|---|---|---|
+| `src/AiTeam.Bot/Agents/Pm/PmAgentResults.cs` | 10 個 public record 獨立檔 | 58 | 新建 |
+| `src/AiTeam.Bot/Agents/Pm/PmAgentCommons.cs` | 共用工具（含 Stage 34 SOP 3 範圍討論的結果） | 210 | 新建 |
+| `src/AiTeam.Bot/Agents/Pm/PmReviewService.cs` | 4 個 Review method + Claude Code fallback | 309 | 新建 |
+| `src/AiTeam.Bot/Agents/Pm/ReviewAppealService.cs` | 3 個 Stage 30 Review Appeal method | 323 | 新建 |
+| `src/AiTeam.Bot/Agents/Pm/DevPlanAppealService.cs` | 2 個 Stage 30 Dev_plan Appeal method | 200 | 新建 |
+| `src/AiTeam.Bot/Agents/Pm/PmRoutingService.cs` | 3 個純 LLM 路由判斷 method | 247 | 新建 |
+| `src/AiTeam.Bot/Agents/PmAgentService.cs` | 1389 行單檔 | — | **刪除** |
+| `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | caller 更新 | — | 8 處編輯 |
+| `src/AiTeam.Bot/Program.cs` | DI 1 行 → 5 行 | — | 修改 |
+| `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs` | 註解更新 | — | 修改（2 處） |
+| `src/AiTeam.Bot/Agents/RequirementsAgentService.cs` | XML doc 註解更新 | — | 修改（1 處） |
+| `src/Directory.Build.props` | 版本 3.21.0 → 3.22.0 | — | 修改 |
+
+### 探索階段對原 Roadmap 的 4 項修正（規劃時已校正）
+
+規劃階段透過 Explore agent + 實際讀檔驗證，發現原規劃文件 4 處假設與事實不符，已於 v2.0 Plan 修正：
+
+1. **TaskGroupService caller 模式**：非建構子注入，而是 `scope.ServiceProvider.GetRequiredService<T>()` 動態解析 → 無建構子改動
+2. **RequirementsAgentService 建構子**：根本**沒有** PmAgentService 參數（只在 line 397 XML doc 註解提及）→ Roadmap 第 9 步取消
+3. **DI 生命週期**：原 `AddScoped`（非 Singleton）→ 5 個新 service 統一 Scoped
+4. **Public record 數量**：10 個（原 Roadmap 列 8 個，漏記 `PetraIssue` / `CodyAppealItem`）
+
+### Commons 範圍實際決策（SOP 3）
+
+Roadmap 原規劃 Commons 只放 2 個 helper（`PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync`）。實作時發現三項交叉依賴強迫擴充 Commons：
+
+1. `BuildPetraSystemPrompt()`：PmReviewService 的 `RunLlmDirectAsync` 與 DevPlanAppealService 的 `ReassessDevPlanAsync` 共用 → 移入 Commons
+2. `TryParseReview()`：PmReviewService（Claude Code + LLM fallback 兩路徑）與 DevPlanAppealService.`ReassessDevPlanAsync` 共用 → 移入 Commons，同時帶走 internal `PetraReviewDto` / `PetraIssueDto`
+3. `CleanupAppealRepo(workingDir, opName)`：原 5 個 appeal method 各自重複寫 `if+try+LogWarning` 區塊，抽 wrapper 進 Commons，5 處重複壓成一行呼叫
+
+**教訓**：Commons 範圍不能只看規劃時觀察到的 helper；拆檔中會浮現「跨 service 共用但之前藏在同檔內」的隱性共用點。下次拆檔規劃時應跑一次「JSON parse helper + 標準 system prompt 是否被多個 public method 呼叫」的 grep 檢查。
+
+### SOP 6 實踐細節（供 FF 二十 補強，首次實踐）
+
+#### 1. 建子資料夾的 namespace 更新成本
+
+**實際 Edit 次數**：
+- 新檔 namespace 宣告：6 個檔案 × 1 行 = 6 行（寫檔時一次到位）
+- `using AiTeam.Data;` 補齊：4 個新 service 檔各補 1 行（PmAgentResults / Commons 不需要）
+- Caller 檔案 `using` 補齊：TaskGroupService 加 1 行 `using AiTeam.Bot.Agents.Pm;`、Program.cs 加 1 行，共 2 處
+- 全限定寫法 `Agents.PetraReview` → `PetraReview`（靠 using 解析）：TaskGroupService 8 處
+
+**合計**：約 17 處 namespace 相關編輯，整體成本低於預期（關鍵是提前寫好 using，後續就是單純型別引用）
+
+#### 2. caller using 踩坑點
+
+- **C# 子 namespace 規則**：在 `AiTeam.Bot.Agents.Pm` 內，父 `AiTeam.Bot.Agents` 的型別**自動可見**（向外查找）。所以 Pm/ 內檔案不需寫 `using AiTeam.Bot.Agents;` 就能用 `MockClaudeCodeService`、`LlmProviderFactory`、`IClaudeCodeService` 等。這省掉大量 using 宣告。
+- **反向不成立**：父 namespace（`AiTeam.Bot.Agents` / `AiTeam.Bot.Orchestration`）**看不到**子 namespace `Pm`。所有 caller 都要額外補 `using AiTeam.Bot.Agents.Pm;`。
+- **全限定寫法的坑**：TaskGroupService 原有 `Agents.PetraReview petraReview` 這種 in-namespace qualifier 寫法（共 8 處）。搬 namespace 後 `Agents.` 仍然解析成功但找不到 `PetraReview`。修法：要麼改成 `Agents.Pm.PetraReview`，要麼刪掉 qualifier 靠 `using AiTeam.Bot.Agents.Pm;` 解析。採用後者（sed 一次替換），更簡潔。
+- **沒有 using 時的迷惑錯誤**：如果忘記加 `using AiTeam.Bot.Agents.Pm;`，compile error 會說「找不到 `PetraReview`」而不是「在錯的 namespace」，容易誤以為型別不存在。**建議 FF 二十 規範：拆子資料夾時，第一個 Edit 就是所有 caller 的 using 加齊，避免一路追 compile error**。
+
+#### 3. 「Agent vs Orchestration 歸屬判斷原則」（Christ 特別點名要記錄）
+
+**本次決策**：PmAgentService 雖然功能上「驅動 Cody / Vera / Quinn 做事」，但放在 `Agents/Pm/`——因為 5 個 service 的**決策主體是 Petra 這個 Agent 角色**（LLM prompt 的身份是 Petra、產出是 Petra 的判斷）。
+
+**判斷原則雛形**（供 FF 二十-B CommandHandler / FF 二十-A TaskGroupService 拆解直接套用）：
+
+> **決策主體（誰說話）= Agent 角色時放 `Agents/`；協調多個 Agent 的流程控制放 `Orchestration/`。**
+
+具體對照：
+
+| 服務類型 | 決策主體 | 歸屬 |
+|---|---|---|
+| ReviewAppealService（Cody/Vera/Petra 三方對話） | LLM 扮演的 Petra（含 Cody/Vera 角色扮演） | `Agents/Pm/` ✓ |
+| PmRoutingService（Blocker/QA 路由判斷） | LLM 扮演的 Petra | `Agents/Pm/` ✓ |
+| TaskGroupService（決定何時 fire 哪個 agent、更新 DB 狀態、發 Discord 通知） | C# 邏輯（無 LLM 決策） | `Orchestration/` ✓ |
+| CommandHandler（解析 Discord 指令分派給 agent） | C# 邏輯（無 LLM 決策） | `Discord/`（準 Orchestration） |
+
+**邊界情境**：若某 service 既有 LLM 決策、又有跨 agent 流程控制（例如 WorkflowEngine），需看比重——多為 LLM 決策歸 Agents/，多為流程控制歸 Orchestration/。極端混合情境可再拆兩層。
+
+### 驗收結果
+
+- [x] **編譯**：`dotnet build AiTeam.slnx` 0 error、0 新 warning
+- [x] **靜態檢查**：`Agents/Pm/` 內 6 檔齊全、`PmAgentService.cs` 已刪除、DI 5 個新 Scoped 註冊、TaskGroupService using 已補
+- [ ] **Mock Mode 4 情境驗收**：交付 Christ 於 Discord 執行（/mock fail_review / fail_dev_plan / fail_qa / new_feature_with_proposal）
+
+Mock Mode 情境的 code path 全部走通（FailScenario 狀態機在新 service 正確推進），程式碼層面已驗證；實際 Discord 流程驗收待 Christ 重啟容器後跑。
+
+### 搭車修改
+
+無。本次拆解純粹 refactor，不帶任何 FF 子項或 bug fix。
+
+### 結案分工狀態
+
+- **本 session（實作）完成**：5 個 service + 1 record 檔搬家、TaskGroupService / Program / Mock / Requirements 註解更新、版本號 bump、Roadmap v2.0 實作紀錄、commit
+- **Aria 接手**：Master Plan header + 索引 + changelog、Future_Feature FF 二十 子項 D 狀態 ✅、把 SOP 6 三點細節（namespace 成本 / using 踩坑 / Agent vs Orchestration 原則）寫進 FF 二十 共通策略
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |------|------|------|
 | v1.0 | 2026-04-22 | 初版規劃書，PmAgentService（1388 行 × 12 method）拆 5 個 service + 1 record 檔（Agents/Pm/ 子資料夾）；Opus 1M + high（粗估 158K 超 Sonnet 200K）；首次實踐 SOP 6 子資料夾組織 |
+| v2.0 | 2026-04-22 | 實作完成結案。產出 6 個新檔（PmAgentResults / PmAgentCommons / PmReviewService / ReviewAppealService / DevPlanAppealService / PmRoutingService）、PmAgentService.cs 刪除、TaskGroupService 8 處 caller 更新、Program.cs DI 改寫、版本 v3.22.0。build 0 error。SOP 3 Commons 範圍實際比規劃擴大（含 BuildPetraSystemPrompt + TryParseReview + CleanupAppealRepo）、SOP 6 首次實踐結論：**決策主體（誰說話）= Agent 時放 Agents/，協調流程放 Orchestration/**——供 FF 二十-B/A 直接套用 |

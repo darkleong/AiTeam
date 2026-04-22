@@ -1,5 +1,6 @@
 using Anthropic.SDK;
 using AiTeam.Bot.Agents;
+using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Configuration;
 using AiTeam.Data;
 using AiTeam.Data.Extensions;
@@ -68,7 +69,12 @@ builder.Services.AddKeyedScoped<IAgentExecutor, ReleaseAgentService>(AgentNames.
 builder.Services.AddScoped<DesignerAgentService>();
 builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames.Designer);
 
-builder.Services.AddScoped<PmAgentService>();
+// Stage 35：PmAgentService 拆解為 5 個 service + 1 record 檔（Agents/Pm/）
+builder.Services.AddScoped<PmAgentCommons>();
+builder.Services.AddScoped<PmReviewService>();
+builder.Services.AddScoped<ReviewAppealService>();
+builder.Services.AddScoped<DevPlanAppealService>();
+builder.Services.AddScoped<PmRoutingService>();
 
 // Discord 警報服務（向 #警報 頻道發送 Token 異常等警報）
 builder.Services.AddSingleton<DiscordAlertService>();

@@ -22,13 +22,13 @@ public class MockClaudeCodeService(
     ///
     /// 狀態機：
     ///  fail_review  → ReviewerAgent 設為 review_cody_appeal，回傳 Critical
-    ///  review_cody_appeal → PmAgent.RunCodyAppealAsync 設為 review_vera_appeal，Cody disagree
-    ///  review_vera_appeal → PmAgent.RunVeraAppealAsync 設為 null，Vera maintain critical
+    ///  review_cody_appeal → ReviewAppealService.RunCodyAppealAsync 設為 review_vera_appeal，Cody disagree
+    ///  review_vera_appeal → ReviewAppealService.RunVeraAppealAsync 設為 null，Vera maintain critical
     ///
     ///  qa_failure → QaAgent 設為 null，回傳 failed 報告
     ///
-    ///  dev_plan_appeal → PmAgent.ReviewDevPlanAsync 設為 dev_plan_cody_appeal，回傳 revise
-    ///  dev_plan_cody_appeal → PmAgent.RunCodyDevPlanAppealAsync 設為 null，Cody disagree
+    ///  dev_plan_appeal → PmReviewService.ReviewDevPlanAsync 設為 dev_plan_cody_appeal，回傳 revise
+    ///  dev_plan_cody_appeal → DevPlanAppealService.RunCodyDevPlanAppealAsync 設為 null，Cody disagree
     /// </summary>
     public static string? FailScenario { get; set; }
 
@@ -123,7 +123,7 @@ public class MockClaudeCodeService(
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
 
         // Stage 30：申訴環節 mock 分支（優先於 agentName 判斷）
-        // FailScenario 失敗路徑已在 PmAgentService 早返回，不會到達此處
+        // FailScenario 失敗路徑已在 Pm/ 各 service 早返回，不會到達此處
         //
         // 設計：Mock 分支依 prompt 內容動態判斷輪次，確保 fail_* 場景能走完
         // 整個迴圈，觸發 maxRounds 上限的仲裁 / 重評路徑，覆蓋所有新 CLI 分支。

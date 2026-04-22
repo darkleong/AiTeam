@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiTeam.Bot.Agents;
+using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
@@ -550,7 +551,7 @@ public class TaskGroupService(
     /// </summary>
     private async Task NotifyBossDevPlanEscalationAsync(
         TaskGroup group,
-        Agents.PetraReview petraReview,
+        PetraReview petraReview,
         CancellationToken cancellationToken)
     {
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
@@ -794,7 +795,7 @@ public class TaskGroupService(
         if (status == "no_applicable_tests")
         {
             await using var scope = serviceProvider.CreateAsyncScope();
-            var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+            var pmService = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
             var noTestDecision = await pmService.AssessNoApplicableTestsAsync(group, report?.NoTestReason, cancellationToken);
             logger.LogInformation("Petra QA 無測試評估：{Routing}（Group={Id}）", noTestDecision.Routing, group.Id);
 
@@ -836,7 +837,7 @@ public class TaskGroupService(
 
         {
             await using var scope = serviceProvider.CreateAsyncScope();
-            var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+            var pmService = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
             var failureDecision = await pmService.AssessQaFailureAsync(
                 group, group.TestReport ?? "", cancellationToken);
 
@@ -907,7 +908,7 @@ public class TaskGroupService(
         var reviewBody = group.LastReviewBody ?? result.ReviewBody ?? "";
 
         await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+        var pmService = scope.ServiceProvider.GetRequiredService<ReviewAppealService>();
 
         var currentCriticalIds = ExtractCriticalIdsFromReviewBody(reviewBody);
         if (currentCriticalIds.Count == 0)
@@ -1027,7 +1028,7 @@ public class TaskGroupService(
         CancellationToken cancellationToken)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+        var pmService = scope.ServiceProvider.GetRequiredService<ReviewAppealService>();
 
         logger.LogInformation("Appeal 達上限，啟動 Petra 仲裁（Group={Id}）", group.Id);
         var arbitration = await pmService.ArbitrateReviewAppealAsync(
@@ -1058,7 +1059,7 @@ public class TaskGroupService(
         CancellationToken cancellationToken)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService   = scope.ServiceProvider.GetRequiredService<PmAgentService>();
+        var pmService   = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
         var ceoChannel  = FindChannel(_discord.Channels.CeoChannel);
 
         BlockerDecision decision;
@@ -1129,7 +1130,7 @@ public class TaskGroupService(
     /// </summary>
     private async Task<bool> RunDevPlanAppealLoopAsync(
         TaskGroup group,
-        Agents.PetraReview initialReview,
+        PetraReview initialReview,
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
@@ -1138,7 +1139,7 @@ public class TaskGroupService(
         var priorContext  = $"Petra 初審意見：{initialReview.Summary}";
 
         await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+        var pmService = scope.ServiceProvider.GetRequiredService<DevPlanAppealService>();
 
         while (group.DevPlanAppealRoundA < maxRounds)
         {
@@ -1215,7 +1216,7 @@ public class TaskGroupService(
     /// <summary>
     /// 建立 Petra TaskItem、呼叫 ReviewDevPlanAsync、推送狀態、通知 #petra-pm 頻道。
     /// </summary>
-    private async Task<(Agents.PetraReview, Guid)> RunPetraDevPlanReviewAsync(
+    private async Task<(PetraReview, Guid)> RunPetraDevPlanReviewAsync(
         TaskGroup group,
         AgentExecutionResult devPlanResult,
         Guid? projectId,
@@ -1224,7 +1225,7 @@ public class TaskGroupService(
         await using var scope   = serviceProvider.CreateAsyncScope();
         var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+        var pmService           = scope.ServiceProvider.GetRequiredService<PmReviewService>();
         var gitHubService       = scope.ServiceProvider.GetRequiredService<GitHub.GitHubService>();
 
         // 建立 Petra TaskItem（projectId 由呼叫方傳入，避免跨 scope 混用 DbContext）
@@ -1268,7 +1269,7 @@ public class TaskGroupService(
         var owner       = _gitHub.Owner;
         var repo        = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
         var localPath   = "";
-        Agents.PetraReview petraReview;
+        PetraReview petraReview;
 
         try
         {
@@ -1284,7 +1285,7 @@ public class TaskGroupService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "RunPetraDevPlanReviewAsync workspace 失敗，fallback approve");
-            petraReview = new Agents.PetraReview("approve", "Petra workspace 失敗，自動放行", [], null);
+            petraReview = new PetraReview("approve", "Petra workspace 失敗，自動放行", [], null);
         }
         finally
         {
@@ -1356,7 +1357,7 @@ public class TaskGroupService(
     /// <summary>
     /// 建立 Petra TaskItem、呼叫 ReviewVeraAsync、推送狀態、通知 #petra-pm 頻道。
     /// </summary>
-    private async Task<Agents.PetraReview> RunPetraVeraReviewAsync(
+    private async Task<PetraReview> RunPetraVeraReviewAsync(
         TaskGroup group,
         AgentExecutionResult veraResult,
         Guid? projectId,
@@ -1365,7 +1366,7 @@ public class TaskGroupService(
         await using var scope   = serviceProvider.CreateAsyncScope();
         var taskRepo            = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService         = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-        var pmService           = scope.ServiceProvider.GetRequiredService<Agents.PmAgentService>();
+        var pmService           = scope.ServiceProvider.GetRequiredService<PmReviewService>();
 
         // 建立 Petra TaskItem（projectId 由呼叫方傳入，避免跨 scope 混用 DbContext）
         var petraTask = new TaskItem
@@ -1404,7 +1405,7 @@ public class TaskGroupService(
             await petraChannel.SendMessageAsync(
                 $"🔍 **Petra 審核 Vera Code Review**\n任務：{group.Title}");
 
-        Agents.PetraReview petraReview;
+        PetraReview petraReview;
         try
         {
             petraReview = await pmService.ReviewVeraAsync(
@@ -1415,7 +1416,7 @@ public class TaskGroupService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "RunPetraVeraReviewAsync LLM 失敗，fallback approve");
-            petraReview = new Agents.PetraReview("approve", "Petra LLM 失敗，自動放行", [], null);
+            petraReview = new PetraReview("approve", "Petra LLM 失敗，自動放行", [], null);
         }
 
         var petraStatus = petraReview.Decision == "revise" ? "revision"

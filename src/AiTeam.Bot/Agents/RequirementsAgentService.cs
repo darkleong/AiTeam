@@ -394,7 +394,7 @@ public class RequirementsAgentService(
 }
 
 /// <summary>
-/// Requirements Agent 分析出的 Issue 預覽，供 CommandHandler 雙層確認與 PmAgentService 審核使用。
+/// Requirements Agent 分析出的 Issue 預覽，供 CommandHandler 雙層確認與 PmReviewService 審核使用。
 /// </summary>
 public sealed record RequirementIssuePreview(
     string Title,
