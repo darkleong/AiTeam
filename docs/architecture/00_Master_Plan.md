@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.18
+> 版本：v7.19
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -48,6 +48,7 @@
 | [Stage_31_Roadmap.md](../planning/Stage_31_Roadmap.md) | Stage 31：可靠性補強 + Appeal 對抗紀錄 UI | v3.18.0 | ✅ 已完成（2026-04-20） |
 | [Stage_32_Roadmap.md](../planning/Stage_32_Roadmap.md) | Stage 32：/mock Dashboard 化 + 系統設定擴充 | v3.19.0 | ✅ 已完成（2026-04-21） |
 | [Stage_33_Roadmap.md](../planning/Stage_33_Roadmap.md) | Stage 33：Agent 狀態卡 2.0 — 佇列控制 + 待辦清單 | v3.20.0 | ✅ 已完成（2026-04-22） |
+| [Stage_34_Roadmap.md](../planning/Stage_34_Roadmap.md) | Stage 34：MeetingService 拆解（FF 二十-C） | v3.21.0 | 🟡 待實作 |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -139,6 +140,7 @@
 | v7.16 | 2026-04-21 | Stage 33 規劃書建立（v3.20.0）— Agent 狀態卡 2.0：主題整合 FF 十五剩餘子項（佇列控制 Dashboard 化：per-agent pause/resume + 全域 stop-all/resume-all）+ 新增 FF 二十一（Agent 狀態卡 expand 展開看待辦清單，解讀 B = running + queued TaskItem）；搭車拆一小塊 CommandHandler（抽 `AgentQueueControlService`）為 FF 二十-B 積少成多；Model 建議拆兩個 Sonnet 200K Session（Session 1 後端 + pause/resume，Session 2 expand + 待辦）或 Opus 1M 一氣呵成 |
 | v7.17 | 2026-04-21 | Stage 33 實作完成（v3.20.0）：子項 A 抽 `AgentQueueControlService`（4 個 `(bool, string)` tuple method 供 Discord + Dashboard 共用）+ `FireAndForgetQueueControl` / `PostQueueControlAsync` 共用 helper + `AgentStatusCard` 抽元件 + `GlobalQueueControlCard` 全域控制（附確認 Dialog）；子項 B **設計優化**：不建 `AgentTodoDto`，改為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）重用既有 `PushQueueUpdateAsync` 鏈路，省一個 DTO + 省一個 push method；`ClearQueueStatusAsync` 補 `PushQueueUpdateAsync` 解決「完成後清單即時移除」；`PipelineList` 支援 `?groupId=` 深層連結；踩坑：Razor tag 命名衝突（舊版 `Components/Shared/AgentStatusCard.razor` 殘留刪除）|
 | v7.18 | 2026-04-22 | Stage 33 驗收通過（v3.20.0）：子項 A/B 全數實測通過（per-agent pause/resume + 淡黃背景提示、全域緊急停止 + 確認 Dialog、待辦清單 🏃/⏳ + 無待辦 empty state、點 item 深層連結 Drawer 預選、Discord `/pause` 等回歸正常）；驗收期間兩項修正 — **(1) State Chip / Status Badge 顯示策略優化**（`228ebd7`，非 active + idle 隱藏 Badge 消除「已停止+閒置」冗餘，非 active + running 時 State chip 改 Filled 強調「按了停但還在跑」衝突狀態）+ **(2) Dev_plan ghost 卡修正**（`b915bf3`，`Home.UpdateAgentStatus` 對 SignalR 未知 AgentName 盲接 Add 導致 workflow 階段名成 ghost 卡，改白名單過濾；推論教訓：初判 DB 孤兒資料被 Christ 截圖打臉後重查找到 SignalR 動態 Add 路徑才是真因）；第三次實踐「Stage 結案兩段式分工」實作 Session 主動補 v2.1 驗收修正紀錄，Aria 不用搶救 |
+| v7.19 | 2026-04-22 | Stage 34 規劃書建立（v3.21.0）— MeetingService 拆解（FF 二十-C 首次正式實踐大檔案拆解 SOP）：`MeetingService.cs`（1415 行）拆為 `KickoffMeetingService`（~500）+ `DesignMeetingService`（~700）+ `MeetingCommons`（~200）；Migration 策略直接切換不做 thin wrapper；Record 搬獨立檔 `MeetingResults.cs`；Model 建議 Sonnet 200K + high（拆解首次、風險最低、context 估 ~85K）；預期產出：Roadmap 實作紀錄要寫「五項拆解決策」供後續 D/B/A 子項參考 |
 
 ---
 
