@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.25
+> 版本：v7.27
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -50,7 +50,7 @@
 | [Stage_33_Roadmap.md](../planning/Stage_33_Roadmap.md) | Stage 33：Agent 狀態卡 2.0 — 佇列控制 + 待辦清單 | v3.20.0 | ✅ 已完成（2026-04-22） |
 | [Stage_34_Roadmap.md](../planning/Stage_34_Roadmap.md) | Stage 34：MeetingService 拆解（FF 二十-C） | v3.21.0 | ✅ 已完成（2026-04-22） |
 | [Stage_35_Roadmap.md](../planning/Stage_35_Roadmap.md) | Stage 35：PmAgentService 拆解（FF 二十-D）+ 子資料夾 SOP | v3.22.0 | ✅ 已完成（2026-04-22） |
-| [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | 🟡 待實作 |
+| [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | ✅ 已完成（2026-04-22） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -149,6 +149,8 @@
 | v7.23 | 2026-04-22 | Stage 35 實作完成（v3.22.0）— PmAgentService 拆解：`Agents/Pm/` 子資料夾首次實踐 SOP 6；產出 6 檔（PmAgentResults 60 + PmAgentCommons 225 + PmReviewService 345 + ReviewAppealService 345 + DevPlanAppealService 207 + PmRoutingService 262 = 1444 行 vs 原 1389）；TaskGroupService 14 處 caller 全改、Program.cs DI 5 個 AddScoped 以 Commons 先、PmAgentService.cs 整檔刪除；規劃書原估 4 個修正被實作 Session 探索階段全部抓出（DI Scoped 非 Singleton / RequirementsAgentService 無依賴 / caller 動態解析 / record 10 個非 8 個）|
 | v7.24 | 2026-04-22 | Stage 35 驗收通過（v3.22.0）— 4 個 Mock 情境全通過；驗收期間兩項 follow-up：(1) Dev_plan Appeal 升級後 group status 重置遺漏修正（`9b0b115`，Stage 30 遺留盲點）(2) PmReviewService 中 Stage 25b dead code 清理（`4f30d1f`，-120 行）；實作 Session 未主動補至 Roadmap，由 Aria 結案時補 v2.1；Context 實際 **261K / Opus 1M 26%**（粗估 158K × 1.65 = 261K，**驗證 ×1.6 校準公式**）—— SOP 6 實踐結論「決策主體 = Agent 時放 Agents/、協調流程放 Orchestration/」供後續 FF 二十-B/A 套用 |
 | v7.25 | 2026-04-22 | Stage 36 規劃書建立（v3.23.0）— FF 二十 A+B 合併（TaskGroupService 2623 + CommandHandler 2172 = 4795 行）最後一次拆解：TaskGroupService 拆 4 個子 service（Meeting/Appeal/Qa/Proposal Orchestration）+ 瘦身；CommandHandler 拆 3 個子模組（SlashCommandRouter / ButtonCallbackRouter / PendingConfirmationStore）+ 瘦身；Stage 34 Meeting 四檔搭車搬到 Orchestration/Meeting/ 子資料夾；核心解耦：_pendingConfirmations dictionary 抽 PendingConfirmationStore Singleton；Model 必選 Opus 1M + high（粗估 241K × 1.6 = 386K，Sonnet 不可能）|
+| v7.26 | 2026-04-22 | Stage 36 實作完成（v3.23.0）— FF 二十 A+B 合併拆解：TaskGroupService 2623→716 行（-73%）+ CommandHandler 2172→556 行（-74%）；新建 11 檔（4 個 OrchestrationService + 3 個 Router/Store + RoutingTypes + 搬 Stage 34 四檔到 Meeting/）；核心解耦：_pendingConfirmations 6 個 Dictionary 抽 PendingConfirmationStore Singleton 升級 ConcurrentDictionary；5 個子資料夾；commit 1792eb7，build 0 error |
+| v7.27 | 2026-04-22 | Stage 36 驗收通過（v3.23.0）— **FF 二十 整項 ✅ 完成**：8 個 Mock 情境全通過 + 驗收期間零 follow-up commits；Context 實際 **360K / Opus 1M 36%**（×1.49 校準）；AiTeam 四個怪物級檔案（TaskGroupService 2623 / CommandHandler 2172 / MeetingService 1415 / PmAgentService 1388）**技術債全部清零 🎉** |
 
 ---
 
