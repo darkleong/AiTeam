@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.27
+> 版本：v7.28
 > 建立日期：2026-04-01
 > 最後更新：2026-04-22
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -803,16 +803,18 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
-### 子項 C：`MeetingService.cs` 拆解（最乾淨、風險最低）
+### 子項 C：`MeetingService.cs` 拆解 — ✅ 已完成（Stage 34，v3.21.0，2026-04-22）
 
-**現有職責**：Kickoff 會議流程 + Design 會議流程 + Rosa/Demi 前置 + 迴圈 orchestration
+**實際產出**（vs 原規劃）：
+- `KickoffMeetingService` — **318 行**（原估 ~500）
+- `DesignMeetingService` — **590 行**（原估 ~700）
+- `MeetingCommons` — **62 行**（原估 ~200，因為 `GetApiKey` / `GetModel` / Prompt builders 各自留在兩個 service 內）
+- `MeetingResults.cs` — **27 行**（獨立放 3 個 public record）
+- `MeetingService.cs` — 整檔刪除
 
-**拆解方向（職責界線清楚、推薦優先做）**：
-- `KickoffMeetingService` — ~500 行
-- `DesignMeetingService` — ~700 行
-- `MeetingCommons` — shared helper（prompt building、round orchestration 共用邏輯）~200 行
+**Stage 34 是 FF 二十 首次正式實踐**，累積出「六項拆解 SOP 決策」寫進下方「共通拆解策略」小節，供子項 D / B / A 參考。
 
-**優勢**：Kickoff vs Design 幾乎沒有共用狀態，拆解風險最低
+**驗收**：Mock Mode 全流程通過、驗收期間零 follow-up commits（最順利的一次 Stage 結案）、`dotnet build` 0 Error。
 
 ---
 
@@ -831,12 +833,12 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
-### 搭車優先順序建議
+### 搭車優先順序建議（Stage 34 後更新）
 
-按「風險 × 迫切 × 動到機率」綜合評估：
+子項 C 已完成，剩三個按「風險 × 迫切 × 動到機率」綜合評估：
 
-1. **子項 C MeetingService**（職責清楚、風險低）→ **未來若修會議流程 bug / 加新會議類型** 搭車
-2. **子項 D PmAgentService**（Stage 30 剛膨脹）→ **若 FF 八 Phase 2 繼續做循環偵測 / 新鮮視角** 搭車
+1. ✅ ~~**子項 C MeetingService**~~ — Stage 34 已完成
+2. **子項 D PmAgentService**（Stage 30 剛膨脹）→ **若 FF 八 Phase 2 繼續做循環偵測 / 新鮮視角** 搭車；或獨立做（有 Stage 34 SOP 參考，風險可控）
 3. **子項 B CommandHandler** + **子項 A TaskGroupService**（兩者互相耦合）→ 合併一次做最乾淨，**等真的 compact 過一次** 再下決心
 
 ### 不建議做法
@@ -845,12 +847,42 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 - ❌ **不要** 一次只拆一個但搭不到車—— 拆完別的 Stage 會撞重構衝突
 - ✅ **要** 每個子項搭對的車，累積 1-2 年自然完成
 
-### 共通拆解策略（四個子項通用）
+### 六項拆解 SOP（Stage 34 實踐後提煉，通用於所有子項）
 
-- **Migration pattern**：新 service 建立後，舊 service 先保留並做 thin wrapper 轉發，確認行為一致後再刪除舊方法
-- **DI 註冊**：全部 Singleton（沿用現有模式）
-- **Context 共享**：需要跨 service 的狀態（如 `_pendingConfirmations`）抽成獨立 Singleton store
-- **測試**：拆解前建議有一輪 Playwright 測試過，確保拆解後迴歸可驗
+以下 SOP 由 Stage 34 MeetingService 拆解實踐後提煉，供子項 A / B / D 參考：
+
+#### SOP 1：Record / Type 組織
+- **Public record**（API 合約、caller 會直接用）→ 搬獨立檔（例：`MeetingResults.cs`），避免引入不必要的大型 namespace 依賴
+- **Internal DTO**（實作細節）→ 留各自 service 檔案，防止跨 service 型別污染
+
+#### SOP 2：Migration 策略（caller 少於 15 處 → 直接切換）
+- Caller < 15 處 + 1 個 DI 行：**直接切換**，不做 thin wrapper（wrapper 讓兩套名稱並存，未來維護混淆）
+- Caller > 15 處 或 跨多個重要 caller：考慮 thin wrapper 過渡，分批遷移
+- Git history 本身就是最好的追蹤，直接刪除舊 service 無妨
+
+#### SOP 3：Commons service 範圍界定
+- **只放**「呼叫方式完全相同、兩邊都用」的 helper（例：`RunAgentTurnAsync`, `CloseAllSessionsAsync`, 共用靜態欄位）
+- **不放**「邏輯相似但各自 private」的（例：`GetApiKey`, `GetModel`, Prompt builders — 各自保留）
+- 原則：**推進 Commons 需要的新依賴 vs. 保留 3-5 行重複碼**，選後者
+
+#### SOP 4：DI 註冊順序
+- Commons 層優先（即使 DI 是 lazy resolved，順序代表依賴方向）
+- 全部 Singleton（對齊既有模式）
+- 循環依賴單向檢查：`子 Service → Commons`，不可反向
+
+#### SOP 5：Session state 管理
+- **有 singleton-level state**（如 `ConcurrentDictionary<Guid, string>`）→ 特別評估歸屬，通常放 Commons
+- **只有 local state**（方法內變數）→ 無需共享，各方法自管
+- Stage 34 MeetingService 無共享 state，是最乾淨情況
+
+#### SOP 6：檔案夾組織原則
+- 單一 `Orchestration/` 資料夾：**檔案 ≤ 10 個時 OK**
+- 超過 10 個 或 3+ 個同主題 service → 建子資料夾（例：`Orchestration/Meeting/`，namespace 隨移）
+- 目前 `Orchestration/` 有 7 個，還沒到閾值
+
+#### 通用流程
+- 測試：拆解前有一輪 Playwright / Mock Mode 驗證基線
+- 版本號 bump：拆解屬 minor 改動，對應 minor version bump
 
 ### 整體優先級
 
@@ -1028,3 +1060,4 @@ AiTeam 系統中存在**兩種「Agent 名稱」的混淆**，導致 Stage 33 �
 | 2026-04-21 | v7.25：FF 整理策略 A（保守整理）— 八（壓縮 Phase 1 詳表 + Phase 2 已完成摘要化，主體聚焦循環偵測 + 新鮮視角）、九（#2 PM 執行路徑標記已釐清、#3 Dashboard pause/resume 註明已移至 FF 十五，主體聚焦 #1 PM 佇列化議題）、十五（剩餘子項從附註升為主體，建立完成進度表）— 為 Stage 33（FF 十五剩餘子項）做鋪墊 |
 | 2026-04-22 | v7.26：Stage 33 驗收通過（v3.20.0）— FF 十五（Dashboard 與 Discord 功能平等，`/mock` + 佇列控制兩子項全部完成）+ FF 二十一（Agent 狀態卡 expand 待辦清單）兩項整項移入已完成項目摘要；Roadmap v2.1 附帶兩項後續建議（AgentConfigService 命名守門 + Bot PushAgentStatus 名稱映射）暫不獨立開 FF，留待未來架構整理時一併評估 |
 | 2026-04-22 | v7.27：新增二十二（Agent 命名一致性）— Stage 33 Roadmap v2.1 後續建議兩項正式記錄：子項 A（AgentConfigService 命名守門，擋 workflow 保留字 Dev_plan/Kickoff/Design）+ 子項 B（Bot PushAgentStatus 名稱語意清理，映射法 vs 雙欄位法兩策略）；子項 A 可獨立做或搭 FF 十 Agent 設定頁 refactor，子項 B 搭 SignalR push 層 refactor 或 FF 八 Phase 2；白名單補丁已擋住實際影響，本 FF 屬架構清理 |
+| 2026-04-22 | v7.28：Stage 34 驗收通過（v3.21.0）— FF 二十 子項 C（MeetingService 拆解）✅ 完成：實際產出 4 檔（KickoffMeetingService 318 + DesignMeetingService 590 + MeetingCommons 62 + MeetingResults 27，原 1415 行 MeetingService 整檔刪除）；從本次實踐提煉「六項拆解 SOP」寫進 FF 二十 共通策略小節，供子項 D / B / A 參考；驗收期間零 follow-up commits 是目前最順利一次 Stage 結案 |
