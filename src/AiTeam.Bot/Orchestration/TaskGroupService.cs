@@ -2571,6 +2571,9 @@ public class TaskGroupService(
 
         if (action == "devplan_skip")
         {
+            // Dev_plan Appeal 耗盡時 group status 被設為 failed；老闆選擇繼續開發，需重置回 running 才能讓 Dev 完成後推進到 Reviewer
+            taskRepo.UpdateGroupStatus(group, "running");
+            await taskRepo.SaveAsync(ct);
             await FireStepsAsync(group, [new WorkflowStep("Dev")], ct);
         }
         else // devplan_abort
