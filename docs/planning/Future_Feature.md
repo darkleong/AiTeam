@@ -960,6 +960,92 @@ AiTeam 系統中存在**兩種「Agent 名稱」的混淆**，導致 Stage 33 �
 
 ---
 
+## 二十三、Orchestration 異常退出的復原機制（Stage 31/37 Crash Recovery 盲點）
+
+> 狀態：🟡 中 — Stage 37-2 驗收時首次踩到，手動 SQL 救回；下次再踩該自動化
+> 提出日期：2026-04-23（Stage 37-2 驗收 Design 會議 null AdjustmentTargets 事故）
+
+### 背景
+
+Stage 31 實作會議 Crash Recovery（v3.18.0）、Stage 37-2 升級為全編排流程 Crash Recovery（五種 `ActiveOrchestration` 值），核心機制是：
+
+1. 進入流程時 `ActiveOrchestration = "Design"` / `"ReviewAppeal"` / ...
+2. `try { ... } finally { ActiveOrchestration = null; }`
+3. Bot 啟動掃 `ActiveOrchestration != null` 的 group → 重跑
+
+**設計前提**：crash = 進程被 kill → finally 沒機會跑 → flag 留在非 null → 下次啟動掃到。
+
+### 盲點
+
+Stage 37-2 驗收當日踩到：[`DesignMeetingService.RunDesignAdjustmentAsync`](../../src/AiTeam.Bot/Orchestration/Meeting/DesignMeetingService.cs:409) 因 Petra JSON 漏填 `AdjustmentTargets` 拋 `ArgumentNullException`：
+
+- Exception 沿 call stack 往上傳
+- Design 的 try-finally **正常執行 finally** → `ActiveOrchestration` 被清回 `null` ✅
+- 但 exception 也讓整場會議失敗、group 卡在 `Status=running / DesignPlan=null`
+- **Crash Recovery 掃不到**（flag 已清），group 永遠卡住
+
+即「crash recovery 只防 crash，不防邏輯 exception」。Design / Kickoff 因為被 Stage 31 排除「重試按鈕」（會議非單一 Agent 任務，`RequeueTaskAsync` 無法處理），所以也沒 UI 路徑可以手動救。
+
+Stage 37-2 當日手動救法：SQL 直接 `UPDATE task_groups SET "ActiveOrchestration"='Design' WHERE Id=...` + `docker restart aiteam-bot` 觸發 Recovery。能用但**不是 Christ 該做的事**。
+
+### 三個方向（選一或組合）
+
+#### A. 異常不清 flag — 最自動
+
+```csharp
+try { ... }
+catch (Exception ex) {
+    logger.LogError(ex, "Design 會議 exception，保留 ActiveOrchestration 等 Recovery");
+    throw;  // 讓 caller 知道失敗
+}
+finally {
+    // 只有「正常完成」才清 flag
+    if (!hadException) await ClearActiveOrchestrationAsync();
+}
+```
+
+- ➕ 全自動、零人工介入
+- ➖ 若 bug 本身重複觸發（例如 Petra 每次都給同樣 null JSON），Recovery 每次重啟都再跑一次、永遠失敗 → 需要加「失敗次數上限」欄位
+- ➖ catch 後 rethrow 行為要小心，上游 `AgentQueueProcessor` 現在不期待 Meeting 流程拋 exception
+
+#### B. Dashboard 手動「重啟會議」按鈕
+
+- 流程追蹤頁面「設計規劃失敗」的步驟卡加按鈕
+- 按鈕呼叫 Dashboard internal API → Bot `RestartDesignMeetingAsync(groupId)`（直接呼叫 `MeetingOrchestrationService.RunDesignPhaseAsync`）
+- Kickoff 同理
+
+- ➕ 人工判斷「值不值得重試」，避免 A 的無限迴圈
+- ➖ 不是自動，老闆要主動發現並操作
+
+#### C. 失敗狀態欄位 + Dashboard 顯示 + 自動重啟計數
+
+折衷方案：
+- `TaskGroup` 新增 `OrchestrationFailureCount` + `OrchestrationFailureMessage`
+- Exception 時 **不清 flag**，但把錯誤訊息落地
+- Recovery 掃到時，若 `FailureCount < 3` 重跑、反之不做（等待人工介入）
+- Dashboard 顯示「已自動重試 N 次，訊息：xxx」+ 手動「強制重試」/「放棄」按鈕
+
+- ➕ 自動 + 人工雙保險
+- ➖ schema 改動 + UI 較大，算中等 Stage 工作量
+
+### 搭車時機
+
+- **可獨立小 Stage**，~4-8 小時（依選 A/B/C 而異）
+- 若等 Gemini 實測驗收發現更多 exception 場景（FF 四第一階段 Rena + Rosa/Demi fallback），建議累積一批後統一修
+- 或在 Dashboard UI 細節打磨 Stage 中搭車做 B
+
+### 優先級
+
+🟡 中 — 實際卡住過老闆，但頻率低（Petra JSON 格式漏欄位是偶發）。修完可避免下次手動 SQL 救援。
+
+### 相關程式碼
+
+- [`MeetingOrchestrationService.RecoverStuckOrchestrationsAsync`](../../src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs:418)（Stage 37-2 擴充的 dispatcher）
+- [`AppealOrchestrationService.HandleReviewerCompletedAsync`](../../src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs:51) / `HandleDevPlanCompletedAsync` / [`QaCoordinationService.HandleQaCompletedAsync`](../../src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs:29)（Stage 37-2 新加 try-finally）
+- 以上所有 try-finally 都要考慮本 FF 的 exception 路徑處理
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
