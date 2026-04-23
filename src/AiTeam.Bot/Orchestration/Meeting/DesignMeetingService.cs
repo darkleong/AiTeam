@@ -393,10 +393,20 @@ public class DesignMeetingService(
         StringBuilder logBuilder,
         CancellationToken ct)
     {
+        // Stage 37 搭車修：Petra JSON 回應可能漏填 AdjustmentTargets / AdjustmentInstructions
+        // （record 欄位雖非 nullable，但 System.Text.Json 不強制 runtime non-null），
+        // 用 defensive defaults 避免 null 時 .Any() / .GetValueOrDefault 炸掉整場會議。
+        var adjustmentTargets      = decision.AdjustmentTargets      ?? [];
+        var adjustmentInstructions = decision.AdjustmentInstructions ?? new Dictionary<string, string>();
+
+        if (decision.AdjustmentTargets is null || decision.AdjustmentInstructions is null)
+            logger.LogWarning("DesignMeetingService：Petra 回應 needs_adjustment 但缺 AdjustmentTargets/Instructions（Group={Id}），已退化為 no-op 調整輪",
+                group.Id);
+
         logBuilder.AppendLine("## 調整紀錄");
         logBuilder.AppendLine();
         logBuilder.AppendLine("### Petra 修改指示");
-        logBuilder.AppendLine(JsonSerializer.Serialize(decision.AdjustmentInstructions,
+        logBuilder.AppendLine(JsonSerializer.Serialize(adjustmentInstructions,
             new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         logBuilder.AppendLine();
 
@@ -406,9 +416,9 @@ public class DesignMeetingService(
         var updatedIssueUrls  = "";
 
         // Rosa 調整
-        if (decision.AdjustmentTargets.Any(t => t.Equals("rosa", StringComparison.OrdinalIgnoreCase)))
+        if (adjustmentTargets.Any(t => t.Equals("rosa", StringComparison.OrdinalIgnoreCase)))
         {
-            var instruction = decision.AdjustmentInstructions.GetValueOrDefault("rosa", "請根據會議討論修改 Issues");
+            var instruction = adjustmentInstructions.GetValueOrDefault("rosa", "請根據會議討論修改 Issues");
             var prompt = $"Petra 的修改指示：\n\n{instruction}\n\n請調整你的 GitHub Issues，在回應最後以 JSON Array 格式輸出更新後的完整 Issues 清單（格式同前置作業）。";
             updatedRosaOutput = await meetingCommons.RunAgentTurnAsync("Rosa", sessions.RosaSessionId,
                 prompt, GetModel("Requirements"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
@@ -438,9 +448,9 @@ public class DesignMeetingService(
         }
 
         // Demi 調整
-        if (decision.AdjustmentTargets.Any(t => t.Equals("demi", StringComparison.OrdinalIgnoreCase)))
+        if (adjustmentTargets.Any(t => t.Equals("demi", StringComparison.OrdinalIgnoreCase)))
         {
-            var instruction = decision.AdjustmentInstructions.GetValueOrDefault("demi", "請根據會議討論修改 UI 規格");
+            var instruction = adjustmentInstructions.GetValueOrDefault("demi", "請根據會議討論修改 UI 規格");
 
             if (sessions.DemiSessionId is null)
             {
