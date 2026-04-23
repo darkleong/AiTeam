@@ -301,8 +301,76 @@ foreach (var group in stuckGroups)
 
 ---
 
+## 實作紀錄 — 第一部分（2026-04-23）
+
+> 狀態：第一部分完成，等驗收。第二部分（Crash Recovery）另開 Session。
+
+### 交付內容
+
+| 檔案 | 動作 | 重點 |
+|------|------|------|
+| [src/AiTeam.Bot/Agents/GeminiProvider.cs](../../src/AiTeam.Bot/Agents/GeminiProvider.cs) | 新增 | 實作 `ILlmProvider`；HttpClient + API key query string；System.Text.Json + `[JsonPropertyName]` 對應 camelCase |
+| [src/AiTeam.Bot/Agents/LlmProviderFactory.cs](../../src/AiTeam.Bot/Agents/LlmProviderFactory.cs) | 改 | switch 加 `"GEMINI"` 分支；建構子多吃 `IHttpClientFactory` / `IConfiguration` / `ILoggerFactory` |
+| [src/AiTeam.Bot/Program.cs](../../src/AiTeam.Bot/Program.cs) | 改 | 新增 `AddHttpClient("Gemini", ...)`，`BaseAddress` 末尾帶 slash |
+| [src/AiTeam.Bot/appsettings.json](../../src/AiTeam.Bot/appsettings.json) | 改 | 新增頂層 `"Gemini"` 區塊（`ApiKey` / `DefaultModel` / `BaseUrl`） |
+| [docker-compose.prod.yml](../../docker-compose.prod.yml) | 改 | 加 `Gemini__ApiKey: "${AITEAM_GEMINI_KEY}"` |
+
+**編譯**：`dotnet build AiTeam.slnx` → 0 error、無新增 warning。
+
+### 設計決策
+
+1. **沒有包裝 `GeminiClient` wrapper 型別**（不像 `AnthropicClient`）——Gemini 沒 SDK，HttpClient + API key 足矣。多做一層包裝是過度設計，違反 CLAUDE.md「不做超出任務需要的抽象」。
+2. **API key 走 query string** 而非 Authorization header——Gemini 官方文件標準做法（`?key={apiKey}`）。
+3. **所有 DTO 私有化** 在 `GeminiProvider` 內（`private sealed class`）——不對外暴露，未來改簽名不會擴散破壞。
+4. **雙保險序列化設定**：`JsonSerializerOptions.PropertyNamingPolicy = CamelCase` + 每個欄位明確標 `[JsonPropertyName]`。Roadmap 踩坑 #3 提醒的根因——避免某處設定被覆蓋時默默壞掉。
+5. **Images 參數忽略 + log warning**（而非 throw）——interface 相容性優先，讓 Rosa/Demi 若意外收到圖片不會整個 pipeline 爆掉；warning 會在 Dashboard log 看得到。
+6. **Rate limit（429）用 `InvalidOperationException`** 帶可識別前綴字串 `"Gemini API rate limit exceeded (429)"`——對齊 `TokenTrackingProvider` 既有例外風格（單次守門也是 `InvalidOperationException`），讓 Orchestration 層捕捉時型別一致。
+
+### 範圍變更（對照原計劃書）
+
+**原計劃書第一部分有 5 項實作項目，實際交付 4 項**。砍掉的是第 4 項「Dashboard Agent 設定頁 Provider 下拉」。
+
+**完整理由**：
+- 探索後確認 [AgentSettings.razor](../../src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor) **根本沒有 Provider 下拉**（只有 `IsActive` 切換 + 信任等級滑桿）。
+- 探索後確認 DB 的 `AgentConfig` entity（[Entities.cs:30](../../src/AiTeam.Data/Entities.cs:30)）**沒有 `Provider` / `Model` 欄位**——這兩個值目前只存 `appsettings.json`。
+- 要真正做出「Dashboard Provider 下拉」完整體驗，需：
+  (1) DB migration 把 `Provider` / `Model` 加入 `AgentConfig` entity
+  (2) `LlmProviderFactory` 改讀 DB 優先（或覆蓋）appsettings
+  (3) Dashboard UI 加下拉 + Model 輸入框 + 儲存邏輯
+  這個工作量等同第二部分 Crash Recovery，不該悄悄塞進 Stage 37-1。
+- **替代方案**：Gemini 切換走 `appsettings.json`（編輯後重啟 Bot），或 `docker-compose.prod.yml` env `AgentSettings__Agents__Requirements__Provider: "Gemini"` + `...__Model: "gemini-2.5-flash"`，和現有 Anthropic 切模型一樣。
+- **下一步建議**（Aria 結案第二段更新）：
+  - Stage Roadmap 第一部分實作項目改記為 4 項交付
+  - Future_Feature.md FF 四更新描述：第二階段包含「Dashboard Provider/Model Dashboard 化（DB migration）」+ Gemini CLI 整合 + OpenAI/Codex + Vision/Tool Use
+
+### 踩坑與注意
+
+1. **HttpClient BaseAddress 末尾 slash**：設為 `.../v1/`（末尾有 slash），因此 `PostAsJsonAsync` 的相對路徑絕對不能開頭加 slash（`models/...` 而非 `/models/...`），否則會覆寫 BaseAddress 的 path 部分變成根路徑請求。計劃書階段 Christ 有特別提醒，實作時留下註解提醒未來改動者。
+2. **`LlmProviderFactory` 建構子多吃三個依賴**（`IHttpClientFactory` / `IConfiguration` / `ILoggerFactory`）——Scoped DI 下沒問題，但呼叫處（`builder.Services.AddScoped<LlmProviderFactory>()`）不變。
+3. **appsettings.json 的 `Gemini:DefaultModel` 目前不讀**——實際 Model 由 `Agents:{Name}:Model` 決定。保留欄位給未來預設 fallback 用，現在是文件性欄位。
+4. **`AITEAM_GEMINI_KEY` 需 Christ 在部署機 `.env` 設定**後重啟容器才生效（和 `AITEAM_ANTHROPIC_KEY` 相同流程）。
+5. **Rate limit 驗證方式**：Gemini 2.5 Flash 免費額度 15 req/min、1500 req/day，連發 20 個小任務可超限。
+
+### 驗收建議（需 Christ 設 key 後進行）
+
+1. 編輯 `appsettings.json`（或 prod env）把 Rosa/Sage 的 `Provider` 改 `"Gemini"`、`Model` 改 `"gemini-2.5-flash"`
+2. 重啟 Bot 容器
+3. Discord 下新功能需求 → 觀察 Rosa 輸出 Issue、Sage archive 生成成功
+4. 打開 Dashboard Token 監控頁 → `token_logs.model` 欄位顯示 `gemini-2.5-flash`、累計用量正確
+5. 若要驗證 rate limit：快速連發 ≥20 小任務 → 觀察不 crash、警報頻道 log 出 429 訊息
+
+### 未觸及
+
+- ❌ 第二部分（Crash Recovery 全面涵蓋）——另開 Session
+- ❌ Vision / Tool Use
+- ❌ Dashboard Provider 下拉（見上方範圍變更）
+- ❌ 版本號 / Master Plan / Future_Feature 更新（Aria 結案第二段處理）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-23 | 計劃書建立（Aria） |
+| v1.1 | 2026-04-23 | 第一部分實作完成紀錄 |

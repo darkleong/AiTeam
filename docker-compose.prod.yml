@@ -38,6 +38,7 @@ services:
       Discord__Channels__ReleaseChannel: "rena-release"
       Discord__Channels__DesignerChannel: "demi-designer"
       Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
+      Gemini__ApiKey: "${AITEAM_GEMINI_KEY}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
       GitHub__DefaultRepo: "AiTeam"

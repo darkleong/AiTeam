@@ -36,6 +36,16 @@ builder.Services.AddSingleton<WorkflowSettingsResolver>();
 // Anthropic
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";
 builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
+
+// Gemini（Stage 37-1 / FF 四第一階段：API 層 Agent 可選 Google Gemini Flash）
+// HttpClient BaseAddress 末尾保留 slash；GeminiProvider 內相對路徑不可開頭加 slash。
+builder.Services.AddHttpClient("Gemini", c =>
+{
+    var baseUrl = (builder.Configuration["Gemini:BaseUrl"]
+                   ?? "https://generativelanguage.googleapis.com/v1").TrimEnd('/');
+    c.BaseAddress = new Uri(baseUrl + "/");
+});
+
 builder.Services.AddScoped<LlmProviderFactory>();
 
 // Rules（取代 Notion，從 PostgreSQL 讀取）
