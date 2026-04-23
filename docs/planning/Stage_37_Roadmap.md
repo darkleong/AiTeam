@@ -303,7 +303,7 @@ foreach (var group in stuckGroups)
 
 ## 實作紀錄 — 第一部分（2026-04-23）
 
-> 狀態：第一部分完成，等驗收。第二部分（Crash Recovery）另開 Session。
+> 狀態：第一部分完成，第二部分接續完成（見下節），等合併驗收。
 
 ### 交付內容
 
@@ -359,12 +359,75 @@ foreach (var group in stuckGroups)
 4. 打開 Dashboard Token 監控頁 → `token_logs.model` 欄位顯示 `gemini-2.5-flash`、累計用量正確
 5. 若要驗證 rate limit：快速連發 ≥20 小任務 → 觀察不 crash、警報頻道 log 出 429 訊息
 
-### 未觸及
+### 未觸及（第一部分）
 
-- ❌ 第二部分（Crash Recovery 全面涵蓋）——另開 Session
-- ❌ Vision / Tool Use
+- ❌ Vision / Tool Use（第一階段排除）
 - ❌ Dashboard Provider 下拉（見上方範圍變更）
+- ❌ 第一部分實測驗收（合併到結案第二段，Rena 跑 release 時驗 Gemini）
+
+---
+
+## 實作紀錄 — 第二部分（2026-04-23）
+
+> 狀態：第二部分完成，等合併驗收（與第一部分一起進結案第二段）。
+
+### 交付內容（6 件實作項目 + 1 搭車 refactor）
+
+| # | 檔案 | 動作 | 重點 |
+|---|------|------|------|
+| 1 | [src/AiTeam.Data/Entities.cs](../../src/AiTeam.Data/Entities.cs) | 改 | `ActiveMeetingType` → `ActiveOrchestration`（+ 註解升級至 5 種值說明） |
+| 1 | `Migrations/20260423071516_Stage37RenameActiveMeetingToOrchestration.cs` | 新增 | EF 自動產生 `RenameColumn`（非 Drop+Add，無資料遺失） |
+| 2 | [src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs](../../src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs) | 改 | 全檔 `ActiveMeetingType` → `ActiveOrchestration`（7 處）；`RecoverStuckMeetingsAsync` 改名 + 擴 5 分支；3 個 `Restart*` private helper |
+| 2 | [src/AiTeam.Bot/Orchestration/TaskGroupService.cs](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs) | 改 | facade `RecoverStuckMeetingsAsync` → `RecoverStuckOrchestrationsAsync`；Dev_plan dispatcher 38 行 → 7 行（搭車 refactor） |
+| 2 | [src/AiTeam.Bot/Orchestration/AgentQueueProcessor.cs](../../src/AiTeam.Bot/Orchestration/AgentQueueProcessor.cs) | 改 | 啟動 recovery 呼叫處改名 + 註解升級 |
+| 3 | [src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs](../../src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs) | 改 | `HandleReviewerCompletedAsync` 整段包 try-finally；`ExtractCriticalIdsFromReviewBody` `private static` → `internal static` |
+| 4 | （同上） | 改 | 新增 `HandleDevPlanCompletedAsync(...) : Task<bool>` wrapper（搬 TaskGroupService L169-207 的 38 行邏輯，集中 try-finally） |
+| 5 | [src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs](../../src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs) | 改 | `HandleQaCompletedAsync` 拆為「外層 try-finally + 內層 `HandleQaCompletedInnerAsync`」（避免 4 個 return 點包 try-finally 後遺症） |
+
+**編譯**：`dotnet build AiTeam.slnx` → 0 error、無新 warning。
+**Migration**：EF 產生 `RenameColumn`（檢查確認），Bot 啟動時 [`Program.cs:174`](../../src/AiTeam.Bot/Program.cs:174) `MigrateAsync` 自動套用，Christ 重啟 Aspire 即可。
+
+### 設計決策
+
+1. **欄位改名 vs 新增**：選改名（Stage 31 既有欄位語意已被升級）+ EF `RenameColumn`，避免 Drop+Add 遺失歷史 stuck record。Christ 拍板「辛苦一次、乾淨永久」。
+2. **Dev_plan Appeal try-finally 包裝位置**：Aria 推薦選項 B（搬到 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper），Christ 同意——順便修正 Stage 36 拆解時 dispatcher 邏輯沒完全搬乾淨的遺漏，符合「Agent vs Orchestration 歸屬原則」。對稱於既有的 `HandleReviewerCompletedAsync` / `HandleDevBlockerAsync` 命名。
+3. **`HandleDevPlanCompletedAsync` 回傳 `Task<bool>`**：approve → `true`（caller 繼續走 dispatcher 觸發 Dev）；revise/escalate → `false`（已處理，caller 直接 return）。讓控制流明確。
+4. **`HandleQaCompletedAsync` 拆內層 method**：原 method 有 4 個 `return` 點（passed / no_test approve / no_test reject / failed escalate），整段包 try-finally 不夠優雅；改成「公開薄殼包 try-finally → 呼叫內層 `HandleQaCompletedInnerAsync` 跑原邏輯」，原 4 return 點完全不動。
+5. **Restart\* helper 寫在 `MeetingOrchestrationService`**（非 Appeal/Qa service 內）：Christ 提示——重啟邏輯是 Recovery 特例，不是 Appeal/QA 的正常入口，集中在 dispatcher 所在檔較合理。透過 `serviceProvider.CreateAsyncScope()` lazy-resolve 跨 service 依賴，無循環依賴。
+6. **「整場重跑」策略**：3 個 Restart helper 都重置 RoundA = 0，但保留 `*Log` 歷史（debug 用）；`QaFixRound` 例外不重置（這是 fix 計數，跨 Recovery 應保留）。
+7. **`ExtractCriticalIdsFromReviewBody` 改 internal static**：Restart helper 需要解析 ReviewBody 重建 `CriticalReviewCount`。原 private 改 internal，限同 namespace 跨 service 用，避免完全 public。
+
+### 搭車 refactor（必須記錄）
+
+**搭車修正 Stage 36 Dev_plan dispatcher 未完全搬進 AppealOrchestrationService 的遺漏**：
+
+Stage 36（FF 二十-A+B）拆解 TaskGroupService 時，Review/QA dispatcher 已抽到對應 service，但 Dev_plan dispatcher 仍留在 TaskGroupService L169-207（38 行：Petra 初審 → switch on Decision → revise/escalate）。本次因 Crash Recovery 需要在 Dev_plan 流程上層入口包 try-finally，順手把這段搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync`。
+
+完成後三個 `Handle*Completed` wrapper 對稱（Reviewer / DevPlan in Appeal、Qa in QaCoordination），TaskGroupService dispatcher 收乾淨——這部分應該在 Aria 結案第二段更新 Master Plan 時標註為 Stage 36 結案的補完（不是 Stage 37 新增工作）。
+
+### 踩坑與注意
+
+1. **`HandleDevPlanCompletedAsync` 內呼叫 `TaskGroupService.FireStepsAsync`**：Appeal ← TaskGroup ← Appeal 會循環依賴。解法：用 `dbScope.ServiceProvider.GetRequiredService<TaskGroupService>()` lazy-resolve，避開建構子注入循環。
+2. **EF `AsTracking()` 在 Restart helper**：取出 freshGroup 後傳給下游 service，下游可能修改 group 屬性（`group.ReviewAppealRoundA++` 之類）並 `taskRepo.SaveAsync`——needs tracked entity。
+3. **Migration 名稱前綴 `Stage37`**：對齊 Stage 29-30 的 migration 命名習慣（如 `Stage29aArchiveContent`），方便後續對照 Roadmap。
+4. **`QaCoordinationService` 已注入 `IServiceProvider`**：grep 確認過，try-finally 直接用即可，不需改建構子。
+5. **`AppealOrchestrationService` 加 `using Microsoft.EntityFrameworkCore;`**：try-finally 用 `ExecuteUpdateAsync` extension method 需要這個 namespace。
+6. **Recovery query 條件不變**：`Where(g => g.ActiveOrchestration != null)` —— 純看 flag，不用時戳閾值（與 Stage 31 一致）。
+
+### 驗收建議（Christ 重啟 Aspire 後執行）
+
+| 情境 | 操作 | 驗收 |
+|------|------|------|
+| Kickoff 中斷（既有路徑回歸測試） | `/mock new_feature` 後 10 秒內 restart Bot | 啟動 log「Crash Recovery」；Kickoff 重跑完成 |
+| Design 中斷（既有路徑回歸） | Kickoff 完成、Design 進行中 restart | Design 重跑 |
+| **Review Appeal 中斷**（新涵蓋） | `/mock fail_review` Round 1 開始後 restart | `ActiveOrchestration=ReviewAppeal` 被掃到；ReviewAppealRoundA 重置；ReviewAppealLog 保留舊紀錄；整場 Appeal 從 Round 0 重跑 |
+| **Dev_plan Appeal 中斷**（新涵蓋） | `/mock fail_dev_plan` Round 1 開始後 restart | `ActiveOrchestration=DevPlanAppeal` 被掃到；DevPlanAppealRoundA 重置；Petra 初審重跑、視 Decision 走 revise/escalate |
+| **QA Routing 中斷**（新涵蓋） | `/mock fail_qa` Quinn 跑完、Petra Assess 開始時 restart | `ActiveOrchestration=QaRouting` 被掃到；`HandleQaCompletedAsync` 用 `group.TestReport` 重建 result 重新呼叫；產生正確下一步 |
+
+### 未觸及（第二部分）
+
 - ❌ 版本號 / Master Plan / Future_Feature 更新（Aria 結案第二段處理）
+- ❌ Gemini 實測驗收（合併到結案第二段，Rena 跑 release 時改 `Agents:Release:Provider=Gemini` 一次驗）
 
 ---
 
@@ -374,3 +437,4 @@ foreach (var group in stuckGroups)
 |------|------|------|
 | v1.0 | 2026-04-23 | 計劃書建立（Aria） |
 | v1.1 | 2026-04-23 | 第一部分實作完成紀錄 |
+| v1.2 | 2026-04-23 | 第二部分實作完成紀錄（含搭車修正 Stage 36 Dev_plan dispatcher 遺漏） |

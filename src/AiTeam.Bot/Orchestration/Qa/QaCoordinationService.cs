@@ -5,6 +5,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AiTeam.Bot.Orchestration.Qa;
@@ -27,6 +28,32 @@ public class QaCoordinationService(
     /// - no_applicable_tests → Petra 判斷是否放行
     /// </summary>
     public async Task HandleQaCompletedAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        CancellationToken cancellationToken)
+    {
+        // Stage 37：Crash Recovery 標記。包整個 Petra 路由判斷，
+        // 涵蓋 passed / failed / no_applicable_tests 三條路徑（每條都可能呼叫 Petra CLI subprocess 卡住）。
+        await using var dbScope = serviceProvider.CreateAsyncScope();
+        var db = dbScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.TaskGroups.Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, "QaRouting"),
+                cancellationToken);
+
+        try
+        {
+            await HandleQaCompletedInnerAsync(group, result, taskRepo, cancellationToken);
+        }
+        finally
+        {
+            await db.TaskGroups.Where(g => g.Id == group.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, (string?)null),
+                    CancellationToken.None);
+        }
+    }
+
+    private async Task HandleQaCompletedInnerAsync(
         TaskGroup group,
         AgentExecutionResult result,
         TaskRepository taskRepo,

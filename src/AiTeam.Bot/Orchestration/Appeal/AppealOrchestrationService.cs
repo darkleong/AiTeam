@@ -12,6 +12,7 @@ using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -55,74 +56,91 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
-        if (result.CriticalReviewCount == 0)
-            return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+        // Stage 37：Crash Recovery 標記。涵蓋短路（直接 Petra Gate）與 Appeal 迴圈兩條路徑，
+        // 因為 RunPetraGateAsync 內部仍會呼叫 Petra CLI subprocess，同樣有卡住風險。
+        await using var dbScope = serviceProvider.CreateAsyncScope();
+        var db = dbScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.TaskGroups.Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, "ReviewAppeal"),
+                cancellationToken);
 
-        var maxRounds  = await workflowResolver.GetReviewAppealMaxRoundsAsync(cancellationToken);
-        var reviewBody = group.LastReviewBody ?? result.ReviewBody ?? "";
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService = scope.ServiceProvider.GetRequiredService<ReviewAppealService>();
-
-        var currentCriticalIds = ExtractCriticalIdsFromReviewBody(reviewBody);
-        if (currentCriticalIds.Count == 0)
+        try
         {
-            logger.LogWarning("有 Critical 但無法解析 ID，直接走 Petra 閘門（Group={Id}）", group.Id);
-            return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
-        }
+            if (result.CriticalReviewCount == 0)
+                return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
 
-        var indentedOptions = new JsonSerializerOptions { WriteIndented = true };
+            var maxRounds  = await workflowResolver.GetReviewAppealMaxRoundsAsync(cancellationToken);
+            var reviewBody = group.LastReviewBody ?? result.ReviewBody ?? "";
 
-        while (group.ReviewAppealRoundA < maxRounds && currentCriticalIds.Count > 0)
-        {
-            var round = group.ReviewAppealRoundA + 1;
-            logger.LogInformation("Appeal Round A {Round}（Group={Id}）", round, group.Id);
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var pmService = scope.ServiceProvider.GetRequiredService<ReviewAppealService>();
 
-            var priorContext = group.ReviewAppealRoundA > 0 ? group.ReviewAppealLog : null;
-            var codyAppeal   = await pmService.RunCodyAppealAsync(
-                group, reviewBody, group.Title, currentCriticalIds, priorContext, cancellationToken);
-            var codyJson     = JsonSerializer.Serialize(codyAppeal, indentedOptions);
-
-            var disagrees = codyAppeal.Items.Where(i => i.Response == "disagree").ToList();
-
-            if (disagrees.Count == 0)
+            var currentCriticalIds = ExtractCriticalIdsFromReviewBody(reviewBody);
+            if (currentCriticalIds.Count == 0)
             {
-                AppendAppealLog(group, round,
-                    $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n→ Cody 同意所有 Critical，進入修正流程。");
-                group.ReviewAppealRoundA++;
-                await taskRepo.SaveAsync(cancellationToken);
-                break;
+                logger.LogWarning("有 Critical 但無法解析 ID，直接走 Petra 閘門（Group={Id}）", group.Id);
+                return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
             }
 
-            var veraResponse = await pmService.RunVeraAppealAsync(group, reviewBody, codyJson, cancellationToken);
-            var veraJson     = JsonSerializer.Serialize(veraResponse, indentedOptions);
+            var indentedOptions = new JsonSerializerOptions { WriteIndented = true };
 
-            currentCriticalIds = currentCriticalIds
-                .Where(id => !veraResponse.AcceptedIds.Contains(id))
-                .ToList();
+            while (group.ReviewAppealRoundA < maxRounds && currentCriticalIds.Count > 0)
+            {
+                var round = group.ReviewAppealRoundA + 1;
+                logger.LogInformation("Appeal Round A {Round}（Group={Id}）", round, group.Id);
 
-            AppendAppealLog(group, round,
-                $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n" +
-                $"**Vera 重評（完整）：**\n```json\n{veraJson}\n```\n\n" +
-                $"→ Vera 接受 {veraResponse.AcceptedIds.Count} 項，維持 {veraResponse.MaintainedIds.Count} 項，" +
-                $"剩餘 Critical：{currentCriticalIds.Count}");
-            group.ReviewAppealRoundA++;
-            await taskRepo.SaveAsync(cancellationToken);
-        }
+                var priorContext = group.ReviewAppealRoundA > 0 ? group.ReviewAppealLog : null;
+                var codyAppeal   = await pmService.RunCodyAppealAsync(
+                    group, reviewBody, group.Title, currentCriticalIds, priorContext, cancellationToken);
+                var codyJson     = JsonSerializer.Serialize(codyAppeal, indentedOptions);
 
-        if (currentCriticalIds.Count == 0)
-        {
-            result = result with { CriticalReviewCount = 0 };
+                var disagrees = codyAppeal.Items.Where(i => i.Response == "disagree").ToList();
+
+                if (disagrees.Count == 0)
+                {
+                    AppendAppealLog(group, round,
+                        $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n→ Cody 同意所有 Critical，進入修正流程。");
+                    group.ReviewAppealRoundA++;
+                    await taskRepo.SaveAsync(cancellationToken);
+                    break;
+                }
+
+                var veraResponse = await pmService.RunVeraAppealAsync(group, reviewBody, codyJson, cancellationToken);
+                var veraJson     = JsonSerializer.Serialize(veraResponse, indentedOptions);
+
+                currentCriticalIds = currentCriticalIds
+                    .Where(id => !veraResponse.AcceptedIds.Contains(id))
+                    .ToList();
+
+                AppendAppealLog(group, round,
+                    $"**Cody 回應（完整）：**\n```json\n{codyJson}\n```\n\n" +
+                    $"**Vera 重評（完整）：**\n```json\n{veraJson}\n```\n\n" +
+                    $"→ Vera 接受 {veraResponse.AcceptedIds.Count} 項，維持 {veraResponse.MaintainedIds.Count} 項，" +
+                    $"剩餘 Critical：{currentCriticalIds.Count}");
+                group.ReviewAppealRoundA++;
+                await taskRepo.SaveAsync(cancellationToken);
+            }
+
+            if (currentCriticalIds.Count == 0)
+            {
+                result = result with { CriticalReviewCount = 0 };
+                return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+            }
+
+            if (group.ReviewAppealRoundA >= maxRounds)
+                return await RunPetraArbitrationAsync(group,
+                    result with { CriticalReviewCount = currentCriticalIds.Count },
+                    taskRepo, projectId, cancellationToken);
+
+            result = result with { CriticalReviewCount = currentCriticalIds.Count };
             return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
         }
-
-        if (group.ReviewAppealRoundA >= maxRounds)
-            return await RunPetraArbitrationAsync(group,
-                result with { CriticalReviewCount = currentCriticalIds.Count },
-                taskRepo, projectId, cancellationToken);
-
-        result = result with { CriticalReviewCount = currentCriticalIds.Count };
-        return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
+        finally
+        {
+            await db.TaskGroups.Where(g => g.Id == group.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, (string?)null),
+                    CancellationToken.None);
+        }
     }
 
     /// <summary>Petra 審核閘門：送 ReviewVeraAsync 並依 approve/revise/escalate 決策。</summary>
@@ -249,6 +267,76 @@ public class AppealOrchestrationService(
     // ============================================================
     //  Dev_plan 審核 + Appeal
     // ============================================================
+
+    /// <summary>
+    /// Stage 37：Dev_plan 完成後 Petra 審核 + Appeal 流程的上層入口。
+    /// 從 TaskGroupService dispatcher 搬遷而來（搭車修正 Stage 36 未完全搬進的遺漏），
+    /// 集中 Crash Recovery try-finally。
+    ///
+    /// 回傳：
+    ///   - true  → caller 應繼續 fall through 走後續 dispatcher（Petra approve）
+    ///   - false → 已處理（revise 成功觸發 Dev、revise 耗盡 escalate、或 Petra escalate），caller 應 return
+    /// </summary>
+    public async Task<bool> HandleDevPlanCompletedAsync(
+        TaskGroup group,
+        AgentExecutionResult result,
+        TaskRepository taskRepo,
+        Guid? projectId,
+        CancellationToken cancellationToken)
+    {
+        await using var dbScope = serviceProvider.CreateAsyncScope();
+        var db = dbScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.TaskGroups.Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, "DevPlanAppeal"),
+                cancellationToken);
+
+        try
+        {
+            group.DevPlan = result.OutputContent ?? result.Summary;
+            await taskRepo.SaveAsync(cancellationToken);
+
+            var (petraDevPlanReview, petraDevPlanTaskId) =
+                await RunPetraDevPlanReviewAsync(group, result, projectId, cancellationToken);
+
+            switch (petraDevPlanReview.Decision)
+            {
+                case "approve":
+                    return true; // 繼續走後續 dispatcher → 觸發 Dev
+
+                case "revise":
+                    var appealApproved = await RunDevPlanAppealLoopAsync(
+                        group, petraDevPlanReview, taskRepo, cancellationToken);
+                    await FinalizePetraDevPlanTaskAsync(
+                        petraDevPlanTaskId, appealApproved, group, cancellationToken);
+                    if (appealApproved)
+                    {
+                        logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
+                        var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                        await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Dev_plan Appeal 耗盡，升級老闆（Group={Id}）", group.Id);
+                        taskRepo.UpdateGroupStatus(group, "failed");
+                        await taskRepo.SaveAsync(cancellationToken);
+                        await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                    }
+                    return false;
+
+                default: // escalate
+                    taskRepo.UpdateGroupStatus(group, "failed");
+                    await taskRepo.SaveAsync(cancellationToken);
+                    await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                    return false;
+            }
+        }
+        finally
+        {
+            await db.TaskGroups.Where(g => g.Id == group.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, (string?)null),
+                    CancellationToken.None);
+        }
+    }
 
     /// <summary>
     /// 建立 Petra TaskItem、呼叫 ReviewDevPlanAsync、推送狀態、通知 #petra-pm 頻道。
@@ -635,8 +723,9 @@ public class AppealOrchestrationService(
         group.DevPlanAppealLog = (group.DevPlanAppealLog ?? "# Dev_plan Appeal 紀錄\n") + entry;
     }
 
-    /// <summary>從審查報告中解析 Critical 段落內的 Issue IDs（格式：[#N]）。</summary>
-    private static IReadOnlyList<int> ExtractCriticalIdsFromReviewBody(string reviewBody)
+    /// <summary>從審查報告中解析 Critical 段落內的 Issue IDs（格式：[#N]）。
+    /// Stage 37：改為 internal static，供 MeetingOrchestrationService.RestartReviewAppealAsync 重建 result 使用。</summary>
+    internal static IReadOnlyList<int> ExtractCriticalIdsFromReviewBody(string reviewBody)
     {
         if (string.IsNullOrWhiteSpace(reviewBody)) return [];
 

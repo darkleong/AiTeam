@@ -165,45 +165,13 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
-        // ── Dev_plan 完成 → Petra 審核 + Appeal（AppealOrchestrationService）──
+        // ── Dev_plan 完成 → Petra 審核 + Appeal（Stage 37：搬至 AppealOrchestrationService.HandleDevPlanCompletedAsync）──
         if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
         {
-            group.DevPlan = result.OutputContent ?? result.Summary;
-            await taskRepo.SaveAsync(cancellationToken);
-
             var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-            var (petraDevPlanReview, petraDevPlanTaskId) =
-                await appealOrchestration.RunPetraDevPlanReviewAsync(group, result, groupProjectId, cancellationToken);
-            switch (petraDevPlanReview.Decision)
-            {
-                case "approve":
-                    break; // 繼續走 GetDecision → 觸發 Dev
-
-                case "revise":
-                    var appealApproved = await appealOrchestration.RunDevPlanAppealLoopAsync(
-                        group, petraDevPlanReview, taskRepo, cancellationToken);
-                    await appealOrchestration.FinalizePetraDevPlanTaskAsync(
-                        petraDevPlanTaskId, appealApproved, group, cancellationToken);
-                    if (appealApproved)
-                    {
-                        logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
-                        await FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
-                    }
-                    else
-                    {
-                        logger.LogWarning("Dev_plan Appeal 耗盡，升級老闆（Group={Id}）", group.Id);
-                        taskRepo.UpdateGroupStatus(group, "failed");
-                        await taskRepo.SaveAsync(cancellationToken);
-                        await appealOrchestration.NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
-                    }
-                    return;
-
-                default: // escalate
-                    taskRepo.UpdateGroupStatus(group, "failed");
-                    await taskRepo.SaveAsync(cancellationToken);
-                    await appealOrchestration.NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
-                    return;
-            }
+            var shouldContinue = await appealOrchestration.HandleDevPlanCompletedAsync(
+                group, result, taskRepo, groupProjectId, cancellationToken);
+            if (!shouldContinue) return;
         }
 
         // ── Reviewer 完成 → AppealOrchestrationService ──
@@ -519,8 +487,8 @@ public class TaskGroupService(
     //  Meeting service 薄 wrapper（保留 public 簽名供外部 caller）
     // ============================================================
 
-    public Task RecoverStuckMeetingsAsync(CancellationToken ct)
-        => meetingOrchestration.RecoverStuckMeetingsAsync(ct);
+    public Task RecoverStuckOrchestrationsAsync(CancellationToken ct)
+        => meetingOrchestration.RecoverStuckOrchestrationsAsync(ct);
 
     public Task HandleKickoffConfirmedAsync(
         Guid groupId, string decision, string? modifyContent = null, CancellationToken ct = default)

@@ -20,7 +20,8 @@ namespace AiTeam.Bot.Orchestration.Meeting;
 /// 職責：
 ///   - 執行 Kick-off 會議（RunKickoffMeetingAndWaitAsync）
 ///   - 執行 Design 會議（RunDesignPhaseAsync）
-///   - Crash Recovery 掃描卡住會議（RecoverStuckMeetingsAsync，Stage 31）
+///   - Stage 37：Crash Recovery 掃描卡住的編排流程（RecoverStuckOrchestrationsAsync）
+///     涵蓋 Meeting / Review Appeal / Dev_plan Appeal / QA Routing 五種流程
 ///   - Christ 按鈕確認 / 修改路由（HandleKickoffConfirmedAsync / HandleDesignConfirmedAsync）
 ///
 /// 不做：
@@ -61,7 +62,7 @@ public class MeetingOrchestrationService(
 
         await db.TaskGroups
             .Where(g => g.Id == group.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, "Kickoff"), CancellationToken.None);
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, "Kickoff"), CancellationToken.None);
 
         logger.LogInformation("MeetingOrchestration：Kick-off 會議開始（Group={Id}）", group.Id);
 
@@ -217,7 +218,7 @@ public class MeetingOrchestrationService(
         {
             await db.TaskGroups
                 .Where(g => g.Id == group.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, (string?)null),
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, (string?)null),
                     CancellationToken.None);
         }
     }
@@ -243,7 +244,7 @@ public class MeetingOrchestrationService(
 
         await db.TaskGroups
             .Where(g => g.Id == group.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, "Design"), CancellationToken.None);
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, "Design"), CancellationToken.None);
 
         logger.LogInformation("MeetingOrchestration：設計規劃會議開始（Group={Id}）", group.Id);
 
@@ -397,7 +398,7 @@ public class MeetingOrchestrationService(
         {
             await db.TaskGroups
                 .Where(g => g.Id == group.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveMeetingType, (string?)null),
+                .ExecuteUpdateAsync(s => s.SetProperty(g => g.ActiveOrchestration, (string?)null),
                     CancellationToken.None);
 
             await pushService.PushAgentStatusAsync(new AgentStatusViewModel
@@ -410,41 +411,130 @@ public class MeetingOrchestrationService(
     }
 
     // ============================================================
-    //  Crash Recovery（Stage 31）
+    //  Crash Recovery（Stage 31 / Stage 37 全面涵蓋）
     // ============================================================
 
-    /// <summary>Bot 啟動時掃描 ActiveMeetingType != null 的 TaskGroup，自動重跑被中斷的會議。</summary>
-    public async Task RecoverStuckMeetingsAsync(CancellationToken ct)
+    /// <summary>Stage 37：Bot 啟動時掃描所有 ActiveOrchestration != null 的 TaskGroup，
+    /// 重跑被中斷的編排流程（Meeting / Appeal / QA 統一）。
+    ///
+    /// 涵蓋五種值：
+    ///   - "Kickoff" / "Design"        Meeting 流程（Stage 31 既有）
+    ///   - "ReviewAppeal"              Cody-Vera Appeal 迴圈 + Petra 仲裁 / 閘門
+    ///   - "DevPlanAppeal"             Petra 初審 + Cody-Petra Appeal 迴圈
+    ///   - "QaRouting"                 Petra 評估 TestReport 4 路由
+    ///
+    /// 全部採「整場重跑」策略：Round 計數重置、Log 保留歷史。</summary>
+    public async Task RecoverStuckOrchestrationsAsync(CancellationToken ct)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var stuckGroups = await db.TaskGroups
-            .Where(g => g.ActiveMeetingType != null)
+            .Where(g => g.ActiveOrchestration != null)
             .ToListAsync(ct);
 
         if (stuckGroups.Count == 0) return;
 
-        logger.LogWarning("會議 Crash Recovery：{N} 個卡住的會議等待重跑：{Details}",
+        logger.LogWarning("Crash Recovery：{N} 個卡住的編排等待重跑：{Details}",
             stuckGroups.Count,
-            string.Join(", ", stuckGroups.Select(g => $"{g.ActiveMeetingType} × {g.Id}")));
+            string.Join(", ", stuckGroups.Select(g => $"{g.ActiveOrchestration} × {g.Id}")));
 
         foreach (var group in stuckGroups)
         {
-            var meetingType = group.ActiveMeetingType;
+            var orchType = group.ActiveOrchestration;
             try
             {
-                if (meetingType == "Kickoff")
-                    await RunKickoffMeetingAndWaitAsync(group, ct);
-                else if (meetingType == "Design")
-                    await RunDesignPhaseAsync(group, ct);
+                switch (orchType)
+                {
+                    case "Kickoff":        await RunKickoffMeetingAndWaitAsync(group, ct); break;
+                    case "Design":         await RunDesignPhaseAsync(group, ct); break;
+                    case "ReviewAppeal":   await RestartReviewAppealAsync(group, ct); break;
+                    case "DevPlanAppeal":  await RestartDevPlanAppealAsync(group, ct); break;
+                    case "QaRouting":      await RestartQaRoutingAsync(group, ct); break;
+                    default:
+                        logger.LogWarning("未知的 ActiveOrchestration 值：{Type}（GroupId={Id}）",
+                            orchType, group.Id);
+                        break;
+                }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "會議恢復失敗（GroupId={Id}，MeetingType={Type}）",
-                    group.Id, meetingType);
+                logger.LogError(ex, "編排恢復失敗（GroupId={Id}，Orchestration={Type}）",
+                    group.Id, orchType);
             }
         }
+    }
+
+    // ============================================================
+    //  Crash Recovery — Restart helpers（Stage 37）
+    //  寫在 dispatcher 所在檔，因為重啟邏輯是 Recovery 特例（非 Appeal / QA 的正常入口）。
+    // ============================================================
+
+    private async Task RestartReviewAppealAsync(TaskGroup group, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var appealService = scope.ServiceProvider.GetRequiredService<Appeal.AppealOrchestrationService>();
+
+        // 整場重跑：重置 Round 計數（ReviewAppealLog 保留歷史）
+        await db.TaskGroups.Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.ReviewAppealRoundA, 0), ct);
+
+        var freshGroup = await db.TaskGroups.AsTracking().FirstAsync(g => g.Id == group.Id, ct);
+        var criticalIds = Appeal.AppealOrchestrationService.ExtractCriticalIdsFromReviewBody(
+            freshGroup.LastReviewBody ?? "");
+
+        var result = new Agents.AgentExecutionResult(
+            Success: true,
+            Summary: "[Crash Recovery] Reviewer 重跑",
+            ReviewBody: freshGroup.LastReviewBody,
+            CriticalReviewCount: criticalIds.Count
+        );
+
+        await appealService.HandleReviewerCompletedAsync(
+            freshGroup, result, taskRepo, freshGroup.ProjectId, ct);
+    }
+
+    private async Task RestartDevPlanAppealAsync(TaskGroup group, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var appealService = scope.ServiceProvider.GetRequiredService<Appeal.AppealOrchestrationService>();
+
+        // 整場重跑：重置 Round 計數（DevPlanAppealLog 保留歷史）
+        await db.TaskGroups.Where(g => g.Id == group.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.DevPlanAppealRoundA, 0), ct);
+
+        var freshGroup = await db.TaskGroups.AsTracking().FirstAsync(g => g.Id == group.Id, ct);
+        var result = new Agents.AgentExecutionResult(
+            Success: true,
+            Summary: "[Crash Recovery] Dev_plan 重跑",
+            OutputContent: freshGroup.DevPlan
+        );
+
+        // wrapper 會重跑 Petra 初審 + 視 Decision 走 revise/escalate
+        await appealService.HandleDevPlanCompletedAsync(
+            freshGroup, result, taskRepo, freshGroup.ProjectId, ct);
+    }
+
+    private async Task RestartQaRoutingAsync(TaskGroup group, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var qaCoord = scope.ServiceProvider.GetRequiredService<Qa.QaCoordinationService>();
+
+        var freshGroup = await db.TaskGroups.AsTracking().FirstAsync(g => g.Id == group.Id, ct);
+        var result = new Agents.AgentExecutionResult(
+            Success: true,
+            Summary: "[Crash Recovery] QA 路由判斷重跑",
+            TestReport: freshGroup.TestReport
+        );
+
+        // QaFixRound 不重置（這是 fix 計數，跨 Recovery 應保留）
+        await qaCoord.HandleQaCompletedAsync(freshGroup, result, taskRepo, ct);
     }
 
     // ============================================================

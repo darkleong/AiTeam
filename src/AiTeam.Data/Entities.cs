@@ -91,8 +91,11 @@ public class TaskGroup
     public int DesignRound { get; set; } = 0;
     /// <summary>Stage 29-1：Sage 歸檔報告全文（docs/archive/pr{N}-archive.md）。</summary>
     public string? ArchiveContent { get; set; }
-    /// <summary>Stage 31：會議 Crash Recovery — 紀錄目前進行中的會議類型（Kickoff / Design / null）。Bot 重啟後掃描此欄位自動重跑。</summary>
-    public string? ActiveMeetingType { get; set; }
+    /// <summary>Stage 37：Crash Recovery 標記，紀錄目前進行中的非佇列化編排流程
+    /// （Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting / null）。
+    /// Bot 重啟後 MeetingOrchestrationService.RecoverStuckOrchestrationsAsync 掃描此欄位自動重跑。
+    /// 原為 ActiveMeetingType（Stage 31，僅涵蓋 Meeting），Stage 37 升級涵蓋所有編排流程。</summary>
+    public string? ActiveOrchestration { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];
