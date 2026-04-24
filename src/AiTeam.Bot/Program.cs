@@ -14,6 +14,7 @@ using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Quartz;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,6 +53,8 @@ builder.Services.AddScoped<LlmProviderFactory>();
 builder.Services.AddSingleton<RulesService>();
 // 動態系統設定（TTL cache，免重啟生效）
 builder.Services.AddSingleton<AppSettingsService>();
+// Stage 38：Agent Provider/Model 動態設定快取（DB 權威，Dashboard 可改，TTL 5 分）
+builder.Services.AddSingleton<AgentConfigCache>();
 
 // Agents（保留具名型別註冊以維持現有相依；同時加上 Keyed 介面，供 CommandHandler 動態分派）
 builder.Services.AddScoped<CeoAgentService>();
@@ -173,6 +176,25 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db);
+
+    // Stage 38：AgentConfig 的 Provider/Model null 欄位從 appsettings 補 seed（已有值不覆蓋）
+    // Guard：只當兩欄位同時為 null 才補（避免半途被 Dashboard 改過的列被 appsettings 回補覆蓋另一半）
+    // Runtime 仍允許 per-field null fallback（dbOverride ?? configConfig），保留未來擴充空間
+    var agentOpts = scope.ServiceProvider.GetRequiredService<IOptions<AgentSettings>>().Value;
+    var agentRows = await db.AgentConfigs.ToListAsync();
+    foreach (var row in agentRows)
+    {
+        if (row.Provider is null && row.Model is null
+            && agentOpts.Agents.TryGetValue(row.Name, out var src))
+        {
+            row.Provider = src.Provider;
+            row.Model    = src.Model;
+        }
+    }
+    await db.SaveChangesAsync();
+
+    // Stage 38：預熱 AgentConfigCache，避免第一筆任務觸發 sync DB 載入 block 執行緒
+    await scope.ServiceProvider.GetRequiredService<AgentConfigCache>().WarmupAsync();
 }
 
 app.Run();

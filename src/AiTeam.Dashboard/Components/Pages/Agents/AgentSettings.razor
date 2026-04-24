@@ -110,6 +110,47 @@ else
                                Disabled="@_isSaving">
                         @(_isSaving ? "儲存中..." : "儲存信任等級")
                     </MudButton>
+
+                    <MudDivider Class="my-3" />
+
+                    @* Stage 38：LLM Provider / Model 動態設定（DB 為權威，立即生效不需重啟） *@
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">LLM 設定</MudText>
+                    <MudStack Row="true" Spacing="2" Class="mb-2">
+                        <MudSelect T="string"
+                                   Label="Provider"
+                                   Value="@_selectedAgent.Provider"
+                                   ValueChanged="@((string v) => OnProviderChangedAsync(_selectedAgent, v))"
+                                   Dense="true"
+                                   Variant="Variant.Outlined"
+                                   Style="max-width:200px"
+                                   Disabled="@_isSavingLlm">
+                            @foreach (var p in LlmModels.AvailableProviders)
+                            {
+                                <MudSelectItem Value="@p">@p</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSelect T="string"
+                                   Label="Model"
+                                   Value="@_selectedAgent.Model"
+                                   ValueChanged="@((string v) => OnModelChangedAsync(_selectedAgent, v))"
+                                   Dense="true"
+                                   Variant="Variant.Outlined"
+                                   Style="max-width:280px"
+                                   Disabled="@(_isSavingLlm || string.IsNullOrEmpty(_selectedAgent.Provider))">
+                            @foreach (var m in LlmModels.GetModelsForProvider(_selectedAgent.Provider ?? ""))
+                            {
+                                <MudSelectItem Value="@m">@m</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudStack>
+                    @if (!string.IsNullOrEmpty(_selectedAgent.Provider)
+                         && !string.IsNullOrEmpty(_selectedAgent.Model)
+                         && !LlmModels.GetModelsForProvider(_selectedAgent.Provider).Contains(_selectedAgent.Model))
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                            目前 Model「@_selectedAgent.Model」不在 Provider「@_selectedAgent.Provider」支援清單，請重新選擇。
+                        </MudAlert>
+                    }
                 </MudPaper>
             }
         </MudItem>

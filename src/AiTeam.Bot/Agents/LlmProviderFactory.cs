@@ -17,6 +17,8 @@ namespace AiTeam.Bot.Agents;
 /// Stage 17：支援 MockMode，啟用時直接回傳 MockLlmProvider（有意跳過 TokenTrackingProvider，
 /// 避免假的 Token 統計資料污染 Dashboard 監控頁）。
 /// Stage 37-1：新增 GEMINI 分支（FF 四第一階段：API 層 Agent 可選 Google Gemini Flash）。
+/// Stage 38：Provider / Model 改為 DB 優先（AgentConfigCache），appsettings 僅作 seed + fallback；
+/// Token 限額（DailyTokenLimitK / MonthlyTokenLimitK）仍讀 appsettings 的 BotAgentConfig。
 /// </summary>
 public class LlmProviderFactory(
     AnthropicClient anthropicClient,
@@ -28,7 +30,8 @@ public class LlmProviderFactory(
     DiscordAlertService discordAlert,
     ILogger<TokenTrackingProvider> tokenLogger,
     ILoggerFactory loggerFactory,
-    AppSettingsService appSettings)
+    AppSettingsService appSettings,
+    AgentConfigCache agentConfigCache)
 {
     private readonly BotAgentSettings _settings = settings.Value;
     private readonly string _geminiApiKey = configuration["Gemini:ApiKey"] ?? "";
@@ -36,6 +39,7 @@ public class LlmProviderFactory(
     /// <summary>
     /// 依 Agent 名稱（CEO / Dev / Ops）建立對應的 Provider，並自動包裝 Token 追蹤與守門。
     /// MockMode 啟用時回傳 MockLlmProvider（不包裝 TokenTrackingProvider）。
+    /// Stage 38：Provider / Model 優先讀 DB（AgentConfigCache），null 時 fallback appsettings。
     /// </summary>
     public ILlmProvider Create(string agentName)
     {
@@ -46,17 +50,23 @@ public class LlmProviderFactory(
         if (!_settings.Agents.TryGetValue(agentName, out var config))
             throw new InvalidOperationException($"找不到 Agent 設定：{agentName}");
 
-        var inner = config.Provider.ToUpperInvariant() switch
+        // Stage 38：DB override 優先，null 欄位 fallback appsettings（per-field）
+        var (dbProvider, dbModel) = agentConfigCache.Get(agentName);
+        var finalProvider = dbProvider ?? config.Provider;
+        var finalModel    = dbModel    ?? config.Model;
+
+        var inner = finalProvider.ToUpperInvariant() switch
         {
-            "ANTHROPIC" => (ILlmProvider)new AnthropicProvider(anthropicClient, config.Model),
+            "ANTHROPIC" => (ILlmProvider)new AnthropicProvider(anthropicClient, finalModel),
             "GEMINI"    => (ILlmProvider)new GeminiProvider(
                                httpClientFactory.CreateClient("Gemini"),
                                _geminiApiKey,
-                               config.Model,
+                               finalModel,
                                loggerFactory.CreateLogger<GeminiProvider>()),
-            _ => throw new NotSupportedException($"不支援的 LLM Provider：{config.Provider}")
+            _ => throw new NotSupportedException($"不支援的 LLM Provider：{finalProvider}（Agent={agentName}）")
         };
 
+        // Token log 要記實際用的 model（finalModel），不可傳 config.Model — 否則 Dashboard 改完後 Token 監控頁顯示舊 model
         return new TokenTrackingProvider(
             inner,
             tokenRepository,
@@ -66,6 +76,6 @@ public class LlmProviderFactory(
             config,
             tokenLogger,
             agentName,
-            config.Model);
+            finalModel);
     }
 }

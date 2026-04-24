@@ -36,6 +36,10 @@ public class AgentConfig
     public int TrustLevel { get; set; } = 0;
     public bool IsActive { get; set; } = true;
     public string? DiscordChannelId { get; set; } // Discord 頻道 ID（ulong 存為字串）
+    /// <summary>Stage 38：LLM Provider（"Anthropic" / "Gemini"）。null = 啟動時從 appsettings.json 補 seed，Dashboard 改過後由此欄位為準。</summary>
+    public string? Provider { get; set; }
+    /// <summary>Stage 38：Model 名稱（如 "claude-sonnet-4-6" / "gemini-2.5-flash"）。null = 啟動時從 appsettings.json 補 seed。</summary>
+    public string? Model { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Team Team { get; set; } = null!;

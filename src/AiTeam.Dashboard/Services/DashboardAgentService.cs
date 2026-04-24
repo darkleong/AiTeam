@@ -45,7 +45,9 @@ public class DashboardAgentService(AppDbContext db)
             Description = agent.Description,
             TrustLevel  = agent.TrustLevel,
             IsActive    = agent.IsActive,
-            TeamName    = team?.Name ?? ""
+            TeamName    = team?.Name ?? "",
+            Provider    = agent.Provider,
+            Model       = agent.Model
         };
     }
 
@@ -75,6 +77,32 @@ public class DashboardAgentService(AppDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Stage 38：更新 Agent 的 Provider / Model（Dashboard UI 存檔呼叫）。
+    /// Server-side 白名單驗證：防 stale 瀏覽器 tab 繞過 MudSelect 約束寫入 garbage 值，
+    /// 造成 LlmProviderFactory 在下次任務 runtime 拋 NotSupportedException。
+    /// 呼叫方需額外呼叫 DashboardBotService.ReloadCacheAsync("agent-config") 讓 Bot 端快取失效。
+    /// </summary>
+    public async Task<bool> UpdateProviderModelAsync(
+        Guid agentId,
+        string provider,
+        string model,
+        CancellationToken cancellationToken = default)
+    {
+        if (!LlmModels.AvailableProviders.Contains(provider))
+            throw new ArgumentException($"不支援的 Provider：{provider}", nameof(provider));
+        if (!LlmModels.GetModelsForProvider(provider).Contains(model))
+            throw new ArgumentException($"Provider {provider} 不支援 Model：{model}", nameof(model));
+
+        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
+        if (agent is null) return false;
+
+        agent.Provider = provider;
+        agent.Model    = model;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)
@@ -88,7 +116,9 @@ public class DashboardAgentService(AppDbContext db)
                 Description = a.Description,
                 TrustLevel  = a.TrustLevel,
                 IsActive    = a.IsActive,
-                TeamName    = a.Team.Name
+                TeamName    = a.Team.Name,
+                Provider    = a.Provider,
+                Model       = a.Model
             })
             .ToListAsync(cancellationToken);
 

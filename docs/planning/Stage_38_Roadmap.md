@@ -3,8 +3,8 @@
 > 對應 Future Feature：四第二階段 2-A（Dashboard Provider/Model 動態化）
 > 對應版本：v3.25.0
 > 建立日期：2026-04-25
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 狀態：🟢 實作完成，等驗收
+> 文件版本：v1.3
 
 ---
 
@@ -346,3 +346,58 @@ Provider 變更時的 UX 處理：
 | v1.0 | 2026-04-25 | 計劃書建立（Aria），對應 FF 四第二階段 2-A，含 PR #107 禁止路線明寫 |
 | v1.1 | 2026-04-25 | Model UI 改為「依 Provider 動態下拉」（原為自由輸入）— 下拉清單從新增的 `src/AiTeam.Shared/Constants/LlmModels.cs` 讀；Aria 查網路維護常數 + commit + 5-10 分鐘部署；新增 FF 二十六（Model 清單 DB 化，待觀察升級）|
 | v1.2 | 2026-04-25 | Aria WebFetch 官方文件確認 Gemini 現況：2.5 Pro/Flash 仍 stable 但 2026-06-17 deprecating、Gemini 3 系列仍 preview；`LlmModels.cs` 範例 `GeminiModels` 加時效註解，清單內容維持（stable 首選）；已知遷移時點（2026-06-17）寫進維護慣例 |
+| v1.3 | 2026-04-25 | 實作完成、build 通過、新增「實作紀錄」章節 |
+
+---
+
+## 實作紀錄（2026-04-25）
+
+> 實作 Session：Claude Opus 4.7 (1M context) + medium effort
+> Aria 複檢後放行計劃書 → 實作 → build 綠燈
+
+### 實際產出（7 項全數完成）
+
+| # | 檔案 | 動作 |
+|---|------|------|
+| 1 | [src/AiTeam.Data/Entities.cs](../../src/AiTeam.Data/Entities.cs):39-42 | `AgentConfig` 加 `string? Provider` / `string? Model` 兩個 nullable 欄位 |
+| 2 | `src/AiTeam.Data/Migrations/20260424180339_Stage38AgentConfigProviderModel.cs` | EF Migration（兩個 `AddColumn<string>(nullable: true)`，`text` 型別，無資料回填）|
+| 3 | [src/AiTeam.Shared/Constants/LlmModels.cs](../../src/AiTeam.Shared/Constants/LlmModels.cs) | 新增常數：`ProviderAnthropic` / `ProviderGemini` / `AvailableProviders` / `GetModelsForProvider()` / `AnthropicModels`（opus-4-7、sonnet-4-6、haiku-4-5）/ `GeminiModels`（2.5-pro、2.5-flash + 2026-06-17 deprecating 註解）|
+| 4 | [src/AiTeam.Bot/Services/AgentConfigCache.cs](../../src/AiTeam.Bot/Services/AgentConfigCache.cs) | 新增 Singleton 快取（TTL 5 分、SemaphoreSlim double-check lock、失敗保留上次快取）|
+| 5 | [src/AiTeam.Bot/Program.cs](../../src/AiTeam.Bot/Program.cs):18, 56, 181-195 | `using Microsoft.Extensions.Options` + `AddSingleton<AgentConfigCache>()` + seed block（兩欄同 null 才補）+ `WarmupAsync` 預熱 |
+| 6 | [src/AiTeam.Bot/Agents/LlmProviderFactory.cs](../../src/AiTeam.Bot/Agents/LlmProviderFactory.cs) | 注入 `AgentConfigCache`；`Create()` 改 `dbOverride ?? configConfig` per-field fallback；**關鍵修正**：TokenTrackingProvider 第 9 參數改傳 `finalModel`（否則 Dashboard 改完後 Token 監控頁會顯示舊 model）|
+| 7 | [src/AiTeam.Bot/Api/InternalController.cs](../../src/AiTeam.Bot/Api/InternalController.cs):35 | `ReloadCache` 加 `scope=agent-config` 分支（`scope=all` 順帶刷新）；既有 `agents`（AppSettings）分支保留不動，兩個 scope 加 code comment 區分 |
+| 8 | [src/AiTeam.Dashboard/Services/DashboardAgentService.cs](../../src/AiTeam.Dashboard/Services/DashboardAgentService.cs) | 新增 `UpdateProviderModelAsync`（server-side 白名單驗證）；`GetAgentConfigsAsync` / `CreateAgentAsync` DTO 投影加 Provider/Model |
+| 9 | [src/AiTeam.Shared/Dtos/AgentConfigDto.cs](../../src/AiTeam.Shared/Dtos/AgentConfigDto.cs) | DTO 加 `Provider` / `Model` 兩欄 |
+| 10 | [src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor](../../src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor) | 右欄加「LLM 設定」區塊：兩個 `MudSelect<string>` + Model 不在 Provider 清單時顯示 MudAlert warning |
+| 11 | [src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor.cs) | 注入 `ISnackbar`；加 `OnProviderChangedAsync` / `OnModelChangedAsync` / `SaveProviderModelAsync`；auto-save + ReloadCacheAsync("agent-config")；類別加 XML doc 提醒未來清單變動 edge case |
+
+### 設計決策落地（對齊計劃書）
+
+- **Single Source of Truth**：runtime 只讀 DB（`AgentConfigCache`），appsettings 降為 seed + fallback 來源 ✅
+- **Sync-over-async**：`AgentConfigCache.Get()` 保持同步（`.GetAwaiter().GetResult()`），不動 12 個 LlmProviderFactory caller ✅ — 理由沿用既有 `MockMode` 行中已有此慣例
+- **Seed 原子性**：只當 Provider/Model 兩欄位同時為 null 才補（避免半途被改過的列被 appsettings 回補覆蓋另一半）；runtime 仍允許 per-field fallback 保留未來擴充空間 ✅
+- **Scope 命名**：legacy `scope=agents`（AppSettings）保留不動；新 `scope=agent-config`（AgentConfigCache）獨立；`scope=all` 順帶刷新兩者 ✅
+- **Token log 同步**：TokenTrackingProvider 第 9 參數從 `config.Model`（appsettings）改傳 `finalModel`（解析後實際值），確保 Token 監控頁即時反映 Dashboard 變更 ✅（Aria 計劃書外抓出的關鍵修正）
+
+### 驗收 Gate 狀態
+
+| Gate | 狀態 | 備註 |
+|------|------|------|
+| `dotnet build AiTeam.slnx` | ✅ 綠燈 | 0 Error / 47 Warning（全為既有 NU1902 vulnerability 與 MSTEST0037，非本 Stage 新增）|
+| EF Migration 產生 | ✅ | `20260424180339_Stage38AgentConfigProviderModel`，`AddColumn<string>(nullable: true)` × 2 |
+| EF `database update` | ⏸ 待 Christ 執行（或待 CI/CD 部署後 `MigrateAsync` 自動套用）|
+
+### 待 Christ 驗收項目（Docker 環境）
+
+1. **Fresh Install / 既有升級**：DB `AgentConfigs` 舊 row 的 Provider/Model 為 null → 重啟 Bot 後 seed 應補回對應 appsettings 值
+2. **UI 出現**：Dashboard `/agents` → 選 Agent → 右欄新「LLM 設定」區塊應顯示 Provider + Model 兩個下拉
+3. **Provider 切換行為**：Anthropic → Gemini 時 Model 清單動態更新；舊 Model 不在新清單 → 清空 + Snackbar warning
+4. **儲存 + cache invalidate**：改完 Model → Snackbar 成功提示 → 下次任務 Token 監控頁應記錄新 model（不需重啟 Bot）
+5. **覆蓋性驗證（核心設計）**：Dashboard 把 Rosa 改 Gemini → 重啟 Bot → Dashboard 仍顯示 Gemini（seed 只補 null，不覆蓋已設值）
+
+### 技術債 / 未做事項
+
+- **資料回填腳本**：未提供（既有 row 依賴 seed 自動補）— 若上 prod 後發現 seed 邏輯未生效可手動 SQL
+- **LlmModels 清單刪除 edge case**：若未來從清單移除某 model（例 Gemini 2.5 2026-06-17 deprecated 後）但 DB 仍有舊值 → UI 顯示空白 + warning；本 Stage 不做自動遷移，發生時再補（razor.cs 已加 XML doc 提醒維護者）
+- **Dashboard「清空欄位回到 appsettings default」UX**：runtime 支援 per-field null fallback，但 UI 沒開放操作（Dashboard 存檔一律兩欄同寫）— 用例小眾，留待 FF 後續
+- **結案第二段**（Aria 負責）：版本 bump `v3.24.0 → v3.25.0`（`src/Directory.Build.props`）+ Master Plan / Future_Feature 同步

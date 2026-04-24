@@ -3,6 +3,12 @@ using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Agents;
 
+/// <summary>
+/// Stage 38：Provider / Model 下拉清單資料源為 <see cref="LlmModels"/> 常數檔。
+/// Edge case 提醒（未來維護者）：若 LlmModels 清單刪除某 model（例如 Gemini 2.5 於 2026-06-17 deprecated 後移除），
+/// 但 DB 仍有舊值 → MudSelect 會顯示空白；目前 UI 已加 MudAlert warning 提示，但本 Stage 不做自動遷移。
+/// 發生時再補資料遷移腳本（或在 LlmModels 加「legacy 相容清單」）。
+/// </summary>
 public partial class AgentSettings
 {
     #region Dependencies
@@ -16,6 +22,9 @@ public partial class AgentSettings
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -25,6 +34,7 @@ public partial class AgentSettings
     private AgentConfigDto?       _selectedAgent;
     private bool                  _isSaving;
     private bool                  _isTogglingActive;
+    private bool                  _isSavingLlm;
     private string?               _saveMessage;
     private string?               _loadError;
 
@@ -96,6 +106,63 @@ public partial class AgentSettings
         _showRestartConfirm = false;
         _saveMessage = success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定";
         _isRestarting = false;
+    }
+
+    /// <summary>
+    /// Stage 38：Provider 變更時：若目前 Model 不在新 Provider 清單 → 清空 Model + 提示重選；
+    /// 若還在清單內 → 直接連同 Provider 存檔（雙欄位同寫）。
+    /// </summary>
+    private async Task OnProviderChangedAsync(AgentConfigDto agent, string newProvider)
+    {
+        agent.Provider = newProvider;
+        var validModels = LlmModels.GetModelsForProvider(newProvider);
+        if (string.IsNullOrEmpty(agent.Model) || !validModels.Contains(agent.Model))
+        {
+            agent.Model = null;
+            Snackbar.Add($"Provider 已改為 {newProvider}，請選擇對應的 Model。", Severity.Warning);
+            return;
+        }
+        await SaveProviderModelAsync(agent);
+    }
+
+    /// <summary>Stage 38：Model 變更時連同現 Provider 存檔 + 觸發 Bot 端 cache invalidate。</summary>
+    private async Task OnModelChangedAsync(AgentConfigDto agent, string newModel)
+    {
+        agent.Model = newModel;
+        if (string.IsNullOrEmpty(agent.Provider) || string.IsNullOrEmpty(agent.Model)) return;
+        await SaveProviderModelAsync(agent);
+    }
+
+    private async Task SaveProviderModelAsync(AgentConfigDto agent)
+    {
+        if (_isSavingLlm) return;
+        if (string.IsNullOrEmpty(agent.Provider) || string.IsNullOrEmpty(agent.Model)) return;
+
+        _isSavingLlm = true;
+        try
+        {
+            var ok = await AgentService.UpdateProviderModelAsync(agent.Id, agent.Provider, agent.Model);
+            if (!ok)
+            {
+                Snackbar.Add($"{agent.Name} 儲存失敗：查無 Agent", Severity.Error);
+                return;
+            }
+            // Stage 38：通知 Bot 端快取失效，下次任務立即生效（無需重啟）
+            await BotService.ReloadCacheAsync("agent-config");
+            Snackbar.Add($"{agent.Name}：Provider={agent.Provider}、Model={agent.Model} 已更新，Bot Cache 已刷新。", Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingLlm = false;
+        }
     }
 
     #endregion

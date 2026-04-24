@@ -24,13 +24,16 @@ public class InternalController(
     AppSettingsService appSettings,
     RulesService rulesService,
     AgentQueueService queueService,
+    AgentConfigCache agentConfigCache,
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
 
     /// <summary>
     /// 清除 Bot 端 Cache，下次存取時自動從 DB 重新載入。
-    /// scope: rules | agents | all（預設 all）
+    /// scope: rules | agents | agent-config | all（預設 all）
+    /// - agents       = AppSettings 資料表快取（AppSettingsService；legacy 命名，對應 app_settings 資料表）
+    /// - agent-config = Stage 38 新增：AgentConfig 資料表的 Provider/Model 快取（AgentConfigCache）
     /// </summary>
     [HttpPost("reload-cache")]
     public IActionResult ReloadCache([FromQuery] string scope = "all")
@@ -40,8 +43,13 @@ public class InternalController(
         if (scope is "rules" or "all")
             rulesService.InvalidateCache();
 
+        // legacy：清 app_settings 資料表快取（系統設定）
         if (scope is "agents" or "all")
             appSettings.InvalidateCache();
+
+        // Stage 38：清 AgentConfig 資料表的 Provider/Model 快取（Dashboard 改完 Agent 設定頁呼叫）
+        if (scope is "agent-config" or "all")
+            agentConfigCache.InvalidateCache();
 
         logger.LogInformation("Bot Cache 已清除（scope={Scope}）", scope);
         return Ok(new { message = "已套用變更", scope });

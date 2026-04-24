@@ -9,4 +9,8 @@ public class AgentConfigDto
     public int TrustLevel { get; set; }
     public bool IsActive { get; set; }
     public string? TeamName { get; set; }
+    /// <summary>Stage 38：LLM Provider（"Anthropic" / "Gemini"）。null = 尚未設定（sentinel 狀態，啟動 seed 後應不會為 null）。</summary>
+    public string? Provider { get; set; }
+    /// <summary>Stage 38：Model 名稱。null = 尚未設定。</summary>
+    public string? Model { get; set; }
 }
