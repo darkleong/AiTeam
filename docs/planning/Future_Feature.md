@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.30
+> 版本：v7.32
 > 建立日期：2026-04-01
-> 最後更新：2026-04-22
+> 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -1275,3 +1275,5 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 
 | 2026-04-22 | v7.29：Stage 35 驗收通過（v3.22.0）— FF 二十 子項 D（PmAgentService 拆解）✅ 完成：實際產出 6 檔（PmAgentResults 60 + PmAgentCommons 225 + PmReviewService 345 + ReviewAppealService 345 + DevPlanAppealService 207 + PmRoutingService 262 = 1444 行 vs 原 1389）；**首次實踐 SOP 6 子資料夾**（Agents/Pm/，namespace AiTeam.Bot.Agents.Pm）；實踐結論「**決策主體 = Agent 時放 Agents/，協調流程放 Orchestration/**」已寫進六項 SOP 供子項 A 參考；搭車優先順序更新（剩 B + A 合併做）；Context 實際 261K / Opus 1M 26% 驗證 ×1.6 校準公式 |
 | 2026-04-22 | v7.30：Stage 36 驗收通過（v3.23.0）— **FF 二十 整項 ✅ 完成**（A+B 合併最後一次拆解）：TaskGroupService 2623→716 行（-73%）+ CommandHandler 2172→556 行（-74%）+ PendingConfirmationStore 解耦（6 字典抽 Singleton 升級 ConcurrentDictionary）+ 5 個子資料夾；驗收期間零 follow-up commits；Context 實際 360K / Opus 1M 36%；**AiTeam 四個怪物級大檔案技術債全部清零 🎉**；FF 二十主體從主清單刪除整項移入已完成項目摘要 |
+| 2026-04-23 ～ 2026-04-24 | v7.31：Stage 37-2 驗收期間 FF 整理（三 commit 合併敘述）— **新增三項 FF**：二十三（Orchestration 異常退出的復原機制，Crash Recovery exception 盲點）/ 二十四（`CLAUDE_Vera.md` / `CLAUDE_QA.md` template 缺檔，production 真實流程才暴露）/ 二十五（Self-implement 試驗 prompt 設計守則，PR #107 架構繞道事件紀錄）；**FF 四細化**：第二階段拆成 2-A（Dashboard Provider/Model 動態化，明寫「不可採 Dashboard 自己讀一份 appsettings」技術約束）+ 2-B（CLI 層多家共存）+ 第一階段標 ✅（Stage 37-1 完成）；**FF 十一升級 🔵→🟡**：全域月限 1000K 首次被踩到（Stage 37-2 self-implement 累積 1.3M tokens 撞 Check 4），記錄「只動嘴的老闆」要 SSH 改 config 的 UX 痛點 |
+| 2026-04-25 | v7.32：Stage 37 驗收通過（v3.24.0）— **FF 四第一階段 ✅ 完成**：GeminiProvider API 層交付（HttpClient + API key query string + System.Text.Json camelCase + 429 可識別 exception）；API 層 Agent 可透過 `appsettings.json` 切 Gemini（無 Dashboard UI，留 FF 四第二階段 2-A）；Rena（Release Agent）切 Gemini Flash 作為實測驗收；**搭車修 Crash Recovery 全面涵蓋**：`ActiveMeetingType` → `ActiveOrchestration`（5 種值 Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting）+ Appeal / QA 兩處 try-finally + dispatcher 5 分支 + 3 個 Restart helper；**搭車修 Stage 36 Dev_plan dispatcher 遺漏**（38 行搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper，三個 `Handle*Completed` 對稱）；FF 四第一階段主體移入已完成項目摘要，第二階段保留 |

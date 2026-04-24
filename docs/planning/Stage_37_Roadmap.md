@@ -3,8 +3,9 @@
 > 對應 Future Feature：四（多 LLM 供應商支援）第一階段 + Stage 31 延伸（搭車）
 > 對應版本：v3.24.0
 > 建立日期：2026-04-23
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 完成日期：2026-04-25
+> 狀態：✅ 已完成（2026-04-25 驗收通過）
+> 文件版本：v2.1
 
 ---
 
@@ -431,6 +432,43 @@ Stage 36（FF 二十-A+B）拆解 TaskGroupService 時，Review/QA dispatcher �
 
 ---
 
+## 驗收後修正（v2.1，2026-04-23 ～ 2026-04-25）
+
+合併驗收期間累積 4 件搭車 fix / ops，本 Stage 結案時併入紀錄。
+
+### A. `chore(stage37)`：Rena 改用 Gemini Flash（`14ecbf7`，2026-04-23）
+
+FF 四第一階段實測驗收用——把 Rena（Release Agent）Provider 從 Anthropic 切到 Gemini Flash。Rena 是系統唯一在主路徑上純 API layer 的 Agent，用她驗 GeminiProvider 最乾淨；結案第二段跑 v3.24.0 release 時會自然觸發。若驗證發現 Gemini 品質不穩，可隨時 revert。
+
+### B. `fix(design)`：`RunDesignAdjustmentAsync` null `AdjustmentTargets` 保護（`f26c159`，2026-04-23）
+
+Stage 25b 既有 bug，Stage 37 驗收真實流程時首次觸發：Petra 在 Design 會議判斷 `needs_adjustment` 時 JSON 回應可能漏填 `AdjustmentTargets` / `AdjustmentInstructions`（record 欄位雖非 nullable，`System.Text.Json` 不強制 runtime non-null），導致 `.Any()` 在 null 上拋 `ArgumentNullException`、整場 Design 會議炸掉、TaskGroup 卡在 `Status=running` / `ActiveOrchestration=null`（Crash Recovery 掃不到）。修法是在 `RunDesignAdjustmentAsync` 開頭加 defensive defaults + log warning，退化行為：兩欄都 null 視為 no-op 調整輪，會議繼續。
+
+### C. `fix(queue)`：`RequeueTaskAsync` 同步 `group.Status` + admin replay endpoint（`715e142`，2026-04-24）
+
+Stage 31 重試按鈕的設計遺漏，Stage 37-2 驗收連環踩到——事件鏈：Dev TaskItem 失敗 → [`TaskGroupService.HandleAgentCompletedAsync`](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs:267) 設 `group.Status='failed'` → Dashboard 重試只改 TaskItem 不改 group → Cody 從 queue 拿 task 跑（`ExecuteTaskAsync` 不 check `group.Status`）→ Cody 完成呼叫 dispatcher → 判斷 `group.Status='failed'` return → **Reviewer 永遠不被 fire ❌**。
+
+兩處修正：
+- [`AgentQueueService.RequeueTaskAsync`](../../src/AiTeam.Bot/Orchestration/AgentQueueService.cs) 加 `group.Status` 同步（`'failed'` 連動改回 `'running'`）
+- 新增 [`InternalController.ReplayCompletion`](../../src/AiTeam.Bot/Api/InternalController.cs) endpoint（`POST /internal/admin/replay-completion/{taskId}`），救援「過去已踩中此 bug」的卡住 group
+
+本次 Stage 37-2 驗收任務（Group=6fd02044）卡在 Cody 完成後的這個 gap，部署後呼叫此 endpoint replay。
+
+### D. `chore(ops)`：全域月限 1000K → 2000K 臨時救援 + FF 十一升級（`0cb0605`，2026-04-24）
+
+Stage 37-2 驗收期間跑 **FF 四第二階段 self-implement 試驗**（PR #107，已 close）到 Dev 階段時，全域本月用量 1,304,628 超 1,000,000 被 `TokenTrackingProvider` Check 4 擋下，group 卡住。採臨時救援：`docker-compose.prod.yml` 的 bot + dashboard 兩處 env var `AgentSettings__MonthlyTokenLimitK: "1000" → "2000"`。
+
+這是 v3.x 以來首次踩到全域月限——Dashboard 無法動態調整是 [FF 十一](./Future_Feature.md) 痛點。順便把 FF 十一優先級 🔵 低 → 🟡 中 + 記錄本次踩坑事故（Dashboard 警告訊息要求使用者 SSH 改 config + push + CI/CD rebuild，對「只動嘴的老闆」不友好）。
+
+### 搭車發現的新 FF
+
+驗收期間另外浮現 3 個 FF 候選，已在 `fe58507` / `d19002c` 寫進 `Future_Feature.md`：
+- **FF 二十三**：Orchestration 異常退出的復原機制（Crash Recovery 的 exception 盲點）
+- **FF 二十四**：`CLAUDE_*.md` template 補齊（`CLAUDE_Vera.md` / `CLAUDE_QA.md` 缺檔，真實流程才暴露）
+- **FF 二十五**：Self-implement 試驗 prompt 設計守則（PR #107 經驗紀錄，Cody 繞道傾向的對策）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
@@ -438,3 +476,5 @@ Stage 36（FF 二十-A+B）拆解 TaskGroupService 時，Review/QA dispatcher �
 | v1.0 | 2026-04-23 | 計劃書建立（Aria） |
 | v1.1 | 2026-04-23 | 第一部分實作完成紀錄 |
 | v1.2 | 2026-04-23 | 第二部分實作完成紀錄（含搭車修正 Stage 36 Dev_plan dispatcher 遺漏） |
+| v2.0 | 2026-04-25 | 驗收通過，header 狀態 → ✅ |
+| v2.1 | 2026-04-25 | Aria 結案：補驗收後修正小節（Rena Gemini / Design null fix / Queue fix + replay / 全域月限救援） |

@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.27
+> 版本：v7.30
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -51,6 +51,7 @@
 | [Stage_34_Roadmap.md](../planning/Stage_34_Roadmap.md) | Stage 34：MeetingService 拆解（FF 二十-C） | v3.21.0 | ✅ 已完成（2026-04-22） |
 | [Stage_35_Roadmap.md](../planning/Stage_35_Roadmap.md) | Stage 35：PmAgentService 拆解（FF 二十-D）+ 子資料夾 SOP | v3.22.0 | ✅ 已完成（2026-04-22） |
 | [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | ✅ 已完成（2026-04-22） |
+| [Stage_37_Roadmap.md](../planning/Stage_37_Roadmap.md) | Stage 37：GeminiProvider API 層 + Crash Recovery 全面涵蓋 | v3.24.0 | ✅ 已完成（2026-04-25） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -151,6 +152,9 @@
 | v7.25 | 2026-04-22 | Stage 36 規劃書建立（v3.23.0）— FF 二十 A+B 合併（TaskGroupService 2623 + CommandHandler 2172 = 4795 行）最後一次拆解：TaskGroupService 拆 4 個子 service（Meeting/Appeal/Qa/Proposal Orchestration）+ 瘦身；CommandHandler 拆 3 個子模組（SlashCommandRouter / ButtonCallbackRouter / PendingConfirmationStore）+ 瘦身；Stage 34 Meeting 四檔搭車搬到 Orchestration/Meeting/ 子資料夾；核心解耦：_pendingConfirmations dictionary 抽 PendingConfirmationStore Singleton；Model 必選 Opus 1M + high（粗估 241K × 1.6 = 386K，Sonnet 不可能）|
 | v7.26 | 2026-04-22 | Stage 36 實作完成（v3.23.0）— FF 二十 A+B 合併拆解：TaskGroupService 2623→716 行（-73%）+ CommandHandler 2172→556 行（-74%）；新建 11 檔（4 個 OrchestrationService + 3 個 Router/Store + RoutingTypes + 搬 Stage 34 四檔到 Meeting/）；核心解耦：_pendingConfirmations 6 個 Dictionary 抽 PendingConfirmationStore Singleton 升級 ConcurrentDictionary；5 個子資料夾；commit 1792eb7，build 0 error |
 | v7.27 | 2026-04-22 | Stage 36 驗收通過（v3.23.0）— **FF 二十 整項 ✅ 完成**：8 個 Mock 情境全通過 + 驗收期間零 follow-up commits；Context 實際 **360K / Opus 1M 36%**（×1.49 校準）；AiTeam 四個怪物級檔案（TaskGroupService 2623 / CommandHandler 2172 / MeetingService 1415 / PmAgentService 1388）**技術債全部清零 🎉** |
+| v7.28 | 2026-04-23 | Stage 37 規劃書建立（v3.24.0）— FF 四第一階段 GeminiProvider API 層 + 搭車 Crash Recovery 全面涵蓋（把 Stage 31 `ActiveMeetingType` → `ActiveOrchestration`，值域擴 5 種：Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting，Appeal + QA 補 try-finally，dispatcher 擴 5 分支）；連續 6 Stage 拆技術債後的換氣 Stage；建議拆兩個 Session 做（37-1 Sonnet 200K medium、37-2 Sonnet 200K high）|
+| v7.29 | 2026-04-23 | Stage 37 實作完成（v3.24.0）— Christ 實際開 Opus 1M 一 Session 做完兩部分：37-1 GeminiProvider（HttpClient + API key query string + camelCase + 429 可識別 exception，範圍變更砍 Dashboard Provider 下拉移 FF 四第二階段）；37-2 Crash Recovery（Entity 改名 + EF Migration `RenameColumn` + 3 個 Restart helper + Dev_plan dispatcher 搭車搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper 修 Stage 36 遺漏；QA 拆「外薄殼 try-finally + 內 Inner method」保留原 4 return 點）；build 0 error |
+| v7.30 | 2026-04-25 | Stage 37 驗收通過（v3.24.0）— 真實流程驗 Rena 切 Gemini 成功 + 5 個 Crash Recovery Mock 情境全通過；**首次真實用 AiTeam 跑自己任務**（FF 四第二階段 self-implement 試驗 PR #107，架構走偏 close 不 merge，但整條 orchestration 在真實流程下穩固）；驗收期間 4 件搭車 fix / ops（Design null fix / Queue RequeueTaskAsync + replay endpoint / 全域月限 1000K→2000K 臨時救援 / Rena Gemini 切換）+ 新增 3 個 FF（二十三 Orchestration 異常退出復原 / 二十四 `CLAUDE_Vera/QA.md` template 補齊 / 二十五 Self-implement prompt 守則）|
 
 ---
 
