@@ -1,3 +1,13 @@
+## v3.23.1 — 2026-04-24
+
+### 新功能
+- **Agent 設定頁面 Provider 與 Model 顯示**：Dashboard Agent 設定頁面新增「Provider」與「Model」欄位即時顯示，對應 PR #107
+
+### Bug 修復
+- Vera 審查建議（W01/W02）：重複 fallback if/else 邏輯待後續優化或列入 Future_Feature
+
+---
+
 ## v1.3.1 — 2026-04-04
 
 ### Bug 修復
