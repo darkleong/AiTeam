@@ -1,3 +1,4 @@
+using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
@@ -187,6 +188,45 @@ public class InternalController(
 
         logger.LogInformation("TaskItem {Id} 重新入佇列（透過 Dashboard）", taskId);
         return Ok(new { message = "已重新入佇列" });
+    }
+
+    /// <summary>
+    /// Stage 37 admin：手動重新觸發已完成 TaskItem 的 dispatcher（呼叫 HandleAgentCompletedAsync）。
+    /// 用途：當 RequeueTaskAsync 在修 group.Status 同步前發生過、導致 dispatcher 因 group.Status='failed'
+    /// 略過後續流程（[TaskGroupService.cs:122]），用此 endpoint 重建 result 並重新呼叫 dispatcher。
+    /// 重建的 result 為 minimal（Success=true、Summary=replay 標記、OutputUrl=group.DevPrUrl），
+    /// 對 Dev/Reviewer/QA 完成階段足以讓 WorkflowEngine.GetDecision 走後續分支。
+    /// </summary>
+    [HttpPost("admin/replay-completion/{taskId}")]
+    public async Task<IActionResult> ReplayCompletion(Guid taskId, CancellationToken cancellationToken)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var taskGroupService = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+
+        var task = await db.Set<TaskItem>().FindAsync([taskId], cancellationToken);
+        if (task is null) return BadRequest(new { message = "任務不存在" });
+        if (task.Status != "done") return BadRequest(new { message = $"任務狀態 {task.Status} 不允許 replay（僅接受 done）" });
+        if (task.GroupId is not { } groupId) return BadRequest(new { message = "任務無 GroupId（非 group 任務不適用）" });
+
+        var group = await db.Set<TaskGroup>().FindAsync([groupId], cancellationToken);
+        if (group is null) return BadRequest(new { message = "TaskGroup 不存在" });
+
+        var result = new AgentExecutionResult(
+            Success: true,
+            Summary: $"[Manual replay] {task.AssignedAgent} 完成",
+            OutputUrl: group.DevPrUrl
+        );
+
+        logger.LogWarning("Admin replay-completion：TaskId={TaskId}, Agent={Agent}, GroupId={GroupId}",
+            taskId, task.AssignedAgent, groupId);
+
+        await taskGroupService.HandleAgentCompletedAsync(
+            groupId, task.AssignedAgent, result, group.DevPrUrl ?? "", cancellationToken);
+
+        return Ok(new { message = "已重新觸發 dispatcher", taskId, agent = task.AssignedAgent, groupId });
     }
 
     /// <summary>

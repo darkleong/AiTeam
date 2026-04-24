@@ -148,6 +148,22 @@ public class AgentQueueService(
         task.QueueStatus = "queued";
         task.QueuedAt    = DateTime.UtcNow;
         task.CompletedAt = null;
+
+        // Stage 37 搭車修：當上游 dispatcher（TaskGroupService.HandleAgentCompletedAsync）
+        // 因 TaskItem 失敗已把 group.Status 設為 "failed"，重試 TaskItem 時也要把 group.Status
+        // 同步改回 "running"，否則 [TaskGroupService.cs:122] 會在 task 完成後 dispatch 時
+        // 看到 "failed" 直接 return，導致整條後續流程斷裂（Reviewer/QA/Doc 永遠不被觸發）。
+        if (task.GroupId is { } groupId)
+        {
+            var group = await db.Set<TaskGroup>().FindAsync([groupId], ct);
+            if (group is not null && group.Status == "failed")
+            {
+                group.Status = "running";
+                logger.LogInformation("AgentQueueService：TaskItem {Id} 重試，連動 TaskGroup {GroupId} 狀態 failed→running",
+                    taskId, groupId);
+            }
+        }
+
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation("AgentQueueService：TaskItem {Id}（{Agent}）已重新入佇列", taskId, task.AssignedAgent);
