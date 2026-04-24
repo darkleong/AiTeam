@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.33
+> 版本：v7.34
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1119,6 +1119,70 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 
 ---
 
+## 二十六、Model 清單 DB 化 + Dashboard 管理頁（Stage 38 延伸升級）
+
+> 狀態：⚪ 待觀察 — Stage 38 採 constants 檔方案，先運行 1-2 個月觀察節奏
+> 提出日期：2026-04-25
+
+### 背景
+
+Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashboard Model 下拉清單的資料源是 `src/AiTeam.Shared/Constants/LlmModels.cs`（hard-coded 常數檔）。維護流程：
+
+1. 新 Model 上線時 Aria 用 WebFetch 查 Anthropic / Google 官網確認
+2. Aria 改 `LlmModels.cs` 字串 → commit + push
+3. CI/CD 自動 build + restart（5-10 分鐘生效）
+
+**為什麼 Stage 38 不直接做 DB 化**：
+- 新 Model 發布頻率 2-3 月一次，部署時間不是痛點（YAGNI）
+- Code 存放比 DB 安全：commit diff 有 review 軌跡、誤改可 revert、審計清楚
+- 本 FF 待觀察：如果真的 1-2 個月後 Aria 改 constants 的節奏開始卡到 Christ 切換實驗，再升級
+
+### 升級觸發條件
+
+以下任一發生時，評估是否啟動本 FF：
+
+- Christ 在 1-2 個月內超過 5 次「想立刻試新 Model，但要等 Aria commit + CI/CD」的抱怨
+- 出現「多個 Model A/B 對比實驗」的真實使用場景（不是猜想）
+- 新增 Provider（如 OpenAI / Codex）後，model 清單膨脹讓 constants 檔超過 50 個項目、維護變亂
+
+### 設計方向（如果要做）
+
+1. **新 Entity**：`LlmModel`
+   ```csharp
+   public class LlmModel
+   {
+       public Guid Id { get; set; }
+       public string Provider { get; set; } = "";     // "Anthropic" / "Gemini"
+       public string ModelName { get; set; } = "";    // "claude-sonnet-4-6"
+       public string? DisplayName { get; set; }        // "Claude Sonnet 4.6"（可選，UI 顯示）
+       public bool IsActive { get; set; } = true;     // 停用舊 model 不刪
+       public string? Notes { get; set; }              // pricing / context window / 淘汰日期
+       public DateTime CreatedAt { get; set; }
+       public DateTime UpdatedAt { get; set; }
+   }
+   ```
+
+2. **Dashboard 管理頁**：`/system/models`（或類似路由）
+   - CRUD table（list / add / edit / toggle active）
+   - 權限考量（只有 localhost bypass / 或特定人能改）
+
+3. **Aria 維護流程**：定期（每 2 週或新 Model 釋出時）WebFetch 官網 → 透過 Dashboard 或 Internal API 更新 DB → 立即生效（不等部署）
+
+4. **Agent 設定頁 Model 下拉資料源改從 DB 讀**：取代 `LlmModels.GetModelsForProvider()`
+
+### 技術約束
+
+- DB 成為 single source of truth（不要再依賴 constants）
+- `LlmModels.cs` 可保留作為 seed（fresh install 時把初始清單塞進 DB）
+- Dashboard 存/改 Model 清單後要 invalidate Bot cache（對齊 Stage 38 的 AgentConfigService cache 模式）
+- 誤刪保護：嘗試刪除「正在被某個 Agent 使用」的 Model 應該被擋下（先改該 Agent 的 Model 才能刪）
+
+### 優先級
+
+⚪ 待觀察 — 純 UX 優化，不解決功能缺口。Stage 38 上線後累積實際使用數據再決定。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1236,3 +1300,4 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 | 2026-04-23 ～ 2026-04-24 | v7.31：Stage 37-2 驗收期間 FF 整理（三 commit 合併敘述）— **新增三項 FF**：二十三（Orchestration 異常退出的復原機制，Crash Recovery exception 盲點）/ 二十四（`CLAUDE_Vera.md` / `CLAUDE_QA.md` template 缺檔，production 真實流程才暴露）/ 二十五（Self-implement 試驗 prompt 設計守則，PR #107 架構繞道事件紀錄）；**FF 四細化**：第二階段拆成 2-A（Dashboard Provider/Model 動態化，明寫「不可採 Dashboard 自己讀一份 appsettings」技術約束）+ 2-B（CLI 層多家共存）+ 第一階段標 ✅（Stage 37-1 完成）；**FF 十一升級 🔵→🟡**：全域月限 1000K 首次被踩到（Stage 37-2 self-implement 累積 1.3M tokens 撞 Check 4），記錄「只動嘴的老闆」要 SSH 改 config 的 UX 痛點 |
 | 2026-04-25 | v7.32：Stage 37 驗收通過（v3.24.0）— **FF 四第一階段 ✅ 完成**：GeminiProvider API 層交付（HttpClient + API key query string + System.Text.Json camelCase + 429 可識別 exception）；API 層 Agent 可透過 `appsettings.json` 切 Gemini（無 Dashboard UI，留 FF 四第二階段 2-A）；Rena（Release Agent）切 Gemini Flash 作為實測驗收；**搭車修 Crash Recovery 全面涵蓋**：`ActiveMeetingType` → `ActiveOrchestration`（5 種值 Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting）+ Appeal / QA 兩處 try-finally + dispatcher 5 分支 + 3 個 Restart helper；**搭車修 Stage 36 Dev_plan dispatcher 遺漏**（38 行搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper，三個 `Handle*Completed` 對稱）；FF 四第一階段主體移入已完成項目摘要，第二階段保留 |
 | 2026-04-25 | v7.33：**FF 二十四 ✅ 完成** — 實證根因與原假設不同：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（建於 2026-04-12/13），問題在 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未設 `CopyToOutputDirectory` → output 沒複製 → runtime `AppContext.BaseDirectory/Resources/` 找不到；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（含未來新增），從主清單刪除整項移入已完成項目摘要 |
+| 2026-04-25 | v7.34：新增 FF 二十六（Model 清單 DB 化 + Dashboard 管理頁，Stage 38 延伸升級）— ⚪ 待觀察；背景：Stage 38 採 constants 檔方案（`LlmModels.cs`），Aria 查網路 + commit 維護，CI/CD 5-10 分鐘生效；觸發條件：1-2 個月內抱怨節奏慢超過 5 次 / Model A/B 實驗場景 / Provider 擴充讓 constants 超 50 項；升級方向：`LlmModel` entity + Dashboard `/system/models` CRUD 管理頁 + Aria 透過 Dashboard/Internal API 改 DB 立即生效 |

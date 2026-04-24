@@ -87,7 +87,7 @@ var inner = config.Provider.ToUpperInvariant() switch { ... };
 
 ---
 
-## 實作項目（6 件）
+## 實作項目（7 件）
 
 ### 1. `AgentConfig` entity 加欄位 + EF Migration
 
@@ -164,17 +164,68 @@ var inner = provider.ToUpperInvariant() switch { ... };
 
 參考 pattern：[`AppSettingsService`](../../src/AiTeam.Bot/Services/AppSettingsService.cs)（1hr TTL cache + explicit invalidate）。
 
-### 5. Dashboard `AgentSettings.razor` 加 UI
+### 5. 新增 `LlmModels.cs` 常數檔（下拉清單資料源）
+
+位置：`src/AiTeam.Shared/Constants/LlmModels.cs`（Shared 專案，讓 Dashboard + Bot 兩邊都能引用）
+
+初始清單（2026-04-25 查到的主流版本，實作 Session 可用 WebFetch 官網確認後微調）：
+
+```csharp
+namespace AiTeam.Shared.Constants;
+
+public static class LlmModels
+{
+    public const string ProviderAnthropic = "Anthropic";
+    public const string ProviderGemini    = "Gemini";
+
+    /// <summary>可用 Provider 清單（Dashboard 下拉用）。</summary>
+    public static readonly IReadOnlyList<string> AvailableProviders =
+        [ProviderAnthropic, ProviderGemini];
+
+    /// <summary>依 Provider 返回對應的 Model 清單（Dashboard Model 下拉依 Provider 動態切換）。</summary>
+    public static IReadOnlyList<string> GetModelsForProvider(string provider) =>
+        provider switch
+        {
+            ProviderAnthropic => AnthropicModels,
+            ProviderGemini    => GeminiModels,
+            _                 => []
+        };
+
+    public static readonly IReadOnlyList<string> AnthropicModels =
+    [
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+    ];
+
+    public static readonly IReadOnlyList<string> GeminiModels =
+    [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+    ];
+}
+```
+
+**維護慣例**：
+- 新 model 上線時由 Aria（或 Christ 授權下） WebFetch 驗證官網 → 加字串 → commit + push → CI/CD 部署（5-10 分鐘內生效）
+- 清單按新到舊排列，預設顯示第一個作為 UX hint
+- 未來需要更頻繁的動態更新 → 升級到 DB 化（見 [FF 二十六](../planning/Future_Feature.md)）
+
+### 6. Dashboard `AgentSettings.razor` 加 UI
 
 [`src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor`](../../src/AiTeam.Dashboard/Components/Pages/Agents/AgentSettings.razor)：
 
 每個 Agent 卡片加：
-- **Provider 下拉選單**：`Anthropic` / `Gemini` 兩個選項（預留未來擴充 `OpenAI`）
-- **Model 輸入框**：`MudTextField`，允許自由輸入（不限下拉，讓 Christ 能填任何 model name）
+- **Provider 下拉**（`MudSelect<string>`）：來源 `LlmModels.AvailableProviders`
+- **Model 下拉**（`MudSelect<string>`）：來源 `LlmModels.GetModelsForProvider(currentProvider)`，**Provider 變更時 Model 清單動態切換**
+
+Provider 變更時的 UX 處理：
+- 若目前 Model 不在新 Provider 的清單中 → 自動選 clear / 或預設第一個 Model
+- 建議：clear + 紅字提示「請選 Model」，避免誤存成混搭（Provider=Anthropic + Model=gemini-xxx）
 
 儲存邏輯：對應 DB `AgentConfig.Provider` / `Model`；存檔後呼叫 Bot 端 cache invalidate API。
 
-### 6. 呼叫 Bot 端 cache invalidate 的 Internal API
+### 7. 呼叫 Bot 端 cache invalidate 的 Internal API
 
 新增 `POST /internal/agent-config/reload-cache`（或對齊 Stage 29 系統設定 cache reload 的既有 endpoint 模式）。Dashboard 改完 AgentConfig 後呼叫。
 
@@ -189,7 +240,8 @@ var inner = provider.ToUpperInvariant() switch { ... };
 | seed 執行位置 | Program.cs MigrateAsync 之後的 scope 內 | `IHostedService`（更優雅但要新 class）|
 | Dashboard → Bot cache invalidate 通道 | Internal HTTP API（既有 pattern）| SignalR 推送 |
 | Provider 下拉 vs 自由輸入 | **下拉**（封閉枚舉、避免 typo）| 自由輸入（彈性但易錯）|
-| Model 下拉 vs 自由輸入 | **自由輸入**（Model 版本更新頻繁、下拉維護成本高）| 依 Provider 動態下拉（工程量大）|
+| Model 下拉來源 | **`LlmModels.cs` constants 檔**（Shared 專案，Aria 維護）| DB 化（FF 二十六，待觀察升級）/ 自由輸入（易 typo 打到未支援 model 噴 500）|
+| Model 下拉依 Provider 切換 | **是**（`Provider=Anthropic` → Claude models、`Provider=Gemini` → Gemini models）| 混合全列（但會讓 Anthropic Provider 選到 Gemini model 的錯誤組合）|
 
 **關鍵驗證點**（實作 Session Plan Mode 前務必確認）：
 - `LlmProviderFactory` 是 Scoped DI（`Program.cs:39`）——cache 要設計成 Singleton service 或 class static field？
@@ -287,3 +339,4 @@ var inner = provider.ToUpperInvariant() switch { ... };
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-25 | 計劃書建立（Aria），對應 FF 四第二階段 2-A，含 PR #107 禁止路線明寫 |
+| v1.1 | 2026-04-25 | Model UI 改為「依 Provider 動態下拉」（原為自由輸入）— 下拉清單從新增的 `src/AiTeam.Shared/Constants/LlmModels.cs` 讀；Aria 查網路維護常數 + commit + 5-10 分鐘部署；新增 FF 二十六（Model 清單 DB 化，待觀察升級）|
