@@ -198,6 +198,10 @@ public static class LlmModels
         "claude-haiku-4-5",
     ];
 
+    // ⚠️ 時效（2026-04-25 Aria WebFetch 確認）：
+    // Gemini 2.5 系列 Google 官方將於 2026-06-17 deprecated，屆時需評估遷移到
+    // Gemini 3 stable GA 版本（當前 Gemini 3 仍為 -preview，不建議 production）。
+    // 這個事件是 FF 二十六 的第一個實際升級 trigger。
     public static readonly IReadOnlyList<string> GeminiModels =
     [
         "gemini-2.5-pro",
@@ -209,6 +213,7 @@ public static class LlmModels
 **維護慣例**：
 - 新 model 上線時由 Aria（或 Christ 授權下） WebFetch 驗證官網 → 加字串 → commit + push → CI/CD 部署（5-10 分鐘內生效）
 - 清單按新到舊排列，預設顯示第一個作為 UX hint
+- **已知遷移時點**：2026-06-17 Gemini 2.5 deprecating → 屆時要評估 Gemini 3 GA 狀態並遷移
 - 未來需要更頻繁的動態更新 → 升級到 DB 化（見 [FF 二十六](../planning/Future_Feature.md)）
 
 ### 6. Dashboard `AgentSettings.razor` 加 UI
@@ -340,3 +345,4 @@ Provider 變更時的 UX 處理：
 |------|------|------|
 | v1.0 | 2026-04-25 | 計劃書建立（Aria），對應 FF 四第二階段 2-A，含 PR #107 禁止路線明寫 |
 | v1.1 | 2026-04-25 | Model UI 改為「依 Provider 動態下拉」（原為自由輸入）— 下拉清單從新增的 `src/AiTeam.Shared/Constants/LlmModels.cs` 讀；Aria 查網路維護常數 + commit + 5-10 分鐘部署；新增 FF 二十六（Model 清單 DB 化，待觀察升級）|
+| v1.2 | 2026-04-25 | Aria WebFetch 官方文件確認 Gemini 現況：2.5 Pro/Flash 仍 stable 但 2026-06-17 deprecating、Gemini 3 系列仍 preview；`LlmModels.cs` 範例 `GeminiModels` 加時效註解，清單內容維持（stable 首選）；已知遷移時點（2026-06-17）寫進維護慣例 |

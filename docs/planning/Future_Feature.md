@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.34
+> 版本：v7.35
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1141,6 +1141,7 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 
 以下任一發生時，評估是否啟動本 FF：
 
+- ⏰ **2026-06-17 Gemini 2.5 deprecating**（第一個已知實際 trigger，Aria 2026-04-25 WebFetch 確認）：屆時要遷移 Gemini 2.5 Pro/Flash → Gemini 3 GA 版本。若 Gemini 3 GA 前後 Google 釋出多版 preview 或快速迭代、需要反覆切換測試 → 啟動本 FF；若單次遷移即穩定 → 維持 constants 方案即可
 - Christ 在 1-2 個月內超過 5 次「想立刻試新 Model，但要等 Aria commit + CI/CD」的抱怨
 - 出現「多個 Model A/B 對比實驗」的真實使用場景（不是猜想）
 - 新增 Provider（如 OpenAI / Codex）後，model 清單膨脹讓 constants 檔超過 50 個項目、維護變亂
@@ -1301,3 +1302,4 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 | 2026-04-25 | v7.32：Stage 37 驗收通過（v3.24.0）— **FF 四第一階段 ✅ 完成**：GeminiProvider API 層交付（HttpClient + API key query string + System.Text.Json camelCase + 429 可識別 exception）；API 層 Agent 可透過 `appsettings.json` 切 Gemini（無 Dashboard UI，留 FF 四第二階段 2-A）；Rena（Release Agent）切 Gemini Flash 作為實測驗收；**搭車修 Crash Recovery 全面涵蓋**：`ActiveMeetingType` → `ActiveOrchestration`（5 種值 Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting）+ Appeal / QA 兩處 try-finally + dispatcher 5 分支 + 3 個 Restart helper；**搭車修 Stage 36 Dev_plan dispatcher 遺漏**（38 行搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper，三個 `Handle*Completed` 對稱）；FF 四第一階段主體移入已完成項目摘要，第二階段保留 |
 | 2026-04-25 | v7.33：**FF 二十四 ✅ 完成** — 實證根因與原假設不同：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（建於 2026-04-12/13），問題在 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未設 `CopyToOutputDirectory` → output 沒複製 → runtime `AppContext.BaseDirectory/Resources/` 找不到；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（含未來新增），從主清單刪除整項移入已完成項目摘要 |
 | 2026-04-25 | v7.34：新增 FF 二十六（Model 清單 DB 化 + Dashboard 管理頁，Stage 38 延伸升級）— ⚪ 待觀察；背景：Stage 38 採 constants 檔方案（`LlmModels.cs`），Aria 查網路 + commit 維護，CI/CD 5-10 分鐘生效；觸發條件：1-2 個月內抱怨節奏慢超過 5 次 / Model A/B 實驗場景 / Provider 擴充讓 constants 超 50 項；升級方向：`LlmModel` entity + Dashboard `/system/models` CRUD 管理頁 + Aria 透過 Dashboard/Internal API 改 DB 立即生效 |
+| 2026-04-25 | v7.35：Aria WebFetch Google 官方文件確認 Gemini 現況 — 2.5 Pro/Flash 仍 stable 但 **2026-06-17 deprecating**（距今 ~2 月）、Gemini 3 系列仍全為 -preview 不建議 production；FF 二十六「升級觸發條件」加入此具體時點作為**第一個已知實際 trigger**（若 Gemini 3 GA 前後快速迭代 → 啟動 DB 化；若單次遷移穩定 → 維持 constants）；Stage 38 Roadmap v1.2 對應 `LlmModels.cs` 範例加時效註解 |
