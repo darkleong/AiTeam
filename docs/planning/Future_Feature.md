@@ -146,12 +146,25 @@ Gemini 行銷主打 1M context 確實誘人，但對 AiTeam 現狀不是主要�
 
 #### 第一階段（工程量小、價值清楚）
 
-1. `GeminiProvider : ILlmProvider` — 照抄 `AnthropicProvider` 改 API call
-2. Dashboard Agent 設定頁 Provider 選單加 `Gemini` 選項
-3. API 層 Agent（Rosa / Demi / Sage / Release / Ops）可選 Gemini
+1. ✅ `GeminiProvider : ILlmProvider` — Stage 37-1（v3.24.0）完成，照 `AnthropicProvider` pattern 實作 + HttpClient + System.Text.Json
+2. ⏳ Dashboard Agent 設定頁 Provider 下拉選擇 — **未完成**，列入第二階段（理由見下節「第二階段技術約束」）
+3. ⏳ API 層 Agent 可改 Provider — Stage 37-1 透過 `appsettings.json` 編輯 + 重啟可用，但**沒有 Dashboard 入口**
 4. 搭配 Gemini 2.5 Flash 免費額度用在低複雜度任務（Sage 歸檔摘要、個性對話）
 
 #### 第二階段（需要 spike 評估）
+
+##### 2-A. Dashboard Provider/Model 動態化（Stage 37-1 砍出來的，必做）
+
+**技術約束（2026-04-24 self-implement 試驗教訓）**：
+- ❌ **不可採「Dashboard 自己讀一份 appsettings」方案** — Stage 37-2 self-implement 試驗（PR #107，已 close）發現 Cody 會繞過 DB migration 採此路徑，結果 Bot 真實用什麼 vs Dashboard UI 顯示什麼會分裂、互不同步。
+- ✅ **必須做的事**（順序）：
+  1. `AgentConfig` entity 加 `Provider` / `Model` 欄位 + EF Migration
+  2. `LlmProviderFactory.Create()` 改成「DB 優先、appsettings.json fallback」雙層讀取
+  3. Dashboard `AgentSettings.razor` 加 Provider 下拉 + Model 輸入框，存進 DB
+  4. 既有 `appsettings.json` 的 `Agents:{Name}:Provider/Model` 保留作為「初始值」，Bot 啟動時若 DB 對應 AgentConfig 沒有值才用 appsettings 補回 DB
+- 下 prompt 給 Victoria 重做時，**這個約束要明寫**，否則 Cody 會選快路徑
+
+##### 2-B. CLI 層多家共存
 
 5. `GeminiCliService : IClaudeCodeService` — 評估 Gemini CLI 的 session 延續、工具調用、輸出格式是否能對齊
 6. 主要挑戰：
@@ -1059,6 +1072,93 @@ finally {
 - [`MeetingOrchestrationService.RecoverStuckOrchestrationsAsync`](../../src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs:418)（Stage 37-2 擴充的 dispatcher）
 - [`AppealOrchestrationService.HandleReviewerCompletedAsync`](../../src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs:51) / `HandleDevPlanCompletedAsync` / [`QaCoordinationService.HandleQaCompletedAsync`](../../src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs:29)（Stage 37-2 新加 try-finally）
 - 以上所有 try-finally 都要考慮本 FF 的 exception 路徑處理
+
+---
+
+## 二十四、CLAUDE_*.md template 補齊（CLI Agent 自我描述檔）
+
+> 狀態：🔵 低 — Stage 37-2 驗收 production 真實流程時首次踩到 warn
+> 提出日期：2026-04-24
+
+### 背景
+
+Stage 16 起多個 CLI Agent（Vera/Quinn 後續 + Petra/Rosa）改走 Claude Code session 模式，慣例是各自有專用的 `CLAUDE_{Name}.md` template 放在 Bot 容器的 `/app/Resources/`。執行時 Bot 把 template 寫進 `/tmp/aiteam-workspace/...` 內當作 CLAUDE.md（subprocess 看到的就是 Agent 角色描述），結束後還原。
+
+`CLAUDE_Rosa.md` / `CLAUDE_Petra.md` / `CLAUDE_Victoria.md` 等都存在，但 **`CLAUDE_Vera.md` 和 `CLAUDE_QA.md` 缺檔**。
+
+### 觀測
+
+Stage 37-2 production 真實流程跑 Vera/Quinn 時 log 出現 warn：
+
+```
+warn: AiTeam.Bot.Agents.ReviewerAgentService[0]
+      CLAUDE_Vera.md 不存在於 /app/Resources/CLAUDE_Vera.md
+warn: AiTeam.Bot.Agents.QaAgentService[0]
+      CLAUDE_QA.md 不存在於 /app/Resources/CLAUDE_QA.md
+```
+
+之前用 `/mock` 模式驗收都繞過 Claude Code 真實呼叫，所以從沒踩到。Stage 37-2 是第一次跑真實流程，才把這個 gap 暴露。
+
+### 影響
+
+- ⚠️ **不阻塞流程**：fallback 行為——subprocess 仍正常啟動，只是 CLAUDE.md 不被覆蓋（Vera/Quinn subprocess 看到的是 repo 原本的 `CLAUDE.md`，不是專用角色 prompt）
+- 可能讓 Vera/Quinn 的審查/測試品質略低於有 template 時的水準（但難量化）
+
+### 解法
+
+補上兩個 template，參考 `CLAUDE_Rosa.md` 結構：
+- `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` — Reviewer 角色 prompt（嚴重度分類、Critical/Warning/Info 規範、JSON 輸出格式）
+- `src/AiTeam.Bot/Resources/CLAUDE_QA.md` — QA 角色 prompt（測試策略、TestReport JSON 格式、no_applicable_tests 判斷）
+
+確認 `Dockerfile` 的 `COPY Resources/ /app/Resources/` 涵蓋這兩個檔（或檔名通配）。
+
+### 優先級
+
+🔵 低 — 不阻塞流程、現有 fallback 可用。但既然知道少兩支，搭車 commit 即可清掉 warn。
+
+---
+
+## 二十五、Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）
+
+> 狀態：🟢 經驗紀錄 — 不是技術 FF，是 prompt design 知識庫
+> 提出日期：2026-04-24（Stage 37-2 PR #107 self-implement 試驗 close 後）
+
+### 背景
+
+Stage 37-2 期間 Christ 順手做了一個「self-implement 試驗」：把 Stage 37-1 範圍刻意砍掉的子項（FF 四第二階段-A：Dashboard Provider/Model 顯示）當成普通需求丟給 Victoria，看系統能不能自己實作。
+
+整條流程跑通（Kickoff → Design → Dev_plan → Petra → Dev → Reviewer → Petra → QA → Doc → NotifyBossMerge），同時順帶實證 Stage 37-2 的 Crash Recovery / RequeueTaskAsync fix / Replay endpoint 三個救援機制——**整套 orchestration 在真實流程下穩固**。
+
+但生出的 PR #107 經 Aria review 後 close 不 merge，**因為架構方向不對**：Cody 選了「Dashboard 自己讀一份 appsettings」快路徑，繞過了「真正該做的 DB migration」。
+
+### 觀察的傾向
+
+**Cody 在 Petra 沒擋下時，會優化「執行成本」而非「架構正確性」。** 具體表現：
+
+1. **遇到「需要動 entity + migration」的需求**：Cody 傾向找方案讓改動只發生在 service 層 / config 層，避免 schema 變更
+2. **遇到「需要跨服務同步」的需求**：Cody 傾向各自為政（Bot 一份 config、Dashboard 一份 config）而非建立單一 source of truth
+3. **Vera 寫的 W01/W02 警告**（重複 fallback 邏輯、硬編碼字串應引用預設值）**Petra 沒當 Critical 放行**——這也是個 gap：Petra 對「架構優雅度」類議題的閾值偏寬
+
+### 守則建議（給未來想做 self-implement 的需求 prompt）
+
+下需求給 Victoria 時，如果涉及以下任一情境，**prompt 必須明寫禁止語句**：
+
+- 「資料源統一」/ 「single source of truth」類需求
+  → 「**禁止繞道：必須建立 DB schema 統一資料源，不接受純 config 同步方案**」
+- 「跨服務一致性」需求
+  → 「**禁止讓 Bot 和 Dashboard 各自維護獨立配置**」
+- 「動 schema」類需求
+  → 「**必須包含 EF Migration**，不接受純 service-layer 補丁」
+
+否則 Cody 會選快路徑、PR 看似完成、但架構債堆積。
+
+### 對 Petra 的觀察
+
+Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進入 QA，這在普通修 bug 場景合理（不該過度閉門），但在 self-implement 試驗時可能放過架構議題。**未來如果擴大 self-implement 用途，Petra prompt 可能要加一條**：「Warning 內若涉及『重複邏輯 / 硬編碼預設值 / 多份 config 維護』類議題，視為 Critical 不放行」。
+
+### 優先級
+
+🟢 經驗紀錄 — 沒有對應的「實作項目」，這是 prompt design knowledge。Aria 結案第二段更新 Master Plan 時可參考這份觀察。
 
 ---
 
