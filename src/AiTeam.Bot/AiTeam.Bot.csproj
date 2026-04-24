@@ -23,12 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Cody 專用 CLAUDE.md 模板，複製到輸出目錄供 DevAgentService 寫入 clone 的 repo -->
-    <Content Include="Resources\CLAUDE_CODY.md">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <!-- Victoria CEO 專用 CLAUDE.md 模板，複製到輸出目錄供 CeoAgentService 寫入 clone 的 repo -->
-    <Content Include="Resources\CLAUDE_Victoria.md">
+    <!-- 各 Agent 專用 CLAUDE.md 模板（FF 二十四：glob 一次涵蓋，避免新增 template 時漏改 csproj）。
+         8 個 Agent service 都從 AppContext.BaseDirectory/Resources/CLAUDE_*.md 讀取：
+         CeoAgentService / DevAgentService / ReviewerAgentService / QaAgentService /
+         DocAgentService / DesignerAgentService / RequirementsAgentService / PmReviewService -->
+    <Content Include="Resources\CLAUDE_*.md">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

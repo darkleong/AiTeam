@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.32
+> 版本：v7.33
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1075,49 +1075,6 @@ finally {
 
 ---
 
-## 二十四、CLAUDE_*.md template 補齊（CLI Agent 自我描述檔）
-
-> 狀態：🔵 低 — Stage 37-2 驗收 production 真實流程時首次踩到 warn
-> 提出日期：2026-04-24
-
-### 背景
-
-Stage 16 起多個 CLI Agent（Vera/Quinn 後續 + Petra/Rosa）改走 Claude Code session 模式，慣例是各自有專用的 `CLAUDE_{Name}.md` template 放在 Bot 容器的 `/app/Resources/`。執行時 Bot 把 template 寫進 `/tmp/aiteam-workspace/...` 內當作 CLAUDE.md（subprocess 看到的就是 Agent 角色描述），結束後還原。
-
-`CLAUDE_Rosa.md` / `CLAUDE_Petra.md` / `CLAUDE_Victoria.md` 等都存在，但 **`CLAUDE_Vera.md` 和 `CLAUDE_QA.md` 缺檔**。
-
-### 觀測
-
-Stage 37-2 production 真實流程跑 Vera/Quinn 時 log 出現 warn：
-
-```
-warn: AiTeam.Bot.Agents.ReviewerAgentService[0]
-      CLAUDE_Vera.md 不存在於 /app/Resources/CLAUDE_Vera.md
-warn: AiTeam.Bot.Agents.QaAgentService[0]
-      CLAUDE_QA.md 不存在於 /app/Resources/CLAUDE_QA.md
-```
-
-之前用 `/mock` 模式驗收都繞過 Claude Code 真實呼叫，所以從沒踩到。Stage 37-2 是第一次跑真實流程，才把這個 gap 暴露。
-
-### 影響
-
-- ⚠️ **不阻塞流程**：fallback 行為——subprocess 仍正常啟動，只是 CLAUDE.md 不被覆蓋（Vera/Quinn subprocess 看到的是 repo 原本的 `CLAUDE.md`，不是專用角色 prompt）
-- 可能讓 Vera/Quinn 的審查/測試品質略低於有 template 時的水準（但難量化）
-
-### 解法
-
-補上兩個 template，參考 `CLAUDE_Rosa.md` 結構：
-- `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` — Reviewer 角色 prompt（嚴重度分類、Critical/Warning/Info 規範、JSON 輸出格式）
-- `src/AiTeam.Bot/Resources/CLAUDE_QA.md` — QA 角色 prompt（測試策略、TestReport JSON 格式、no_applicable_tests 判斷）
-
-確認 `Dockerfile` 的 `COPY Resources/ /app/Resources/` 涵蓋這兩個檔（或檔名通配）。
-
-### 優先級
-
-🔵 低 — 不阻塞流程、現有 fallback 可用。但既然知道少兩支，搭車 commit 即可清掉 warn。
-
----
-
 ## 二十五、Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）
 
 > 狀態：🟢 經驗紀錄 — 不是技術 FF，是 prompt design 知識庫
@@ -1200,6 +1157,7 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 | 十八 | Appeal 對抗紀錄 UI 呈現 | ✅ Stage 31（v3.18.0，2026-04-20）— TaskGroupDto 擴充 4 欄位（ReviewAppealLog/ReviewAppealRoundA/DevPlanAppealLog/DevPlanAppealRoundA）；DashboardTaskService 三個 Select 補 mapping；PipelineView 新增兩個「🗣️ Appeal 對抗紀錄」折疊面板（有資料才顯示） |
 | 十五 | Dashboard 與 Discord 功能平等（Feature Parity）| ✅ Stage 32（v3.19.0，`/mock` Dashboard 化 — `MockScenarioService` 抽出共用）+ Stage 33（v3.20.0，佇列控制 Dashboard 化 — `AgentQueueControlService` + Agent 狀態卡 pause/resume 按鈕 + `GlobalQueueControlCard` 全域緊急停止 + 確認 Dialog）— Discord 原指令透過薄 wrapper 共用同一 shared service |
 | 二十一 | Agent 狀態卡 expand 展開看待辦清單 | ✅ Stage 33（v3.20.0，2026-04-22）— 採解讀 B（running + queued TaskItem）；實作優化為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代原規劃 `AgentTodoDto`，重用既有 `PushQueueUpdateAsync` 鏈路；點 item 深層連結 `?groupId=` 自動 Drawer 預選 |
+| 二十四 | `CLAUDE_*.md` template 補齊（CLI Agent 自我描述檔） | ✅ 2026-04-25 — 根因修正：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（2026-04-12/13），但 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未 COPY 到 output；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（未來新增 template 自動涵蓋）；Rosa/Demi/Sage/Petra 沒 warn 只因走 API layer 或該 CLI path 沒被觸發，但 agent code 都有讀 template 的邏輯——一次全修 |
 
 ---
 
@@ -1277,3 +1235,4 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 | 2026-04-22 | v7.30：Stage 36 驗收通過（v3.23.0）— **FF 二十 整項 ✅ 完成**（A+B 合併最後一次拆解）：TaskGroupService 2623→716 行（-73%）+ CommandHandler 2172→556 行（-74%）+ PendingConfirmationStore 解耦（6 字典抽 Singleton 升級 ConcurrentDictionary）+ 5 個子資料夾；驗收期間零 follow-up commits；Context 實際 360K / Opus 1M 36%；**AiTeam 四個怪物級大檔案技術債全部清零 🎉**；FF 二十主體從主清單刪除整項移入已完成項目摘要 |
 | 2026-04-23 ～ 2026-04-24 | v7.31：Stage 37-2 驗收期間 FF 整理（三 commit 合併敘述）— **新增三項 FF**：二十三（Orchestration 異常退出的復原機制，Crash Recovery exception 盲點）/ 二十四（`CLAUDE_Vera.md` / `CLAUDE_QA.md` template 缺檔，production 真實流程才暴露）/ 二十五（Self-implement 試驗 prompt 設計守則，PR #107 架構繞道事件紀錄）；**FF 四細化**：第二階段拆成 2-A（Dashboard Provider/Model 動態化，明寫「不可採 Dashboard 自己讀一份 appsettings」技術約束）+ 2-B（CLI 層多家共存）+ 第一階段標 ✅（Stage 37-1 完成）；**FF 十一升級 🔵→🟡**：全域月限 1000K 首次被踩到（Stage 37-2 self-implement 累積 1.3M tokens 撞 Check 4），記錄「只動嘴的老闆」要 SSH 改 config 的 UX 痛點 |
 | 2026-04-25 | v7.32：Stage 37 驗收通過（v3.24.0）— **FF 四第一階段 ✅ 完成**：GeminiProvider API 層交付（HttpClient + API key query string + System.Text.Json camelCase + 429 可識別 exception）；API 層 Agent 可透過 `appsettings.json` 切 Gemini（無 Dashboard UI，留 FF 四第二階段 2-A）；Rena（Release Agent）切 Gemini Flash 作為實測驗收；**搭車修 Crash Recovery 全面涵蓋**：`ActiveMeetingType` → `ActiveOrchestration`（5 種值 Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting）+ Appeal / QA 兩處 try-finally + dispatcher 5 分支 + 3 個 Restart helper；**搭車修 Stage 36 Dev_plan dispatcher 遺漏**（38 行搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper，三個 `Handle*Completed` 對稱）；FF 四第一階段主體移入已完成項目摘要，第二階段保留 |
+| 2026-04-25 | v7.33：**FF 二十四 ✅ 完成** — 實證根因與原假設不同：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（建於 2026-04-12/13），問題在 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未設 `CopyToOutputDirectory` → output 沒複製 → runtime `AppContext.BaseDirectory/Resources/` 找不到；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（含未來新增），從主清單刪除整項移入已完成項目摘要 |
