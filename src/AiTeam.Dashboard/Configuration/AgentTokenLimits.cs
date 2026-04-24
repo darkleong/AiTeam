@@ -22,4 +22,10 @@ public class AgentLimit
 
     /// <summary>月用量上限（千 token）。</summary>
     public int MonthlyTokenLimitK { get; set; } = 200;
+
+    /// <summary>LLM 提供者（如 "Anthropic"、"Gemini"）。</summary>
+    public string Provider { get; set; } = "Anthropic";
+
+    /// <summary>LLM 模型名稱（如 "claude-sonnet-4-6"、"gemini-2.5-flash"）。</summary>
+    public string Model { get; set; } = "claude-sonnet-4-6";
 }

@@ -9,4 +9,6 @@ public class AgentConfigDto
     public int TrustLevel { get; set; }
     public bool IsActive { get; set; }
     public string? TeamName { get; set; }
+    public string Provider { get; set; } = "";
+    public string Model { get; set; } = "";
 }

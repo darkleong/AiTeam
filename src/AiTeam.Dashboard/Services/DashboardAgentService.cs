@@ -1,16 +1,19 @@
+using AiTeam.Dashboard.Configuration;
 using AiTeam.Data;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace AiTeam.Dashboard.Services;
 
 /// <summary>
 /// Agent 狀態查詢服務，初始狀態從 DB 讀取統計，後續由 SignalR 推送更新。
 /// </summary>
-public class DashboardAgentService(AppDbContext db)
+public class DashboardAgentService(AppDbContext db, IOptions<AgentTokenLimits> tokenLimitsOptions)
 {
+    private readonly AgentTokenLimits _tokenLimits = tokenLimitsOptions.Value;
     #region Public Methods
 
     /// <summary>新增 Agent 設定，回傳新建的 AgentConfigDto。TeamId 自動使用第一個 Team。</summary>
@@ -38,7 +41,7 @@ public class DashboardAgentService(AppDbContext db)
         await db.SaveChangesAsync(cancellationToken);
 
         var team = await db.Teams.FindAsync([teamId], cancellationToken);
-        return new AgentConfigDto
+        var dto = new AgentConfigDto
         {
             Id          = agent.Id,
             Name        = agent.Name,
@@ -47,6 +50,19 @@ public class DashboardAgentService(AppDbContext db)
             IsActive    = agent.IsActive,
             TeamName    = team?.Name ?? ""
         };
+
+        if (_tokenLimits.Agents.TryGetValue(agent.Name, out var agentCfg))
+        {
+            dto.Provider = agentCfg.Provider;
+            dto.Model    = agentCfg.Model;
+        }
+        else
+        {
+            dto.Provider = "Anthropic";
+            dto.Model    = "claude-sonnet-4-6";
+        }
+
+        return dto;
     }
 
     /// <summary>切換 Agent 的啟用狀態，回傳更新後的 IsActive 值。</summary>
@@ -78,7 +94,8 @@ public class DashboardAgentService(AppDbContext db)
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)
-        => await db.AgentConfigs
+    {
+        var dtos = await db.AgentConfigs
             .AsNoTracking()
             .Include(a => a.Team)
             .Select(a => new AgentConfigDto
@@ -91,6 +108,23 @@ public class DashboardAgentService(AppDbContext db)
                 TeamName    = a.Team.Name
             })
             .ToListAsync(cancellationToken);
+
+        foreach (var dto in dtos)
+        {
+            if (_tokenLimits.Agents.TryGetValue(dto.Name, out var agentCfg))
+            {
+                dto.Provider = agentCfg.Provider;
+                dto.Model    = agentCfg.Model;
+            }
+            else
+            {
+                dto.Provider = "Anthropic";
+                dto.Model    = "claude-sonnet-4-6";
+            }
+        }
+
+        return dtos;
+    }
 
     /// <summary>取得所有 Agent 的初始狀態 ViewModel（首頁用）。</summary>
     public async Task<List<AgentStatusViewModel>> GetAllAgentStatusesAsync(
