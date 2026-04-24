@@ -537,7 +537,7 @@ PR 欄位顯示優化：
 
 ## 十一、Dashboard 可調整 Token 守門全域限額
 
-> 狀態：🔵 低優先級 — 目前只能改設定檔後重新部署
+> 狀態：🟡 中優先級 — Stage 37-2 驗收首次實際踩到全域月限（2026-04-24 升級，原 🔵 低）
 
 ### 背景
 
@@ -548,6 +548,22 @@ Stage 22 實作了 Token 守門機制，包含：
 - **單次請求上限**：`AgentSettings:SingleRequestTokenLimitK`（預設 50K）
 
 目前這些值只能透過修改 `docker-compose.prod.yml` 環境變數並重新部署來調整。Token 監控頁面的警示訊息也只能說「請至 Bot 設定調整」，沒有直接入口。
+
+### 實際踩坑紀錄（Stage 37-2 驗收，2026-04-24）
+
+驗收「Agent 設定頁顯示 Provider/Model」任務（FF 四第二階段 self-implement 試驗）跑到 Dev 階段時，TokenTrackingProvider 的 Check 4（全域月限）擋下：
+
+```
+Dev Agent 執行失敗：Token 守門：全域本月用量 1,304,628 + 估算 5,289
+超過全域月限 1,000,000。所有 LLM 呼叫已暫停。
+```
+
+老闆角度的體驗問題：
+- Dashboard Token 監控頁警告訊息寫著「請至 Bot 設定調整 `AgentSettings:MonthlyTokenLimitK`」—— 相當於**教使用者 SSH 改 config + push + 等 CI/CD 重 build**
+- 對「只動嘴的老闆」完全不友好，Stage 27b 以降的 `/pause` `/resume` 已經把佇列控制 Dashboard 化，Token 守門也該跟上
+- 臨時救援只能改 `docker-compose.prod.yml` env var（`MonthlyTokenLimitK: "1000" → "2000"`）+ commit push + CI/CD rebuild（~3 分鐘 downtime）
+
+事故當日採用臨時救援（commit `<this commit>`）讓驗收繼續。這是第一次真正碰到月限，本 FF 必須做。
 
 ### 需求
 
@@ -567,7 +583,7 @@ Stage 22 實作了 Token 守門機制，包含：
 
 ### 優先級
 
-🔵 低優先級 — 目前繞道修改 docker-compose.prod.yml 可解決問題，UI 入口是便利性需求
+🟡 中優先級 — 已實際擋下驗收任務、臨時救援成本高（commit + CI/CD rebuild + 30 秒 downtime）。建議下個獨立小 Stage 處理，或搭車 FF 十（Agent 設定頁 refactor）一起做。
 
 ---
 
