@@ -125,7 +125,7 @@ AiTeam.slnx   ← 解決方案檔位於 repo root（注意是 .slnx 不是 .sln�
   dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
   ```
   **注意**：`startup-project` 必須用 `src/AiTeam.Dashboard`（含 `Microsoft.EntityFrameworkCore.Design`），用 `AiTeam.AppHost` 會找不到 DLL；多 DbContext 必加 `--context AppDbContext`
-- git commit / push / 開 PR — 實作完成後自行提交
+- **git commit + push 到 main** — 實作完成後**直接執行**，不要詢問 Christ「要不要 push」（push 是預設行為；完整結案鏈路詳見下方「結案 SOP」段）
 - 程式碼靜態分析 — 確認無明顯 warning
 - **Playwright 驗收** — 凡是可以用 Playwright 截圖驗證的 UI 變更，自行執行並確認結果，不需要請 Christ 開瀏覽器驗收
 
@@ -134,6 +134,24 @@ AiTeam.slnx   ← 解決方案檔位於 repo root（注意是 .slnx 不是 .sln�
 - 在 Discord 執行 `/reload-rules`（規則快取更新）
 - 在 Discord 實際測試 Bot 對話流程
 - 在 Dashboard 驗收 UI 功能
+
+---
+
+## 實作完成後的結案 SOP
+
+驗收條件達標 + 實作完成時，完整結案鏈路：
+
+1. **本機驗證**：`dotnet build AiTeam.slnx` / `dotnet test` / Playwright 截圖（如適用）
+2. **自行 commit**：聚焦「為什麼」而非「做了什麼」；遵循近期 commit 訊息風格（從 `git log --oneline -10` 觀察）
+3. **自行 push 到 main**：這是預設行為，**不需要詢問 Christ「要不要 push」**——直接 push
+4. **CI/CD 自動接手**：
+   - push 觸發 GitHub Actions **self-hosted runner**
+   - Runner 自動執行 `docker compose build + up`
+   - 系統跑在 Christ **本機 Win11 Docker Compose**（非雲端），runner 直接重建本機容器
+   - 你**不需要手動 ssh / 執行 docker 指令**——這些 Christ 自己也做不到（runner 才有權限）
+5. **回報「實作完成 + 已 push」**：給 commit hash，等 Christ 驗收 Bot / Dashboard 行為
+
+> 這條鏈路（commit → push → CI/CD → 本機 Docker）是預設工作流，**不要把它拆成「先 commit 再問是否 push」**。除非該 commit 涉及破壞性操作（force push / reset --hard 等）或 Christ 明確指示要 review，否則一氣呵成完成。
 
 ---
 
