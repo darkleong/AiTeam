@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.40
+> 版本：v7.41
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1091,10 +1091,98 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 
 ### 優先級
 
-🟡 中（v2 部分完成，v3 前置就緒待規劃）— FF 二十八 + Trial_v2 搭車修四項皆於 Stage 39 解決；v3 任務挑選 + 規劃為下一步。
+🟡 中（v3 已完成 ✅）— v2 部分完成 + v3 已執行；FF 二十八完全成功、Top 1 部分（CLAUDE_Vera.md 漏寫 a11y `<a>` / 安全 / pattern match → FF 二十九）、Top 2 預期行為、Top 3 維持高品質；新增 FF 二十九 + FF 三十。
+
+### v3 試驗結果（2026-04-25 執行完成）
+
+✅ **試驗已執行**，任務：流程追蹤頁面 PR 欄位優化（PR #109）。**詳細紀錄**：[docs/experiments/Trial_v3_PipelinePrColumn.md](../experiments/Trial_v3_PipelinePrColumn.md)
+
+**結論摘要**（對照 v2）：
+- ✅ **FF 二十八完全成功**：Vera 啟動 razor 審查 + 高品質跨檔影響範圍分析（Vera 主動掃出 Home.razor:60-62 也有同樣 pattern 沒同步改）
+- 🟡 **Top 1 部分成功**：CLAUDE_Vera.md 擴充判準有效（DRY / fallback / 慣例對齊都做得好），但**漏寫 `<a>` link a11y / `target="_blank"` 安全慣例 / 業務邏輯 pattern match 升 Warning** → 觸發 **新 FF 二十九**
+- 🟢 **Top 2 預期行為**：1 Warning + 1 Info + 0 Critical → Petra 直接放行進 QA → 沒進 Appeal 迴圈。「偏好放行」哲學維持（設計意圖）
+- ✅ **Top 3 維持**：Quinn xUnit + Playwright 都做、甚至 over-deliver（連既有 helper 也補測）
+
+**新發現**（觸發新 FF）：
+1. **CLAUDE_Vera.md 三處判準漏寫** → 新 FF 二十九（a11y `<a>` / `rel="noopener"` 安全 / pattern match）
+2. **tech_improvement ghost Dev task** → 新 FF 三十
+3. **Agent 執行確認訊息誤導**：「即將由 Dev 執行」實際先跑 Dev_plan → FF 二十二 子項 B 案例補完
+
+**戰略結論**：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 self-implement 品質低下根因，**非 Vera 失職**。執行層 / Quinn 測試 / Petra 路由都健康。
+
 
 ---
 
+## 二十九、CLAUDE_Vera.md 判準補強（a11y link + 安全 + pattern match）
+
+> 狀態：🟡 中 — Trial_v3 試驗（2026-04-25）發現的 CLAUDE_Vera.md 判準邊界漏洞
+> 提出日期：2026-04-25
+
+### 背景
+
+Stage 39（FF 二十八）擴充 CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準，但 Trial_v3（PR #109）執行後發現**三處漏寫**：
+
+1. **`<a target="_blank">` 缺 `rel="noopener"`**（tabnabbing 安全漏洞）— PR #109 帶進 production
+2. **`<a>` link 缺 `aria-label`**（a11y）— Stage 39 a11y 段列了 button/MudButton/MudSwitch/MudCheckBox/MudIconButton/img，**但沒列 `<a>` link**
+3. **業務邏輯用 string pattern match**（Trial_v3 的 `Title.Contains("[MOCK]")`）只標 Info case-sensitive，沒升 Warning fragile 設計議題
+
+Vera 是照 CLAUDE_Vera.md 做事的，**沒寫到的議題就放行**——這就是 Stage 37 self-implement 品質低下感受的精確樣貌。
+
+### 修法
+
+CLAUDE_Vera.md「Razor / CSS / a11y / MudBlazor 判準（補充）」段擴充：
+
+- **安全（Critical）**：`<a target="_blank">` 必須有 `rel="noopener"`（防 tabnabbing 漏洞）
+- **a11y `<a>` link（Warning）**：純圖示 link / icon-only link 缺 `aria-label` 或 Tooltip
+- **業務邏輯 pattern match（Warning）**：`Title.Contains("[XXX]")` 等字串 pattern 判斷業務狀態應改用 DTO 欄位 / 注入 service / 列舉
+
+### 順帶處理（Stage 40 主菜搭車修）
+
+- PR #109 帶進的兩個遺漏：`PipelineList.razor` 新 link 補 `rel="noopener"` + `aria-label`
+- Vera 自己抓到但沒人修：`Home.razor:60-62` 同步 + `ExtractPrNumber` 抽共用 helper
+
+### 優先級
+
+🟡 中 — 解 Trial_v3 暴露的真實設計缺口；**Trial_v4 前置條件**。
+
+---
+
+## 三十、tech_improvement 工作流的 ghost Dev task
+
+> 狀態：🔵 低 — UI 顯示一致性問題，不影響流程正確性
+> 提出日期：2026-04-25（Trial_v3 試驗發現）
+
+### 背景
+
+Trial_v3 觀察：tech_improvement 流程的任務列表會出現一筆 **ghost Dev task** 永遠 stuck 在「等待中」：
+
+| 時間 | 事件 | TaskItem |
+|------|------|---------|
+| t+0 | Christ 按 Agent 執行確認的「執行」 | 建 **Dev (等待中, Dashboard 觸發)** ← orphan |
+| t+2min | Orchestrator 啟動 tech_improvement 流程 | 另起 **Dev_plan (執行中, Orchestrator)** |
+| t+5min | Dev_plan 完成 → Petra 審 → Dev 觸發 | 又建 **Dev (執行中, Orchestrator)** |
+| ghost | 永遠 stuck | 第一筆 Dev TaskItem 永遠不會被消化 |
+
+### 根因（推測）
+
+CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_improvement workflow 的 Orchestrator **沒使用這筆 task**，另起爐灶建 Dev_plan + 後來的 Dev。可能是 Stage 25a / 25b 設計遺漏。
+
+### 影響
+
+- ✅ **流程本身正確**：實際 Dev 階段仍正常啟動
+- ❌ **UI 一致性**：任務列表多一筆永遠 stuck 的 task，誤導使用者
+- ❌ **資料正確性**：DB 有 orphan TaskItem 不會被清理
+
+### 修法方向
+
+- **方案 A**：Orchestrator 使用既有 Dev TaskItem（tech_improvement 進場時改 status / agent 為 Dev_plan）
+- **方案 B**：CEO 確認改建 Dev_plan TaskItem（不是 Dev）
+
+### 優先級
+
+🔵 低 — 純 UI 顯示問題，可搭車修。Stage 40 順手做或下次清 orphan task 時做。
+
+---
 
 ## 已完成項目摘要
 
@@ -1222,3 +1310,4 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 | 2026-04-25 | v7.38：Trial_v2（self-implement 試驗 v2）執行完成 — 任務「規則管理頁面 UI 微調」（PR #108）；新增獨立紀錄 [docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)；FF 二十七 補「v2 試驗結果」段（Top 3 ✅ 部分驗證 / Top 1+2 因任務性質繞過 Vera/Petra 未驗）；**新增 FF 二十八**（Vera 審查範圍擴及 .razor / .css，Trial_v2 發現的真實設計缺口）；FF 二十二 子項 B 補具體案例（Dev/Dev_plan chip vs expand 不一致）；其他 Trial_v2 觀察列為下個 Stage 搭車修候選（BossInteraction.Description bug、a11y 隱患、Reviewer 略過狀態錯標）|
 | 2026-04-25 | v7.39：Stage 39 完成（v3.26.0）— **FF 二十八 ✅ 完成 + Trial_v2 搭車修四項 ✅ 完成**：Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準擴充（全 Warning 維持「偏好放行」）；新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 teal `#20c997` mapping + TaskGroupService Reviewer Skipped 跳 Petra 放行；BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）；RuleManagement.razor MudSwitch aria-label；QA 略過共用 Skipped API；Mock `review_skipped` 情境（Discord + Dashboard 雙入口）；FF 二十八主體 78 行搬入已完成摘要 + FF 二十七 5 個觀察項 4 項標 ✅、Trial_v2 v3 前置條件全部就緒；驗收 D pass（Stage39測試3 Reviewer Status=skipped）、A 流程 pass（主菜真實能力待 Trial_v3 真實 PR）、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm）改用真實 CEO 對話補驗 |
 | 2026-04-25 | v7.40：Stage 39 結案後補完 — (1) Stage 39 Roadmap header 升 ✅ + 文件版本 v2.0（Christ 結案 commit 漏改，Aria 補）；(2) FF 十「Agent 角色設定 Dashboard 化」擴充 Phase 1 / Phase 2 分階段：Phase 1 C# SystemPrompt（API 層 Agent，FF 十既有範圍）+ Phase 2 CLAUDE_*.md template（CLI 層 Agent，Stage 39 結案後 Christ 詢問是否可 Dashboard 編輯，Aria 推薦現在不做：內容仍在演進、修改頻率低、code review 軌跡比 DB 安全；觸發條件寫明「等 Trial_v3 完成 + CLAUDE_Vera 定型 1-2 月後 + 真實使用情境」）|
+| 2026-04-25 | v7.41：Trial_v3（self-implement 試驗 v3）執行完成 — 任務「流程追蹤頁面 PR 欄位優化」（PR #109）；新增獨立紀錄 [docs/experiments/Trial_v3_PipelinePrColumn.md](../experiments/Trial_v3_PipelinePrColumn.md)；FF 二十七 補「v3 試驗結果」段（FF 二十八 ✅ / Top 1 🟡 部分 / Top 2 🟢 預期 / Top 3 ✅ 維持）；**新增 FF 二十九**（CLAUDE_Vera.md 三處判準漏寫：`<a>` a11y / `rel="noopener"` 安全 / pattern match Warning）+ **新增 FF 三十**（tech_improvement ghost Dev task）；FF 二十二 子項 B 補 Agent 執行確認訊息誤導案例；戰略結論：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 品質低下根因，非 Vera 失職 |
