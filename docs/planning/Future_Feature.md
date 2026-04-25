@@ -806,6 +806,17 @@ AiTeam 系統中存在**兩種「Agent 名稱」的混淆**，導致 Stage 33 �
 
 **規模**：M（影響 `AgentStatusViewModel` + `PushAgentStatusAsync` + 客戶端 `UpdateAgentStatus` + StatusBadge / Pipeline View 可能的 fallback 邏輯；需要整體評估才不會破功能）
 
+#### 具體案例（2026-04-25 Trial_v2 試驗發現）
+
+執行 self-implement 試驗 v2 期間，Christ 觀察到首頁 Dev Agent 狀態卡顯示矛盾：
+
+| 顯示位置 | 邏輯 | 看到什麼 |
+|---------|------|---------|
+| Agent chip 「閒置」 | 看 SemaphoreGroups 的 `Dev` 是否被佔用 | Dev_plan 不算佔 Dev semaphore → 閒置 |
+| Expand 「🏃 規則管理頁表... 已跑 40s」 | 看 TaskItem.AssignedAgent | 包含 Dev_plan → 顯示 running |
+
+**兩個資料來源邏輯各自正確，但並列顯示 → 使用者覺得矛盾。** 這是子項 B 「PushAgentStatus 名稱語意清理」的真實使用者體驗痛點。詳見 [docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)。
+
 ### 搭車時機
 
 - **子項 A 可獨立做**：若未來做 Agent 設定頁 refactor（FF 十「Agent 角色設定 Dashboard 化」）時一起加守門最經濟
@@ -1057,9 +1068,107 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 - ❌ Petra 升級為「設計 PM」（需要更大架構討論）
 - ❌ 自動化品質評估（人工觀察為主，不做評分自動化）
 
+### v2 試驗結果（2026-04-25 執行完成）
+
+✅ **試驗已執行**，任務：規則管理頁面 UI 微調（PR #108）。**詳細紀錄**：[docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)
+
+**結論摘要**：
+- ✅ **Top 3（Quinn 測試品質）部分驗證為正** — 寫了 10 個實質的 Playwright 視覺截圖測試，不是 dummy 湊數
+- ❓ **Top 1 / Top 2 本次未驗證** — 任務是純 `.razor` 改動，Vera 因 [`ReviewerAgentService.cs:108`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs:108) 設計（只審 .cs）直接略過，Petra 也沒仲裁
+
+**新發現**（觸發新 FF / 列為下個 Stage 待修）：
+1. **Vera 略過純 .razor PR** — 設計缺口，新增 [FF 二十八](#二十八vera-審查範圍擴及-razor--css)
+2. **BossInteraction.Description 缺 Task.Description**（CommandHandler.cs:195）— Dashboard UX 不平等，列下個 Stage 搭車修
+3. **Dev/Dev_plan chip vs expand 不一致** — 加為 FF 二十二 子項 B 具體案例
+4. **MudSwitch 移除 Label 後 a11y 缺替代描述**（PR #108 沒人擋）— 與 #1 連動
+5. **Reviewer 略過時狀態錯標 `failed`** — 應為 `skipped`
+
+**試驗 v3 規劃**：需挑會動 `.cs` 檔的小工程（補 Top 1 / Top 2 驗證），且需 **FF 二十八修完後**再執行（否則純 UI 任務仍會略過 Vera）。詳見 Trial_v2 紀錄末段。
+
 ### 優先級
 
-🟡 中 — 解鎖未來 self-implement 戰略（決定 Cody/Vera/Quinn 能否接客戶級任務），但不阻擋當前開發節奏。下個適合的小任務搭車跑即可。
+🟡 中（v2 部分完成，v3 待規劃）— v2 結果證明系統能力部分回升、部分受設計缺口阻擋；v3 待 FF 二十八 修復後執行。
+
+---
+
+## 二十八、Vera 審查範圍擴及 .razor / .css（對齊 Quinn 邏輯）
+
+> 狀態：🟡 中 — Trial_v2 試驗（2026-04-25）發現的真實設計缺口
+> 提出日期：2026-04-25
+
+### 背景
+
+[`ReviewerAgentService.cs:108-109`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs:108) 目前的設計：
+
+```csharp
+if (csFiles.Count == 0)
+    return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
+```
+
+**Vera 只審查 `.cs` 檔（C# 邏輯），純 `.razor` 或 `.css` 改動的 PR 直接略過。**
+
+對比 [`QaAgentService.cs:111`](../../src/AiTeam.Bot/Agents/QaAgentService.cs:111)（Quinn 已支援）：
+
+```csharp
+if (!hasUiChanges && csFiles.Count == 0)
+    return new AgentExecutionResult(false,
+        $"PR #{prNumber} 未包含可測試的 .cs / .razor / .css 檔案，略過 QA");
+```
+
+**Quinn 有檢查 `hasUiChanges`（razor/css），但 Vera 沒對齊。**
+
+### Trial_v2 真實案例
+
+PR #108（規則管理頁面 UI 微調）只動 `.razor`，Vera 直接略過 review，**整個 review 環節缺位**。
+
+**真實後果**：
+- Cody 寫的 `MudSwitch` 移除 `Label` 後**沒補 `aria-label` 替代描述**（a11y 隱患）
+- 這個問題如果 Vera 有跑，應該標 Warning
+- 但因 Vera 略過 → PR 直接到 QA → Quinn 跑 Playwright（過）→ 任務「完成」**a11y 隱患流入 production**
+
+**這就是 Stage 37 self-implement 試驗品質低下感受的（其中一個）真因**：純 UI 任務 review 環節缺位，使用者感受到「沒被把關」。
+
+### 修法
+
+對齊 Quinn 邏輯：
+
+```csharp
+// 前
+if (csFiles.Count == 0)
+    return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
+
+// 後
+var razorFiles = files.Where(f => f.FileName.EndsWith(".razor", ...)).ToList();
+var cssFiles   = files.Where(f => f.FileName.EndsWith(".css", ...)).ToList();
+var hasUiChanges = razorFiles.Count > 0 || cssFiles.Count > 0;
+
+if (!hasUiChanges && csFiles.Count == 0)
+    return Skip(task, $"PR #{prNumber} 未包含 .cs / .razor / .css 檔案，略過 Reviewer");
+```
+
+### CLAUDE_Vera.md 同步擴充
+
+`CLAUDE_Vera.md` 目前針對 C# 程式碼審查（Critical 三類：崩潰 / 資安 / 資源洩漏）。razor / css 審查需要補的判準：
+
+- **a11y**：缺 `aria-label` / `aria-describedby`、`<button>` 缺 text content、image 缺 `alt`
+- **Blazor 特性**：`@onclick` handler 例外處理、`@bind-Value` 拼錯欄位名、Circuit 隔離
+- **MudBlazor 慣例**：相同類型按鈕應一致用 IconButton vs Button
+- **CSS**：`!important` 濫用、`color`/`background` 寫死無法 dark mode 切換
+
+### 順便修：Reviewer 略過時的狀態分類
+
+目前 Vera 略過時 `Fail(task, ...)` → group status = `failed` + Dashboard 顯示「失敗」+「重試」按鈕。但「沒檔案可審」不是失敗，重試也救不了。
+
+修法：拋特殊 result 讓 Processor 標 `skipped`（綠色）而非 `failed`（紅色）。
+
+### 優先級
+
+🟡 中 — Trial_v2 真實案例證明這個缺口讓純 UI 任務的品質保障形同虛設。建議優先做（試驗 v3 前置條件）。
+
+### 不在範圍
+
+- ❌ a11y 自動掃描工具整合（如 axe-core）— 用 prompt 指引讓 Vera 用 Read/Grep 探索就夠
+- ❌ Visual regression（差異截圖）— Quinn 已用 Playwright 截圖負責
 
 ---
 
@@ -1185,3 +1294,4 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 | 2026-04-25 | v7.36：Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A ✅ 完成**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton 對齊 AppSettingsService TTL 5min pattern + `LlmModels.cs` 常數白名單 + Internal API `scope=agent-config` 分支讓 cache 即時失效；**關鍵修正**（Aria 計劃書外抓出）：TokenTrackingProvider 第 9 參數從 `config.Model` 改傳 `finalModel`，避免 Dashboard 改完後 Token 監控頁顯示舊 model 的資料誤導；Christ 驗收 1（UI）+ 3（覆蓋性）通過，2（Token 監控）待後續 Stage 真實任務搭車驗；FF 四第二階段 2-A 主體標 ✅，2-B（CLI 層多家共存）保留待評估 |
 | 2026-04-25 | v7.37：Stage 38 結案後整理 — (1) **新增 FF 二十七**（Self-implement 試驗 v2，FF 二十四 fix 後重新評估品質）：Aria 調查 Stage 37 真實流程品質低下三大主因（Top 1 CLAUDE_*.md COPY 漏 = FF 二十四已修 / Top 2 Vera 偏好放行 + Petra Warning 寬鬆 / Top 3 QA 測試品質指引偏量）；計劃下個小規模任務 production 真實流程跑一次 self-implement 看品質回升狀況，若 Top 1 修復就足夠則 Top 2/3 延後。(2) **補完 FF 二十搬遷**：Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但實際沒搬，主清單仍有 155 行；本次補完搬遷至已完成摘要 |
 | 2026-04-25 | v7.38：FF 四瘦身（波 2 選項 A）— 第一階段 + 第二階段 2-A 詳細描述（共 ~30 行）壓縮成「已完成成果」摘要兩 bullet 帶 Stage Roadmap 連結；「實作重點」改名「2-B 實作重點」並刪掉已完成的 GEMINI case 條目；FF 四從 ~156 行縮到 ~95 行（-39%）；2-B（CLI 層多家共存）+ CLI 三家能力研究 +「PR #107 三條禁止路線」全保留供未來 spike 用 |
+| 2026-04-25 | v7.38：Trial_v2（self-implement 試驗 v2）執行完成 — 任務「規則管理頁面 UI 微調」（PR #108）；新增獨立紀錄 [docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)；FF 二十七 補「v2 試驗結果」段（Top 3 ✅ 部分驗證 / Top 1+2 因任務性質繞過 Vera/Petra 未驗）；**新增 FF 二十八**（Vera 審查範圍擴及 .razor / .css，Trial_v2 發現的真實設計缺口）；FF 二十二 子項 B 補具體案例（Dev/Dev_plan chip vs expand 不一致）；其他 Trial_v2 觀察列為下個 Stage 搭車修候選（BossInteraction.Description bug、a11y 隱患、Reviewer 略過狀態錯標）|
