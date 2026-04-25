@@ -177,9 +177,13 @@ public class TaskGroupService(
         // ── Reviewer 完成 → AppealOrchestrationService ──
         if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
         {
-            if (!result.Success)
+            // Stage 39：Skipped 結果（Vera 收到無可審檔案）也走「放行」路徑，跳過 Petra 評審
+            if (!result.Success || result.ResultType == AgentResultType.Skipped)
             {
-                logger.LogWarning("Vera 執行失敗（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
+                if (result.ResultType == AgentResultType.Skipped)
+                    logger.LogInformation("Vera 略過（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
+                else
+                    logger.LogWarning("Vera 執行失敗（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
                 result = result with { CriticalReviewCount = 0 };
             }
             else

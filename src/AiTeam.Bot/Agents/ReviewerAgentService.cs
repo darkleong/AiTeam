@@ -51,6 +51,19 @@ public class ReviewerAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 39：略過驗收情境（review_skipped）— 回傳 Skipped 結果，task.Status 標 "skipped"，跳過 Petra
+            if (MockClaudeCodeService.FailScenario == "review_skipped")
+            {
+                MockClaudeCodeService.FailScenario = null;
+                logger.LogInformation("[MockMode/Skipped] Vera 模擬無可審檔案，回傳 Skipped");
+                AddLog(task, "[MOCK] Vera 模擬審查中...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Id, task.Title);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                return AgentExecutionResult.Skipped(
+                    "[MOCK] PR 未包含可審查的 .cs / .razor / .css 檔案，略過 Reviewer");
+            }
+
             // 強制失敗情境：回傳 Critical Issue，觸發 Review Appeal 流程
             if (MockClaudeCodeService.FailScenario == "review_appeal")
             {
@@ -98,21 +111,31 @@ public class ReviewerAgentService(
             if (prNumber <= 0)
                 return Fail(task, "找不到任何 open PR，請先開一個 PR 或指定格式：PR #123");
 
-            // 2. 取得 PR 的變更檔案（僅審查 .cs 檔）
+            // 2. 取得 PR 的變更檔案（Stage 39：審查範圍擴及 .cs / .razor / .css，對齊 Quinn 的 hasUiChanges 邏輯）
             var prFiles = await gitHubService.GetPullRequestFilesAsync(owner, repo, prNumber);
             var headRef = await gitHubService.GetPullRequestHeadRefAsync(owner, repo, prNumber);
             var csFiles = prFiles
                 .Where(f => f.FileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 .ToList();
+            var razorFiles = prFiles
+                .Where(f => f.FileName.EndsWith(".razor", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var cssFiles = prFiles
+                .Where(f => f.FileName.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var hasUiChanges = razorFiles.Count > 0 || cssFiles.Count > 0;
 
-            if (csFiles.Count == 0)
-                return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
+            if (!hasUiChanges && csFiles.Count == 0)
+                return AgentExecutionResult.Skipped(
+                    $"PR #{prNumber} 未包含可審查的 .cs / .razor / .css 檔案，略過 Reviewer");
 
-            AddLog(task, $"PR #{prNumber} 共 {csFiles.Count} 個 .cs 檔，啟動 Claude Code Review session", "done");
+            AddLog(task,
+                $"PR #{prNumber}：{csFiles.Count} .cs / {razorFiles.Count} .razor / {cssFiles.Count} .css，啟動 Claude Code Review session",
+                "done");
             await taskRepository.SaveAsync(cancellationToken);
 
             // 3. 組建 prompt（只帶 patch，不帶完整檔案內容；Claude Code 自行 Read 需要的檔案）
-            var prompt = BuildClaudeCodeReviewPrompt(csFiles, rules);
+            var prompt = BuildClaudeCodeReviewPrompt(csFiles, razorFiles, cssFiles, rules);
 
             // 4. 單一 Claude Code session：程式碼審查 + 影響範圍分析
             var ccResult = await RunClaudeCodeReviewAsync(owner, repo, headRef, prompt, task, cancellationToken);
@@ -237,21 +260,32 @@ public class ReviewerAgentService(
     /// 只帶 patch（diff），不帶完整檔案內容。
     /// Claude Code 在需要時會自行用 Read 工具讀取完整檔案。
     /// Stage 23：加入版本號檢查指示（若 WorkflowSettings.TargetVersion 有設定）。
+    /// Stage 39：審查範圍擴及 .razor / .css，依檔案類型分區呈現 diff。
     /// </summary>
     private string BuildClaudeCodeReviewPrompt(
         IReadOnlyList<PullRequestFile> csFiles,
+        IReadOnlyList<PullRequestFile> razorFiles,
+        IReadOnlyList<PullRequestFile> cssFiles,
         IReadOnlyList<string> rules)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("## PR 變更（僅 .cs 檔案的 diff）");
+        sb.AppendLine("## PR 變更 diff");
         sb.AppendLine();
-        foreach (var file in csFiles)
+
+        if (csFiles.Count > 0)
         {
-            sb.AppendLine($"### {file.FileName}");
-            sb.AppendLine("```diff");
-            sb.AppendLine(file.Patch ?? "(no patch available)");
-            sb.AppendLine("```");
-            sb.AppendLine();
+            sb.AppendLine("### .cs 檔案");
+            foreach (var file in csFiles) AppendFileDiff(sb, file);
+        }
+        if (razorFiles.Count > 0)
+        {
+            sb.AppendLine("### .razor 檔案");
+            foreach (var file in razorFiles) AppendFileDiff(sb, file);
+        }
+        if (cssFiles.Count > 0)
+        {
+            sb.AppendLine("### .css 檔案");
+            foreach (var file in cssFiles) AppendFileDiff(sb, file);
         }
 
         if (rules.Count > 0)
@@ -279,6 +313,16 @@ public class ReviewerAgentService(
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>Stage 39：消除 cs / razor / css 三段重複的 diff 區塊輸出。</summary>
+    private static void AppendFileDiff(StringBuilder sb, PullRequestFile file)
+    {
+        sb.AppendLine($"#### {file.FileName}");
+        sb.AppendLine("```diff");
+        sb.AppendLine(file.Patch ?? "(no patch available)");
+        sb.AppendLine("```");
+        sb.AppendLine();
     }
 
     // ────────────── Review Body 組建 ──────────────

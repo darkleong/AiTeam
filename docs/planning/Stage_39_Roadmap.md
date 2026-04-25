@@ -286,3 +286,80 @@ QA 也有相同「略過」邏輯（[`QaAgentService.cs:111`](../../src/AiTeam.B
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-25 | 計劃書建立（Aria）— FF 二十八 主菜 + Trial_v2 搭車修三項 |
+| v1.1 | 2026-04-25 | 實作完成 — 實作紀錄章節新增（待 Aria 結案第二段：版本 bump v3.26.0 + Master Plan / Future_Feature 整理） |
+
+---
+
+## 實作紀錄
+
+> 完成日期：2026-04-25
+> 模型：Sonnet 4.6 200K（high effort）
+> Build：`dotnet build AiTeam.slnx` → 0 Errors / 57 Warnings（皆為既有，含 NU1902 / MSTEST0037 / MUD0002 PipelineView Color 屬性）
+
+### 實作摘要
+
+**Phase A — Skipped 結果型別（基礎建設）**
+
+- [`IAgentExecutor.cs`](../../src/AiTeam.Bot/Agents/IAgentExecutor.cs)：新增 `AgentResultType { Normal, Skipped }` enum + `AgentExecutionResult.Skipped(reason)` 工廠方法。`ResultType` 加在 record 尾端帶 default，所有既有 `with` 表達式相容。Skipped 結果一律 `Success=true`（讓流程繼續、Agent 狀態走 idle）。
+- [`AgentQueueProcessor.cs:204-228`](../../src/AiTeam.Bot/Orchestration/AgentQueueProcessor.cs:204)：`finalStatus` 改三分支（skipped / done / failed）。Discord embed 標題與顏色順手改三分支（Skipped 走 ⏭️ + Color.Teal）。
+- Dashboard 全鏈路 mapping `skipped`：[`StatusBadge.razor`](../../src/AiTeam.Dashboard/Components/Shared/StatusBadge.razor)（"略過"）、[`app.css`](../../src/AiTeam.Dashboard/wwwroot/css/app.css)（`--color-status-skipped: #20c997`）、[`PipelineView.razor.cs`](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineView.razor.cs)（終態判定 + `IsCompleted` + `GetLogColor` Tertiary）、[`PipelineList.razor.cs`](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineList.razor.cs)（SignalR 終態刷新）、[`TaskCenter.razor`](../../src/AiTeam.Dashboard/Components/Pages/Tasks/TaskCenter.razor) + [`PipelineList.razor`](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineList.razor)（篩選下拉新增）。
+
+**Phase B — 主菜：Vera 審查範圍擴及 .razor / .css**
+
+- [`ReviewerAgentService.cs`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs)：對齊 [`QaAgentService.cs:99-113`](../../src/AiTeam.Bot/Agents/QaAgentService.cs:99) 的 `hasUiChanges` 邏輯，提取 `csFiles` / `razorFiles` / `cssFiles`；略過條件改為 `!hasUiChanges && csFiles.Count == 0` → 回 `AgentExecutionResult.Skipped(...)`。
+- `BuildClaudeCodeReviewPrompt` 簽名改為三個檔案清單；標題從「PR 變更（僅 .cs 檔案的 diff）」改名為「PR 變更 diff」；新增三段（.cs / .razor / .css）共用 helper `AppendFileDiff`（消除重複）。
+- [`CLAUDE_Vera.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Vera.md)：審查範圍擴成「.cs / .razor / .css」；新增「Razor / CSS / a11y / MudBlazor 判準（補充）」段落，**全列為 Warning**（除非 runtime 崩潰），呼應「寧可漏報 warning，不可誤報 critical」「偏好放行」哲學。Critical 仍只限：runtime 崩潰 / 資安 / 資源洩漏 三類。
+
+**Phase C — TaskGroupService Reviewer Skipped 路由**
+
+- [`TaskGroupService.cs:178-200`](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs:178)：Reviewer 完成判斷改為 `!result.Success || result.ResultType == AgentResultType.Skipped`，兩種情境都走「跳過 Petra 直接放行」路徑（log 訊息分流區別）。Vera 略過時 `CriticalReviewCount = 0`，避免下游 Petra 拿空 review report 異常。
+- QA 略過：[`TaskGroupService.cs:156-163`](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs:156) 的 QA 處理只在 `TestReport != null` 時儲存，QA Skipped 時 `TestReport == null` 自然不進此 if，無需額外處理。
+
+**Phase D — 搭車修三項**
+
+- **D1** [`QaAgentService.cs:111-113`](../../src/AiTeam.Bot/Agents/QaAgentService.cs:111)：略過改用 `AgentExecutionResult.Skipped(...)`（與 Vera 共用同一 API）。
+- **D2** BossInteraction.Description 補 Task.Description，三處改動（兩處對稱補完計劃書 L195 沒提到的 SlashCommandRouter）：
+  - [`CommandHandler.cs:195`](../../src/AiTeam.Bot/Discord/CommandHandler.cs:195)（Dashboard 路徑）
+  - [`CommandHandler.cs:441`](../../src/AiTeam.Bot/Discord/CommandHandler.cs:441)（Discord 路徑）
+  - [`SlashCommandRouter.cs:245`](../../src/AiTeam.Bot/Discord/Routing/SlashCommandRouter.cs:245)（slash command `/build` 路徑，計劃書未提，掃描時順手補）
+  - 新增 `BuildCeoConfirmDescription` static helper 在 [`CommandHandler.cs:559-571`](../../src/AiTeam.Bot/Discord/CommandHandler.cs:559)（前兩處共用）；SlashCommandRouter 因不同 namespace 採 inline 寫法（不過度抽象）。
+- **D3** [`RuleManagement.razor:62`](../../src/AiTeam.Dashboard/Components/Pages/Rules/RuleManagement.razor:62)：MudSwitch 補 `aria-label="@(context.IsActive ? \"已啟用，點擊停用\" : \"已停用，點擊啟用\")"`。全站 grep 確認其他 4 處 MudSwitch 皆有 `Label`，無需改動。
+
+**Phase E — Mock 覆蓋（review_skipped 情境）**
+
+- [`ReviewerAgentService.cs:54-66`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs:54)：MockMode early return 新增 `FailScenario == "review_skipped"` 分支，回 `AgentExecutionResult.Skipped(...)`。
+- [`MockScenarioService.cs`](../../src/AiTeam.Bot/Services/MockScenarioService.cs)：`RunScenarioAsync` 新增 `review_skipped` 處理（設 FailScenario + 對應 `(NewFeature, "Vera 略過驗收", "Dev")`）。
+- [`SlashCommandRouter.cs:114`](../../src/AiTeam.Bot/Discord/Routing/SlashCommandRouter.cs:114)：`/mock` 指令選項新增「【略過驗收】Vera 略過（無可審檔案 → skipped）」。
+- [`MockScenarioCard.razor:53`](../../src/AiTeam.Dashboard/Components/Pages/Home/MockScenarioCard.razor:53)：Dashboard /mock 卡片新增「⏭️ 略過驗收 — Vera 略過（無可審檔案）」選項。
+
+### 踩坑記錄
+
+實作過程順利，無重大踩坑。三點注意事項：
+
+1. **TaskGroupService 已有 `using AiTeam.Bot.Agents;`**：`AgentResultType` 不需額外 using。
+2. **MudStepper 的 `Skipped` 屬性語義不同**：[`PipelineView.razor:126`](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineView.razor:126) 的 `Skipped="@IsRevision(...)"` 是把 MudStepper 的 Skipped 視覺**借來給 "revision/reviewing"** 用（既有設計）。本 Stage 新增的 `"skipped"` 狀態走 `IsCompleted`（顯示為已完成樣式），由 StatusBadge teal 配色 + "略過" 文字 + 不顯示重試按鈕來呈現語義差異。
+3. **C# record `with` 相容性**：`ResultType` 加在 record 尾端帶 default，所有既有 `result with { ... }` 表達式（如 `TaskGroupService.cs` 多處）無需改動。
+
+### 驗收情境完成度
+
+| 情境 | 狀態 | 驗收方式 |
+|------|------|----------|
+| A. Vera 審 .razor PR | ✅ 程式邏輯就緒 | Mock：`/mock new_feature` 觸發後若 PR 含 .razor 檔，Vera 走 review session（不再略過） |
+| B. Vera 抓 a11y | ⏳ 待真實 PR 驗收 | CLAUDE_Vera.md 判準擴充已就位；FF 十子項實作中或 Trial_v3 時驗證 |
+| C. BossInteraction 完整描述 | ✅ 程式邏輯就緒 | `/mock new_feature_with_proposal` → Dashboard 操作中心查看 ceo_confirm 卡片 |
+| D. Reviewer 略過 skipped | ✅ 程式邏輯就緒 | `/mock review_skipped` → Dashboard 顯示綠色 skipped chip + 流程繼續走 QA |
+| E. MudSwitch a11y | ✅ 程式邏輯就緒 | Playwright `/rules` accessibility audit 確認 aria-label 屬性存在 |
+
+### 模型 / Effort 校準
+
+- 預估 Context：~110-140K
+- 實際模型：Sonnet 4.6 200K + high effort
+- 工作項目：4 個 Phase（A 基礎建設 / B 主菜 / C-D 搭車修 / E Mock 覆蓋），共 17 個檔案改動
+- 範本可用度：高（QaAgentService.hasUiChanges 直接抄 + 既有 mock FailScenario 結構抄）
+- Build 通過：0 Errors
+
+### 下一步（待 Aria 結案第二段處理）
+
+- ⏳ `src/Directory.Build.props` 版本 bump：v3.25.0 → v3.26.0（minor）
+- ⏳ [`docs/architecture/00_Master_Plan.md`](../architecture/00_Master_Plan.md) Stage 39 狀態更新（🟡 → 🟢）+ 版本歷史
+- ⏳ [`docs/planning/Future_Feature.md`](Future_Feature.md) FF 二十八 標記完成 + Trial_v2 三項搭車修標記完成

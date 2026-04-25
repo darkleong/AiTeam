@@ -192,7 +192,8 @@ public class CommandHandler(
                 _ = interactionService.CreateInteractionAsync(
                     "ceo_confirm",
                     title:                ceoResponse.Task?.Title ?? userInput,
-                    description:          ceoResponse.Reply ?? userInput,
+                    // Stage 39 搭車修：補上 Task.Description（CEO 解析出的具體任務內容），讓 Dashboard 操作中心顯示完整資訊
+                    description:          BuildCeoConfirmDescription(ceoResponse, userInput),
                     project:              finalProject,
                     agentName:            ceoResponse.TargetAgent,
                     availableActionsJson: InteractionService.CeoConfirmActionsJson,
@@ -438,7 +439,8 @@ public class CommandHandler(
                 _ = interactionService.CreateInteractionAsync(
                     "ceo_confirm",
                     title:                ceoResponse.Task?.Title ?? msg.CleanContent,
-                    description:          ceoResponse.Reply ?? msg.CleanContent,
+                    // Stage 39 搭車修：補上 Task.Description（與 Dashboard 路徑對稱）
+                    description:          BuildCeoConfirmDescription(ceoResponse, msg.CleanContent),
                     project:              finalProject,
                     agentName:            ceoResponse.TargetAgent,
                     availableActionsJson: InteractionService.CeoConfirmActionsJson,
@@ -552,5 +554,19 @@ public class CommandHandler(
         if (string.IsNullOrEmpty(input)) return "直接指派任務";
         var firstLine = input.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? input;
         return firstLine.Length <= 100 ? firstLine : firstLine[..97] + "…";
+    }
+
+    /// <summary>
+    /// Stage 39 搭車修：組裝 ceo_confirm BossInteraction 的 description，含 Reply + Task.Description。
+    /// 原本只放 ceoResponse.Reply，Dashboard 操作中心看不到 CEO 解析出的具體任務內容；
+    /// 改為兩段式：上半 Reply（短摘要 + 路由說明）、下半 Task.Description（具體任務描述）。
+    /// </summary>
+    private static string BuildCeoConfirmDescription(CeoResponse ceoResponse, string fallback)
+    {
+        var reply = ceoResponse.Reply ?? fallback;
+        var taskDescription = ceoResponse.Task?.Description;
+        return string.IsNullOrWhiteSpace(taskDescription)
+            ? reply
+            : $"{reply}\n\n---\n\n{taskDescription}";
     }
 }

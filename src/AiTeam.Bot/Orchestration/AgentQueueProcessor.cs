@@ -201,7 +201,11 @@ public class AgentQueueProcessor(
 
             var result = await executor.ExecuteTaskAsync(task, owner, repo, rules, linkedCts.Token);
 
-            var finalStatus = result.Success ? "done" : "failed";
+            // Stage 39：三分支狀態映射 — Skipped → "skipped"（綠色，非阻擋）/ Normal Success → "done" / 失敗 → "failed"
+            var isSkipped = result.ResultType == AgentResultType.Skipped;
+            var finalStatus = isSkipped
+                ? "skipped"
+                : result.Success ? "done" : "failed";
             taskRepo.UpdateStatus(task, finalStatus);
             taskRepo.AddLog(new TaskLog
             {
@@ -227,12 +231,16 @@ public class AgentQueueProcessor(
                 CurrentTaskTitle = result.Success ? null : result.Summary
             });
 
-            // Discord embed
+            // Discord embed（Stage 39：Skipped 用 ⏭️ 與 Teal 配色，與成功/失敗區分）
             var embed = new EmbedBuilder()
-                .WithTitle(result.Success
-                    ? $"✅ {task.AssignedAgent} Agent 執行完成（Orchestrator）"
-                    : $"❌ {task.AssignedAgent} Agent 執行失敗（Orchestrator）")
-                .WithColor(result.Success ? Color.Green : Color.Red)
+                .WithTitle(isSkipped
+                    ? $"⏭️ {task.AssignedAgent} Agent 略過（Orchestrator）"
+                    : result.Success
+                        ? $"✅ {task.AssignedAgent} Agent 執行完成（Orchestrator）"
+                        : $"❌ {task.AssignedAgent} Agent 執行失敗（Orchestrator）")
+                .WithColor(isSkipped
+                    ? Color.Teal
+                    : result.Success ? Color.Green : Color.Red)
                 .AddField("任務", task.Title)
                 .AddField("摘要", result.Summary)
                 .WithTimestamp(DateTimeOffset.UtcNow);

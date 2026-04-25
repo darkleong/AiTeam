@@ -68,7 +68,7 @@ public partial class PipelineView : IAsyncDisposable
         {
             // 找到對應步驟，直接更新狀態
             step.Task.Status = update.Status;
-            if (update.Status is "done" or "failed" or "cancelled")
+            if (update.Status is "done" or "failed" or "cancelled" or "skipped")
             {
                 step.Task.CompletedAt = DateTime.UtcNow;
                 // 步驟完成時同步更新 Group content 欄位（Agent 可能已寫入歸檔報告等資料）
@@ -93,7 +93,7 @@ public partial class PipelineView : IAsyncDisposable
 
             if (_steps.Any(s => s.Task.Status == "failed"))
                 Group.Status = "failed";
-            else if (_steps.All(s => s.Task.Status is "done" or "cancelled"))
+            else if (_steps.All(s => s.Task.Status is "done" or "cancelled" or "skipped"))
                 Group.Status = "done";
             else if (_steps.Any(s => s.Task.Status == "running"))
                 Group.Status = "running";
@@ -225,7 +225,7 @@ public partial class PipelineView : IAsyncDisposable
         return ts.Minutes > 0 ? $"{(int)ts.TotalHours} 時 {ts.Minutes} 分" : $"{(int)ts.TotalHours} 時";
     }
 
-    private static bool IsCompleted(string status)  => status == "done";
+    private static bool IsCompleted(string status)  => status is "done" or "skipped";
     private static bool IsFailed(string status)      => status is "failed" or "error";
     private static bool IsRevision(string status)    => status is "revision" or "reviewing";
 
@@ -236,6 +236,7 @@ public partial class PipelineView : IAsyncDisposable
         "running"            => Color.Info,
         "revision"           => Color.Warning,
         "reviewing"          => Color.Warning,
+        "skipped"            => Color.Tertiary,
         _                    => Color.Default
     };
 

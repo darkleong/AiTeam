@@ -33,7 +33,7 @@ public class MockScenarioService(
 
     /// <summary>
     /// 執行指定情境（new_feature / bug_fix / tech_improvement / new_feature_with_proposal /
-    /// fail_review / fail_qa / fail_dev_plan），建立 TaskGroup 並觸發流程。
+    /// fail_review / fail_qa / fail_dev_plan / review_skipped），建立 TaskGroup 並觸發流程。
     /// </summary>
     /// <returns>(ok, message)：ok 表示是否成功啟動；message 供呼叫端顯示（Discord Followup / Dashboard Snackbar）。</returns>
     public async Task<(bool ok, string message)> RunScenarioAsync(
@@ -56,6 +56,8 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "qa_failure";
         else if (scenario == "fail_dev_plan")
             MockClaudeCodeService.FailScenario = "dev_plan_appeal";
+        else if (scenario == "review_skipped")
+            MockClaudeCodeService.FailScenario = "review_skipped"; // Stage 39：Vera 略過驗收情境
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -65,6 +67,7 @@ public class MockScenarioService(
             "fail_review"               => (WorkflowType.NewFeature,      "失敗測試-ReviewAppeal", "Dev"),
             "fail_qa"                   => (WorkflowType.NewFeature,      "失敗測試-QA失敗",       "Dev"),
             "fail_dev_plan"             => (WorkflowType.NewFeature,      "失敗測試-DevPlanAppeal", "Dev_plan"),
+            "review_skipped"            => (WorkflowType.NewFeature,      "Vera 略過驗收",         "Dev"),
             _                           => (WorkflowType.NewFeature,      "新功能",                "Dev_plan")
         };
 

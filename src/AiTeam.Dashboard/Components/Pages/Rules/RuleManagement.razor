@@ -59,7 +59,8 @@ else if (_rules.Count > 0)
                 <MudSwitch T="bool"
                            Value="@context.IsActive"
                            ValueChanged="@((bool v) => ToggleActiveAsync(context, v))"
-                           Color="Color.Primary" />
+                           Color="Color.Primary"
+                           aria-label="@(context.IsActive ? "已啟用，點擊停用" : "已停用，點擊啟用")" />
             </MudTd>
             <MudTd>
                 <MudStack Row="true" Spacing="1">

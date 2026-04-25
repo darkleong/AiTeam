@@ -109,7 +109,7 @@ public class QaAgentService(
                 .ToList();
 
             if (!hasUiChanges && csFiles.Count == 0)
-                return new AgentExecutionResult(false,
+                return AgentExecutionResult.Skipped(
                     $"PR #{prNumber} 未包含可測試的 .cs / .razor / .css 檔案，略過 QA");
 
             // 3. Clone / Pull + Checkout

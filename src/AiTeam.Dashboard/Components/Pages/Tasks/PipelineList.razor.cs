@@ -124,7 +124,7 @@ public partial class PipelineList : IAsyncDisposable
     /// </summary>
     private void OnGroupStatusChangedAsync(string newStatus)
     {
-        if (newStatus is not ("done" or "failed" or "cancelled")) return;
+        if (newStatus is not ("done" or "failed" or "cancelled" or "skipped")) return;
 
         _ = Task.Run(async () =>
         {

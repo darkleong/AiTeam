@@ -22,6 +22,7 @@
     --color-status-revision:  #f59e0b;
     --color-status-reviewing: #7c3aed;
     --color-status-cancelled: #6c757d;
+    --color-status-skipped:   #20c997;
 
     --shadow-card:             0 2px 8px rgba(0, 0, 0, 0.08);
     --radius-card:             8px;
@@ -152,6 +153,7 @@ body {
 .status-revision  { background: var(--color-status-revision);  }
 .status-reviewing { background: var(--color-status-reviewing); }
 .status-cancelled { background: var(--color-status-cancelled); }
+.status-skipped   { background: var(--color-status-skipped);   }
 
 /* ========================================
    工具類別

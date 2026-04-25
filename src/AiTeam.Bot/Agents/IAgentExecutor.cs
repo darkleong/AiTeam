@@ -21,12 +21,24 @@ public interface IAgentExecutor
 }
 
 /// <summary>
+/// Agent 執行結果型別（Stage 39）。
+/// Normal：一般成功 / 失敗（依 Success 旗標判斷）。
+/// Skipped：Agent 主動略過（例如 Vera 收到無可審檔案的 PR），流程繼續但 task.Status 標 "skipped"。
+/// </summary>
+public enum AgentResultType
+{
+    Normal,
+    Skipped
+}
+
+/// <summary>
 /// Agent 執行結果。
 /// Stage 10 新增：IsWaitingInput（暫停等待輸入）、QuestionType、Question（回報問題內容）、
 /// CriticalReviewCount（Vera 回傳，用於 Review 閉環判斷）。
 /// Stage 24 新增：TestReport（Quinn 的測試報告 JSON，存入 TaskGroup.TestReport）。
+/// Stage 39 新增：ResultType（區分 Normal / Skipped，讓 Reviewer/QA 略過時走專屬狀態）。
 /// </summary>
-/// <param name="Success">是否成功。</param>
+/// <param name="Success">是否成功。Skipped 結果一律 Success=true（代表「正常略過」，不阻擋下一步）。</param>
 /// <param name="Summary">Discord embed 用的一行摘要。</param>
 /// <param name="OutputUrl">PR URL / Issue URL 等輸出連結（可為 null）。</param>
 /// <param name="IsWaitingInput">Agent 是否暫停等待老闆或上游補充資訊。</param>
@@ -36,6 +48,7 @@ public interface IAgentExecutor
 /// <param name="ReviewBody">Vera 的完整審查報告 markdown（fix loop 傳給 Dev 用）。</param>
 /// <param name="OutputContent">Demi 產出的 UI 規格 markdown 全文（Stage 12：存入 TaskGroup.UiSpecContent）。</param>
 /// <param name="TestReport">Quinn 的測試報告 JSON（Stage 24：存入 TaskGroup.TestReport，供 Petra QA 判斷）。</param>
+/// <param name="ResultType">結果型別：Normal（一般）/ Skipped（略過）。Stage 39 新增。</param>
 public record AgentExecutionResult(
     bool Success,
     string Summary,
@@ -47,12 +60,20 @@ public record AgentExecutionResult(
     string? ReviewBody = null,
     IReadOnlyList<string>? OutputUrls = null,
     string? OutputContent = null,
-    string? TestReport = null)
+    string? TestReport = null,
+    AgentResultType ResultType = AgentResultType.Normal)
 {
     /// <summary>建立「暫停並回報問題」的結果（不需 CEO 走 LLM，由 Orchestrator 路由）。</summary>
     public static AgentExecutionResult PauseAndAsk(string questionType, string question)
         => new(false, question, IsWaitingInput: true,
                QuestionType: questionType, Question: question);
+
+    /// <summary>
+    /// 建立「略過執行」結果（Stage 39）。例如 Vera 收到無可審檔案的 PR、Quinn 收到無可測檔案的 PR。
+    /// Success=true（流程繼續走下一步），ResultType=Skipped（task.Status 標 "skipped"）。
+    /// </summary>
+    public static AgentExecutionResult Skipped(string reason)
+        => new(true, reason, ResultType: AgentResultType.Skipped);
 }
 
 /// <summary>

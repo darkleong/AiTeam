@@ -110,7 +110,8 @@ public class SlashCommandRouter(
                     .AddChoice("技術改善（tech_improvement）", "tech_improvement")
                     .AddChoice("【失敗測試】Review Appeal（Vera 拒絕 → Cody 反駁）", "fail_review")
                     .AddChoice("【失敗測試】QA 失敗（Quinn 失敗 → Petra 路由）", "fail_qa")
-                    .AddChoice("【失敗測試】Dev_plan Appeal（Petra 拒絕 → Cody 反駁）", "fail_dev_plan"))
+                    .AddChoice("【失敗測試】Dev_plan Appeal（Petra 拒絕 → Cody 反駁）", "fail_dev_plan")
+                    .AddChoice("【略過驗收】Vera 略過（無可審檔案 → skipped）", "review_skipped"))
                 .AddOption("title", ApplicationCommandOptionType.String, "（選用）模擬任務標題", isRequired: false)
                 .Build(),
         };
@@ -239,10 +240,15 @@ public class SlashCommandRouter(
                 store.RegisterConfirmation(confirmMessage.Id,
                     new PendingConfirmation(ceoResponse, project, description));
 
+                // Stage 39 搭車修：補上 Task.Description（與 CommandHandler 兩處對稱）
+                var interactionDescription = string.IsNullOrWhiteSpace(ceoResponse.Task?.Description)
+                    ? (ceoResponse.Reply ?? description)
+                    : $"{ceoResponse.Reply}\n\n---\n\n{ceoResponse.Task.Description}";
+
                 _ = interactionService.CreateInteractionAsync(
                     "ceo_confirm",
                     title:                ceoResponse.Task?.Title ?? description,
-                    description:          ceoResponse.Reply ?? description,
+                    description:          interactionDescription,
                     project:              project,
                     agentName:            ceoResponse.TargetAgent,
                     availableActionsJson: InteractionService.CeoConfirmActionsJson,
