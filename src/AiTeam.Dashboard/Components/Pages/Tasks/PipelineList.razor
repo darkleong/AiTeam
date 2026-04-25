@@ -56,7 +56,14 @@
         <MudTd>
             @if (!string.IsNullOrEmpty(context.DevPrUrl))
             {
-                <MudLink Href="@context.DevPrUrl" Target="_blank">PR</MudLink>
+                @if (context.Title.Contains("[MOCK]"))
+                {
+                    <MudText Typo="Typo.body2">@ExtractPrNumber(context.DevPrUrl)</MudText>
+                }
+                else
+                {
+                    <MudLink Href="@context.DevPrUrl" Target="_blank">@ExtractPrNumber(context.DevPrUrl)</MudLink>
+                }
             }
         </MudTd>
     </RowTemplate>
