@@ -3,8 +3,9 @@
 > 對應 Future Feature：四第二階段 2-A（Dashboard Provider/Model 動態化）
 > 對應版本：v3.25.0
 > 建立日期：2026-04-25
-> 狀態：🟢 實作完成，等驗收
-> 文件版本：v1.3
+> 完成日期：2026-04-25
+> 狀態：✅ 已完成（2026-04-25 驗收通過）
+> 文件版本：v2.0
 
 ---
 
@@ -347,6 +348,7 @@ Provider 變更時的 UX 處理：
 | v1.1 | 2026-04-25 | Model UI 改為「依 Provider 動態下拉」（原為自由輸入）— 下拉清單從新增的 `src/AiTeam.Shared/Constants/LlmModels.cs` 讀；Aria 查網路維護常數 + commit + 5-10 分鐘部署；新增 FF 二十六（Model 清單 DB 化，待觀察升級）|
 | v1.2 | 2026-04-25 | Aria WebFetch 官方文件確認 Gemini 現況：2.5 Pro/Flash 仍 stable 但 2026-06-17 deprecating、Gemini 3 系列仍 preview；`LlmModels.cs` 範例 `GeminiModels` 加時效註解，清單內容維持（stable 首選）；已知遷移時點（2026-06-17）寫進維護慣例 |
 | v1.3 | 2026-04-25 | 實作完成、build 通過、新增「實作紀錄」章節 |
+| v2.0 | 2026-04-25 | 驗收通過，header 狀態 → ✅；Christ 驗收 UI 出現 + 覆蓋性（Single Source of Truth 核心設計）通過，Token 監控頁新 model 顯示由後續 Stage 真實任務搭車驗；Fresh Install seed / Provider 切換 / cache invalidate 三項 UX 行為含在驗收動線中（操作 Dashboard UI 自然觸發）；錯誤處理與反向 SQL Seed 兩項 edge case 略過（不阻擋核心功能）|
 
 ---
 
