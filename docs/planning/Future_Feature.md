@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.35
+> 版本：v7.36
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -153,16 +153,22 @@ Gemini 行銷主打 1M context 確實誘人，但對 AiTeam 現狀不是主要�
 
 #### 第二階段（需要 spike 評估）
 
-##### 2-A. Dashboard Provider/Model 動態化（Stage 37-1 砍出來的，必做）
+##### 2-A. Dashboard Provider/Model 動態化（Stage 37-1 砍出來的，必做） ✅ 已完成（Stage 38，2026-04-25）
 
-**技術約束（2026-04-24 self-implement 試驗教訓）**：
-- ❌ **不可採「Dashboard 自己讀一份 appsettings」方案** — Stage 37-2 self-implement 試驗（PR #107，已 close）發現 Cody 會繞過 DB migration 採此路徑，結果 Bot 真實用什麼 vs Dashboard UI 顯示什麼會分裂、互不同步。
-- ✅ **必須做的事**（順序）：
-  1. `AgentConfig` entity 加 `Provider` / `Model` 欄位 + EF Migration
-  2. `LlmProviderFactory.Create()` 改成「DB 優先、appsettings.json fallback」雙層讀取
-  3. Dashboard `AgentSettings.razor` 加 Provider 下拉 + Model 輸入框，存進 DB
-  4. 既有 `appsettings.json` 的 `Agents:{Name}:Provider/Model` 保留作為「初始值」，Bot 啟動時若 DB 對應 AgentConfig 沒有值才用 appsettings 補回 DB
-- 下 prompt 給 Victoria 重做時，**這個約束要明寫**，否則 Cody 會選快路徑
+**完成於 Stage 38 / v3.25.0**：DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改；新增 `AgentConfigCache` Singleton（對齊 AppSettingsService TTL 5min pattern）+ `LlmModels.cs` 常數白名單；`LlmProviderFactory.Create()` 改 per-field fallback；TokenTrackingProvider 第 9 參數改傳 `finalModel`（避免 Token 監控頁顯示舊 model 的資料誤導）；Internal API 加 `scope=agent-config` 分支讓 Dashboard 改完即時生效不需重啟。
+
+**技術約束（2026-04-24 self-implement 試驗教訓）— 三條禁止路線全避開**：
+- ❌ Dashboard 自讀 appsettings（會分裂）
+- ❌ 無 EF Migration 只在 service layer cache（無持久化）
+- ❌ DB + appsettings 兩源並行 merge（誰贏誰輸不透明）
+
+**實作項目**（全數完成）：
+1. ✅ `AgentConfig` entity 加 `Provider` / `Model` nullable 欄位 + EF Migration `Stage38AgentConfigProviderModel`
+2. ✅ `LlmProviderFactory.Create()` 改 DB 優先（per-field `dbOverride ?? configConfig` fallback）
+3. ✅ Dashboard `AgentSettings.razor` 加 Provider/Model 下拉（依 Provider 動態切換 Model 清單）
+4. ✅ Bot 啟動 seed 邏輯（兩欄同 null 才補，避免覆蓋 Dashboard 設定）
+
+詳見 [Stage_38_Roadmap.md](Stage_38_Roadmap.md)。
 
 ##### 2-B. CLI 層多家共存
 
@@ -1303,3 +1309,4 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 | 2026-04-25 | v7.33：**FF 二十四 ✅ 完成** — 實證根因與原假設不同：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（建於 2026-04-12/13），問題在 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未設 `CopyToOutputDirectory` → output 沒複製 → runtime `AppContext.BaseDirectory/Resources/` 找不到；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（含未來新增），從主清單刪除整項移入已完成項目摘要 |
 | 2026-04-25 | v7.34：新增 FF 二十六（Model 清單 DB 化 + Dashboard 管理頁，Stage 38 延伸升級）— ⚪ 待觀察；背景：Stage 38 採 constants 檔方案（`LlmModels.cs`），Aria 查網路 + commit 維護，CI/CD 5-10 分鐘生效；觸發條件：1-2 個月內抱怨節奏慢超過 5 次 / Model A/B 實驗場景 / Provider 擴充讓 constants 超 50 項；升級方向：`LlmModel` entity + Dashboard `/system/models` CRUD 管理頁 + Aria 透過 Dashboard/Internal API 改 DB 立即生效 |
 | 2026-04-25 | v7.35：Aria WebFetch Google 官方文件確認 Gemini 現況 — 2.5 Pro/Flash 仍 stable 但 **2026-06-17 deprecating**（距今 ~2 月）、Gemini 3 系列仍全為 -preview 不建議 production；FF 二十六「升級觸發條件」加入此具體時點作為**第一個已知實際 trigger**（若 Gemini 3 GA 前後快速迭代 → 啟動 DB 化；若單次遷移穩定 → 維持 constants）；Stage 38 Roadmap v1.2 對應 `LlmModels.cs` 範例加時效註解 |
+| 2026-04-25 | v7.36：Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A ✅ 完成**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton 對齊 AppSettingsService TTL 5min pattern + `LlmModels.cs` 常數白名單 + Internal API `scope=agent-config` 分支讓 cache 即時失效；**關鍵修正**（Aria 計劃書外抓出）：TokenTrackingProvider 第 9 參數從 `config.Model` 改傳 `finalModel`，避免 Dashboard 改完後 Token 監控頁顯示舊 model 的資料誤導；Christ 驗收 1（UI）+ 3（覆蓋性）通過，2（Token 監控）待後續 Stage 真實任務搭車驗；FF 四第二階段 2-A 主體標 ✅，2-B（CLI 層多家共存）保留待評估 |

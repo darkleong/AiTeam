@@ -1,6 +1,6 @@
 # AI 團隊實作總規劃
 
-> 版本：v7.30
+> 版本：v7.31
 > 建立日期：2026-03-29
 > 狀態：進行中
 
@@ -52,6 +52,7 @@
 | [Stage_35_Roadmap.md](../planning/Stage_35_Roadmap.md) | Stage 35：PmAgentService 拆解（FF 二十-D）+ 子資料夾 SOP | v3.22.0 | ✅ 已完成（2026-04-22） |
 | [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | ✅ 已完成（2026-04-22） |
 | [Stage_37_Roadmap.md](../planning/Stage_37_Roadmap.md) | Stage 37：GeminiProvider API 層 + Crash Recovery 全面涵蓋 | v3.24.0 | ✅ 已完成（2026-04-25） |
+| [Stage_38_Roadmap.md](../planning/Stage_38_Roadmap.md) | Stage 38：Dashboard Provider/Model 動態化（FF 四第二階段 2-A） | v3.25.0 | ✅ 已完成（2026-04-25） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -155,6 +156,7 @@
 | v7.28 | 2026-04-23 | Stage 37 規劃書建立（v3.24.0）— FF 四第一階段 GeminiProvider API 層 + 搭車 Crash Recovery 全面涵蓋（把 Stage 31 `ActiveMeetingType` → `ActiveOrchestration`，值域擴 5 種：Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting，Appeal + QA 補 try-finally，dispatcher 擴 5 分支）；連續 6 Stage 拆技術債後的換氣 Stage；建議拆兩個 Session 做（37-1 Sonnet 200K medium、37-2 Sonnet 200K high）|
 | v7.29 | 2026-04-23 | Stage 37 實作完成（v3.24.0）— Christ 實際開 Opus 1M 一 Session 做完兩部分：37-1 GeminiProvider（HttpClient + API key query string + camelCase + 429 可識別 exception，範圍變更砍 Dashboard Provider 下拉移 FF 四第二階段）；37-2 Crash Recovery（Entity 改名 + EF Migration `RenameColumn` + 3 個 Restart helper + Dev_plan dispatcher 搭車搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper 修 Stage 36 遺漏；QA 拆「外薄殼 try-finally + 內 Inner method」保留原 4 return 點）；build 0 error |
 | v7.30 | 2026-04-25 | Stage 37 驗收通過（v3.24.0）— 真實流程驗 Rena 切 Gemini 成功 + 5 個 Crash Recovery Mock 情境全通過；**首次真實用 AiTeam 跑自己任務**（FF 四第二階段 self-implement 試驗 PR #107，架構走偏 close 不 merge，但整條 orchestration 在真實流程下穩固）；驗收期間 4 件搭車 fix / ops（Design null fix / Queue RequeueTaskAsync + replay endpoint / 全域月限 1000K→2000K 臨時救援 / Rena Gemini 切換）+ 新增 3 個 FF（二十三 Orchestration 異常退出復原 / 二十四 `CLAUDE_Vera/QA.md` template 補齊 / 二十五 Self-implement prompt 守則）|
+| v7.31 | 2026-04-25 | Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton（對齊 AppSettingsService TTL 5min pattern）+ `LlmModels.cs` 常數白名單（Gemini 2.5 附 2026-06-17 deprecating 註解）+ `LlmProviderFactory` per-field fallback + TokenTrackingProvider 第 9 參數改 `finalModel`（避免 Token 監控頁顯示舊 model 的資料誤導）；驗收 1+3 通過、2 待真實任務搭車驗 |
 
 ---
 
