@@ -23,7 +23,14 @@
         <MudText Typo="Typo.caption" Class="ml-2">@Group.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</MudText>
         @if (!string.IsNullOrEmpty(Group.DevPrUrl))
         {
-            <MudLink Href="@Group.DevPrUrl" Target="_blank" Typo="Typo.caption" Class="ml-2">PR 連結</MudLink>
+            @if (Group.Title.Contains("[MOCK]"))
+            {
+                <MudText Typo="Typo.caption" Class="ml-2">@PrNumberText</MudText>
+            }
+            else
+            {
+                <MudLink Href="@Group.DevPrUrl" Target="_blank" Typo="Typo.caption" Class="ml-2">@PrNumberText</MudLink>
+            }
         }
     </div>
 </div>

@@ -152,6 +152,13 @@ public partial class PipelineList : IAsyncDisposable
         _                  => Color.Default
     };
 
+    private static string ExtractPrNumber(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "PR";
+        var last = url.TrimEnd('/').Split('/')[^1];
+        return int.TryParse(last, out var num) ? $"#{num}" : "PR";
+    }
+
     #endregion
 
     #region IAsyncDisposable
