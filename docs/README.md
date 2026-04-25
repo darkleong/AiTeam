@@ -53,16 +53,18 @@
 
 ### `agents/` — Agent 文件（依需查閱）
 
-各 AI Agent 的能力說明、行為設定與協作架構記錄。
+各 AI Agent 的能力說明、行為設定與協作架構記錄。執行細節（行為、工具權限、輸出格式）以 `src/AiTeam.Bot/Resources/CLAUDE_*.md` 為準，本資料夾為角色 lore + 設計脈絡。
 
 ---
 
-### `generated/` — 自動生成內容（勿手動編輯）
+### `experiments/` — Self-implement 試驗紀錄
 
-由系統或 Agent 自動產生的文件（如提案書、任務紀錄等）。
+老闆 + Aria 對 AiTeam 系統做 self-implement 試驗的觀察紀錄（`Trial_vN_*.md`）。每次試驗驗證一個假設，是 FF 條目觸發前的真實流程觀察證據。
 
 ---
 
-### `ui-specs/` — UI 規格（設計決策參考）
+### `_archive/` — 歷史文件歸檔（不再維護）
 
-Dashboard 各頁面的 UI 規格文件，由 Rosa（UI 設計師）產出，供 Dev Agent 實作依據。
+收納早期設計、暫緩構想、停產自動產出。詳見 [`_archive/README.md`](./_archive/README.md)。
+
+> **`generated/`（Doc Agent 自動產出）與 `ui-specs/`（Demi UI 規格）兩資料夾已於 2026-04-25 整體歸檔**——前者因 Sage 轉型歸檔員停產，後者因 Stage 12 改 UI 規格存 DB（FF 十七）。
