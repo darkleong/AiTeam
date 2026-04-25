@@ -1077,100 +1077,20 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 - ❓ **Top 1 / Top 2 本次未驗證** — 任務是純 `.razor` 改動，Vera 因 [`ReviewerAgentService.cs:108`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs:108) 設計（只審 .cs）直接略過，Petra 也沒仲裁
 
 **新發現**（觸發新 FF / 列為下個 Stage 待修）：
-1. **Vera 略過純 .razor PR** — 設計缺口，新增 [FF 二十八](#二十八vera-審查範圍擴及-razor--css)
-2. **BossInteraction.Description 缺 Task.Description**（CommandHandler.cs:195）— Dashboard UX 不平等，列下個 Stage 搭車修
-3. **Dev/Dev_plan chip vs expand 不一致** — 加為 FF 二十二 子項 B 具體案例
-4. **MudSwitch 移除 Label 後 a11y 缺替代描述**（PR #108 沒人擋）— 與 #1 連動
-5. **Reviewer 略過時狀態錯標 `failed`** — 應為 `skipped`
+1. ✅ **Vera 略過純 .razor PR** — 設計缺口，FF 二十八（**Stage 39 已完成**，2026-04-25）
+2. ✅ **BossInteraction.Description 缺 Task.Description**（CommandHandler.cs:195）— **Stage 39 搭車修完成**（含 SlashCommandRouter L245 第三處對稱）
+3. ⏳ **Dev/Dev_plan chip vs expand 不一致** — 加為 FF 二十二 子項 B 具體案例（待 SignalR refactor 搭車）
+4. ✅ **MudSwitch 移除 Label 後 a11y 缺替代描述**（PR #108 沒人擋）— **Stage 39 搭車修完成**（RuleManagement.razor 補 aria-label）
+5. ✅ **Reviewer 略過時狀態錯標 `failed`** — 應為 `skipped`，**Stage 39 完成**（新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 mapping teal `#20c997`）
 
-**試驗 v3 規劃**：需挑會動 `.cs` 檔的小工程（補 Top 1 / Top 2 驗證），且需 **FF 二十八修完後**再執行（否則純 UI 任務仍會略過 Vera）。詳見 Trial_v2 紀錄末段。
-
-### 優先級
-
-🟡 中（v2 部分完成，v3 待規劃）— v2 結果證明系統能力部分回升、部分受設計缺口阻擋；v3 待 FF 二十八 修復後執行。
-
----
-
-## 二十八、Vera 審查範圍擴及 .razor / .css（對齊 Quinn 邏輯）
-
-> 狀態：🟡 中 — Trial_v2 試驗（2026-04-25）發現的真實設計缺口
-> 提出日期：2026-04-25
-
-### 背景
-
-[`ReviewerAgentService.cs:108-109`](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs:108) 目前的設計：
-
-```csharp
-if (csFiles.Count == 0)
-    return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
-```
-
-**Vera 只審查 `.cs` 檔（C# 邏輯），純 `.razor` 或 `.css` 改動的 PR 直接略過。**
-
-對比 [`QaAgentService.cs:111`](../../src/AiTeam.Bot/Agents/QaAgentService.cs:111)（Quinn 已支援）：
-
-```csharp
-if (!hasUiChanges && csFiles.Count == 0)
-    return new AgentExecutionResult(false,
-        $"PR #{prNumber} 未包含可測試的 .cs / .razor / .css 檔案，略過 QA");
-```
-
-**Quinn 有檢查 `hasUiChanges`（razor/css），但 Vera 沒對齊。**
-
-### Trial_v2 真實案例
-
-PR #108（規則管理頁面 UI 微調）只動 `.razor`，Vera 直接略過 review，**整個 review 環節缺位**。
-
-**真實後果**：
-- Cody 寫的 `MudSwitch` 移除 `Label` 後**沒補 `aria-label` 替代描述**（a11y 隱患）
-- 這個問題如果 Vera 有跑，應該標 Warning
-- 但因 Vera 略過 → PR 直接到 QA → Quinn 跑 Playwright（過）→ 任務「完成」**a11y 隱患流入 production**
-
-**這就是 Stage 37 self-implement 試驗品質低下感受的（其中一個）真因**：純 UI 任務 review 環節缺位，使用者感受到「沒被把關」。
-
-### 修法
-
-對齊 Quinn 邏輯：
-
-```csharp
-// 前
-if (csFiles.Count == 0)
-    return Fail(task, $"PR #{prNumber} 未包含 .cs 檔案，略過 Reviewer");
-
-// 後
-var razorFiles = files.Where(f => f.FileName.EndsWith(".razor", ...)).ToList();
-var cssFiles   = files.Where(f => f.FileName.EndsWith(".css", ...)).ToList();
-var hasUiChanges = razorFiles.Count > 0 || cssFiles.Count > 0;
-
-if (!hasUiChanges && csFiles.Count == 0)
-    return Skip(task, $"PR #{prNumber} 未包含 .cs / .razor / .css 檔案，略過 Reviewer");
-```
-
-### CLAUDE_Vera.md 同步擴充
-
-`CLAUDE_Vera.md` 目前針對 C# 程式碼審查（Critical 三類：崩潰 / 資安 / 資源洩漏）。razor / css 審查需要補的判準：
-
-- **a11y**：缺 `aria-label` / `aria-describedby`、`<button>` 缺 text content、image 缺 `alt`
-- **Blazor 特性**：`@onclick` handler 例外處理、`@bind-Value` 拼錯欄位名、Circuit 隔離
-- **MudBlazor 慣例**：相同類型按鈕應一致用 IconButton vs Button
-- **CSS**：`!important` 濫用、`color`/`background` 寫死無法 dark mode 切換
-
-### 順便修：Reviewer 略過時的狀態分類
-
-目前 Vera 略過時 `Fail(task, ...)` → group status = `failed` + Dashboard 顯示「失敗」+「重試」按鈕。但「沒檔案可審」不是失敗，重試也救不了。
-
-修法：拋特殊 result 讓 Processor 標 `skipped`（綠色）而非 `failed`（紅色）。
+**試驗 v3 規劃**：需挑會動 `.cs` 檔的小工程（補 Top 1 / Top 2 驗證）。FF 二十八已修，**v3 前置條件全部就緒**，可隨時規劃。詳見 Trial_v2 紀錄末段。
 
 ### 優先級
 
-🟡 中 — Trial_v2 真實案例證明這個缺口讓純 UI 任務的品質保障形同虛設。建議優先做（試驗 v3 前置條件）。
-
-### 不在範圍
-
-- ❌ a11y 自動掃描工具整合（如 axe-core）— 用 prompt 指引讓 Vera 用 Read/Grep 探索就夠
-- ❌ Visual regression（差異截圖）— Quinn 已用 Playwright 截圖負責
+🟡 中（v2 部分完成，v3 前置就緒待規劃）— FF 二十八 + Trial_v2 搭車修四項皆於 Stage 39 解決；v3 任務挑選 + 規劃為下一步。
 
 ---
+
 
 ## 已完成項目摘要
 
@@ -1212,6 +1132,7 @@ if (!hasUiChanges && csFiles.Count == 0)
 | 二十一 | Agent 狀態卡 expand 展開看待辦清單 | ✅ Stage 33（v3.20.0，2026-04-22）— 採解讀 B（running + queued TaskItem）；實作優化為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代原規劃 `AgentTodoDto`，重用既有 `PushQueueUpdateAsync` 鏈路；點 item 深層連結 `?groupId=` 自動 Drawer 預選 |
 | 二十四 | `CLAUDE_*.md` template 補齊（CLI Agent 自我描述檔） | ✅ 2026-04-25 — 根因修正：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（2026-04-12/13），但 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未 COPY 到 output；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（未來新增 template 自動涵蓋）；Rosa/Demi/Sage/Petra 沒 warn 只因走 API layer 或該 CLI path 沒被觸發，但 agent code 都有讀 template 的邏輯——一次全修 |
 | 二十 | 大檔案拆解技術債（合集）— 四個怪物級檔案清零 | ✅ Stage 34（v3.21.0，MeetingService 1415→4 檔）+ Stage 35（v3.22.0，PmAgentService 1388→6 檔 + Agents/Pm/ 子資料夾）+ Stage 36（v3.23.0，TaskGroupService 2623→716、CommandHandler 2172→556 + 5 個子資料夾）— 累積六項拆解 SOP 已整理至 [docs/conventions/refactor-sop.md](../conventions/refactor-sop.md)；Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但漏實際搬遷，Stage 38 結案後 Aria 補完 |
+| 二十八 | Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ Reviewer 略過狀態正名為 `skipped` | ✅ Stage 39（v3.26.0，2026-04-25）— `ReviewerAgentService` 三類檔案分類 + `BuildClaudeCodeReviewPrompt` 三段共用 `AppendFileDiff` helper + 標題改名「PR 變更 diff」；CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` teal `#20c997`；TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車順手解決 Trial_v2 觀察四項（BossInteraction.Description 補 Task.Description / RuleManagement.razor MudSwitch aria-label / QA Skipped 共用 API / Mock review_skipped 情境） |
 ---
 
 ## 變更紀錄
@@ -1295,3 +1216,4 @@ if (!hasUiChanges && csFiles.Count == 0)
 | 2026-04-25 | v7.37：Stage 38 結案後整理 — (1) **新增 FF 二十七**（Self-implement 試驗 v2，FF 二十四 fix 後重新評估品質）：Aria 調查 Stage 37 真實流程品質低下三大主因（Top 1 CLAUDE_*.md COPY 漏 = FF 二十四已修 / Top 2 Vera 偏好放行 + Petra Warning 寬鬆 / Top 3 QA 測試品質指引偏量）；計劃下個小規模任務 production 真實流程跑一次 self-implement 看品質回升狀況，若 Top 1 修復就足夠則 Top 2/3 延後。(2) **補完 FF 二十搬遷**：Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但實際沒搬，主清單仍有 155 行；本次補完搬遷至已完成摘要 |
 | 2026-04-25 | v7.38：FF 四瘦身（波 2 選項 A）— 第一階段 + 第二階段 2-A 詳細描述（共 ~30 行）壓縮成「已完成成果」摘要兩 bullet 帶 Stage Roadmap 連結；「實作重點」改名「2-B 實作重點」並刪掉已完成的 GEMINI case 條目；FF 四從 ~156 行縮到 ~95 行（-39%）；2-B（CLI 層多家共存）+ CLI 三家能力研究 +「PR #107 三條禁止路線」全保留供未來 spike 用 |
 | 2026-04-25 | v7.38：Trial_v2（self-implement 試驗 v2）執行完成 — 任務「規則管理頁面 UI 微調」（PR #108）；新增獨立紀錄 [docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)；FF 二十七 補「v2 試驗結果」段（Top 3 ✅ 部分驗證 / Top 1+2 因任務性質繞過 Vera/Petra 未驗）；**新增 FF 二十八**（Vera 審查範圍擴及 .razor / .css，Trial_v2 發現的真實設計缺口）；FF 二十二 子項 B 補具體案例（Dev/Dev_plan chip vs expand 不一致）；其他 Trial_v2 觀察列為下個 Stage 搭車修候選（BossInteraction.Description bug、a11y 隱患、Reviewer 略過狀態錯標）|
+| 2026-04-25 | v7.39：Stage 39 完成（v3.26.0）— **FF 二十八 ✅ 完成 + Trial_v2 搭車修四項 ✅ 完成**：Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準擴充（全 Warning 維持「偏好放行」）；新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 teal `#20c997` mapping + TaskGroupService Reviewer Skipped 跳 Petra 放行；BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）；RuleManagement.razor MudSwitch aria-label；QA 略過共用 Skipped API；Mock `review_skipped` 情境（Discord + Dashboard 雙入口）；FF 二十八主體 78 行搬入已完成摘要 + FF 二十七 5 個觀察項 4 項標 ✅、Trial_v2 v3 前置條件全部就緒；驗收 D pass（Stage39測試3 Reviewer Status=skipped）、A 流程 pass（主菜真實能力待 Trial_v3 真實 PR）、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm）改用真實 CEO 對話補驗 |

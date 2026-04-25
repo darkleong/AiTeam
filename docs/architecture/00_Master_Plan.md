@@ -53,6 +53,7 @@
 | [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | ✅ 已完成（2026-04-22） |
 | [Stage_37_Roadmap.md](../planning/Stage_37_Roadmap.md) | Stage 37：GeminiProvider API 層 + Crash Recovery 全面涵蓋 | v3.24.0 | ✅ 已完成（2026-04-25） |
 | [Stage_38_Roadmap.md](../planning/Stage_38_Roadmap.md) | Stage 38：Dashboard Provider/Model 動態化（FF 四第二階段 2-A） | v3.25.0 | ✅ 已完成（2026-04-25） |
+| [Stage_39_Roadmap.md](../planning/Stage_39_Roadmap.md) | Stage 39：Vera 審查擴及 .razor / .css（FF 二十八）+ Trial_v2 搭車修三項 | v3.26.0 | ✅ 已完成（2026-04-25） |
 | [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
 | [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
 
@@ -157,6 +158,7 @@
 | v7.29 | 2026-04-23 | Stage 37 實作完成（v3.24.0）— Christ 實際開 Opus 1M 一 Session 做完兩部分：37-1 GeminiProvider（HttpClient + API key query string + camelCase + 429 可識別 exception，範圍變更砍 Dashboard Provider 下拉移 FF 四第二階段）；37-2 Crash Recovery（Entity 改名 + EF Migration `RenameColumn` + 3 個 Restart helper + Dev_plan dispatcher 搭車搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper 修 Stage 36 遺漏；QA 拆「外薄殼 try-finally + 內 Inner method」保留原 4 return 點）；build 0 error |
 | v7.30 | 2026-04-25 | Stage 37 驗收通過（v3.24.0）— 真實流程驗 Rena 切 Gemini 成功 + 5 個 Crash Recovery Mock 情境全通過；**首次真實用 AiTeam 跑自己任務**（FF 四第二階段 self-implement 試驗 PR #107，架構走偏 close 不 merge，但整條 orchestration 在真實流程下穩固）；驗收期間 4 件搭車 fix / ops（Design null fix / Queue RequeueTaskAsync + replay endpoint / 全域月限 1000K→2000K 臨時救援 / Rena Gemini 切換）+ 新增 3 個 FF（二十三 Orchestration 異常退出復原 / 二十四 `CLAUDE_Vera/QA.md` template 補齊 / 二十五 Self-implement prompt 守則）|
 | v7.31 | 2026-04-25 | Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton（對齊 AppSettingsService TTL 5min pattern）+ `LlmModels.cs` 常數白名單（Gemini 2.5 附 2026-06-17 deprecating 註解）+ `LlmProviderFactory` per-field fallback + TokenTrackingProvider 第 9 參數改 `finalModel`（避免 Token 監控頁顯示舊 model 的資料誤導）；驗收 1+3 通過、2 待真實任務搭車驗 |
+| v7.32 | 2026-04-25 | Stage 39 完成（v3.26.0）— **FF 二十八 主菜 + Trial_v2 搭車修三項**：Vera 審查範圍擴及 `.razor` / `.css`（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全列為 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` 為 teal `#20c997`（區分 done 飽和綠 / failed 紅）+ TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車修：BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）+ RuleManagement.razor MudSwitch 補 aria-label；Mock 新增 `review_skipped` 情境（Discord + Dashboard 雙入口）；驗收 D pass（Stage39測試3 Reviewer Status=skipped 流程繼續走完）、A 流程 pass 但主菜真實能力待 Trial_v3 真實 PR 驗、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm，待真實 CEO 對話驗），整體解鎖 Trial_v3 前置條件 |
 
 ---
 
