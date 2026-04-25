@@ -3,8 +3,9 @@
 > 對應 Future Feature：FF 二十八（主菜）+ Trial_v2 搭車修
 > 對應版本：v3.26.0
 > 建立日期：2026-04-25
-> 狀態：🟡 待實作
-> 文件版本：v1.0
+> 完成日期：2026-04-25
+> 狀態：✅ 已完成（2026-04-25 驗收通過）
+> 文件版本：v2.0
 
 ---
 
@@ -287,6 +288,7 @@ QA 也有相同「略過」邏輯（[`QaAgentService.cs:111`](../../src/AiTeam.B
 |------|------|------|
 | v1.0 | 2026-04-25 | 計劃書建立（Aria）— FF 二十八 主菜 + Trial_v2 搭車修三項 |
 | v1.1 | 2026-04-25 | 實作完成 — 實作紀錄章節新增（待 Aria 結案第二段：版本 bump v3.26.0 + Master Plan / Future_Feature 整理） |
+| v2.0 | 2026-04-25 | 驗收通過，header 狀態 → ✅；驗收 D（Reviewer Skipped）pass、A（Vera 流程通）pass、E（MudSwitch a11y）pass；驗收 C（BossInteraction 完整）改用真實 CEO 對話補驗（Mock 跳過 CEO LLM 不會建 ceo_confirm，原計劃驗收方法錯誤）；驗收 B（Vera 抓 a11y）⏳ 待 Trial_v3 真實 PR 驗證 |
 
 ---
 

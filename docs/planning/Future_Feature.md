@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.38
+> 版本：v7.40
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -524,9 +524,13 @@ PR 欄位顯示優化：
 - prompt 組合順序：`DB 角色設定` + `DB 行為準則` + `C# 流程邏輯模板` + `任務動態內容`
 - 與 Feature 二（Agent 個性）共用：個性描述就是角色設定的一部分
 
+**分階段實作**：
+- **Phase 1**：C# `SystemPrompt` 抽至 DB（API 層 Agent — Rosa / Demi / Sage / Release / Ops / Petra 部分）
+- **Phase 2**：`CLAUDE_*.md` template 抽至 DB（CLI 層 Agent — Victoria / Cody / Vera / Quinn / Petra 部分）— **Stage 39 結案後 Christ 提出（2026-04-25）**：Stage 38 `AgentConfigCache` pattern 直接抄即可，工程上無新東西；但目前 `CLAUDE_*.md` 內容仍在演進（Stage 39 才剛擴充 Vera），且修改頻率低（1-2 月一次）+ 對系統行為影響大（JSON 輸出格式 / 工具範圍 / 角色定位），**code review 軌跡比 DB 安全**。**觸發條件**：等 AiTeam 核心功能穩定（Trial_v3 跑完、CLAUDE_Vera.md 內容定型 1-2 月後）+ 出現「想立刻試新 prompt」真實使用情境，再評估 Phase 2
+
 ### 優先級
 
-🔵 低優先級 — 不影響功能，純 UI 組織與使用便利性優化
+🔵 低優先級 — 不影響功能，純 UI 組織與使用便利性優化；Phase 2（CLAUDE_*.md）需等核心穩定，目前不急
 
 ---
 
@@ -1217,3 +1221,4 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 | 2026-04-25 | v7.38：FF 四瘦身（波 2 選項 A）— 第一階段 + 第二階段 2-A 詳細描述（共 ~30 行）壓縮成「已完成成果」摘要兩 bullet 帶 Stage Roadmap 連結；「實作重點」改名「2-B 實作重點」並刪掉已完成的 GEMINI case 條目；FF 四從 ~156 行縮到 ~95 行（-39%）；2-B（CLI 層多家共存）+ CLI 三家能力研究 +「PR #107 三條禁止路線」全保留供未來 spike 用 |
 | 2026-04-25 | v7.38：Trial_v2（self-implement 試驗 v2）執行完成 — 任務「規則管理頁面 UI 微調」（PR #108）；新增獨立紀錄 [docs/experiments/Trial_v2_RuleManagementUI.md](../experiments/Trial_v2_RuleManagementUI.md)；FF 二十七 補「v2 試驗結果」段（Top 3 ✅ 部分驗證 / Top 1+2 因任務性質繞過 Vera/Petra 未驗）；**新增 FF 二十八**（Vera 審查範圍擴及 .razor / .css，Trial_v2 發現的真實設計缺口）；FF 二十二 子項 B 補具體案例（Dev/Dev_plan chip vs expand 不一致）；其他 Trial_v2 觀察列為下個 Stage 搭車修候選（BossInteraction.Description bug、a11y 隱患、Reviewer 略過狀態錯標）|
 | 2026-04-25 | v7.39：Stage 39 完成（v3.26.0）— **FF 二十八 ✅ 完成 + Trial_v2 搭車修四項 ✅ 完成**：Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準擴充（全 Warning 維持「偏好放行」）；新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 teal `#20c997` mapping + TaskGroupService Reviewer Skipped 跳 Petra 放行；BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）；RuleManagement.razor MudSwitch aria-label；QA 略過共用 Skipped API；Mock `review_skipped` 情境（Discord + Dashboard 雙入口）；FF 二十八主體 78 行搬入已完成摘要 + FF 二十七 5 個觀察項 4 項標 ✅、Trial_v2 v3 前置條件全部就緒；驗收 D pass（Stage39測試3 Reviewer Status=skipped）、A 流程 pass（主菜真實能力待 Trial_v3 真實 PR）、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm）改用真實 CEO 對話補驗 |
+| 2026-04-25 | v7.40：Stage 39 結案後補完 — (1) Stage 39 Roadmap header 升 ✅ + 文件版本 v2.0（Christ 結案 commit 漏改，Aria 補）；(2) FF 十「Agent 角色設定 Dashboard 化」擴充 Phase 1 / Phase 2 分階段：Phase 1 C# SystemPrompt（API 層 Agent，FF 十既有範圍）+ Phase 2 CLAUDE_*.md template（CLI 層 Agent，Stage 39 結案後 Christ 詢問是否可 Dashboard 編輯，Aria 推薦現在不做：內容仍在演進、修改頻率低、code review 軌跡比 DB 安全；觸發條件寫明「等 Trial_v3 完成 + CLAUDE_Vera 定型 1-2 月後 + 真實使用情境」）|
