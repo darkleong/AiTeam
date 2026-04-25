@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.36
+> 版本：v7.37
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -780,160 +780,6 @@ Christ 的長期願景是「Dashboard 能調 AiTeam 各項行為參數」。maxT
 
 ---
 
-## 二十、大檔案拆解技術債（合集）
-
-> 狀態：🟡 待觀察 — 優先搭車未來動到各檔的 Stage 一起拆
-> 提出日期：2026-04-20（Stage 32 規劃後 Christ 觀察到 TaskGroupService 2000 行、Aria 掃 wc -l 發現 Top 4 全破千行）
-
-### 背景（統一動機）
-
-按「Session 類型 Context 消耗模式」分析（見 `feedback_impl_session_briefing.md` 第二節），**大檔案是實作 Session context 殺手**：
-
-- 每行 C# ≈ 20 tokens，2000 行檔案 Read 一次 ≈ 40K tokens
-- 同樣「S-M 工程」動大檔案 vs 小檔案，context 消耗差 **4-5 倍**
-- Stage 31 Sonnet 200K 跑到 75% 主因就是動了 TaskGroupService
-
-### Top 4 怪物級檔案（2026-04-20 現況）
-
-| 排名 | 檔案 | 行數 | Read 成本 |
-|---|---|---|---|
-| 1 | `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | 2617 | ~52K |
-| 2 | `src/AiTeam.Bot/Discord/CommandHandler.cs` | 2327 | ~46K |
-| 3 | `src/AiTeam.Bot/Orchestration/MeetingService.cs` | 1415 | ~28K |
-| 4 | `src/AiTeam.Bot/Agents/PmAgentService.cs` | 1388 | ~28K |
-
-第 5 名以下（DevAgentService 958 行等）尚在可接受範圍，不列入。
-
----
-
-### 子項 A：`TaskGroupService.cs` 拆解（最大、最迫切）
-
-**現有職責**（9 大項）：Kickoff Orchestration / Design Orchestration / Review Appeal 雙迴圈 + 仲裁 / Dev_plan Appeal 迴圈 / QA Fix 迴圈 + Petra 路由 / Crash Recovery / Proposal 確認路由（Discord + Dashboard）/ 多個按鈕 handler / TaskGroup CRUD 包裝
-
-**拆解方向**：
-
-| 拆出的 Service | 職責 | 預估行數 |
-|---|---|---|
-| `MeetingOrchestrationService` | Kickoff + Design + Crash Recovery | ~600 |
-| `AppealOrchestrationService` | Review Appeal（雙迴圈 + 仲裁）+ Dev_plan Appeal | ~500 |
-| `QaCoordinationService` | QA Fix 迴圈 + Petra 四路由判斷 | ~300 |
-| `ProposalConfirmationService` | Proposal 按鈕路由（Discord + Dashboard，與子項 B CommandHandler 拆解連動）| ~300 |
-| `TaskGroupService`（瘦身）| CRUD + 流程入口 dispatcher | ~300 |
-
-**風險**：依賴切分、`serviceProvider.CreateAsyncScope()` scope 管理、Meeting↔Appeal 循環依賴、按鈕回調 dispatcher 重新設計
-
----
-
-### 子項 B：`CommandHandler.cs` 拆解
-
-**現有職責**：Slash command dispatcher、按鈕回調、Proposal/Kickoff/Design 確認、`_pendingConfirmations` 狀態、/mock 指令、/pause /stop-all 等佇列指令、CEO Dashboard 路由
-
-**拆解方向**：
-- `SlashCommandRouter` — dispatcher + 各 slash command handler
-- `ButtonCallbackRouter` — 按鈕回調 + `_pendingConfirmations` 狀態
-- `ProposalConfirmationHandler` / `KickoffConfirmationHandler` / `DesignConfirmationHandler`（與子項 A 的 `ProposalConfirmationService` 連動，合併設計）
-- `PendingConfirmationStore` — 把字典抽成獨立 Singleton 供多方共用
-
-**風險**：`_pendingConfirmations` dictionary 所有權移轉要仔細；CommandHandler 與 Discord.Net 框架緊耦合，拆完要保持 event binding 完整
-
----
-
-### 子項 C：`MeetingService.cs` 拆解 — ✅ 已完成（Stage 34，v3.21.0，2026-04-22）
-
-**實際產出**（vs 原規劃）：
-- `KickoffMeetingService` — **318 行**（原估 ~500）
-- `DesignMeetingService` — **590 行**（原估 ~700）
-- `MeetingCommons` — **62 行**（原估 ~200，因為 `GetApiKey` / `GetModel` / Prompt builders 各自留在兩個 service 內）
-- `MeetingResults.cs` — **27 行**（獨立放 3 個 public record）
-- `MeetingService.cs` — 整檔刪除
-
-**Stage 34 是 FF 二十 首次正式實踐**，累積出「六項拆解 SOP 決策」寫進下方「共通拆解策略」小節，供子項 D / B / A 參考。
-
-**驗收**：Mock Mode 全流程通過、驗收期間零 follow-up commits（最順利的一次 Stage 結案）、`dotnet build` 0 Error。
-
----
-
-### 子項 D：`PmAgentService.cs` 拆解 — ✅ 已完成（Stage 35，v3.22.0，2026-04-22）
-
-**實際產出**（vs 原規劃）：
-- `PmAgentResults.cs` — **60 行**（10 個 public record 獨立檔，SOP 1）
-- `PmAgentCommons.cs` — **225 行**（`PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` + 共用 helper；範圍比原規劃略大）
-- `PmReviewService.cs` — **345 行**（4 個 Petra 審核 method：Rosa/Demi/DevPlan/Vera）
-- `ReviewAppealService.cs` — **345 行**（3 個 Stage 30 升級的三角互動）
-- `DevPlanAppealService.cs` — **207 行**（2 個 Stage 30 升級）
-- `PmRoutingService.cs` — **262 行**（3 個路由判斷）
-- 原 `PmAgentService.cs` 1389 行整檔刪除
-- **首次實踐 SOP 6 子資料夾**：`Agents/Pm/`，namespace `AiTeam.Bot.Agents.Pm`
-
-**驗收**：4 個 Mock 情境全通過；驗收期間兩項 follow-up commits（`9b0b115` Dev_plan group status 重置 + `4f30d1f` Stage 25b dead code 清理）由 Aria 結案時補入 Roadmap v2.1。
-
-**規劃階段修正**：實作 Session 探索階段抓出 Aria Roadmap 4 個錯誤（DI Scoped 非 Singleton / RequirementsAgentService 無依賴 / caller 動態解析 / record 10 個非 8 個）—— 之後 Aria 寫 Roadmap 時會勤勞 grep 驗證。
-
----
-
-### 搭車優先順序建議（Stage 35 後更新）
-
-子項 C、D 已完成，剩兩個：
-
-1. ✅ ~~**子項 C MeetingService**~~ — Stage 34 完成
-2. ✅ ~~**子項 D PmAgentService**~~ — Stage 35 完成（首次實踐 SOP 6 子資料夾）
-3. **子項 B CommandHandler** + **子項 A TaskGroupService**（兩者互相耦合）→ 合併一次做最乾淨。Stage 34/35 已驗證拆解 SOP 可靠，可獨立排 Stage 或等搭車。
-
-### 不建議做法
-
-- ❌ **不要** 獨立開「大檔案拆解 Stage」做全部四個—— M-L × 4 = 3-4 個月，業務停滯
-- ❌ **不要** 一次只拆一個但搭不到車—— 拆完別的 Stage 會撞重構衝突
-- ✅ **要** 每個子項搭對的車，累積 1-2 年自然完成
-
-### 六項拆解 SOP（Stage 34 實踐後提煉，通用於所有子項）
-
-以下 SOP 由 Stage 34 MeetingService 拆解實踐後提煉，供子項 A / B / D 參考：
-
-#### SOP 1：Record / Type 組織
-- **Public record**（API 合約、caller 會直接用）→ 搬獨立檔（例：`MeetingResults.cs`），避免引入不必要的大型 namespace 依賴
-- **Internal DTO**（實作細節）→ 留各自 service 檔案，防止跨 service 型別污染
-
-#### SOP 2：Migration 策略（caller 少於 15 處 → 直接切換）
-- Caller < 15 處 + 1 個 DI 行：**直接切換**，不做 thin wrapper（wrapper 讓兩套名稱並存，未來維護混淆）
-- Caller > 15 處 或 跨多個重要 caller：考慮 thin wrapper 過渡，分批遷移
-- Git history 本身就是最好的追蹤，直接刪除舊 service 無妨
-
-#### SOP 3：Commons service 範圍界定
-- **只放**「呼叫方式完全相同、兩邊都用」的 helper（例：`RunAgentTurnAsync`, `CloseAllSessionsAsync`, 共用靜態欄位）
-- **不放**「邏輯相似但各自 private」的（例：`GetApiKey`, `GetModel`, Prompt builders — 各自保留）
-- 原則：**推進 Commons 需要的新依賴 vs. 保留 3-5 行重複碼**，選後者
-
-#### SOP 4：DI 註冊順序
-- Commons 層優先（即使 DI 是 lazy resolved，順序代表依賴方向）
-- 全部 Singleton（對齊既有模式）
-- 循環依賴單向檢查：`子 Service → Commons`，不可反向
-
-#### SOP 5：Session state 管理
-- **有 singleton-level state**（如 `ConcurrentDictionary<Guid, string>`）→ 特別評估歸屬，通常放 Commons
-- **只有 local state**（方法內變數）→ 無需共享，各方法自管
-- Stage 34 MeetingService 無共享 state，是最乾淨情況
-
-#### SOP 6：檔案夾組織原則（Stage 35 首次實踐後增補）
-- 單一資料夾：**檔案 ≤ 10 個時 OK**
-- 超過 10 個 或 3+ 個同主題 service → 建子資料夾，namespace 隨移
-
-**Stage 35 實踐結論（Agents/Pm/ 首次）**：
-- **判斷原則**：「**決策主體（誰說話）= Agent 角色時放 `Agents/`；協調多個 Agent 的流程控制放 `Orchestration/`**」
-  - PmAgentService 拆完仍放 `Agents/Pm/`，因為 5 個 service 都是 Petra 角色在說話
-  - TaskGroupService 拆完會放 `Orchestration/`（子項 A），因為它協調多個 Agent
-- **搬家成本**：namespace 從 `AiTeam.Bot.Agents` → `AiTeam.Bot.Agents.Pm`，caller 的 `using` 要補加 `AiTeam.Bot.Agents.Pm;`（兩個 namespace 可並存，原 using 不用刪）
-- **當前狀況**：`Agents/` 15 個（PmAgentService 拆走後）；`Agents/Pm/` 6 個；`Orchestration/` 12 個（Meeting 拆後加三個）——`Orchestration/` 已超閾值，若下次做子項 A 可順便做 `Orchestration/Meeting/` 子資料夾歸納
-
-#### 通用流程
-- 測試：拆解前有一輪 Playwright / Mock Mode 驗證基線
-- 版本號 bump：拆解屬 minor 改動，對應 minor version bump
-
-### 整體優先級
-
-🟡 中 — 累積中的技術債，搭車做最經濟。完成一個算一個。若被迫獨立做任一子項，建議 **Opus 1M + ultrathink**（需要整體架構視角）。
-
----
-
 ## 二十二、Agent 命名一致性（守門 + 名稱映射）
 
 > 狀態：🔵 低 — 防呆類技術債，等搭車或獨立小 Stage
@@ -1190,6 +1036,57 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 
 ---
 
+## 二十七、Self-implement 試驗 v2（FF 二十四 fix 後重新評估品質）
+
+> 狀態：🟡 中 — 等下個適合的小規模任務即可執行
+> 提出日期：2026-04-25（Stage 38 結案後 Christ 反映 Stage 37 真實流程品質低下，Aria 調查報告觸發）
+
+### 背景
+
+Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implement 試驗）發現品質低下。Aria 2026-04-25 調查報告盤點三大主因：
+
+1. **Top 1（純技術 bug）：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 在 production 沒被 COPY 到容器** — Vera/Quinn 看到的是 repo 根的 CLAUDE.md（給 Cody/Victoria 用），等於用錯角色做事。**已在 FF 二十四（2026-04-25 修復）**。
+2. **Top 2（流程設計）：`CLAUDE_Vera.md` 「偏好放行」+ Petra 對 Warning 寬鬆** — 架構繞道（重複邏輯/多份 config）天生被歸 Warning 不擋。
+3. **Top 3（流程設計）：`CLAUDE_QA.md` 測試品質指引偏「量」不偏「質」** — Quinn 可能寫 dummy 測試湊數。
+
+關鍵問題：**Stage 37 的品質觀察 50%+ 機率是 Top 1 純技術 bug 造成**，不一定是流程設計問題。要先重做試驗看 Top 1 修復是否就足夠。
+
+### 行動計劃
+
+在 FF 二十四 fix 後（**2026-04-25 已就緒**），下個適合的小規模任務時，故意**用 production 真實流程**（關閉 Mock）跑一次 self-implement，重新評估品質。
+
+**任務候選**（小範圍、低風險）：
+- FF 十 Dashboard UI 第四批的某個小子項（例：Switch 文字移除、Icon 按鈕替換）
+- 當前累積的小 bug 修復
+- **避開**：架構性重構、跨多檔的修改、有設計選擇的需求（這些是 PR #107 踩過的坑）
+
+### 評估維度（試驗結果觀察）
+
+| 維度 | 觀察點 | 通過標準 |
+|------|-------|---------|
+| **A. 程式碼品質** | Cody 寫出的設計是否合理、有沒有走快路徑 | 對照 PR #107 的繞道情境，沒重演 |
+| **B. Vera 抓問題能力** | Review report 的 Critical / Warning 分級是否準確 | 至少抓到該抓的明顯問題 |
+| **C. Quinn 測試覆蓋** | 測試是否驗證關鍵邏輯，不只是 dummy assertion | 抽看 1-2 個測試，邏輯有意義 |
+| **D. Petra 仲裁判斷** | 是否擋下該擋的、放行該放行的 | 路由決策合理 |
+| **E. 整體 PR 品質** | 是否能直接 merge 而不需要人工修補 | merge 後不需 follow-up fix |
+
+### 結果分流
+
+- **品質回升（Top 1 是 root cause）** → 確認 system 能力其實 OK，繼續累積 self-implement 經驗，**Top 2 / Top 3 的 prompt 強化可延後**
+- **仍差（流程設計問題確認）** → 啟動 Top 2（強化 `CLAUDE_Vera.md` 加架構議題 Critical 判準）+ Top 3（強化 `CLAUDE_QA.md` 加測試品質判準）+ FF 二十五（self-implement prompt 守則），列獨立 Stage
+
+### 不在範圍
+
+- ❌ Top 2 / Top 3 的 prompt 強化（**等試驗結果決定**，不要先做以免無謂工作量）
+- ❌ Petra 升級為「設計 PM」（需要更大架構討論）
+- ❌ 自動化品質評估（人工觀察為主，不做評分自動化）
+
+### 優先級
+
+🟡 中 — 解鎖未來 self-implement 戰略（決定 Cody/Vera/Quinn 能否接客戶級任務），但不阻擋當前開發節奏。下個適合的小任務搭車跑即可。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1229,7 +1126,7 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 | 十五 | Dashboard 與 Discord 功能平等（Feature Parity）| ✅ Stage 32（v3.19.0，`/mock` Dashboard 化 — `MockScenarioService` 抽出共用）+ Stage 33（v3.20.0，佇列控制 Dashboard 化 — `AgentQueueControlService` + Agent 狀態卡 pause/resume 按鈕 + `GlobalQueueControlCard` 全域緊急停止 + 確認 Dialog）— Discord 原指令透過薄 wrapper 共用同一 shared service |
 | 二十一 | Agent 狀態卡 expand 展開看待辦清單 | ✅ Stage 33（v3.20.0，2026-04-22）— 採解讀 B（running + queued TaskItem）；實作優化為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代原規劃 `AgentTodoDto`，重用既有 `PushQueueUpdateAsync` 鏈路；點 item 深層連結 `?groupId=` 自動 Drawer 預選 |
 | 二十四 | `CLAUDE_*.md` template 補齊（CLI Agent 自我描述檔） | ✅ 2026-04-25 — 根因修正：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（2026-04-12/13），但 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未 COPY 到 output；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（未來新增 template 自動涵蓋）；Rosa/Demi/Sage/Petra 沒 warn 只因走 API layer 或該 CLI path 沒被觸發，但 agent code 都有讀 template 的邏輯——一次全修 |
-
+| 二十 | 大檔案拆解技術債（合集）— 四個怪物級檔案清零 | ✅ Stage 34（v3.21.0，MeetingService 1415→4 檔）+ Stage 35（v3.22.0，PmAgentService 1388→6 檔 + Agents/Pm/ 子資料夾）+ Stage 36（v3.23.0，TaskGroupService 2623→716、CommandHandler 2172→556 + 5 個子資料夾）— 累積六項拆解 SOP 已整理至 [docs/conventions/refactor-sop.md](../conventions/refactor-sop.md)；Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但漏實際搬遷，Stage 38 結案後 Aria 補完 |
 ---
 
 ## 變更紀錄
@@ -1310,3 +1207,4 @@ Stage 38（v3.25.0）做完 Agent 的 `Provider` / `Model` 動態化後，Dashbo
 | 2026-04-25 | v7.34：新增 FF 二十六（Model 清單 DB 化 + Dashboard 管理頁，Stage 38 延伸升級）— ⚪ 待觀察；背景：Stage 38 採 constants 檔方案（`LlmModels.cs`），Aria 查網路 + commit 維護，CI/CD 5-10 分鐘生效；觸發條件：1-2 個月內抱怨節奏慢超過 5 次 / Model A/B 實驗場景 / Provider 擴充讓 constants 超 50 項；升級方向：`LlmModel` entity + Dashboard `/system/models` CRUD 管理頁 + Aria 透過 Dashboard/Internal API 改 DB 立即生效 |
 | 2026-04-25 | v7.35：Aria WebFetch Google 官方文件確認 Gemini 現況 — 2.5 Pro/Flash 仍 stable 但 **2026-06-17 deprecating**（距今 ~2 月）、Gemini 3 系列仍全為 -preview 不建議 production；FF 二十六「升級觸發條件」加入此具體時點作為**第一個已知實際 trigger**（若 Gemini 3 GA 前後快速迭代 → 啟動 DB 化；若單次遷移穩定 → 維持 constants）；Stage 38 Roadmap v1.2 對應 `LlmModels.cs` 範例加時效註解 |
 | 2026-04-25 | v7.36：Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A ✅ 完成**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton 對齊 AppSettingsService TTL 5min pattern + `LlmModels.cs` 常數白名單 + Internal API `scope=agent-config` 分支讓 cache 即時失效；**關鍵修正**（Aria 計劃書外抓出）：TokenTrackingProvider 第 9 參數從 `config.Model` 改傳 `finalModel`，避免 Dashboard 改完後 Token 監控頁顯示舊 model 的資料誤導；Christ 驗收 1（UI）+ 3（覆蓋性）通過，2（Token 監控）待後續 Stage 真實任務搭車驗；FF 四第二階段 2-A 主體標 ✅，2-B（CLI 層多家共存）保留待評估 |
+| 2026-04-25 | v7.37：Stage 38 結案後整理 — (1) **新增 FF 二十七**（Self-implement 試驗 v2，FF 二十四 fix 後重新評估品質）：Aria 調查 Stage 37 真實流程品質低下三大主因（Top 1 CLAUDE_*.md COPY 漏 = FF 二十四已修 / Top 2 Vera 偏好放行 + Petra Warning 寬鬆 / Top 3 QA 測試品質指引偏量）；計劃下個小規模任務 production 真實流程跑一次 self-implement 看品質回升狀況，若 Top 1 修復就足夠則 Top 2/3 延後。(2) **補完 FF 二十搬遷**：Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但實際沒搬，主清單仍有 155 行；本次補完搬遷至已完成摘要 |
