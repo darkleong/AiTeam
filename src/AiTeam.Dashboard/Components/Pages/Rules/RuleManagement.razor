@@ -59,15 +59,21 @@ else if (_rules.Count > 0)
                 <MudSwitch T="bool"
                            Value="@context.IsActive"
                            ValueChanged="@((bool v) => ToggleActiveAsync(context, v))"
-                           Color="Color.Primary"
-                           Label="@(context.IsActive ? "啟用" : "停用")" />
+                           Color="Color.Primary" />
             </MudTd>
             <MudTd>
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                               OnClick="@(() => OpenEditRuleDialogAsync(context))">編輯</MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                               OnClick="@(() => DeleteRuleAsync(context.Id))">刪除</MudButton>
+                <MudStack Row="true" Spacing="1">
+                    <MudTooltip Text="編輯">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                       Size="Size.Small"
+                                       OnClick="@(() => OpenEditRuleDialogAsync(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="刪除">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => DeleteRuleAsync(context.Id))" />
+                    </MudTooltip>
                 </MudStack>
             </MudTd>
         </RowTemplate>
