@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.37
+> 版本：v7.38
 > 建立日期：2026-04-01
 > 最後更新：2026-04-25
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -142,51 +142,27 @@ Gemini 行銷主打 1M context 確實誘人，但對 AiTeam 現狀不是主要�
 
 **真正動機應該是**：① 成本（Gemini Flash 免費額度）② 供應商分散 ③ 不同 Agent 品質交叉驗證
 
-### 實作策略（建議分階段）
+### 已完成成果（2026-04-25 為止）
 
-#### 第一階段（工程量小、價值清楚）
+- ✅ **第一階段：API 層 GeminiProvider**（Stage 37-1，v3.24.0）— 詳見 [Stage_37_Roadmap.md](Stage_37_Roadmap.md)
+- ✅ **第二階段 2-A：Dashboard Provider/Model 動態化**（Stage 38，v3.25.0）— DB 為唯一 SoT + `AgentConfigCache` Singleton（TTL 5min）+ `LlmModels.cs` 常數白名單 + Internal API `scope=agent-config` cache invalidate；建立「PR #107 三條禁止路線」（Dashboard 自讀 appsettings / 無 EF Migration 只 cache / 雙源 merge）作為未來 self-implement 紅線；詳見 [Stage_38_Roadmap.md](Stage_38_Roadmap.md)
 
-1. ✅ `GeminiProvider : ILlmProvider` — Stage 37-1（v3.24.0）完成，照 `AnthropicProvider` pattern 實作 + HttpClient + System.Text.Json
-2. ⏳ Dashboard Agent 設定頁 Provider 下拉選擇 — **未完成**，列入第二階段（理由見下節「第二階段技術約束」）
-3. ⏳ API 層 Agent 可改 Provider — Stage 37-1 透過 `appsettings.json` 編輯 + 重啟可用，但**沒有 Dashboard 入口**
-4. 搭配 Gemini 2.5 Flash 免費額度用在低複雜度任務（Sage 歸檔摘要、個性對話）
+### 待做：第二階段 2-B — CLI 層多家共存
 
-#### 第二階段（需要 spike 評估）
-
-##### 2-A. Dashboard Provider/Model 動態化（Stage 37-1 砍出來的，必做） ✅ 已完成（Stage 38，2026-04-25）
-
-**完成於 Stage 38 / v3.25.0**：DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改；新增 `AgentConfigCache` Singleton（對齊 AppSettingsService TTL 5min pattern）+ `LlmModels.cs` 常數白名單；`LlmProviderFactory.Create()` 改 per-field fallback；TokenTrackingProvider 第 9 參數改傳 `finalModel`（避免 Token 監控頁顯示舊 model 的資料誤導）；Internal API 加 `scope=agent-config` 分支讓 Dashboard 改完即時生效不需重啟。
-
-**技術約束（2026-04-24 self-implement 試驗教訓）— 三條禁止路線全避開**：
-- ❌ Dashboard 自讀 appsettings（會分裂）
-- ❌ 無 EF Migration 只在 service layer cache（無持久化）
-- ❌ DB + appsettings 兩源並行 merge（誰贏誰輸不透明）
-
-**實作項目**（全數完成）：
-1. ✅ `AgentConfig` entity 加 `Provider` / `Model` nullable 欄位 + EF Migration `Stage38AgentConfigProviderModel`
-2. ✅ `LlmProviderFactory.Create()` 改 DB 優先（per-field `dbOverride ?? configConfig` fallback）
-3. ✅ Dashboard `AgentSettings.razor` 加 Provider/Model 下拉（依 Provider 動態切換 Model 清單）
-4. ✅ Bot 啟動 seed 邏輯（兩欄同 null 才補，避免覆蓋 Dashboard 設定）
-
-詳見 [Stage_38_Roadmap.md](Stage_38_Roadmap.md)。
-
-##### 2-B. CLI 層多家共存
-
-5. `GeminiCliService : IClaudeCodeService` — 評估 Gemini CLI 的 session 延續、工具調用、輸出格式是否能對齊
-6. 主要挑戰：
+1. `GeminiCliService : IClaudeCodeService` — 評估 Gemini CLI 的 session 延續、工具調用、輸出格式是否能對齊
+2. 主要挑戰：
    - Session 延續機制不同（Claude Code `--resume UUID` vs Gemini CLI 自己的 session 管理）
    - 工具調用格式、輸出解析格式不同
    - `MockClaudeCodeService` 模擬的是 Claude 輸出，Gemini 要另做一套
    - `CLAUDE.md` 對應的 `GEMINI.md` 兩套記憶檔並存維護成本
-7. CLI 層 Agent（Victoria / Cody / Vera / Quinn / Petra）可選 Claude Code 或 Gemini CLI
+3. CLI 層 Agent（Victoria / Cody / Vera / Quinn / Petra）可選 Claude Code 或 Gemini CLI
 
-### 實作重點（技術細節）
+### 2-B 實作重點（技術細節）
 
-- `LlmProviderFactory.Create()` 的 switch 新增 `"GEMINI"` / `"OPENAI"` case
-- `GeminiProvider` 需支援 Vision（Victoria / Quinn 可能傳入圖片）
-- Token 追蹤（`TokenTrackingProvider`）包裝層不需改動，對供應商透明
-- CLI 層若做 `GeminiCliService`，需抽象出 `ICliAgentService`（原 `IClaudeCodeService` 重命名）或直接並列兩個實作
+- `GeminiProvider` 第一階段未支援 Vision（Victoria / Quinn 傳圖片仍走 Anthropic），未來加 Vision 時擴充
+- CLI 層做 `GeminiCliService`，需抽象出 `ICliAgentService`（原 `IClaudeCodeService` 重命名）或直接並列兩個實作
 - `MockClaudeCodeService` 若為 Gemini CLI 做對應模擬，考慮抽出 `MockCliAgentService` 共用 MockMode 邏輯
+- Token 追蹤（`TokenTrackingProvider`）包裝層對供應商透明，不需改動
 
 ### CLI 三家能力研究（2026-04-20 Aria 查官方文件 + GitHub issue 彙整）
 
@@ -1208,3 +1184,4 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 | 2026-04-25 | v7.35：Aria WebFetch Google 官方文件確認 Gemini 現況 — 2.5 Pro/Flash 仍 stable 但 **2026-06-17 deprecating**（距今 ~2 月）、Gemini 3 系列仍全為 -preview 不建議 production；FF 二十六「升級觸發條件」加入此具體時點作為**第一個已知實際 trigger**（若 Gemini 3 GA 前後快速迭代 → 啟動 DB 化；若單次遷移穩定 → 維持 constants）；Stage 38 Roadmap v1.2 對應 `LlmModels.cs` 範例加時效註解 |
 | 2026-04-25 | v7.36：Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A ✅ 完成**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton 對齊 AppSettingsService TTL 5min pattern + `LlmModels.cs` 常數白名單 + Internal API `scope=agent-config` 分支讓 cache 即時失效；**關鍵修正**（Aria 計劃書外抓出）：TokenTrackingProvider 第 9 參數從 `config.Model` 改傳 `finalModel`，避免 Dashboard 改完後 Token 監控頁顯示舊 model 的資料誤導；Christ 驗收 1（UI）+ 3（覆蓋性）通過，2（Token 監控）待後續 Stage 真實任務搭車驗；FF 四第二階段 2-A 主體標 ✅，2-B（CLI 層多家共存）保留待評估 |
 | 2026-04-25 | v7.37：Stage 38 結案後整理 — (1) **新增 FF 二十七**（Self-implement 試驗 v2，FF 二十四 fix 後重新評估品質）：Aria 調查 Stage 37 真實流程品質低下三大主因（Top 1 CLAUDE_*.md COPY 漏 = FF 二十四已修 / Top 2 Vera 偏好放行 + Petra Warning 寬鬆 / Top 3 QA 測試品質指引偏量）；計劃下個小規模任務 production 真實流程跑一次 self-implement 看品質回升狀況，若 Top 1 修復就足夠則 Top 2/3 延後。(2) **補完 FF 二十搬遷**：Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但實際沒搬，主清單仍有 155 行；本次補完搬遷至已完成摘要 |
+| 2026-04-25 | v7.38：FF 四瘦身（波 2 選項 A）— 第一階段 + 第二階段 2-A 詳細描述（共 ~30 行）壓縮成「已完成成果」摘要兩 bullet 帶 Stage Roadmap 連結；「實作重點」改名「2-B 實作重點」並刪掉已完成的 GEMINI case 條目；FF 四從 ~156 行縮到 ~95 行（-39%）；2-B（CLI 層多家共存）+ CLI 三家能力研究 +「PR #107 三條禁止路線」全保留供未來 spike 用 |
