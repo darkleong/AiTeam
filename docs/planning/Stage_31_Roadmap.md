@@ -177,7 +177,7 @@ Sonnet 200K 完全勝任。無需 Opus。
 
 ## 結案檢查清單
 
-完成後記得「三件套」同步（見 `feedback_impl_session_briefing.md` 第五節）：
+完成後記得「三件套」同步（見 `workflow_aria.md` 第五節）：
 
 - ① Master Plan：header 版本 bump + 索引狀態 + changelog
 - ② Future_Feature：header 版本 bump + 最後更新 + FF 十七 & 十八 移至已完成摘要

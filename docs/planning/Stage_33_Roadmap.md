@@ -200,7 +200,7 @@ A 和 B 可平行，但動同一元件時有衝突風險。建議順序：
 
 **核心挑戰：CommandHandler 2327 行（~46K tokens）是主要 context 殺手。**
 
-按新「Context 預估法」（見 `feedback_impl_session_briefing.md` 第二節）粗估：
+按新「Context 預估法」（見 `workflow_aria.md` 第二節）粗估：
 - CommandHandler Read 一次 46K（子項 A 必動）
 - AgentQueueService / Processor ~14K
 - Home.razor + AgentStatusCard ~15K
@@ -240,7 +240,7 @@ A 和 B 可平行，但動同一元件時有衝突風險。建議順序：
 ## 結案檢查清單（兩段式分工）
 
 - **實作 Session 做**：Stage_33_Roadmap 補「實作紀錄」章節 + 狀態 ✅ + 文件版本 v2.0 + 版本歷史、commit
-- **Aria 做**：Master Plan header + 索引 ✅ + changelog；Future_Feature header + FF 十五「佇列控制子項」標 ✅ + FF 二十一 移入已完成 + changelog；掃 git log 把驗收期間 follow-up commits 補進 Roadmap（見 `feedback_impl_session_briefing.md` 第五節）
+- **Aria 做**：Master Plan header + 索引 ✅ + changelog；Future_Feature header + FF 十五「佇列控制子項」標 ✅ + FF 二十一 移入已完成 + changelog；掃 git log 把驗收期間 follow-up commits 補進 Roadmap（見 `workflow_aria.md` 第五節）
 
 ---
 

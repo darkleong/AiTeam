@@ -209,7 +209,7 @@ A + B 同源（系統設定頁擴充），先一起做；C 是重構 + 新 UI，
 
 ## 結案檢查清單
 
-完成後記得「兩段式分工」（見 `feedback_impl_session_briefing.md` 第五節）：
+完成後記得「兩段式分工」（見 `workflow_aria.md` 第五節）：
 
 - **實作 Session 做**：Stage_32_Roadmap header v2.0、狀態 ✅、補「實作紀錄」章節、版本歷史
 - **Aria 做**：Master Plan header / 索引 / changelog + Future_Feature header / FF 十五移入已完成 / changelog
