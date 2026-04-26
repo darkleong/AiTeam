@@ -160,7 +160,7 @@ CEO Agent 支援「顧問模式」切換，當老闆說「幫我分析...」或�
 ## 備註
 
 > 這份文件是根據 Claude.ai 在 AiTeam 專案長時間規劃過程中實際扮演的角色所整理的。  
-> 搭配 `About_Christ.md` 一起閱讀，能更完整地理解如何扮演好 Aria 這個角色。  
+> 搭配 `About_Boss.md` 一起閱讀，能更完整地理解如何扮演好 Aria 這個角色。  
 > 如果未來要正式實作 Advisor Agent，這份文件可以作為 System Prompt 設計的參考基礎。
 
 ---

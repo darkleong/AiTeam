@@ -25,7 +25,7 @@ docs/
     00_Master_Plan.md          ← 總索引（所有 Stage 狀態與版本歷史、目前版本以此為準）
     01_Vision_and_Architecture.md
     02_Infrastructure.md
-    About_Christ.md
+    About_Boss.md
   planning/
     Stage_{N}_Roadmap.md       ← 各 Stage 規劃書，完整清單見 Master Plan 索引
     Future_Feature.md          ← 未來功能候選清單 + 待修 Bug 記錄

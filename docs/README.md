@@ -22,7 +22,7 @@
 | `00_Master_Plan.md` | 總索引：所有 Stage 狀態一覽、變更紀錄 |
 | `01_Vision_and_Architecture.md` | 願景、核心設計原則、整體架構、Agent 定義 |
 | `02_Infrastructure.md` | Discord 頻道、資料儲存、基礎建設細節 |
-| `About_Christ.md` | 老闆背景與工作風格（AI 團隊行為依據） |
+| `About_Boss.md` | 老闆背景與工作風格（AI 團隊行為依據） |
 
 ---
 

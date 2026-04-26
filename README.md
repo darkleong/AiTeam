@@ -78,7 +78,7 @@ docs/
 │   ├── 00_Master_Plan.md        ← 總索引（含所有 Stage 狀態與版本歷史）
 │   ├── 01_Vision_and_Architecture.md
 │   ├── 02_Infrastructure.md
-│   └── About_Christ.md
+│   └── About_Boss.md
 ├── planning/
 │   ├── Stage_1_Design.md ~ Stage_21_Roadmap.md  ← 全部 Stage 規劃文件（均已完成）
 │   └── Future_Feature.md        ← 未來功能候選清單
@@ -328,7 +328,7 @@ Stage 21 完成了系統文件的結構整理，並正式導入語意化版本�
 
 | 子資料夾 | 內容 | 特性 |
 |---------|------|------|
-| `architecture/` | 總索引、願景、基礎設施、About_Christ | 靜態，少變動 |
+| `architecture/` | 總索引、願景、基礎設施、About_Boss | 靜態，少變動 |
 | `planning/` | Stage 1~21 規劃文件 + Future_Feature | 動態，每 Stage 更新 |
 | `conventions/` | C# / Blazor / MudBlazor / EF Core / API 設計規範 | 穩定，必讀 |
 | `agents/` | 各 Agent 角色說明 | 依需查閱 |
