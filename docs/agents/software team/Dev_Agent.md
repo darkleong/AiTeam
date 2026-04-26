@@ -8,7 +8,7 @@
 ## 執行指引
 
 > 實際行為、工具權限、技術棧規範、禁止使用的框架，詳見：
-> **[`src/AiTeam.Bot/Resources/CLAUDE_CODY.md`](../../src/AiTeam.Bot/Resources/CLAUDE_CODY.md)**
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Cody.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Cody.md)**
 
 ---
 
@@ -32,7 +32,7 @@ Reviewer Agent（Vera）→ QA Agent（Quinn）→ 通知老闆
 
 ### 1. Claude Code 自主開發（Stage 11）
 - 透過 `ClaudeCodeService.RunAsync` 啟動 Claude Code CLI
-- 自主探索、修改、build 驗證，詳細規範見 `CLAUDE_CODY.md`
+- 自主探索、修改、build 驗證，詳細規範見 `CLAUDE_Cody.md`
 - 30 分鐘 timeout、最多 40 turns（Stage 16 調整）
 
 ### 2. 支援的任務類型
@@ -103,8 +103,8 @@ Reviewer Agent（Vera）→ QA Agent（Quinn）→ 通知老闆
 |------|------|
 | 模型 | Claude Sonnet（需要強程式碼能力）|
 | Claude Code | RunAsync（30 分鐘 timeout、20 turns、全工具） |
-| 記憶來源 | 任務 context + Issues 內容 + UI 規格 + CLAUDE_CODY.md |
-| System Prompt | CLAUDE_CODY.md 模板（含 C# / Blazor / EF Core 編程規範） |
+| 記憶來源 | 任務 context + Issues 內容 + UI 規格 + CLAUDE_Cody.md |
+| System Prompt | CLAUDE_Cody.md 模板（含 C# / Blazor / EF Core 編程規範） |
 
 ---
 

@@ -8,7 +8,7 @@
 ## 執行指引
 
 > 實際行為、測試策略（xUnit / Playwright）、輸出路徑規則，詳見：
-> **[`src/AiTeam.Bot/Resources/CLAUDE_QA.md`](../../src/AiTeam.Bot/Resources/CLAUDE_QA.md)**
+> **[`src/AiTeam.Bot/Resources/CLAUDE_Quinn.md`](../../src/AiTeam.Bot/Resources/CLAUDE_Quinn.md)**
 
 ---
 
@@ -78,7 +78,7 @@ WorkflowEngine 繼續串行流程（→ Doc Agent）
 | 模型 | Claude Sonnet（需要理解程式邏輯）|
 | 執行模式 | Claude Code session（Stage 16 重構）|
 | 記憶來源 | 任務 context + PR changed files |
-| System Prompt | `CLAUDE_QA.md` |
+| System Prompt | `CLAUDE_Quinn.md` |
 
 ---
 

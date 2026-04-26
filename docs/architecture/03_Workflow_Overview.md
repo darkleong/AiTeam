@@ -1,8 +1,10 @@
 # 開發流程全景圖
 
-> 版本：v1.0
-> 建立日期：2026-04-16
-> 對應系統版本：v3.13.0（Stage 27b）
+> 版本：v2.0
+> 建立日期：2026-04-16（v1.0）/ 更新：2026-04-26（v2.0 — 補 Stage 28-39 演進）
+> 對應系統版本：**v3.26.0（Stage 39）**
+>
+> 最新狀態以 [`/CHANGELOG.md`](../../CHANGELOG.md) 為準；本檔記錄當前流程設計，後續每幾個 Stage 補一次。
 
 ---
 
@@ -286,7 +288,9 @@ Christ 下指令 → Victoria 分類為 TechImprovement
 
 可透過 `SkipCeoConfirm` AppSettings 跳過第一層。
 
-**程式碼：** `Discord/CommandHandler.cs`
+**雙通道（Stage 28a/b）：** 確認按鈕同時出現在 Discord 訊息 + Dashboard 操作中心 (`/interactions`)，**任一端先回覆即鎖**（樂觀鎖 `BossInteractionRepository.ExecuteUpdateAsync WHERE status='pending'`）；另一端的按鈕自動失效。Stage 28b 加入文字輸入互動（如 Kickoff/Design 修改意見），改用 `MudDialog` 收集再 submit。
+
+**程式碼：** `Discord/SlashCommandRouter.cs` / `Discord/ButtonCallbackRouter.cs`（Stage 36 拆解後）+ `Services/InteractionService.cs` + `Dashboard/Pages/InteractionCenter.razor`
 
 ---
 
@@ -397,6 +401,10 @@ Cody 根據前置階段的產出（設計規劃書 + Issues + UI 規格）制定
 4. 產出結構化 Review 報告
 5. 透過 GitHub API 發布 PR Review
 
+**審查範圍（Stage 39 起）：** `.cs` / `.razor` / `.css` 三類副檔名（對齊 Quinn `hasUiChanges`）；`CLAUDE_Vera.md` 含 a11y / Blazor / CSS / MudBlazor 判準（全列 Warning，維持「偏好放行」哲學）。
+
+**Skipped 路徑（Stage 39）：** PR 無 `.cs/.razor/.css` 變更時，`ReviewerAgentService` 回傳 `AgentExecutionResult.Skipped(reason)`，TaskGroupService 走「跳過 Petra 放行」路徑直進 QA；Dashboard 顯示 teal `#20c997` 跟 done 飽和綠 / failed 紅區分。
+
 **產出：**
 - Review 報告（`TaskGroup.LastReviewBody`）
 - Critical 問題數（`CriticalReviewCount`）
@@ -428,9 +436,11 @@ CriticalReviewCount = 0？
 
 **Petra 審閱 Review 報告（`ReviewVeraAsync`）：** 使用 LLM API（不需 codebase），判斷 Review 品質是否合理。
 
-**申訴迴圈細節：**
-- Cody 和 Vera 的每輪申訴都使用 LLM API（`RunCodyAppealAsync` / `RunVeraAppealAsync`）
-- Petra 仲裁使用 LLM API（`ArbitrateReviewAppealAsync`）
+**申訴迴圈細節（Stage 30 升級）：** 5 個申訴環節從 LLM API 升級為 **Claude Code CLI 新開 session + 唯讀工具**（保留 codebase 存取能力）：
+- `RunCodyAppealAsync` / `RunVeraAppealAsync`：Cody / Vera 反駁時可重新探索 codebase 找實證
+- `ArbitrateReviewAppealAsync`：Petra 仲裁時可看 PR diff + 相關檔案脈絡
+- `ModifyDevPlanAsync` / `RunPetraDevPlanReassessAsync`：Dev_plan 申訴同樣升級
+- 共用 helper：`PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync`（帶入 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff 脈絡）
 
 **Dev_fix 迴圈：**
 - Cody 修復 → Vera 重審，最多 3 輪（`FixIteration`）
@@ -552,7 +562,22 @@ Stopped — 完全停止
 
 **Discord 指令：** `/pause`、`/resume`、`/stop-all`、`/resume-all`、`/queue`
 
-**Dashboard：** Agent 卡片顯示狀態 Badge + 佇列深度 Chip，SignalR 即時更新。
+**Dashboard 等價控制（Stage 33）：** Agent 狀態卡內建 pause/resume 按鈕、`GlobalQueueControlCard` 全域緊急停止（含確認 Dialog）、佇列深度 Chip + SignalR 即時更新。Discord 指令與 Dashboard 控制共用同一 `AgentQueueControlService`（先到先贏）。
+
+### Crash Recovery（Stage 31 + 37 全面涵蓋）
+
+**問題場景：** Bot 在會議 / 申訴 / QA 路由執行中崩潰或重啟，如何恢復進度？
+
+**解法：** `TaskGroup.ActiveOrchestration` 欄位記錄當前 in-flight 階段（5 種值）：
+- `Kickoff` / `Design`（會議）
+- `ReviewAppeal` / `DevPlanAppeal`（申訴迴圈）
+- `QaRouting`（QA 失敗路由）
+
+各階段執行時 set `ActiveOrchestration`，try-finally clear；Bot 啟動時 `RecoverStuckMeetingsAsync` 掃描所有 `ActiveOrchestration != null` 的 TaskGroup，依類型重啟對應 helper（5 個 `Restart*Async` 方法 in `Orchestration/AppealOrchestrationService.cs` / `MeetingOrchestrationService.cs`）。
+
+**Dashboard 重試（Stage 31）：** Failed / Cancelled 的 TaskItem 在 PipelineView + TaskCenter 列表頁有 `🔁 重試` 按鈕，呼叫 `AgentQueueService.RequeueTaskAsync` → Bot Internal API 重新 enqueue。
+
+**程式碼：** `Data/Entities/TaskGroup.cs`（`ActiveOrchestration`）+ `Orchestration/CrashRecoveryService.cs` + 5 個 Restart helper
 
 ---
 
@@ -577,16 +602,28 @@ Stopped — 完全停止
 
 ## 關鍵程式碼位置索引
 
+> Stage 34-36 完成 FF 二十大檔案拆解（TaskGroupService / CommandHandler / MeetingService / PmAgentService 四怪物清零），結構從單一大檔重組為子資料夾。
+
 | 功能 | 檔案 | 說明 |
 |------|------|------|
 | 流程決策表 | `Orchestration/WorkflowEngine.cs` | 三種流程類型的步驟定義 + Decision 邏輯 |
-| 流程協調中樞 | `Orchestration/TaskGroupService.cs` | Petra 閘門、申訴迴圈、QA 路由、阻礙報告 |
+| 流程協調主入口 | `Orchestration/TaskGroupService.cs` | 對外 API + 路由到子 OrchestrationService |
+| 會議協調 | `Orchestration/MeetingOrchestrationService.cs` | Kickoff / Design 會議流程協調 |
+| 申訴協調 | `Orchestration/AppealOrchestrationService.cs` | Review Appeal + Dev_plan Appeal + 5 個 Restart helper |
+| QA 協調 | `Orchestration/QaCoordinationService.cs` | QA 路由判斷 + 修復迴圈 |
+| 提案確認協調 | `Orchestration/ProposalConfirmationService.cs` | 提案核准 / 修改 / 取消 |
+| 會議 Service（Stage 34 拆解後） | `Orchestration/Meeting/{KickoffMeetingService, DesignMeetingService, MeetingCommons, MeetingResults}.cs` | Kickoff + Design 會議引擎 |
+| Petra 子模組（Stage 35 拆解後） | `Agents/Pm/{PmReviewService, ReviewAppealService, DevPlanAppealService, PmRoutingService, PmAgentCommons}.cs` | Petra 五項職責 |
 | 佇列處理器 | `Orchestration/AgentQueueProcessor.cs` | Semaphore 分組、輪詢 + Signal、狀態檢查 |
-| 佇列服務 | `Orchestration/AgentQueueService.cs` | Enqueue / Dequeue / CTS 管理 |
-| 會議服務 | `Orchestration/MeetingService.cs` | Kick-off 會議 + 設計會議 |
-| Discord 指令 | `Discord/CommandHandler.cs` | 任務觸發、雙層確認、按鈕處理 |
-| Claude Code 介面 | `Agents/IClaudeCodeService.cs` | 六種執行模式定義 |
-| Agent 設定 | `appsettings.json` | Provider / Model / 各項參數 |
+| 佇列服務 | `Orchestration/AgentQueueService.cs` | Enqueue / Dequeue / CTS 管理 + 重試 RequeueTaskAsync |
+| 佇列控制（Stage 33） | `Services/AgentQueueControlService.cs` | Discord + Dashboard 共用的 pause/resume/stop |
+| Discord 指令分派（Stage 36 拆解後） | `Discord/SlashCommandRouter.cs` + `Discord/ButtonCallbackRouter.cs` + `Discord/PendingConfirmationStore.cs` | 從 CommandHandler 拆出的 3 個子模組 |
+| 雙向操作中心（Stage 28a/b） | `Services/InteractionService.cs` + `Dashboard/Pages/InteractionCenter.razor` + `Bot/InteractionProcessor.cs` | BossInteraction 雙通道（樂觀鎖先到先贏） |
+| Crash Recovery（Stage 31+37） | `Orchestration/CrashRecoveryService.cs` | `RecoverStuckMeetingsAsync` 啟動掃描 |
+| Mock Mode（Stage 17+32） | `Agents/MockClaudeCodeService.cs` + `Services/MockScenarioService.cs` | 動態 Delay（AppSettings） + Dashboard /mock 卡片 |
+| Provider/Model 動態化（Stage 38） | `Services/AgentConfigCache.cs` + `Configuration/LlmModels.cs` | DB SoT + 5 分鐘 TTL Cache + 常數白名單 |
+| Claude Code 介面 | `Agents/IClaudeCodeService.cs` | 六種執行模式定義（含 Stage 25a 的 `RunMeetingSessionAsync`） |
+| Agent 設定 | DB `agent_configs` 表（Dashboard 改）+ `appsettings.json` 啟動 seed | Provider / Model / 各項參數 |
 
 ---
 
@@ -595,3 +632,4 @@ Stopped — 完全停止
 | 日期 | 版本 | 內容 |
 |------|------|------|
 | 2026-04-16 | v1.0 | 初版建立 — 記錄 v3.13.0 完整流程 |
+| 2026-04-26 | v2.0 | 補 Stage 28-39 演進：Dashboard 雙向操作中心（Stage 28a/b）/ 申訴迴圈 LLM API → Claude Code CLI（Stage 30）/ Crash Recovery 全面涵蓋（Stage 31+37）/ Reviewer Skipped 結果型別（Stage 39）/ Mock 動態 Delay（Stage 32）/ Agent 狀態卡 2.0 + Dashboard 佇列控制（Stage 33）/ FF 二十大檔案拆解後的程式碼索引（Stage 34-36）/ Provider/Model 動態化（Stage 38）/ Vera 審查擴及 razor/css（Stage 39）|

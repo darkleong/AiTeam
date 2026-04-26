@@ -54,9 +54,9 @@ Release Agent（Rena）          Ops Agent（Maya）
 | Aria | [Advisor_Agent.md](../Advisor_Agent.md) | memory: workflow_aria.md（Christ 私人）|
 | Victoria | [CEO_Agent.md](./CEO_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Victoria.md` |
 | Petra | [PM_Agent.md](./PM_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Petra.md` |
-| Cody | [Dev_Agent.md](./Dev_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_CODY.md` |
+| Cody | [Dev_Agent.md](./Dev_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Cody.md` |
 | Vera | [Reviewer_Agent.md](./Reviewer_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` |
-| Quinn | [QA_Agent.md](./QA_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_QA.md` |
+| Quinn | [QA_Agent.md](./QA_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Quinn.md` |
 | Sage | [Doc_Agent.md](./Doc_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Sage.md` |
 | Rosa | [Requirements_Agent.md](./Requirements_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Rosa.md` |
 | Demi | [Designer_Agent.md](./Designer_Agent.md) | `src/AiTeam.Bot/Resources/CLAUDE_Demi.md` |

@@ -82,7 +82,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     /// <summary>
     /// QA 模式：開放所有工具（含 Write / Edit / Bash），供 Quinn 產生測試並以 dotnet build 驗證。
     /// 不呼叫 ConfigureGitAsync（QA 不 commit，由呼叫端 GitHubService 負責）。
-    /// 靠 CLAUDE_QA.md 約束只寫入 tests/ 與 Playwright Generated/ 目錄。
+    /// 靠 CLAUDE_Quinn.md 約束只寫入 tests/ 與 Playwright Generated/ 目錄。
     /// </summary>
     public Task<ClaudeCodeResult> RunQaAsync(
         string workingDir,

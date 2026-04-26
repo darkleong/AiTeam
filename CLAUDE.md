@@ -23,9 +23,8 @@ docs/
   README.md                  ← 資料夾導覽（各子資料夾說明）
   architecture/
     00_Master_Plan.md          ← 文件導覽 stub（變更紀錄已遷至 /CHANGELOG.md）
-    01_Vision_and_Architecture.md
-    02_Infrastructure.md
-    About_Boss.md
+    03_Workflow_Overview.md    ← 開發流程全景圖
+    About_Boss.md              ← 老闆角色描述（當前實例：Christ）
   planning/
     Stage_{N}_Roadmap.md       ← 各 Stage 規劃書（完整版本歷史見 /CHANGELOG.md）
     Future_Feature.md          ← 未來功能候選清單 + 待修 Bug 記錄

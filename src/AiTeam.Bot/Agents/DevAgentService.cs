@@ -238,7 +238,7 @@ public class DevAgentService(
         // 將 Cody 專用 CLAUDE.md 模板寫入 repo 根目錄，執行完後還原
         // （避免 CLAUDE.md 的替換被 GitHubService 一起 commit 進 PR）
         var claudeMdPath  = Path.Combine(localPath, "CLAUDE.md");
-        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_CODY.md");
+        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Cody.md");
         var originalClaudeMd = File.Exists(claudeMdPath)
             ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
             : null;
@@ -251,7 +251,7 @@ public class DevAgentService(
         }
         else
         {
-            logger.LogWarning("CLAUDE_CODY.md 模板不存在於 {Path}，略過寫入", templatePath);
+            logger.LogWarning("CLAUDE_Cody.md 模板不存在於 {Path}，略過寫入", templatePath);
         }
 
         // 解析 Vera 報告與 UI 規格（fix loop 時提供）

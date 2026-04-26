@@ -228,8 +228,7 @@ docker compose --env-file .env up -d
 |---|---|
 | 完整版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
 | 待實作功能候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
-| 系統願景與架構細節 | [docs/architecture/01_Vision_and_Architecture.md](./docs/architecture/01_Vision_and_Architecture.md) |
-| 基礎建設（Discord 頻道、PostgreSQL 等） | [docs/architecture/02_Infrastructure.md](./docs/architecture/02_Infrastructure.md) |
+| 開發流程全景圖 | [docs/architecture/03_Workflow_Overview.md](./docs/architecture/03_Workflow_Overview.md) |
 | 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
 | 老闆角色描述 | [docs/architecture/About_Boss.md](./docs/architecture/About_Boss.md) |
 | Agent 角色 lore | [docs/agents/](./docs/agents/) |

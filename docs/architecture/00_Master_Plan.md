@@ -13,9 +13,8 @@
 | 系統版本歷史 + 各 Stage 對應版本 | [`/CHANGELOG.md`](../../CHANGELOG.md) |
 | 待實作功能 / Stage 候選 | [`docs/planning/Future_Feature.md`](../planning/Future_Feature.md) |
 | 個別 Stage 完整實作紀錄 | [`docs/planning/Stage_*_Roadmap.md`](../planning/) |
-| 系統願景與架構 | [`01_Vision_and_Architecture.md`](./01_Vision_and_Architecture.md) |
-| 基礎建設細節（Discord 頻道、PostgreSQL 等） | [`02_Infrastructure.md`](./02_Infrastructure.md) |
-| 流程總覽 | [`03_Workflow_Overview.md`](./03_Workflow_Overview.md) |
+| 開發流程全景圖（NewFeature / BugFix / TechImprovement） | [`03_Workflow_Overview.md`](./03_Workflow_Overview.md) |
+| 早期願景紀錄（已歸檔，保留歷史脈絡） | [`docs/_archive/early-vision/`](../_archive/early-vision/) |
 | 老闆角色描述 | [`About_Boss.md`](./About_Boss.md) |
 | 編程規範（C# / Blazor / MudBlazor / EF Core / API / refactor SOP） | [`docs/conventions/`](../conventions/) |
 | Agent 角色 lore | [`docs/agents/`](../agents/) |

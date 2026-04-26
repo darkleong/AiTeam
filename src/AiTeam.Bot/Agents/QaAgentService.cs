@@ -183,7 +183,7 @@ public class QaAgentService(
     // ────────────── Claude Code QA Session ──────────────
 
     /// <summary>
-    /// 在已 clone 的 localPath 上：備份 CLAUDE.md → 寫入 CLAUDE_QA.md → 執行 RunQaAsync → 還原 CLAUDE.md。
+    /// 在已 clone 的 localPath 上：備份 CLAUDE.md → 寫入 CLAUDE_Quinn.md → 執行 RunQaAsync → 還原 CLAUDE.md。
     /// localPath 由呼叫端管理（不在此 method 內清理）。
     /// </summary>
     private async Task<ClaudeCodeResult> RunClaudeCodeQaAsync(
@@ -196,7 +196,7 @@ public class QaAgentService(
         CancellationToken cancellationToken)
     {
         var claudeMdPath  = Path.Combine(localPath, "CLAUDE.md");
-        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_QA.md");
+        var templatePath  = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Quinn.md");
         var backup = File.Exists(claudeMdPath)
             ? await File.ReadAllTextAsync(claudeMdPath, cancellationToken)
             : null;
@@ -208,7 +208,7 @@ public class QaAgentService(
                     await File.ReadAllTextAsync(templatePath, cancellationToken),
                     cancellationToken);
             else
-                logger.LogWarning("CLAUDE_QA.md 不存在於 {Path}", templatePath);
+                logger.LogWarning("CLAUDE_Quinn.md 不存在於 {Path}", templatePath);
 
             var model  = configuration["Agents:QA:Model"]
                       ?? configuration["Anthropic:DefaultModel"]
@@ -322,7 +322,7 @@ public class QaAgentService(
 
 // ────────────── 資料模型 ──────────────
 
-/// <summary>Stage 24：Quinn 的結構化測試報告（CLAUDE_QA.md 輸出格式）。</summary>
+/// <summary>Stage 24：Quinn 的結構化測試報告（CLAUDE_Quinn.md 輸出格式）。</summary>
 public class QaReport
 {
     [JsonPropertyName("status")]           public string Status        { get; set; } = "passed";
