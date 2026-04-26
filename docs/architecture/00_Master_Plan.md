@@ -1,165 +1,28 @@
-# AI 團隊實作總規劃
+# Master Plan
 
-> 版本：v7.31
-> 建立日期：2026-03-29
-> 狀態：進行中
-
----
-
-## 文件索引
-
-| 文件 | 說明 | 版本 | 狀態 |
-|------|------|------|------|
-| [01_Vision_and_Architecture.md](./01_Vision_and_Architecture.md) | 願景、核心設計原則、整體架構、Agent 定義 | — | ✅ 已確認 |
-| [02_Infrastructure.md](./02_Infrastructure.md) | Discord 頻道、資料儲存、已確認細節 | — | ✅ 已確認 |
-| [Stage_1_Design.md](../planning/Stage_1_Design.md) | Stage 1：設計與決策 | v0.1.0 | ✅ 完成 |
-| [Stage_2_Foundation.md](../planning/Stage_2_Foundation.md) | Stage 2：基礎建設 | v0.1.0 | ✅ 已完成（2026-03-31） |
-| [Stage_3_Agents.md](../planning/Stage_3_Agents.md) | Stage 3：第一批 Agent 上線 | v0.2.0 | ✅ 已完成（2026-03-31） |
-| [Stage_4_Dashboard.md](../planning/Stage_4_Dashboard.md) | Stage 4：Blazor Dashboard | v0.3.0 | ✅ 已完成（2026-03-31） |
-| [Stage_5_Expansion.md](../planning/Stage_5_Expansion.md) | Stage 5：擴充更多 Agent | v0.4.0 | ✅ 已完成（2026-04-01） |
-| [Stage_6_Roadmap.md](../planning/Stage_6_Roadmap.md) | Stage 6：強化、驗收與技術債清償 | v1.0.0 | ✅ 已完成（2026-04-01） |
-| [Stage_7_Roadmap.md](../planning/Stage_7_Roadmap.md) | Stage 7：Software Team 完全體（三個新 Agent + CI/CD + Discord 重設計） | v1.1.0 | ✅ 已完成（2026-04-02） |
-| [Stage_8_Roadmap.md](../planning/Stage_8_Roadmap.md) | Stage 8：系統可靠性與操作體驗 | v1.2.0 | ✅ 已完成（2026-04-02） |
-| [Stage_9_Roadmap.md](../planning/Stage_9_Roadmap.md) | Stage 9：CEO 升級 + 可觀測性 | v1.3.0 | ✅ 已完成（2026-04-03） |
-| [Stage_10_Roadmap.md](../planning/Stage_10_Roadmap.md) | Stage 10：開發流程自動閉環 | v1.4.0 | ✅ 已完成（2026-04-03） |
-| [Stage_11_Roadmap.md](../planning/Stage_11_Roadmap.md) | Stage 11：Dev Agent 驅動 Claude Code | v2.0.0 | ✅ 已完成（2026-04-05） |
-| [Stage_12_Roadmap.md](../planning/Stage_12_Roadmap.md) | Stage 12：提案流程全面升級 | v2.1.0 | ✅ 已完成（2026-04-06） |
-| [Stage_13_Roadmap.md](../planning/Stage_13_Roadmap.md) | Stage 13：系統穩定性與流程修正 | v2.2.0 | ✅ 已完成（2026-04-06） |
-| [Stage_14_Roadmap.md](../planning/Stage_14_Roadmap.md) | Stage 14：CEO 分類與流程完整性補強 | v2.3.0 | ✅ 已完成（2026-04-06） |
-| [Stage_15_Roadmap.md](../planning/Stage_15_Roadmap.md) | Stage 15：Victoria 接上 Claude Code + Session 對話 + 長期記憶 | v2.4.0 | ✅ 已完成（2026-04-06） |
-| [Stage_16_Roadmap.md](../planning/Stage_16_Roadmap.md) | Stage 16：PM Agent（Petra）品質審核閘門 | v3.0.0 | ✅ 已完成（2026-04-07） |
-| [Stage_17_Roadmap.md](../planning/Stage_17_Roadmap.md) | Stage 17：Mock Mode（模擬模式） | v3.1.0 | ✅ 已完成（2026-04-08） |
-| [Stage_18_Roadmap.md](../planning/Stage_18_Roadmap.md) | Stage 18：Dashboard 可觀測性升級 | v3.2.0 | ✅ 已完成（2026-04-09） |
-| [Stage_19_Roadmap.md](../planning/Stage_19_Roadmap.md) | Stage 19：Dashboard UI 全面打磨 | v3.3.0 | ✅ 已完成（Pt.1 2026-04-10、Pt.2/Pt.3 2026-04-11） |
-| [Stage_20_Roadmap.md](../planning/Stage_20_Roadmap.md) | Stage 20：Dashboard 全面換 MudBlazor Layout | v3.4.0 | ✅ 已完成（2026-04-11） |
-| [Stage_21_Roadmap.md](../planning/Stage_21_Roadmap.md) | Stage 21：文件整理與 SemVer 導入 | v3.5.0 | ✅ 已完成（2026-04-11） |
-| [Stage_22_Roadmap.md](../planning/Stage_22_Roadmap.md) | Stage 22：Dashboard 存取分層 + Token 保護 + 頻道清理 | v3.6.0 | ✅ 已完成（2026-04-12） |
-| [Stage_23_Roadmap.md](../planning/Stage_23_Roadmap.md) | Stage 23：開發流程重構 Phase 1a（Review Appeal + 流程產出強化） | v3.7.0 | ✅ 已完成（2026-04-12） |
-| [Stage_24_Roadmap.md](../planning/Stage_24_Roadmap.md) | Stage 24：開發流程重構 Phase 1b（QA 改造 + Dev_plan 審核強化 + 文件基礎設施） | v3.8.0 | ✅ 已完成（2026-04-13） |
-| [Stage_25a_Roadmap.md](../planning/Stage_25a_Roadmap.md) | Stage 25a：開發流程重構 Phase 1c（Kick-off 會議機制） | v3.9.0 | ✅ 已完成（2026-04-14） |
-| [Stage_25b_Roadmap.md](../planning/Stage_25b_Roadmap.md) | Stage 25b：開發流程重構 Phase 1d（設計規劃階段） | v3.10.0 | ✅ 已完成（2026-04-14） |
-| [Stage_26_Roadmap.md](../planning/Stage_26_Roadmap.md) | Stage 26：驗收基礎設施 + 版本號集中管理 | v3.11.0 | ✅ 已完成（2026-04-14） |
-| [Stage_27a_Roadmap.md](../planning/Stage_27a_Roadmap.md) | Stage 27a：Agent 任務序列 — 核心佇列機制 | v3.12.0 | ✅ 已完成（2026-04-16） |
-| [Stage_27b_Roadmap.md](../planning/Stage_27b_Roadmap.md) | Stage 27b：Agent 任務序列 — 操作性與可觀察性 | v3.13.0 | ✅ 已完成（2026-04-16） |
-| [Stage_28a_Roadmap.md](../planning/Stage_28a_Roadmap.md) | Stage 28a：Dashboard 雙向操作中心 — 基礎架構與按鈕回覆 | v3.14.0 | ✅ 已完成（2026-04-17） |
-| [Stage_28b_Roadmap.md](../planning/Stage_28b_Roadmap.md) | Stage 28b：Dashboard 雙向操作中心 — 文字輸入互動與歷史紀錄 | v3.15.0 | ✅ 已完成（2026-04-17） |
-| [Stage_29_Roadmap.md](../planning/Stage_29_Roadmap.md) | Stage 29：Dashboard 操作性收尾 + CEO 指令通道擴充 | v3.16.0 | ✅ 已完成（2026-04-19） |
-| [Stage_30_Roadmap.md](../planning/Stage_30_Roadmap.md) | Stage 30：申訴迴圈 LLM API → Claude Code CLI 全面升級 | v3.17.0 | ✅ 已完成（2026-04-20） |
-| [Stage_31_Roadmap.md](../planning/Stage_31_Roadmap.md) | Stage 31：可靠性補強 + Appeal 對抗紀錄 UI | v3.18.0 | ✅ 已完成（2026-04-20） |
-| [Stage_32_Roadmap.md](../planning/Stage_32_Roadmap.md) | Stage 32：/mock Dashboard 化 + 系統設定擴充 | v3.19.0 | ✅ 已完成（2026-04-21） |
-| [Stage_33_Roadmap.md](../planning/Stage_33_Roadmap.md) | Stage 33：Agent 狀態卡 2.0 — 佇列控制 + 待辦清單 | v3.20.0 | ✅ 已完成（2026-04-22） |
-| [Stage_34_Roadmap.md](../planning/Stage_34_Roadmap.md) | Stage 34：MeetingService 拆解（FF 二十-C） | v3.21.0 | ✅ 已完成（2026-04-22） |
-| [Stage_35_Roadmap.md](../planning/Stage_35_Roadmap.md) | Stage 35：PmAgentService 拆解（FF 二十-D）+ 子資料夾 SOP | v3.22.0 | ✅ 已完成（2026-04-22） |
-| [Stage_36_Roadmap.md](../planning/Stage_36_Roadmap.md) | Stage 36：TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併） | v3.23.0 | ✅ 已完成（2026-04-22） |
-| [Stage_37_Roadmap.md](../planning/Stage_37_Roadmap.md) | Stage 37：GeminiProvider API 層 + Crash Recovery 全面涵蓋 | v3.24.0 | ✅ 已完成（2026-04-25） |
-| [Stage_38_Roadmap.md](../planning/Stage_38_Roadmap.md) | Stage 38：Dashboard Provider/Model 動態化（FF 四第二階段 2-A） | v3.25.0 | ✅ 已完成（2026-04-25） |
-| [Stage_39_Roadmap.md](../planning/Stage_39_Roadmap.md) | Stage 39：Vera 審查擴及 .razor / .css（FF 二十八）+ Trial_v2 搭車修三項 | v3.26.0 | ✅ 已完成（2026-04-25） |
-| [Future_Feature.md](../planning/Future_Feature.md) | 未來功能候選清單（不限 Stage） | — | 🔵 持續維護 |
-| [agents/software team/Agent_Capability_Gaps.md](../agents/software%20team/Agent_Capability_Gaps.md) | 各 Agent 能力缺口清單（內部協作基礎建設用） | — | 🔵 持續維護 |
+> 本檔於 2026-04-26 重構：版本變更紀錄全面遷移至 root [`CHANGELOG.md`](../../CHANGELOG.md)。
+>
+> 本檔保留作為文件導覽（Stage 索引指針），不再是版本變更 SoT。
 
 ---
 
-## 變更紀錄
+## 找什麼，去哪查
 
-| 版本 | 日期 | 變更內容 |
-|------|------|----------|
-| v1.0 | 2026-03-29 | 初版建立，文件拆分為獨立 Stage 檔案 |
-| v1.1 | 2026-03-29 | 更新各 Stage 狀態、修正 Ops 部署描述、補充 Token 監控細節 |
-| v1.2 | 2026-03-31 | Stage 2 & Stage 3 實作完成，補充實作重點紀錄 |
-| v1.3 | 2026-03-31 | Stage 4 實作完成，補充 Blazor Web App、Identity、SignalR、Aspire 陷阱紀錄 |
-| v1.4 | 2026-04-01 | Stage 5 實作完成，動態 Agent 框架 + QA / Doc / Requirements 三個新 Agent |
-| v1.5 | 2026-04-01 | Future_Research.md 升格為 Stage_6_Roadmap.md，納入正式規劃序列 |
-| v1.6 | 2026-04-01 | Stage 6 結案（Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項）；新增 Stage_7_Roadmap.md |
-| v1.7 | 2026-04-02 | Stage 7 結案（Reviewer/Release/Designer Agent、CI/CD、Discord 重設計、自然語言對話）；新增 Future_Feature.md |
-| v1.8 | 2026-04-02 | 新增 Stage_8_Roadmap.md（8 項：可靠性補完 + Notion 遷移 + 專案管理 + 部署紀錄）|
-| v1.9 | 2026-04-02 | Stage 8 全部 8 項完成：動態 AppSettings、per-agent Rules、Dark Mode CSS 覆寫、Notion 完全移除、OpsAgent 移除 docker CLI 依賴 |
-| v2.0 | 2026-04-03 | 新增 Stage_9_Roadmap.md（CEO 智慧分類 + 提案模式、Token 監控 Dashboard、QA Playwright）；Future_Feature.md 清理已完成項目 |
-| v2.1 | 2026-04-03 | Stage 9 全部完成並驗收：Token 監控即時 SignalR 更新、CEO 四類分類 + 提案模式、QA Playwright CI |
-| v2.2 | 2026-04-03 | 新增 Stage_10_Roadmap.md（CEO Orchestrator、提案書增強、開發上下文、Review 閉環、Ops Rollback）；修復 CHANGELOG.md base64 問題並補上 v1.1.0 / v1.2.0 |
-| v2.3 | 2026-04-03 | Stage 10 實作完成：WorkflowEngine、TaskGroupService、✏️ 提案調整按鈕、Dev repo tree 上下文、Review 閉環 webhook、Ops Rollback GitHub Actions |
-| v2.4 | 2026-04-04 | Stage 10 驗收完成；Stage_10_Roadmap.md 補充詳細實作紀錄（架構設計、踩坑、Race Condition、Ops 路徑說明、Migration 指令）；v1.3.1 修正 7 項驗收後 bug |
-| v2.5 | 2026-04-05 | 新增 Stage_11_Roadmap.md（Dev Agent 驅動 Claude Code，單一目標）；Future_Feature.md 新增十二～十七共 6 項 |
-| v2.6 | 2026-04-05 | Stage 11 驗收完成：ClaudeCodeService subprocess 封裝、Dockerfile 改 sdk:10.0 + Node.js 22 + claude CLI、workspace 改 Linux 路徑；三項踩坑修復後 PR #65 通過 |
-| v2.7 | 2026-04-05 | 新增 Stage_12_Roadmap.md（提案流程全面升級：Agent 唯讀探索、Rosa/Demi 串行協作、UI 規格改存 DB）；Future_Feature.md 十七/十八/十九 標記移入 Stage 12 |
-| v2.8 | 2026-04-06 | Stage 12 驗收完成（六項驗收全通過）；修正三項 bug（Discord 重複觸發、Slug 中文標題、Demi 調整 prompt）；Stage_12_Roadmap.md 結案 |
-| v2.9 | 2026-04-06 | 新增 Stage_13_Roadmap.md（系統穩定性與流程修正：技術債 + Orchestrator 流程 + Dashboard 詳情）；Future_Feature.md 清理已完成 / 已消滅項目 |
-| v3.0 | 2026-04-06 | Stage 13 驗收完成：串行流程 Dev → Reviewer → QA → Doc、單一 PR（含 Closes #XX 自動關 Issues）、QA code fence 修正、Playwright 改 self-hosted runner；Future_Feature.md 新增二十一（Dashboard Agent 狀態卡即時更新）|
-| v3.1 | 2026-04-06 | 新增 Stage_14_Roadmap.md（CEO 分類補強：技術改善分類、Release/Ops/Doc 路由、任務取消）；Future_Feature.md 第九項移入 Stage 14 |
-| v3.2 | 2026-04-06 | Stage 14 驗收完成（CEO 六類分類全通過）；順帶修正 Bug fix Orchestrator 未啟動問題；ClaudeCodeService 外部 cancel kill subprocess 補齊；Stage_14_Roadmap.md 補充實作紀錄 |
-| v3.3 | 2026-04-06 | 新增 Stage_15_Roadmap.md（Victoria 接上 Claude Code + Session 對話）；吸收 Future Feature 十（CEO 文件記錄）和十一（Victoria 技術顧問 Phase 1~2）|
-| v3.4 | 2026-04-06 | Stage 15 實作完成：Victoria 升級 Claude Code 模式、Session DB 持久化、長期記憶、/new-session 指令、CLAUDE_Victoria.md 模板、EF Migration |
-| v3.5 | 2026-04-06 | Stage 15 後續 bugfix：CloneOrPull 取得 repo 副本（修正容器路徑）、appsettings 補 DefaultRepo=AiTeam、LLM 降級原因顯示於 Discord、CLAUDE_Victoria.md 納入 csproj 修正容器內找不到模板問題 |
-| v3.6 | 2026-04-07 | Stage 15 驗收完成（8/8 全通過）；Stage_15_Roadmap.md 補充踩坑三件組、診斷工具設計、驗收結果；README.md 新增 Victoria CEO 升級章節、/new-session 指令說明、Stage 15 進度列 |
-| v3.7 | 2026-04-07 | 新增 Stage_16_Roadmap.md（PM Agent Iris 品質審核閘門）；Rosa/Demi/Sage 模型改為 Haiku；全面更新 Agent 文件（CEO/Dev 大改、Capability Gaps v2.0）；PM 命名為 Petra、Grand CEO 維持 Iris；Future_Feature.md v3.0 清理 |
-| v3.8 | 2026-04-07 | Stage 16 驗收完成（NewFeature 全流程跑完）；Vera 重構為單一 Claude Code session（消滅 false Critical）；QA Agent 重構為 Claude Code session（消滅 StripCodeFence 問題）；Playwright workflow 移除 Start/Stop Dashboard（修正打到 production 的問題）；RunAsync maxTurns 提升至 40（修正 fix loop 截斷）；踩坑五件組全記錄於 Stage_16_Roadmap.md |
-| v3.9 | 2026-04-08 | 新增 Stage_17_Roadmap.md（Mock Mode 模擬模式 — IClaudeCodeService 介面 + 代理模式 Runtime 切換 + Dashboard 開關）；Future_Feature.md v3.2 新增十四（測試環境隔離） |
-| v4.0 | 2026-04-08 | Stage 17 驗收完成（4 種 /mock 流程全通過）；Stage_17_Roadmap.md 補充實作細節、踩坑三件組（QA/Doc 缺 early return、含提案流程卡死、延遲過短）、驗收結果 |
-| v4.1 | 2026-04-08 | 新增 Stage_18_Roadmap.md（Dashboard 可觀測性 — Agent 狀態卡即時更新 + Pipeline View）、Stage_19_Roadmap.md（Dashboard UI 全面打磨）；Future Feature 十/十一 移入 Stage 18 |
-| v4.2 | 2026-04-09 | Stage 18 驗收完成（新功能含提案 + Bug Fix 全通過）；踩坑五件組（雙重訂閱 HubConnection、Rosa/Demi GroupId、提案步驟 CompletedAt、header 徽章本地推算、群組列表延遲刷新）；Stage_18_Roadmap.md 補充實作紀錄 |
-| v4.3 | 2026-04-10 | Stage 19 Pt.1 驗收完成（StatusBadge 補齊、PipelineList 獨立頁、MudSwitch、表格 FixedHeader）；Stage_19_Roadmap.md 改版為 v2.0（三批 18 項問題清單）；新增 Stage_20_Roadmap.md（全面換 MudBlazor Layout）；決策：Stage 19 Pt.2 暫緩，先執行 Stage 20 奠定 MudLayout 基礎 |
-| v4.4 | 2026-04-10 | Stage 20 實作完成（MainLayout → MudLayout、NavMenu → MudNavMenu、Dark Mode → MudThemeProvider、三處 Drawer → MudDrawer Temporary、app.css 清理）；dotnet build 通過（0 errors）；待瀏覽器驗收 |
-| v4.5 | 2026-04-11 | Stage 20 驗收完成；補充五項踩坑完整記錄（Layout @rendermode HTTP 500、onclick C# 解析、MudBlazor CSS 雙 hyphen、跨 Circuit 服務隔離、HttpContext Interactive 不可用）；最終架構：Routes.razor 全域 InteractiveServer、Layout 靠 JS onclick + CSS 變數 Dark Mode；Stage_20_Roadmap.md 更新至 v2.0 |
-| v4.6 | 2026-04-11 | Stage 19 Pt.2 驗收完成（7 項：首頁緊湊小卡 + 最近流程、MudChip Badge、MudSelect 多選篩選、Agent 左右雙欄、MudDialog 表單、Token Sticky、hover CSS）；五項踩坑記錄；Stage_19_Roadmap.md 更新至 v3.0 |
-| v4.7 | 2026-04-11 | Stage 19 Pt.3 驗收完成（8 項：MudIcon Empty State、MudSwitch、MudChip Agent Badge、MudButton、MudStack inline flex 清除、system-config-card 更名、側邊欄 localStorage 持久化、inline 色碼消除）；Stage_19_Roadmap.md 更新至 v3.3；Stage 19 三批全部結案 |
-| v4.8 | 2026-04-11 | 新增 Stage_21_Roadmap.md（文件整理 + SemVer 導入）；Future_Feature.md 整理至 v4.0（移除已完成的十/十一，重新編號為一～十二） |
-| v4.9 | 2026-04-11 | 建立 docs/conventions/mudblazor.md（MudBlazor 8.x 使用規範，13 大項，含累積踩坑記錄）；Stage_21_Roadmap.md 更新至 v1.1（補入前置作業）|
-| v4.10 | 2026-04-11 | 建立 docs/README.md（docs 資料夾導覽入口，說明各子資料夾用途）；Stage_21_Roadmap.md 更新至 v1.2 |
-| v4.11 | 2026-04-11 | docs/agents/ 全面重整：8 個有對應 Resources/ 的 Agent 文件加入「執行指引」指標，移除與 CLAUDE_*.md 重疊的行為細節，修正所有錯誤（Notion、PM 狀態、Reviewer 輸出格式、QA/Doc/Rosa 流程描述）|
-| v4.12 | 2026-04-11 | CLAUDE.md 全面更新：修正 Blazor Server → Web App、補齊 Stage 11~21 文件清單、新增 mudblazor.md、修正 dotnet ef 指令、新增「版本號管理（SemVer）」章節 |
-| v5.0 | 2026-04-11 | Stage 21 完成：docs/ 資料夾重整（planning/ + architecture/ 子資料夾）、telerik.md 刪除、SemVer 導入（Bot + Dashboard 版本號升至 v3.5.0）、索引表加入版本欄 |
-| v5.1 | 2026-04-12 | Future_Feature.md v5.0 全盤整理：移除 4 項（MCP/顧問/Doc 品質/API 餘額恢復），新增十一～十三（對抗機制/雙向操作/任務序列），重新編號為一～十三 |
-| v5.2 | 2026-04-12 | 新增 Stage_22_Roadmap.md（Dashboard 存取分層 + Token 保護 + 頻道清理，對應 FF 九/七/四） |
-| v5.3 | 2026-04-12 | Stage 22 驗收完成：localhost bypass（Host header 方案）、Token 守門 4 層攔截、Reviewer 超月限警示確認、#指令中心 頻道刪除；Future_Feature.md v5.2 新增十五（Dashboard 調整 Token 守門限額）|
-| v5.4 | 2026-04-12 | Future_Feature.md 整理至 v5.2（十四/十五合併為 UI 第四批打磨，加入規則管理 Switch 精簡 + 圖示按鈕）；新增 Stage_23_Roadmap.md（Agent 糾錯機制 Phase 1 — 申訴 + 熔斷，對應 FF 十一）|
-| v5.5 | 2026-04-12 | Future_Feature.md v6.0：全面流程重構討論完成（七個階段），移除 3 個已完成項目（#指令中心/Token 保護/存取分層→Stage 22），重新編號為一～十四；Stage_23_Roadmap.md v2.0 全面重寫為 Phase 1a（Review Appeal + 流程產出強化 + Sage 轉型 + Git Tag） |
-| v5.6 | 2026-04-12 | Stage 23 實作完成：Review Appeal 迴圈 A（Cody-Vera 純對話 while loop，最多 3 輪）、Petra 仲裁（ArbitrateReviewAppealAsync）、SkipReviewerAfterArbitration 仲裁後路由、Cody 實作說明（ImplementationNote）解析儲存、阻礙報告（BlockedOperationException + AssessBlockerAsync 路由）、Sage 轉型為收尾歸檔員（CHANGELOG + archive）、Git Tag 自動化、ReviewIssue.Id、WorkflowSettings、版本號檢查；MockMode 四個 Agent 加 30–60 秒隨機延遲；v3.7.0 tag 驗收通過 |
-| v5.7 | 2026-04-12 | 新增 Stage_24_Roadmap.md（開發流程重構 Phase 1b — QA Petra 介入 + Dev_plan 審核強化 + 測試報告結構化 + 文件存 DB 基礎設施） |
-| v5.8 | 2026-04-13 | Stage 24 實作完成（v3.8.0）：QA 四路由（code_bug / back_to_reviewer / env_or_test_issue / escalate_boss）、Dev_plan Appeal while loop（Cody 可反駁）、TestReport 結構化存 DB、文件傳遞矩陣（Vera ← dev_plan、Quinn ← issues + dev_plan、Sage ← test_report）；踩坑四件組：QaFixRound 重置、codyJson 提前序列化、accept → return true、DevPlanAppealLog 完整 JSON |
-| v5.9 | 2026-04-13 | 新增 Stage_25a_Roadmap.md（開發流程重構 Phase 1c — Kick-off 會議機制：Claude Code 持續對話 session 基礎設施 + 多 Agent 會議引擎 + Petra 主持 Rosa/Demi/Cody/Quinn 全員討論 + Christ 確認任務計劃書） |
-| v6.0 | 2026-04-14 | Stage 25a 實作完成（v3.9.0）：MeetingService 多 Agent 會議引擎、RunMeetingSessionAsync（持續對話 session）、Kickoff 步驟插入 NewFeature 流程、Christ 確認機制（Discord 按鈕）、Petra session 保留供修改流程使用、KickoffMeetingLog/TaskPlan/KickoffRound 欄位、EF Migration、TaskPlan 傳遞給後續 Agent；踩坑三件組：UUID session-id 格式要求、--resume 直接帶 UUID（不可搭配 --session-id）、file record 不可出現在非 file-local 型別的方法簽名 |
-| v6.1 | 2026-04-14 | 新增 Stage_25b_Roadmap.md（開發流程重構 Phase 1d — 設計規劃階段：移除提案 Rosa/Demi、Rosa Issues + 條件式 Demi、設計會議 + 調整機制、條件式 Christ 確認） |
-| v6.2 | 2026-04-14 | Stage 25b 實作完成（v3.10.0）：設計規劃階段全流程（5 人設計會議 + needs_adjustment 調整 + consensus/escalate 路由）；關鍵踩坑：Petra Design session 改用 Guid.NewGuid()（非 group.Id，避免 Kickoff 衝突）、ModifyDesignPlanAsync 接收外部 sessionId、MockMode Rosa Issues 解析失敗 fallback、Demi 動態加入邊界案例；EF Migration Stage25bDesignFields；Feature 八 Phase 1 全部完成 |
-| v6.3 | 2026-04-14 | 新增 Stage_26_Roadmap.md（驗收基礎設施：Dashboard 詳情頁顯示會議紀錄/計劃書、Pipeline View Kickoff/Design 步驟、MockMode 全流程修正、版本號集中管理 Directory.Build.props） |
-| v6.4 | 2026-04-14 | Stage 26 實作完成（v3.11.0）：Directory.Build.props 集中版本號管理、TaskGroupDto 補 6 欄位 + PipelineView MudExpansionPanels 折疊面板、Kickoff/Design 步驟建立 TaskItem（PipelineView 可見）、MockClaudeCodeService 改 prompt 判斷角色（修正 sessionId UUID 誤判）、Reviewer/QA/Doc MockMode 狀態時序修正（running → delay → done）|
-| v6.5 | 2026-04-15 | 新增 Stage_27a/27b_Roadmap.md（Agent 任務序列：27a = 核心佇列 + WorkflowEngine 整合 + Crash Recovery；27b = Agent 狀態管理 + Dashboard 佇列視覺化，對應 FF 十） |
-| v6.6 | 2026-04-16 | Stage 27a 實作完成（v3.12.0）：DB-as-Queue（TaskItem 新增 QueuedAt/QueueStatus/WorkflowAgentKey）、AgentQueueService + AgentQueueProcessor（per-agent SemaphoreSlim）、FireOneStepAsync 純 enqueue、Crash Recovery；關鍵修正 db.Attach(task)（EF detached entity 導致狀態卡在執行中） |
-| v6.7 | 2026-04-16 | Stage 27b 實作完成（v3.13.0）：AppSettingsService.SetAsync（cache 即時生效）、Processor 雙保險 Stopping→Stopped（主迴圈空閒路徑 + finally race condition 安全網）、Discord 五指令（/pause、/resume、/stop-all、/resume-all、/queue）AddChoice 下拉選單、AgentQueueDto + SignalR QueueUpdate 鏈路、StatusBadge queued、Home.razor 卡片狀態 Badge + 佇列深度 Chip；Future_Feature.md 新增 Feature 十後續三個待討論項目 |
-| v6.8 | 2026-04-16 | 新增 Stage_28a_Roadmap.md（Dashboard 雙向操作中心 Phase 1 — BossInteraction Entity、Bot 寫入 8 個確認點、Dashboard 操作中心頁面 /interactions、InteractionProcessor 輪詢 Dashboard 回覆 + 先到先贏雙通道同步，對應 FF 九） |
-| v6.9 | 2026-04-17 | Stage 28a 實作完成（v3.14.0）：BossInteraction Entity + EF Migration、BossInteractionRepository（樂觀鎖 ExecuteUpdateAsync WHERE status='pending'）、InteractionService（Singleton + CreateAsyncScope，8 個確認點 pure additive 寫入）、Dashboard 操作中心 /interactions（InteractionCenter + InteractionCard + InteractionRespondService Scoped 直寫 DB + SignalR）、InteractionProcessor（3 秒輪詢消費 + Discord 同步訊息）、TaskGroupService.ProcessBossResponseAsync（統一分派入口，kickoff/design 共用既有方法）；CI/CD 踩坑：Bot Dockerfile apt NodeSource 安裝在 GitHub runner 上極慢（22min+），改用 node:22-slim multi-stage COPY binary 解決 |
-| v7.0 | 2026-04-17 | Stage 28a 驗收修正三項：① AgentStatusController.RespondToInteractionAsync 改 delegate 給 InteractionRespondService，消除重複的 interactionRepo + SignalR 邏輯；② TaskGroupService exec_no 新增 CancelTaskItemFromContextAsync（TaskItem 標記 cancelled + Dashboard 推送），confirm_no 加說明註解；③ InteractionProcessor catch 區塊加入 MarkProcessedByBotAsync，避免 ContextJson 格式異常造成無限重試 |
-| v7.1 | 2026-04-17 | Stage 28b 實作完成（v3.15.0）：BossInteraction.ResponseContent + EF Migration、三個 ActionsJson 加入修改動作（requiresInput: true）、TextInputDialog.razor + InteractionCard RequiresInput 分支、InteractionRespondService content overload、ProcessBossResponseAsync responseContent 參數 + ProcessProposalAdjustAsync 新方法、Discord 三個修改按鈕 SyncDiscordResponseAsync 同步、RegisterProposalConfirmation、歷史紀錄篩選（類型/來源/日期）+ MudTable 分頁 |
-| v7.2 | 2026-04-18 | Stage 28b 驗收修正三項：① Kickoff/Design modify 分支補 CreateInteractionAsync（修改後的新確認 Dashboard 看不到）；② MockMode 提案改手動確認（移除倒數 Task.Run，改用 RegisterProposalConfirmation + CreateInteractionAsync）；③ ExecuteProposalApprovedAsync 防重複建 group（task.GroupId 有值時直接用現有 group）|
-| v7.3 | 2026-04-18 | Hotfix：操作中心日期範圍篩選 `AddDays(1)` 重複（UI 層與資料層各加一次，選 04/17 會撈到 04/18 的資料）；移除 `InteractionCenter.razor.cs` UI 層的 `.AddDays(1)`，日界邏輯集中於 `DashboardTaskService.GetInteractionHistoryAsync` 一處 |
-| v7.4 | 2026-04-18 | Stage 29 規劃書建立（v3.16.0）— Dashboard 操作性收尾 + CEO 指令通道擴充：歸檔報告折疊面板、TaskLog 顯示統一化、Cache Reload 按鈕、系統設定獨立頁、Dashboard 下達指令給 Victoria（含圖片附件，對應 FF 零、零-A、十部分） |
-| v7.5 | 2026-04-19 | Stage 29 實作完成並驗收通過（v3.16.0）：五項全部交付 + FF 零-C（通知卡片「我知道了」按鈕）順手修完；驗收期間五個關鍵修正：Discord 端圖片提示 + `BossCommandLog.Images` camelCase（`8ac7aac`）、**CEO 指令改 fire-and-forget**（`eccf525`，解決 Claude Code subprocess > HttpClient timeout）、`QuickCommandCard` 改用 `MudFileUpload` + 拖移支援（`a4a7921`，修 JSRuntime JS 表達式拋例外）、移除 `MaximumFileCount` 改自行過濾（`39ff81b`）、補前端 MIME 驗證（`1aa8ff3`）；Future_Feature 新增 FF 十五（Dashboard 與 Discord 功能平等）+ FF 十六（Dashboard 錯誤處理 UX 打磨）|
-| v7.6 | 2026-04-19 | Hotfix v3.16.1：零-B（MockMode 新提案流程產生重複 TaskGroup Bug）查明並修復 — Stage 28b 驗收修正只改了 Discord 路徑（`ExecuteProposalApprovedAsync` 有 GroupId 防護），Dashboard 路徑（`TaskGroupService.ProcessProposalApprovedAsync`）無條件 `CreateGroupAsync`，導致從 Dashboard 核准 MockMode 提案時產生兩筆 TaskGroup（一筆孤兒 CEO TaskItem、一筆 Kickoff/Design 流程）；兩處對稱化 GroupId 檢查後修復 |
-| v7.7 | 2026-04-19 | Stage 30 規劃書建立（v3.17.0）— 申訴迴圈 LLM API → Claude Code CLI 全面升級：5 個環節（Cody 修正 Dev_plan、Petra 再評估 Dev_plan、Cody 反駁 Review、Vera 再評估 Review、Petra 仲裁）從 LLM API 純文字問答升級為 Claude Code CLI（保留 codebase 存取能力）；決策：每 appeal 新開 session + 強化 Prompt（Stage 23 的 ImplementationNote 已涵蓋 ~80% 價值，Resume 工程量大 40% 且 Token 成本反而更高），對應 FF 八 Phase 2 第三項 |
-| v7.8 | 2026-04-20 | Stage 30 實作完成（v3.17.0）：5 個申訴環節全面改寫為 `RunMeetingSessionAsync`（新開 session，唯讀工具 Glob/Grep/Read）；新增 `PrepareClaudeCodeEnv` + `BuildAppealContextSectionAsync` 共用輔助方法（帶入 TaskPlan / DesignPlan / DevPlan / ImplementationNote / PR diff 脈絡）；3 個 Review Appeal 方法新增 `TaskGroup group` 參數；MockClaudeCodeService 5 種新 `[APPEAL:*]` 分支；FF 八 Phase 2 第三項完成 |
-| v7.9 | 2026-04-20 | Stage 30 驗收通過（v3.17.0）：`/mock fail_review` 與 `/mock fail_dev_plan` 兩個場景實測完整走完，5 個新 CLI 分支全數觸發（Cody/Vera/Petra Arbitration × Dev_plan Cody/Petra Reassess）；搭車補丁：MockMode 第一次驗收只覆蓋 1/5 分支（FailScenario 狀態機提早結束迴圈），修正為依 prompt 內容動態判斷輪次（「前幾輪對話紀錄」/`"disagree"`/`[MOCK-FAIL] Dev_plan 不夠詳細`）後 5/5 全覆蓋；搭車發現對抗紀錄完整存在 DB（`ReviewAppealLog` / `DevPlanAppealLog`）但 Dashboard 完全沒呈現 → 記入 FF 十八（Appeal 對抗紀錄 UI 呈現）|
-| v7.10 | 2026-04-20 | Stage 31 規劃書建立（v3.18.0）— 可靠性補強 + Appeal 對抗紀錄 UI：合併 FF 十七（Dashboard 失敗任務重試按鈕 + 會議 Crash Recovery）+ FF 十八（Appeal 對抗紀錄 UI 呈現）；三項規模 S-M，共用一次 Migration（`TaskGroup.ActiveMeetingType`）；Model 建議 Sonnet 200K（Stage 27a / 29-3 / 26 皆有範本可抄）|
-| v7.11 | 2026-04-20 | Stage 31 實作完成（v3.18.0）：項目三（Appeal 對抗紀錄 UI — TaskGroupDto 擴充 4 欄位 + PipelineView 兩個折疊面板）、項目一（Dashboard 🔁 重試按鈕 — AgentQueueService.RequeueTaskAsync + Bot internal API + ISnackbar 回饋）、項目二（會議 Crash Recovery — ActiveMeetingType 欄位 + EF Migration + RunKickoffMeetingAndWaitAsync/RunDesignPhaseAsync set/finally clear + RecoverStuckMeetingsAsync 啟動掃描）；FF 十七 + 十八 移入已完成項目摘要 |
-| v7.12 | 2026-04-20 | Stage 31 驗收通過（v3.18.0）：三項全數實測通過；驗收期間兩項補強 — TaskCenter 任務列表頁補「🔁 重試」按鈕（PipelineView 外第二個入口，含 stopPropagation 防誤觸 Drawer）+ Kickoff/Design TaskItem 隱藏重試按鈕（不走 AgentQueueProcessor 按了無效，由 spawn_task chip 啟動的獨立 PR #101 處理）+ PipelineView ApplyGroupContent 補同步 Group.Status；Roadmap 驗收情境 #5 從「手動改 DB」改為實境六步驟測試（Mock 跑 Kickoff → Ctrl+C → 重啟看 Crash Recovery log）；本次首次實踐「Stage 結案兩段式分工」（實作 Session 寫 Roadmap 實作紀錄、Aria 收尾 Master Plan + Future_Feature） |
-| v7.13 | 2026-04-20 | Stage 32 規劃書建立（v3.19.0）— /mock Dashboard 化 + 系統設定擴充：A. Mock Delay 可調整（7 處硬碼改動態 AppSettings）B. 各流程輪次上限動態化（WorkflowSettings 升級「AppSettings 優先 + appsettings.json fallback」，仿 FF 十一 Token 守門模式）C. /mock Dashboard 化（FF 十五核心，抽 shared service + Internal API + UI 卡片）；Model 建議 Opus 1M + high（取 Stage 31 Sonnet 200K 用到 75% context 的校準教訓，三子項一氣呵成需要大 context）；新增設定欄位要求統一附灰字說明（Christ 明確要求）|
-| v7.14 | 2026-04-20 | Stage 32 實作完成（v3.19.0）：A. `MockClaudeCodeService` + `MockLlmProvider` 共 7 處 Mock Delay 改動態（`Mock:DelayMinMs` / `Mock:DelayMaxMs` AppSettings）+ 系統設定頁「Mock Mode 延遲範圍」區塊（min/max 驗證）；B. 新增 `WorkflowSettingsResolver`（5 個 async getter + `v > 0` 驗證 + fallback IOptions）+ TaskGroupService 3 處 / MeetingService 2 處 call site 改 async local；C. 新增 `MockScenarioService` 抽出 `CommandHandler` Mock 邏輯 + `/internal/mock/scenario` fire-and-forget Internal API + `MockScenarioCard` 首頁卡片；踩坑四件組（namespace / Discord 名稱衝突 / using 遺漏 / CommandHandler ↔ MockScenarioService 循環依賴以 `IServiceProvider.GetRequiredService` 延遲解析解決）|
-| v7.15 | 2026-04-21 | Stage 32 驗收通過（v3.19.0）：三子項實測通過（Mock Delay 可調 1-3 秒、輪次設 1 即立即 escalate、Dashboard Mock 觸發與 Discord 等價）；驗收期間三項補強 — MockScenarioCard Project 欄位改下拉（利用既有 `DashboardProjectService`，`b59b926`）+ DbContext 並行衝突修（改用 `IServiceScopeFactory.CreateAsyncScope()`，`d93f772`）+ 補齊 Agent services（Dev/QA/Reviewer/Doc）內遺漏的 6 處 Mock 延遲點（`f4d5314`，否則 Mock Delay 設定只生效一半）；第二次實踐「Stage 結案兩段式分工」順利，本次驗收修正由 Aria 順手補進 Roadmap v2.1 版本歷史 |
-| v7.16 | 2026-04-21 | Stage 33 規劃書建立（v3.20.0）— Agent 狀態卡 2.0：主題整合 FF 十五剩餘子項（佇列控制 Dashboard 化：per-agent pause/resume + 全域 stop-all/resume-all）+ 新增 FF 二十一（Agent 狀態卡 expand 展開看待辦清單，解讀 B = running + queued TaskItem）；搭車拆一小塊 CommandHandler（抽 `AgentQueueControlService`）為 FF 二十-B 積少成多；Model 建議拆兩個 Sonnet 200K Session（Session 1 後端 + pause/resume，Session 2 expand + 待辦）或 Opus 1M 一氣呵成 |
-| v7.17 | 2026-04-21 | Stage 33 實作完成（v3.20.0）：子項 A 抽 `AgentQueueControlService`（4 個 `(bool, string)` tuple method 供 Discord + Dashboard 共用）+ `FireAndForgetQueueControl` / `PostQueueControlAsync` 共用 helper + `AgentStatusCard` 抽元件 + `GlobalQueueControlCard` 全域控制（附確認 Dialog）；子項 B **設計優化**：不建 `AgentTodoDto`，改為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）重用既有 `PushQueueUpdateAsync` 鏈路，省一個 DTO + 省一個 push method；`ClearQueueStatusAsync` 補 `PushQueueUpdateAsync` 解決「完成後清單即時移除」；`PipelineList` 支援 `?groupId=` 深層連結；踩坑：Razor tag 命名衝突（舊版 `Components/Shared/AgentStatusCard.razor` 殘留刪除）|
-| v7.18 | 2026-04-22 | Stage 33 驗收通過（v3.20.0）：子項 A/B 全數實測通過（per-agent pause/resume + 淡黃背景提示、全域緊急停止 + 確認 Dialog、待辦清單 🏃/⏳ + 無待辦 empty state、點 item 深層連結 Drawer 預選、Discord `/pause` 等回歸正常）；驗收期間兩項修正 — **(1) State Chip / Status Badge 顯示策略優化**（`228ebd7`，非 active + idle 隱藏 Badge 消除「已停止+閒置」冗餘，非 active + running 時 State chip 改 Filled 強調「按了停但還在跑」衝突狀態）+ **(2) Dev_plan ghost 卡修正**（`b915bf3`，`Home.UpdateAgentStatus` 對 SignalR 未知 AgentName 盲接 Add 導致 workflow 階段名成 ghost 卡，改白名單過濾；推論教訓：初判 DB 孤兒資料被 Christ 截圖打臉後重查找到 SignalR 動態 Add 路徑才是真因）；第三次實踐「Stage 結案兩段式分工」實作 Session 主動補 v2.1 驗收修正紀錄，Aria 不用搶救 |
-| v7.19 | 2026-04-22 | Stage 34 規劃書建立（v3.21.0）— MeetingService 拆解（FF 二十-C 首次正式實踐大檔案拆解 SOP）：`MeetingService.cs`（1415 行）拆為 `KickoffMeetingService`（~500）+ `DesignMeetingService`（~700）+ `MeetingCommons`（~200）；Migration 策略直接切換不做 thin wrapper；Record 搬獨立檔 `MeetingResults.cs`；Model 建議 Sonnet 200K + high（拆解首次、風險最低、context 估 ~85K）；預期產出：Roadmap 實作紀錄要寫「五項拆解決策」供後續 D/B/A 子項參考 |
-| v7.20 | 2026-04-22 | Stage 34 實作完成（v3.21.0）— MeetingService 拆解：`KickoffMeetingService`（318 行）+ `DesignMeetingService`（590 行）+ `MeetingCommons`（62 行）+ `MeetingResults.cs`（27 行）+ 刪除原 `MeetingService.cs`（1415 行）；Migration 直接切換、TaskGroupService 8 處 caller 全對齊、Program.cs DI 順序正確；踩坑僅一項（`using AiTeam.Data` 遺漏）|
-| v7.21 | 2026-04-22 | Stage 34 驗收通過（v3.21.0）— 全部 Mock Mode 流程驗證通過（`/mock new_feature_with_proposal` 走 Kickoff + Modify + Design + Modify 全程 / `/mock fail_review` 確認 CLI 層 `RunMeetingSessionAsync` 不受影響）；**驗收期間零 follow-up commits**（目前最順利一次 Stage 結案）；實作 Session 寫下「六項拆解 SOP」供 FF 二十 子項 D / B / A 參考，Aria 結案第二段將 SOP 提煉進 FF 二十 共通策略小節 |
-| v7.22 | 2026-04-22 | Stage 35 規劃書建立（v3.22.0）— PmAgentService 拆解（FF 二十-D）：1388 行 × 12 method 拆 5 個 service（PmAgentCommons + PmReviewService + ReviewAppealService + DevPlanAppealService + PmRoutingService）+ 1 record 獨立檔 PmAgentResults；首次實踐 SOP 6 子資料夾組織（Agents/ 已 20 檔案超閾值，建 Agents/Pm/，namespace 改 AiTeam.Bot.Agents.Pm）；Model 建議 Opus 1M + high（粗估 158K × 1.6 = 250K 遠超 Sonnet 200K，5 個 service 邏輯耦合契約一致性需 Opus 支援）|
-| v7.23 | 2026-04-22 | Stage 35 實作完成（v3.22.0）— PmAgentService 拆解：`Agents/Pm/` 子資料夾首次實踐 SOP 6；產出 6 檔（PmAgentResults 60 + PmAgentCommons 225 + PmReviewService 345 + ReviewAppealService 345 + DevPlanAppealService 207 + PmRoutingService 262 = 1444 行 vs 原 1389）；TaskGroupService 14 處 caller 全改、Program.cs DI 5 個 AddScoped 以 Commons 先、PmAgentService.cs 整檔刪除；規劃書原估 4 個修正被實作 Session 探索階段全部抓出（DI Scoped 非 Singleton / RequirementsAgentService 無依賴 / caller 動態解析 / record 10 個非 8 個）|
-| v7.24 | 2026-04-22 | Stage 35 驗收通過（v3.22.0）— 4 個 Mock 情境全通過；驗收期間兩項 follow-up：(1) Dev_plan Appeal 升級後 group status 重置遺漏修正（`9b0b115`，Stage 30 遺留盲點）(2) PmReviewService 中 Stage 25b dead code 清理（`4f30d1f`，-120 行）；實作 Session 未主動補至 Roadmap，由 Aria 結案時補 v2.1；Context 實際 **261K / Opus 1M 26%**（粗估 158K × 1.65 = 261K，**驗證 ×1.6 校準公式**）—— SOP 6 實踐結論「決策主體 = Agent 時放 Agents/、協調流程放 Orchestration/」供後續 FF 二十-B/A 套用 |
-| v7.25 | 2026-04-22 | Stage 36 規劃書建立（v3.23.0）— FF 二十 A+B 合併（TaskGroupService 2623 + CommandHandler 2172 = 4795 行）最後一次拆解：TaskGroupService 拆 4 個子 service（Meeting/Appeal/Qa/Proposal Orchestration）+ 瘦身；CommandHandler 拆 3 個子模組（SlashCommandRouter / ButtonCallbackRouter / PendingConfirmationStore）+ 瘦身；Stage 34 Meeting 四檔搭車搬到 Orchestration/Meeting/ 子資料夾；核心解耦：_pendingConfirmations dictionary 抽 PendingConfirmationStore Singleton；Model 必選 Opus 1M + high（粗估 241K × 1.6 = 386K，Sonnet 不可能）|
-| v7.26 | 2026-04-22 | Stage 36 實作完成（v3.23.0）— FF 二十 A+B 合併拆解：TaskGroupService 2623→716 行（-73%）+ CommandHandler 2172→556 行（-74%）；新建 11 檔（4 個 OrchestrationService + 3 個 Router/Store + RoutingTypes + 搬 Stage 34 四檔到 Meeting/）；核心解耦：_pendingConfirmations 6 個 Dictionary 抽 PendingConfirmationStore Singleton 升級 ConcurrentDictionary；5 個子資料夾；commit 1792eb7，build 0 error |
-| v7.27 | 2026-04-22 | Stage 36 驗收通過（v3.23.0）— **FF 二十 整項 ✅ 完成**：8 個 Mock 情境全通過 + 驗收期間零 follow-up commits；Context 實際 **360K / Opus 1M 36%**（×1.49 校準）；AiTeam 四個怪物級檔案（TaskGroupService 2623 / CommandHandler 2172 / MeetingService 1415 / PmAgentService 1388）**技術債全部清零 🎉** |
-| v7.28 | 2026-04-23 | Stage 37 規劃書建立（v3.24.0）— FF 四第一階段 GeminiProvider API 層 + 搭車 Crash Recovery 全面涵蓋（把 Stage 31 `ActiveMeetingType` → `ActiveOrchestration`，值域擴 5 種：Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting，Appeal + QA 補 try-finally，dispatcher 擴 5 分支）；連續 6 Stage 拆技術債後的換氣 Stage；建議拆兩個 Session 做（37-1 Sonnet 200K medium、37-2 Sonnet 200K high）|
-| v7.29 | 2026-04-23 | Stage 37 實作完成（v3.24.0）— Christ 實際開 Opus 1M 一 Session 做完兩部分：37-1 GeminiProvider（HttpClient + API key query string + camelCase + 429 可識別 exception，範圍變更砍 Dashboard Provider 下拉移 FF 四第二階段）；37-2 Crash Recovery（Entity 改名 + EF Migration `RenameColumn` + 3 個 Restart helper + Dev_plan dispatcher 搭車搬進 `AppealOrchestrationService.HandleDevPlanCompletedAsync` wrapper 修 Stage 36 遺漏；QA 拆「外薄殼 try-finally + 內 Inner method」保留原 4 return 點）；build 0 error |
-| v7.30 | 2026-04-25 | Stage 37 驗收通過（v3.24.0）— 真實流程驗 Rena 切 Gemini 成功 + 5 個 Crash Recovery Mock 情境全通過；**首次真實用 AiTeam 跑自己任務**（FF 四第二階段 self-implement 試驗 PR #107，架構走偏 close 不 merge，但整條 orchestration 在真實流程下穩固）；驗收期間 4 件搭車 fix / ops（Design null fix / Queue RequeueTaskAsync + replay endpoint / 全域月限 1000K→2000K 臨時救援 / Rena Gemini 切換）+ 新增 3 個 FF（二十三 Orchestration 異常退出復原 / 二十四 `CLAUDE_Vera/QA.md` template 補齊 / 二十五 Self-implement prompt 守則）|
-| v7.31 | 2026-04-25 | Stage 38 完成（v3.25.0）— **FF 四第二階段 2-A**：Dashboard Provider/Model 動態化；DB 為唯一 source of truth + appsettings 降為啟動 seed null 欄位 + Dashboard UI 直接改（PR #107 三條禁止路線全避開）；新增 `AgentConfigCache` Singleton（對齊 AppSettingsService TTL 5min pattern）+ `LlmModels.cs` 常數白名單（Gemini 2.5 附 2026-06-17 deprecating 註解）+ `LlmProviderFactory` per-field fallback + TokenTrackingProvider 第 9 參數改 `finalModel`（避免 Token 監控頁顯示舊 model 的資料誤導）；驗收 1+3 通過、2 待真實任務搭車驗 |
-| v7.32 | 2026-04-25 | Stage 39 完成（v3.26.0）— **FF 二十八 主菜 + Trial_v2 搭車修三項**：Vera 審查範圍擴及 `.razor` / `.css`（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全列為 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` 為 teal `#20c997`（區分 done 飽和綠 / failed 紅）+ TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車修：BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）+ RuleManagement.razor MudSwitch 補 aria-label；Mock 新增 `review_skipped` 情境（Discord + Dashboard 雙入口）；驗收 D pass（Stage39測試3 Reviewer Status=skipped 流程繼續走完）、A 流程 pass 但主菜真實能力待 Trial_v3 真實 PR 驗、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm，待真實 CEO 對話驗），整體解鎖 Trial_v3 前置條件 |
+| 想看的東西 | 去哪查 |
+|---|---|
+| 系統版本歷史 + 各 Stage 對應版本 | [`/CHANGELOG.md`](../../CHANGELOG.md) |
+| 待實作功能 / Stage 候選 | [`docs/planning/Future_Feature.md`](../planning/Future_Feature.md) |
+| 個別 Stage 完整實作紀錄 | [`docs/planning/Stage_*_Roadmap.md`](../planning/) |
+| 系統願景與架構 | [`01_Vision_and_Architecture.md`](./01_Vision_and_Architecture.md) |
+| 基礎建設細節（Discord 頻道、PostgreSQL 等） | [`02_Infrastructure.md`](./02_Infrastructure.md) |
+| 流程總覽 | [`03_Workflow_Overview.md`](./03_Workflow_Overview.md) |
+| 老闆角色描述 | [`About_Boss.md`](./About_Boss.md) |
+| 編程規範（C# / Blazor / MudBlazor / EF Core / API / refactor SOP） | [`docs/conventions/`](../conventions/) |
+| Agent 角色 lore | [`docs/agents/`](../agents/) |
 
 ---
 
-*本文件為動態維護文件，隨規劃討論持續更新。*
+## 重構前的歷史
+
+完整 Master Plan 文件版本歷史（v1.0 ~ v7.31，2026-03-29 ~ 2026-04-25）已隨本次重構併入 CHANGELOG。
+本檔在重構前的最後狀態見 git commit `d7dadb5` 之前的版本（`git show <hash>:docs/architecture/00_Master_Plan.md`）。

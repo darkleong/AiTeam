@@ -1,132 +1,188 @@
-## v1.3.1 — 2026-04-04
+# Changelog
 
-### Bug 修復
-- **Race Condition 防護**：`TaskGroupService.HandleAgentCompletedAsync` 加入 Group Status Guard，`TaskGroup.Status` 已為 `done/failed` 時直接跳過，防止 Webhook 與 Orchestrator 同時觸發 Vera 兩次
-- **IssueUrls 重複 bug**：`AgentExecutionResult` 新增 `OutputUrls`（`IReadOnlyList<string>?`），`RequirementsAgentService` 回傳完整 Issue URL 清單，`CommandHandler` 優先讀 `OutputUrls`，解決所有 Issue 存成同一個 URL 的問題
-- **DesignerAgentService PushStatus**：`PushStatus` 改接受 `Guid taskId` 參數取代寫死 `Guid.Empty`，Dashboard 任務追蹤正常顯示 Designer 執行進度
-- **ReviewerAgentService PushStatus**：同上
-- **Agent 頻道直接指令專案欄位空白**：`ExtractProjectFromChannelName` 回傳空字串時 fallback 到 `DefaultRepo`，修正 `#maya-ops` 等頻道觸發的任務在 Dashboard 任務中心專案欄位顯示空白的問題
-- **移除 dead code**：`DesignerAgentService.ContainsPrKeyword()` 從未被呼叫（Stage 10 改為一律提交），已移除
-- **EF Index**：`task_groups.status` 新增索引（EF Migration `AddTaskGroupStatusIndex`），優化 Orchestrator 熱路徑查詢效能
+本專案所有重要變更紀錄於此檔。
+
+格式參照 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-TW/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
+工作單位為 **Stage**，每完成一個 Stage 通常對應 minor 版本 bump。每條 entry 的細節見對應 Stage Roadmap；更深的實作 commit 訊息見 git log。
+
+未實作功能候選見 [Future_Feature.md](docs/planning/Future_Feature.md)。
 
 ---
 
-## v1.3.0 — 2026-04-03
+## [Unreleased]
 
-### 新功能
-- **Stage 10 — CEO Orchestrator**：任務完成後 CEO 按流程表（in-code WorkflowEngine）自動觸發下一步，不走 LLM，毫秒級路由
-  - 新功能流程：提案核准 → Dev → QA / Doc / Vera（並行）→ 通知老闆 merge
-  - Bug 修復流程：Dev → Vera → 通知老闆 merge
-  - Review 閉環：Vera 有 🔴 → 通知 Dev → Dev 推 commit → PR webhook 自動重派 Vera → 無 🔴 通知老闆
-  - 修復迭代防護：`TaskGroup.FixIteration >= 3` 升級給老闆介入
-- **Stage 10 — 提案書增強**：
-  - ✏️「需要調整」第三個按鈕，老闆說明修改方向後 CEO 重新提案
-  - Embed 附上 🎨 UI 規格文件 GitHub 連結（完整版可點擊閱讀）
-  - 提案模式一律提交 UI 規格到 `docs/ui-specs/`，不再依關鍵字判斷
-- **Stage 10 — 開發上下文補強**：Dev 制定計畫前呼叫 GitHub Tree API 取得 2 層目錄結構（免 Clone），計畫中 `files_to_modify` 準確率提升
-- **Stage 10 — Ops Rollback**：部署失敗時 Maya 自動觸發 `rollback.yml` GitHub Actions workflow，回滾到上一個穩定 tag，不再只通知老闆手動處理
-
-### 架構變更
-- 新增 `TaskGroup` entity + `task_groups` 資料表（EF Migration `AddTaskGroupAndWaitingInput`）
-- `TaskItem.Status` 新增 `waiting_input` 狀態
-- `TaskItem.GroupId` FK 關聯 `TaskGroup`
-- `AgentExecutionResult` 新增 `IsWaitingInput`、`QuestionType`、`Question`、`CriticalReviewCount`（向後相容）
-- 新建 `WorkflowEngine.cs`（純靜態流程表，無 LLM，無 DB）
-- 新建 `TaskGroupService.cs`（群組管理 + 並行觸發 + 遞迴 Orchestration）
-- `GitHubService` 新增 `GetRepoTreeSummaryAsync`（Git Trees API，2 層，最多 200 筆）
-- `GitHubService` 新增 `TriggerWorkflowDispatchAsync`（觸發 `workflow_dispatch`）
-- `OpsAgentService` 注入 `GitHubService`，Rollback 改用 GitHub API 而非本機 docker-compose
-- 新增 `.github/workflows/rollback.yml`（workflow_dispatch + target_tag input）
-- `WebhookController` 新增 `pull_request.synchronize` handler（Review 閉環自動重審）
+- **Stage 40（規劃中）**：FF 二十九 `CLAUDE_Vera.md` 判準補強（`rel="noopener"` Critical / `<a>` aria-label Warning / pattern match Warning）+ 順手修 PR #109 兩遺漏 + `Home.razor` 同步 + `ExtractPrNumber` 抽 helper
 
 ---
 
-## v1.2.0 — 2026-04-03
+## [3.26.0] — 2026-04-25 — [Stage 39](docs/planning/Stage_39_Roadmap.md)
 
-### 新功能
-- **Stage 9 — CEO 智慧分類**：Victoria 每次回應前自動查 GitHub PR / Issues，判斷輸入為新功能 / Bug / 正常行為 / 疑問並說明理由
-- **Stage 9 — CEO 提案模式**：新功能時 CEO 並行呼叫 Rosa + Demi，彙整提案書 Embed（✅❌ 按鈕），核准後才執行
-- **Stage 9 — Token 監控 Dashboard**：`/tokens` 頁面顯示各 Agent Token 用量卡片、MudChart 折線圖、費用估算，每次 LLM 呼叫後 SignalR 即時推送更新
-- **Stage 9 — QA Playwright CI**：QA Agent 偵測 PR 含 `.razor` / `.css` 變更時自動產出 Playwright 截圖測試，CI/CD pipeline 起臨時容器執行
+Vera 審查擴及 `.razor` / `.css`（FF 二十八）；新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 teal 配色
 
-### 架構變更
-- 新增 `token_logs` 資料表（EF Migration `AddTokenLogs`）
-- `TokenTrackingProvider` Decorator 包裝所有 LLM 呼叫，AgentService 零改動
-- `LlmProviderFactory` 從 Singleton 改 Scoped，支援 Token Repository 注入
-- `app_settings` 新增 `TokenPricing:InputPer1kUsd` / `OutputPer1kUsd` 費率設定
-- `DesignerAgentService` 新增 `GenerateDraftAsync`（提案模式草稿，不開 PR）
-- 新增 `AiTeam.Tests.Playwright` 專案（MSTest + Microsoft.Playwright.MSTest 1.52.0）
-- 新增 `.github/workflows/playwright.yml`（觸發條件：PR 含 `.razor` / `.css` 變更）
+## [3.25.0] — 2026-04-25 — [Stage 38](docs/planning/Stage_38_Roadmap.md)
 
-### Bug 修復
-- 修正 Discord CDN 有時將 PNG 回報為 `image/webp`，改從 magic bytes 偵測真實格式
+Dashboard Provider/Model 動態化（FF 四第二階段 2-A）：DB SoT + `AgentConfigCache` + `LlmModels.cs` 常數白名單
 
----
+## [3.24.0] — 2026-04-25 — [Stage 37](docs/planning/Stage_37_Roadmap.md)
 
-## v1.1.0 — 2026-04-02
+GeminiProvider API 層（FF 四第一階段）+ Crash Recovery 全面涵蓋（5 種 `ActiveOrchestration`）
 
-### 新功能
-- **Stage 8 — Bot 重啟清理**：啟動時自動將殘留「執行中」任務標記為失敗，附備註「Bot 重啟，任務中斷」
-- **Stage 8 — Ops CI/CD 監控**：Quartz 排程定期查 GitHub Actions，外部故障（docker push/pull）自動重試，程式問題通知老闆
-- **Stage 8 — Dashboard 重啟 Bot**：Bot 暴露 `/internal/restart` endpoint，Dashboard 一鍵觸發 Bot 重啟
-- **Stage 8 — SkipCeoConfirm 動態設定**：可於 Dashboard 系統設定開啟，5 分鐘內生效，不需重啟 Bot
-- **Stage 8 — 專案管理頁面**：Dashboard 新增專案 CRUD（GitHub Repo 連結、優先級、狀態管理）
-- **Stage 8 — 部署紀錄自動化**：CI/CD Deploy 成功後呼叫 `/internal/deployment` 寫入 DB，Dashboard 可查歷史部署紀錄
-- **Stage 8 — Notion 完全移除**：規則改存 PostgreSQL `rules` 資料表，`app_settings` 資料表取代 Notion AppSettings，移除 Notion.Net 相依
+## [3.23.0] — 2026-04-22 — [Stage 36](docs/planning/Stage_36_Roadmap.md)
 
-### Bug 修復
-- 修正 OpsAgent 移除 docker CLI 依賴，健康檢查改用 DB ping + 記憶體監控
-- 修正 per-agent Rules 機制：每個 Agent 有獨立規則集，`/reload-rules` 清除所有快取
-- 修正 Dark Mode CSS 覆寫：全域 `.mud-dark` 前綴確保 MudBlazor 顏色主題正確套用
+TaskGroupService + CommandHandler 拆解（FF 二十 A+B 合併）：4795 行 → 1272 行（-73%）；**AiTeam 四怪物級檔案技術債清零** 🎉
 
----
+## [3.22.0] — 2026-04-22 — [Stage 35](docs/planning/Stage_35_Roadmap.md)
 
-## v1.0.0 — 2026-04-02
+PmAgentService 拆解（FF 二十-D）：1388 行 → 6 個子 service；首次實踐 SOP 6（子資料夾 `Agents/Pm/`）
 
-### 新功能
-- **Stage 2**：Discord Bot 基礎建設、CEO Agent、Notion 整合、EF Core 資料層建立
-- **Stage 3**：Dev Agent、Ops Agent、GitHub Webhook 串接，`exec_yes` 按鈕觸發 Agent 執行流程
-- **Stage 4**：Blazor Dashboard 實作，Bot 串接 SignalR 即時推送任務狀態
-- **Stage 5**：動態 Agent 框架完成，新增 QA Agent、Doc Agent、Requirements Agent
-- **Stage 6.1**：Discord 圖片輸入支援（Vision 功能），Requirements Agent 第三層確認機制
-- **Stage 6.3**：前端 UI 框架由 Telerik UI 全面替換為 MudBlazor 8.15.0
-- **Stage 7**：Software Team 完全體，完整多 Agent 協作流程上線
-- **Agent 設定頁面**新增「新增 Agent」功能，支援動態擴充 Agent 配置
-- Bot 啟動時自動建立缺少的 Discord 頻道
-- 任務建立後立即透過 SignalR 推送，任務中心即時顯示 pending 狀態
-- Designer Agent 完成後將 UI 規格書以 Markdown 附件形式傳送至 Discord
+## [3.21.0] — 2026-04-22 — [Stage 34](docs/planning/Stage_34_Roadmap.md)
 
-### Bug 修復
-- 修正 Dashboard SignalR 在 Docker 容器內連線失敗及 TrustLevel 顯示錯誤
-- 修正 Dashboard 即時推送 URL 在 Docker 環境連到 port 80 而非 8080
-- 修正 `BuildCeoDecisionEmbed` 空值欄位導致 Discord Embed 拋出 `ArgumentException`
-- 修正 Discord Embed field 超過 1024 字元限制導致錯誤
-- 修正 CEO Agent `action=reply` 誤判導致雙層確認流程被跳過
-- 修正 `confirm_yes` 建立任務失敗（TeamId FK 違反約束）及無法顯示第二層確認的問題
-- 修正 `RequireConfirmation` 判斷邏輯，確保 delegate 永遠顯示確認 Embed
-- 修正 `ExecuteAgentTaskAsync` 補齊 running / done / failed 的 SignalR push
-- 修正 Requirements Agent 補齊 running / done / failed SignalR push
-- 修正 QA Agent 從 PR head branch 讀取原始碼，解決 404 問題
-- 修正 QA Agent 排除 PR 中的測試檔案，避免 `GetFileContentAsync` 404
-- 修正 Doc Agent `ListFilesAsync` 支援遞迴並修正尾巴斜線 404
-- 修正 `DbSeeder` 補入 CEO Agent seed，避免新環境缺少 CEO 設定
-- 修正 Dockerfile `libgssapi` 警告、postgres 版本升至 17、docker-compose 納入版本控制
-- 修正 `deploy.yml` 加入 `--env-file` 讓 docker compose 正確載入 `.env`
-- 修正 Bot Dockerfile 移除 `libgit2` 系統安裝（LibGit2Sharp 0.31+ 已內建 native binary）
-- 修正 `MudPopoverProvider` 電路隔離問題，修復側欄收合展開功能
-- 修正 `MutationObserver` 防止 Blazor DOM patch 重設側欄收合狀態
-- 修正側欄收合時展開按鈕被裁切的問題
-- 修正 Agent 設定頁面啟用/停用提示訊息顯示位置錯誤
-- 修正 Quartz Cron 格式錯誤導致 Bot 啟動崩潰
-- 修正 Bot 啟動崩潰：移除 `appsettings Urls` 衝突、補 Aspire HTTP Endpoint 設定
-- 修正 Slash Command 註冊時序問題，新增自動 DB Migration
-- 將 `ANTHROPIC_API_KEY` 更名為 `AITEAM_ANTHROPIC_KEY`，避免 Shell 環境變數覆蓋
+MeetingService 拆解（FF 二十-C）：1415 行 → KickoffMeetingService + DesignMeetingService + Commons + Results
 
-### 重構
-- 抽離 `AiTeam.Data` / `AiTeam.Shared` 共用層，移除 Bot 內的舊 Data 相依
+## [3.20.0] — 2026-04-22 — [Stage 33](docs/planning/Stage_33_Roadmap.md)
 
-### 文件
-- 新增 README.md，包含專案概覽、架構說明與快速啟動指南
-- Doc Agent 自動產生 10 個 Markdown 文件檔案
-- 更新 Stage 2、3、4、5、6 狀態為已完成，補充實作重點紀錄
-- Stage 6 新增 Dashboard UI 微調清單（第十二項）
+Agent 狀態卡 2.0：佇列控制 Dashboard 化（per-agent pause/resume + 全域 stop-all）+ 待辦清單 expand + 深層連結
+
+## [3.19.0] — 2026-04-21 — [Stage 32](docs/planning/Stage_32_Roadmap.md)
+
+`/mock` Dashboard 化 + Mock Delay / WorkflowSettings 動態化（從 AppSettings 讀，免重啟容器）
+
+## [3.18.0] — 2026-04-20 — [Stage 31](docs/planning/Stage_31_Roadmap.md)
+
+可靠性補強：Dashboard 重試按鈕 + 會議 Crash Recovery + Appeal 對抗紀錄 UI（FF 十七 + 十八）
+
+## [3.17.0] — 2026-04-20 — [Stage 30](docs/planning/Stage_30_Roadmap.md)
+
+申訴迴圈 LLM API → Claude Code CLI 全面升級（5 個環節新開 session + 唯讀工具）
+
+## [3.16.1] — 2026-04-19 — Hotfix
+
+MockMode 提案核准重複建 TaskGroup bug 修正（Dashboard 路徑補 GroupId 防護對齊 Discord 路徑）
+
+## [3.16.0] — 2026-04-19 — [Stage 29](docs/planning/Stage_29_Roadmap.md)
+
+Dashboard 操作性收尾 + CEO 指令通道擴充（Dashboard 直接下指令給 Victoria，含圖片附件）
+
+## [3.15.0] — 2026-04-17 — [Stage 28b](docs/planning/Stage_28b_Roadmap.md)
+
+Dashboard 雙向操作中心 — 文字輸入互動 + 歷史紀錄篩選
+
+## [3.14.0] — 2026-04-17 — [Stage 28a](docs/planning/Stage_28a_Roadmap.md)
+
+Dashboard 雙向操作中心 — 基礎架構 + 8 個確認點按鈕回覆 + 樂觀鎖先到先贏
+
+## [3.13.0] — 2026-04-16 — [Stage 27b](docs/planning/Stage_27b_Roadmap.md)
+
+Agent 任務序列 — 操作性與可觀察性（5 個 Discord 指令 + Dashboard 佇列視覺化 + SignalR）
+
+## [3.12.0] — 2026-04-16 — [Stage 27a](docs/planning/Stage_27a_Roadmap.md)
+
+Agent 任務序列 — 核心佇列機制（DB-as-Queue + AgentQueueService + per-agent SemaphoreSlim + Crash Recovery）
+
+## [3.11.0] — 2026-04-14 — [Stage 26](docs/planning/Stage_26_Roadmap.md)
+
+驗收基礎設施（PipelineView 折疊面板 + MockMode 修正）+ 版本號集中管理（`Directory.Build.props`）
+
+## [3.10.0] — 2026-04-14 — [Stage 25b](docs/planning/Stage_25b_Roadmap.md)
+
+開發流程重構 Phase 1d — 設計規劃階段（5 人設計會議 + 條件式 Christ 確認）
+
+## [3.9.0] — 2026-04-14 — [Stage 25a](docs/planning/Stage_25a_Roadmap.md)
+
+開發流程重構 Phase 1c — Kick-off 會議機制（Claude Code 持續對話 session + 多 Agent 會議）
+
+## [3.8.0] — 2026-04-13 — [Stage 24](docs/planning/Stage_24_Roadmap.md)
+
+開發流程重構 Phase 1b — QA Petra 介入 + Dev_plan 審核強化 + TestReport 結構化存 DB
+
+## [3.7.0] — 2026-04-12 — [Stage 23](docs/planning/Stage_23_Roadmap.md)
+
+開發流程重構 Phase 1a — Review Appeal 迴圈 + Sage 轉型歸檔員 + Git Tag 自動化
+
+## [3.6.0] — 2026-04-12 — [Stage 22](docs/planning/Stage_22_Roadmap.md)
+
+Dashboard 存取分層（localhost bypass）+ Token 守門 4 層攔截 + `#指令中心` 頻道清理
+
+## [3.5.0] — 2026-04-11 — [Stage 21](docs/planning/Stage_21_Roadmap.md)
+
+`docs/` 資料夾重整（architecture / planning 子資料夾）+ SemVer 導入
+
+## [3.4.0] — 2026-04-11 — [Stage 20](docs/planning/Stage_20_Roadmap.md)
+
+Dashboard 全面換 MudBlazor Layout（MainLayout → MudLayout + Dark Mode → MudThemeProvider）
+
+## [3.3.0] — 2026-04-10 / 04-11 — [Stage 19](docs/planning/Stage_19_Roadmap.md)
+
+Dashboard UI 全面打磨（三批 18 項：StatusBadge / MudChip / MudIcon / MudStack / 側邊欄 localStorage 等）
+
+## [3.2.0] — 2026-04-09 — [Stage 18](docs/planning/Stage_18_Roadmap.md)
+
+Dashboard 可觀測性升級：Agent 狀態卡即時更新 + Pipeline View（MudStepper + MudTimeline）
+
+## [3.1.0] — 2026-04-08 — [Stage 17](docs/planning/Stage_17_Roadmap.md)
+
+Mock Mode：`IClaudeCodeService` 代理模式 + Dashboard 開關 + 4 種 `/mock` 流程
+
+## [3.0.0] — 2026-04-07 — [Stage 16](docs/planning/Stage_16_Roadmap.md)
+
+**MAJOR**：PM Agent（Petra）品質審核閘門；Vera / QA 重構為單一 Claude Code session
+
+## [2.4.0] — 2026-04-06 — [Stage 15](docs/planning/Stage_15_Roadmap.md)
+
+Victoria 接上 Claude Code + Session 對話持久化 + 長期記憶
+
+## [2.3.0] — 2026-04-06 — [Stage 14](docs/planning/Stage_14_Roadmap.md)
+
+CEO 分類補強：技術改善分類 + Release / Ops / Doc 直接路由 + 任務取消能力
+
+## [2.2.0] — 2026-04-06 — [Stage 13](docs/planning/Stage_13_Roadmap.md)
+
+系統穩定性與流程修正：Dev → Reviewer → QA → Doc 串行 + 單一 PR + Closes #XX 自動關 Issues
+
+## [2.1.0] — 2026-04-06 — [Stage 12](docs/planning/Stage_12_Roadmap.md)
+
+提案流程全面升級：Rosa / Demi 串行協作 + 唯讀探索 + UI 規格存 DB + Discord 附件
+
+## [2.0.0] — 2026-04-05 — [Stage 11](docs/planning/Stage_11_Roadmap.md)
+
+**MAJOR**：Dev Agent（Cody）驅動 Claude Code CLI 自主開發
+
+## [1.4.0] — 2026-04-03 — [Stage 10](docs/planning/Stage_10_Roadmap.md)
+
+開發流程自動閉環：CEO Orchestrator + WorkflowEngine + Review 閉環 + Ops Rollback
+
+## [1.3.1] — 2026-04-04 — Hotfix
+
+Stage 10 驗收後 7 項修正（Race Condition / IssueUrls 重複 / PushStatus / dead code 清理 / EF Index）
+
+## [1.3.0] — 2026-04-03 — [Stage 9](docs/planning/Stage_9_Roadmap.md)
+
+CEO 升級 + 可觀測性：Token 監控 Dashboard + CEO 智慧分類 + 提案模式 + QA Playwright
+
+## [1.2.0] — 2026-04-02 — [Stage 8](docs/planning/Stage_8_Roadmap.md)
+
+系統可靠性與操作體驗：動態 AppSettings + per-agent Rules + Dark Mode + Notion 移除
+
+## [1.1.0] — 2026-04-02 — [Stage 7](docs/planning/Stage_7_Roadmap.md)
+
+Software Team 完全體：Reviewer / Release / Designer Agent + CI/CD + Discord 重設計 + 自然語言對話
+
+## [1.0.0] — 2026-04-01 — [Stage 6](docs/planning/Stage_6_Roadmap.md)
+
+**MAJOR**：強化、驗收與技術債清償（Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項）
+
+## [0.4.0] — 2026-04-01 — [Stage 5](docs/planning/Stage_5_Expansion.md)
+
+擴充 Agent：QA / Doc / Requirements + 動態 Agent 框架
+
+## [0.3.0] — 2026-03-31 — [Stage 4](docs/planning/Stage_4_Dashboard.md)
+
+Blazor Web App Dashboard（Identity + SignalR + Aspire 基礎）
+
+## [0.2.0] — 2026-03-31 — [Stage 3](docs/planning/Stage_3_Agents.md)
+
+第一批 Agent 上線：CEO / Dev / Ops（Anthropic Claude API）
+
+## [0.1.0] — 2026-03-31 — [Stage 1](docs/planning/Stage_1_Design.md) + [Stage 2](docs/planning/Stage_2_Foundation.md)
+
+基礎建設：系統設計確定 + Discord Bot + Aspire AppHost + PostgreSQL

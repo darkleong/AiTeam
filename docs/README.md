@@ -6,8 +6,11 @@
 
 ## 入口
 
-**想了解整個專案的全貌或查詢某個 Stage？**
-→ [`architecture/00_Master_Plan.md`](./architecture/00_Master_Plan.md)
+**想了解整個專案的版本歷史 / 最新狀態？**
+→ [`/CHANGELOG.md`](../CHANGELOG.md)（root 層，完整版本變更紀錄）
+
+**想找某個特定 Stage 的詳細實作？**
+→ [`planning/Stage_{N}_Roadmap.md`](./planning/)
 
 ---
 
@@ -19,7 +22,7 @@
 
 | 文件 | 說明 |
 |------|------|
-| `00_Master_Plan.md` | 總索引：所有 Stage 狀態一覽、變更紀錄 |
+| `00_Master_Plan.md` | 文件導覽 stub（變更紀錄已遷至 [`/CHANGELOG.md`](../CHANGELOG.md)） |
 | `01_Vision_and_Architecture.md` | 願景、核心設計原則、整體架構、Agent 定義 |
 | `02_Infrastructure.md` | Discord 頻道、資料儲存、基礎建設細節 |
 | `About_Boss.md` | 老闆背景與工作風格（AI 團隊行為依據） |

@@ -958,7 +958,7 @@ Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進�
 
 ### 優先級
 
-🟢 經驗紀錄 — 沒有對應的「實作項目」，這是 prompt design knowledge。Aria 結案第二段更新 Master Plan 時可參考這份觀察。
+🟢 經驗紀錄 — 沒有對應的「實作項目」，這是 prompt design knowledge。Aria 結案第二段更新 CHANGELOG 時可參考這份觀察。
 
 ---
 

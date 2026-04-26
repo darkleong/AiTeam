@@ -22,12 +22,12 @@
 docs/
   README.md                  ← 資料夾導覽（各子資料夾說明）
   architecture/
-    00_Master_Plan.md          ← 總索引（所有 Stage 狀態與版本歷史、目前版本以此為準）
+    00_Master_Plan.md          ← 文件導覽 stub（變更紀錄已遷至 /CHANGELOG.md）
     01_Vision_and_Architecture.md
     02_Infrastructure.md
     About_Boss.md
   planning/
-    Stage_{N}_Roadmap.md       ← 各 Stage 規劃書，完整清單見 Master Plan 索引
+    Stage_{N}_Roadmap.md       ← 各 Stage 規劃書（完整版本歷史見 /CHANGELOG.md）
     Future_Feature.md          ← 未來功能候選清單 + 待修 Bug 記錄
   conventions/               ← 編程規範（見下方）
   agents/                    ← Agent 角色說明文件
@@ -107,7 +107,7 @@ AiTeam.slnx   ← 解決方案檔位於 repo root（注意是 .slnx 不是 .sln�
 - `src/Directory.Build.props` — `<Version>` 標籤（Stage 26 起集中管理，改版只需改此一個檔案）
 - Dashboard 頁腳會自動讀取 assembly version 顯示
 
-> 目前版本 / 最新 Stage 以 `docs/architecture/00_Master_Plan.md` 為準（不在本文件寫死，避免過期）。
+> 目前版本 / 最新 Stage 以 [`/CHANGELOG.md`](./CHANGELOG.md) 為準（不在本文件寫死，避免過期）。
 
 ---
 
