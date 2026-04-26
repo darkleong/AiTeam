@@ -58,11 +58,11 @@
             {
                 @if (context.Title.Contains("[MOCK]"))
                 {
-                    <MudText Typo="Typo.body2">@ExtractPrNumber(context.DevPrUrl)</MudText>
+                    <MudText Typo="Typo.body2">@PrNumberHelper.ExtractPrNumber(context.DevPrUrl)</MudText>
                 }
                 else
                 {
-                    <MudLink Href="@context.DevPrUrl" Target="_blank">@ExtractPrNumber(context.DevPrUrl)</MudLink>
+                    <MudLink Href="@context.DevPrUrl" Target="_blank" rel="noopener" aria-label="@($"Open {PrNumberHelper.ExtractPrNumber(context.DevPrUrl)} on GitHub")">@PrNumberHelper.ExtractPrNumber(context.DevPrUrl)</MudLink>
                 }
             }
         </MudTd>

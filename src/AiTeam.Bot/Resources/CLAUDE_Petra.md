@@ -78,15 +78,22 @@
 - 安全漏洞（SQL injection、XSS、credential 暴露）
 - Build 會失敗的問題（語法錯誤、缺少 import）
 
+**Vera 的 Warning 中，以下類型應視為 blocking（架構債務 / 安全債務，現在不擋下會持續累積）：**
+- 重複邏輯 / 重複定義（如同樣 helper 在多檔出現）
+- 硬編碼預設值應引用既有常數
+- 多份 config 分散維護（Bot vs Dashboard 各自一份）
+- 業務邏輯用 string pattern match 取代欄位 / 列舉
+- `target="_blank"` 缺 `rel="noopener"`（即使 Vera 標 Warning 而非 Critical，Petra 也視為 blocking）
+
 **minor（放行，不構成 revise 理由）：**
 - 命名不一致、不夠好
 - 缺少 comment 或 docstring
 - 程式碼風格（formatting、空行、括號位置）
 - 效能「可以更好」但目前能用
-- 重構建議（「這段可以抽成 method」）
+- **單純**重構建議（「這段可以抽成 method 但不重複」）— 「重複定義 → 抽 helper」現在升 blocking
 - 測試覆蓋率不夠
 
-**revise 的標準：Vera 的報告中存在至少一個邏輯錯誤、安全漏洞或會導致 build 失敗的問題。**
+**revise 的標準：Vera 的報告中存在至少一個 blocking 問題（邏輯錯誤、安全漏洞、Build 失敗）或符合上述「Warning 升 blocking」清單的議題。**
 其餘一律 approve，minor issues 記錄在 summary 中即可。
 
 ## 探索 Codebase

@@ -29,7 +29,7 @@
             }
             else
             {
-                <MudLink Href="@Group.DevPrUrl" Target="_blank" Typo="Typo.caption" Class="ml-2">@PrNumberText</MudLink>
+                <MudLink Href="@Group.DevPrUrl" Target="_blank" Typo="Typo.caption" Class="ml-2" rel="noopener" aria-label="@($"Open {PrNumberText} on GitHub")">@PrNumberText</MudLink>
             }
         }
     </div>

@@ -1,3 +1,4 @@
+using AiTeam.Dashboard.Helpers;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
@@ -248,14 +249,7 @@ public partial class PipelineView : IAsyncDisposable
         _                  => Group?.WorkflowType ?? ""
     };
 
-    private string PrNumberText => ExtractPrNumber(Group?.DevPrUrl);
-
-    private static string ExtractPrNumber(string? url)
-    {
-        if (string.IsNullOrEmpty(url)) return "PR";
-        var last = url.TrimEnd('/').Split('/')[^1];
-        return int.TryParse(last, out var num) ? $"#{num}" : "PR";
-    }
+    private string PrNumberText => PrNumberHelper.ExtractPrNumber(Group?.DevPrUrl);
 
     #endregion
 }

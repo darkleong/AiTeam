@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using AiTeam.Dashboard.Components.Pages.Tasks;
+using AiTeam.Dashboard.Helpers;
 using AiTeam.Shared.Dtos;
 using FluentAssertions;
 using MudBlazor;
@@ -15,12 +16,7 @@ public class PipelineViewTests
     // -----------------------------------------------------------------------
 
     private static string InvokeExtractPrNumber(string? url)
-    {
-        var method = typeof(PipelineView).GetMethod(
-            "ExtractPrNumber",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        return (string)method.Invoke(null, new object?[] { url })!;
-    }
+        => PrNumberHelper.ExtractPrNumber(url);
 
     private static string InvokeFormatDuration(TaskItemDto task)
     {

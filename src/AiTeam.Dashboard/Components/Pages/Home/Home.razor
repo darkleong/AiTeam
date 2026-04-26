@@ -59,7 +59,7 @@
                 <small>@group.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
                 @if (!string.IsNullOrEmpty(group.DevPrUrl))
                 {
-                    <MudLink Href="@group.DevPrUrl" Target="_blank" Typo="Typo.caption">PR</MudLink>
+                    <MudLink Href="@group.DevPrUrl" Target="_blank" Typo="Typo.caption" rel="noopener" aria-label="@($"Open {PrNumberHelper.ExtractPrNumber(group.DevPrUrl)} on GitHub")">@PrNumberHelper.ExtractPrNumber(group.DevPrUrl)</MudLink>
                 }
             </div>
         }

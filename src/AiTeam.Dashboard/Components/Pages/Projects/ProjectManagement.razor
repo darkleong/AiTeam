@@ -78,7 +78,7 @@
             </p>
             @if (_selectedProject.RepoUrl is not null)
             {
-                <p><strong>Repo：</strong><a href="@_selectedProject.RepoUrl" target="_blank">@_selectedProject.RepoUrl</a></p>
+                <p><strong>Repo：</strong><a href="@_selectedProject.RepoUrl" target="_blank" rel="noopener" aria-label="Open repository on GitHub">@_selectedProject.RepoUrl</a></p>
             }
             @if (_selectedProject.TechStack is not null)
             {

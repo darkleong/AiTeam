@@ -45,11 +45,18 @@
 
 當 PR 包含 `.razor` / `.css` 改動時，以下議題**一律列為 Warning**（這是刻意保守，呼應「偏好放行」哲學；除非真的會 runtime 崩潰，否則不升級為 Critical）：
 
+### 安全（**Critical**）
+- `<a target="_blank">` 與 `<MudLink Target="_blank">` **必須同時設定 `rel="noopener"`**（防 tabnabbing 漏洞）
+  - 屬於 OWASP 列出的真實安全風險，非「理論上可能」
+  - 與既有「Blazor 例外處理」並列為**唯二可能列為 Critical 的 razor 議題**
+
 ### a11y（Warning）
 - `<button>` / `MudButton` 沒有可見文字 → 缺 `aria-label`
 - `MudSwitch` / `MudCheckBox` 移除 `Label` 但沒補 `aria-label`
 - `MudIconButton` 等 icon-only 元素缺 `Tooltip` 或 `aria-label`（螢幕閱讀器無法辨識）
 - `<img>` 缺 `alt` 屬性
+- `<a>` 與 `<MudLink>` 缺 `aria-label`（純圖示 link / icon-only link / 文字過短難識別 link）→ Warning
+  - 例：只顯示「PR」「下載」「More」等短文字、或只有 icon 的 link
 
 ### CSS（Warning）
 - `!important` 濫用（同一檔案出現超過 1-2 個 → 設計問題）
@@ -59,11 +66,16 @@
 - 同表格內按鈕風格混用（同時有 `MudButton` 與 `MudIconButton` 時，先確認是否刻意）
 - 移除 `Label` 的 `MudSwitch` / `MudCheckBox` 必須補 `aria-label`（呼應 a11y 段落）
 
-### Blazor 例外處理（**唯一可能列為 Critical 的 razor 議題**）
+### 業務邏輯 pattern match（Warning）
+- `Title.Contains("[XXX]")` / `Description.StartsWith("Mock:")` 等用 string pattern 判斷業務狀態 → Warning
+  - **建議改法**：DTO 加明確欄位（如 `IsMock`）/ 注入 service 判斷 / 列舉常數
+  - **理由**：pattern match 是 fragile 設計，標題文案改動或多語系化會無聲破壞邏輯
+
+### Blazor 例外處理（**唯二可能列為 Critical 的 razor 議題之一**）
 - `@onclick` handler 內未處理可能拋例外的呼叫（如 `await DeleteAsync(...)` 沒 try-catch），且該例外會在 Server Circuit 內炸掉整個 connection → **Critical**
 - 其他 Blazor 細節（`@bind-Value` 拼錯、Circuit 範圍誤用、共用 service 注入）→ **Warning**
 
-> **關鍵**：a11y / CSS / MudBlazor 議題即便看起來明顯，也維持 Warning。Critical 只給「會崩潰」「資安漏洞」「資源洩漏」三類。
+> **關鍵**：a11y / CSS / MudBlazor / pattern match 議題即便看起來明顯，也維持 Warning。**唯二例外**：`target="_blank"` 缺 `rel="noopener"`（OWASP 安全）與 `@onclick` 未捕例外（Server Circuit 崩潰）→ Critical。
 
 ## 影響範圍分析
 

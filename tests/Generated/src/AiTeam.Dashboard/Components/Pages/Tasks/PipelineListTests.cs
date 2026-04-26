@@ -1,5 +1,6 @@
 using System.Reflection;
 using AiTeam.Dashboard.Components.Pages.Tasks;
+using AiTeam.Dashboard.Helpers;
 using FluentAssertions;
 using MudBlazor;
 using Xunit;
@@ -29,12 +30,7 @@ public class PipelineListTests
     }
 
     private static string InvokeExtractPrNumber(string? url)
-    {
-        var method = typeof(PipelineList).GetMethod(
-            "ExtractPrNumber",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        return (string)method.Invoke(null, new object?[] { url })!;
-    }
+        => PrNumberHelper.ExtractPrNumber(url);
 
     // -----------------------------------------------------------------------
     // WorkflowTypeLabel — 已知類型

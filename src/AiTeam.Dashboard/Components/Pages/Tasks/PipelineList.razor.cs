@@ -1,3 +1,4 @@
+using AiTeam.Dashboard.Helpers;
 using AiTeam.Data.Hubs;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
@@ -151,13 +152,6 @@ public partial class PipelineList : IAsyncDisposable
         "tech_improvement" => Color.Secondary,
         _                  => Color.Default
     };
-
-    private static string ExtractPrNumber(string? url)
-    {
-        if (string.IsNullOrEmpty(url)) return "PR";
-        var last = url.TrimEnd('/').Split('/')[^1];
-        return int.TryParse(last, out var num) ? $"#{num}" : "PR";
-    }
 
     #endregion
 
