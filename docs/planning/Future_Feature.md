@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.41
+> 版本：v7.42
 > 建立日期：2026-04-01
-> 最後更新：2026-04-25
+> 最後更新：2026-04-26
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -956,6 +956,8 @@ Stage 37-2 期間 Christ 順手做了一個「self-implement 試驗」：把 Sta
 
 Petra（PM 閘門）目前對「Vera 標 W (Warning)」級別問題會放行進入 QA，這在普通修 bug 場景合理（不該過度閉門），但在 self-implement 試驗時可能放過架構議題。**未來如果擴大 self-implement 用途，Petra prompt 可能要加一條**：「Warning 內若涉及『重複邏輯 / 硬編碼預設值 / 多份 config 維護』類議題，視為 Critical 不放行」。
 
+> ✅ **Stage 40（v3.27.0，2026-04-26）已完成此 Petra 子項**：CLAUDE_Petra.md 第 4 節新增「Warning→blocking 升級規則」清單五條（重複定義 / 硬編碼常數 / config 分散 / pattern match / `target="_blank"` 缺 `rel="noopener"`）。FF 二十五本體（self-implement 任務 prompt 設計守則）仍保留作為未來規劃 Trial 任務的 reference。
+
 ### 優先級
 
 🟢 經驗紀錄 — 沒有對應的「實作項目」，這是 prompt design knowledge。Aria 結案第二段更新 CHANGELOG 時可參考這份觀察。
@@ -1113,40 +1115,6 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 
 ---
 
-## 二十九、CLAUDE_Vera.md 判準補強（a11y link + 安全 + pattern match）
-
-> 狀態：🟡 中 — Trial_v3 試驗（2026-04-25）發現的 CLAUDE_Vera.md 判準邊界漏洞
-> 提出日期：2026-04-25
-
-### 背景
-
-Stage 39（FF 二十八）擴充 CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準，但 Trial_v3（PR #109）執行後發現**三處漏寫**：
-
-1. **`<a target="_blank">` 缺 `rel="noopener"`**（tabnabbing 安全漏洞）— PR #109 帶進 production
-2. **`<a>` link 缺 `aria-label`**（a11y）— Stage 39 a11y 段列了 button/MudButton/MudSwitch/MudCheckBox/MudIconButton/img，**但沒列 `<a>` link**
-3. **業務邏輯用 string pattern match**（Trial_v3 的 `Title.Contains("[MOCK]")`）只標 Info case-sensitive，沒升 Warning fragile 設計議題
-
-Vera 是照 CLAUDE_Vera.md 做事的，**沒寫到的議題就放行**——這就是 Stage 37 self-implement 品質低下感受的精確樣貌。
-
-### 修法
-
-CLAUDE_Vera.md「Razor / CSS / a11y / MudBlazor 判準（補充）」段擴充：
-
-- **安全（Critical）**：`<a target="_blank">` 必須有 `rel="noopener"`（防 tabnabbing 漏洞）
-- **a11y `<a>` link（Warning）**：純圖示 link / icon-only link 缺 `aria-label` 或 Tooltip
-- **業務邏輯 pattern match（Warning）**：`Title.Contains("[XXX]")` 等字串 pattern 判斷業務狀態應改用 DTO 欄位 / 注入 service / 列舉
-
-### 順帶處理（Stage 40 主菜搭車修）
-
-- PR #109 帶進的兩個遺漏：`PipelineList.razor` 新 link 補 `rel="noopener"` + `aria-label`
-- Vera 自己抓到但沒人修：`Home.razor:60-62` 同步 + `ExtractPrNumber` 抽共用 helper
-
-### 優先級
-
-🟡 中 — 解 Trial_v3 暴露的真實設計缺口；**Trial_v4 前置條件**。
-
----
-
 ## 三十、tech_improvement 工作流的 ghost Dev task
 
 > 狀態：🔵 低 — UI 顯示一致性問題，不影響流程正確性
@@ -1225,6 +1193,7 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 | 二十四 | `CLAUDE_*.md` template 補齊（CLI Agent 自我描述檔） | ✅ 2026-04-25 — 根因修正：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（2026-04-12/13），但 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未 COPY 到 output；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（未來新增 template 自動涵蓋）；Rosa/Demi/Sage/Petra 沒 warn 只因走 API layer 或該 CLI path 沒被觸發，但 agent code 都有讀 template 的邏輯——一次全修 |
 | 二十 | 大檔案拆解技術債（合集）— 四個怪物級檔案清零 | ✅ Stage 34（v3.21.0，MeetingService 1415→4 檔）+ Stage 35（v3.22.0，PmAgentService 1388→6 檔 + Agents/Pm/ 子資料夾）+ Stage 36（v3.23.0，TaskGroupService 2623→716、CommandHandler 2172→556 + 5 個子資料夾）— 累積六項拆解 SOP 已整理至 [docs/conventions/refactor-sop.md](../conventions/refactor-sop.md)；Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但漏實際搬遷，Stage 38 結案後 Aria 補完 |
 | 二十八 | Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ Reviewer 略過狀態正名為 `skipped` | ✅ Stage 39（v3.26.0，2026-04-25）— `ReviewerAgentService` 三類檔案分類 + `BuildClaudeCodeReviewPrompt` 三段共用 `AppendFileDiff` helper + 標題改名「PR 變更 diff」；CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` teal `#20c997`；TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車順手解決 Trial_v2 觀察四項（BossInteraction.Description 補 Task.Description / RuleManagement.razor MudSwitch aria-label / QA Skipped 共用 API / Mock review_skipped 情境） |
+| 二十九 | CLAUDE_Vera.md 判準補強（a11y `<a>` link + `target="_blank"` 安全 + 業務邏輯 pattern match）| ✅ Stage 40（v3.27.0，2026-04-26）— CLAUDE_Vera.md 三段判準擴充：**安全 Critical**（`<a target="_blank">` / `<MudLink Target="_blank">` 缺 `rel="noopener"` 列為 Critical，OWASP 真實安全；與 `@onclick` 未捕例外並列「唯二 Critical razor 議題」）+ **a11y Warning**（`<a>` / `<MudLink>` 缺 `aria-label` 補入既有 a11y 子段）+ **業務邏輯 pattern match Warning**（`Title.Contains("[XXX]")` 等 fragile 設計，建議改 DTO 欄位 / service / 列舉）；搭車修 4 處同源 tabnabbing（PipelineList:65 + PipelineView:32 + Home:62 + ProjectManagement:81）作為 FF 二十九判準的真實演習場；Home.razor PR 連結同步顯示 `#編號`（原寫死「PR」）；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper（消 PipelineList vs PipelineView 重複）；MudLink rel/aria-label 採 inline 寫法成功 forward 至底層 `<a>` |
 ---
 
 ## 變更紀錄
@@ -1311,3 +1280,4 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 | 2026-04-25 | v7.39：Stage 39 完成（v3.26.0）— **FF 二十八 ✅ 完成 + Trial_v2 搭車修四項 ✅ 完成**：Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ CLAUDE_Vera.md a11y / Blazor / CSS / MudBlazor 判準擴充（全 Warning 維持「偏好放行」）；新增 `AgentResultType.Skipped` 結果型別 + Dashboard 全鏈路 teal `#20c997` mapping + TaskGroupService Reviewer Skipped 跳 Petra 放行；BossInteraction.Description 補 Task.Description（CommandHandler L195/L441 + 順手抓到 SlashCommandRouter L245 第三處對稱）；RuleManagement.razor MudSwitch aria-label；QA 略過共用 Skipped API；Mock `review_skipped` 情境（Discord + Dashboard 雙入口）；FF 二十八主體 78 行搬入已完成摘要 + FF 二十七 5 個觀察項 4 項標 ✅、Trial_v2 v3 前置條件全部就緒；驗收 D pass（Stage39測試3 Reviewer Status=skipped）、A 流程 pass（主菜真實能力待 Trial_v3 真實 PR）、C 規劃驗收方式錯誤（mock 跳過 CEO LLM 不會建 ceo_confirm）改用真實 CEO 對話補驗 |
 | 2026-04-25 | v7.40：Stage 39 結案後補完 — (1) Stage 39 Roadmap header 升 ✅ + 文件版本 v2.0（Christ 結案 commit 漏改，Aria 補）；(2) FF 十「Agent 角色設定 Dashboard 化」擴充 Phase 1 / Phase 2 分階段：Phase 1 C# SystemPrompt（API 層 Agent，FF 十既有範圍）+ Phase 2 CLAUDE_*.md template（CLI 層 Agent，Stage 39 結案後 Christ 詢問是否可 Dashboard 編輯，Aria 推薦現在不做：內容仍在演進、修改頻率低、code review 軌跡比 DB 安全；觸發條件寫明「等 Trial_v3 完成 + CLAUDE_Vera 定型 1-2 月後 + 真實使用情境」）|
 | 2026-04-25 | v7.41：Trial_v3（self-implement 試驗 v3）執行完成 — 任務「流程追蹤頁面 PR 欄位優化」（PR #109）；新增獨立紀錄 [docs/experiments/Trial_v3_PipelinePrColumn.md](../experiments/Trial_v3_PipelinePrColumn.md)；FF 二十七 補「v3 試驗結果」段（FF 二十八 ✅ / Top 1 🟡 部分 / Top 2 🟢 預期 / Top 3 ✅ 維持）；**新增 FF 二十九**（CLAUDE_Vera.md 三處判準漏寫：`<a>` a11y / `rel="noopener"` 安全 / pattern match Warning）+ **新增 FF 三十**（tech_improvement ghost Dev task）；FF 二十二 子項 B 補 Agent 執行確認訊息誤導案例；戰略結論：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 品質低下根因，非 Vera 失職 |
+| 2026-04-26 | v7.42：Stage 40 完成（v3.27.0）— **FF 二十九 ✅ 完成**（CLAUDE_Vera.md 三段判準補入：安全 Critical / a11y `<a>` Warning / 業務邏輯 pattern match Warning；4 處同源 tabnabbing 全清；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper；MudLink inline rel/aria-label 確認可 forward）；**FF 二十五 Petra 子項 ✅ 完成**（CLAUDE_Petra.md 第 4 節新增「Warning→blocking 升級規則」五條清單；FF 二十五本體保留作為未來 Trial 任務 prompt design 的 reference）；**Trial_v4 前置條件閉環就緒**（FF 二十九 Vera 抓得到 + FF 二十五子項 Petra 擋得下）；首次驗收即通過、零 follow-up commits；Forge 揭露踩坑「tests/Generated/ 非編譯目標」（Quinn 寫的測試實際無法用 `dotnet test` 跑）—— 待 Christ 評估是否新開 FF |

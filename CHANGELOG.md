@@ -11,9 +11,13 @@
 
 ## [Unreleased]
 
-- **Stage 40（規劃中）**：FF 二十九 `CLAUDE_Vera.md` 判準補強（`rel="noopener"` Critical / `<a>` aria-label Warning / pattern match Warning）+ 順手修 PR #109 兩遺漏 + `Home.razor` 同步 + `ExtractPrNumber` 抽 helper
+- **下個 Stage（待規劃）**：Trial_v4 任務（FF 二十七延伸，驗證 Vera + Petra 閉環效果）— 需自然合適的 a11y / 安全 / form / auth 真實需求載體；可能搭車 FF 三十（tech_improvement ghost Dev task）
 
 ---
+
+## [3.27.0] — 2026-04-26 — [Stage 40](docs/planning/Stage_40_Roadmap.md)
+
+`CLAUDE_Vera.md` + `CLAUDE_Petra.md` 判準補強（FF 二十九 + FF 二十五 Petra 子項）— Trial_v4 前置條件閉環
 
 ## [3.26.0] — 2026-04-25 — [Stage 39](docs/planning/Stage_39_Roadmap.md)
 
