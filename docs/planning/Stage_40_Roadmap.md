@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 二十九（Vera 判準補強）+ FF 二十五子項（Petra 升級規則）
 > 對應版本：v3.27.0
 > 建立日期：2026-04-26
-> 狀態：📝 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-26）
+> 文件版本：v2.0
 
 ---
 
@@ -302,8 +302,54 @@ Vera Trial_v3 W01 抓到的議題，Stage 40 順手解決。
 
 ---
 
+## 實作紀錄
+
+### 實作完成項目
+
+**主菜 — FF 二十九：CLAUDE_Vera.md 三段判準補強**
+- **安全 Critical 段**：`<a target="_blank">` / `<MudLink Target="_blank">` 缺 `rel="noopener"` 列為 **Critical**（與 Blazor 例外處理並列唯二 Critical razor 議題）
+- **a11y `<a>` link 段**：`<a>` / `<MudLink>` 缺 `aria-label`（icon-only / 短文字）→ Warning；補入既有 a11y 子段末尾
+- **業務邏輯 pattern match 段**：`Title.Contains("[XXX]")` 等 string pattern 判斷業務狀態 → Warning；新增獨立子段說明建議改法與理由
+- 「關鍵」note 同步更新為「唯二例外：tabnabbing + @onclick 未捕例外」
+
+**第二菜 — FF 二十五子項：CLAUDE_Petra.md Warning→blocking 升級規則**
+- 在 blocking 清單後新增「Warning 升 blocking」清單（五條：重複定義 / 硬編碼常數 / config 分散 / pattern match / `rel="noopener"` 缺漏）
+- minor 清單「重構建議」條目加「但不重複」限定語，區分 minor vs blocking 的邊界
+- revise 標準更新為涵蓋「Warning 升 blocking 清單」
+
+**搭車修 — tabnabbing 全面清掃**
+- `PipelineList.razor:65` — `<MudLink>` 補 `rel="noopener"` + `aria-label`（含 PR 編號）
+- `PipelineView.razor:32` — 同上
+- `Home.razor:62` — 寫死「PR」改為 `PrNumberHelper.ExtractPrNumber(...)` 動態顯示 `#編號` + 補 `rel` + `aria-label`
+- `ProjectManagement.razor:81` — 原生 `<a>` 補 `rel="noopener"` + `aria-label`
+
+**搭車修 — ExtractPrNumber 抽共用 helper（Vera Trial_v3 W01）**
+- 新建 `src/AiTeam.Dashboard/Helpers/PrNumberHelper.cs`（public static，Helpers/ 新資料夾）
+- `_Imports.razor` 加 `@using AiTeam.Dashboard.Helpers` 全域可用
+- `PipelineList.razor.cs` / `PipelineView.razor.cs` 移除各自的私有 `ExtractPrNumber`，改呼叫 `PrNumberHelper.ExtractPrNumber`
+- 測試檔移除 Reflection 呼叫，改為直接呼叫 `PrNumberHelper.ExtractPrNumber`
+
+### 關鍵設計決策
+
+**MudLink `rel` 屬性寫法**：採 inline `rel="noopener"` 直接寫在 MudLink 元件上（方案 B）。MudBlazor 8 的 MudLink 繼承 MudComponentBase，支援 splatted attributes（`UserAttributes`），inline 未知屬性會 forward 至底層 `<a>`。Build 與驗收均正常，不需改用 `UserAttributes` 字典。
+
+**Helpers/ 資料夾位置**：選 `src/AiTeam.Dashboard/Helpers/`（新建資料夾），而非放入既有 `Components/Shared/`。Dashboard 層的純邏輯 helper 語意上不屬於 Component，獨立 Helpers/ 更清晰。Bot 端的 `ExtractPrNumber*`（簽名不同）不在本次抽 helper 範圍。
+
+**Petra Warning→blocking 升級清單措辭**：明確列出五個類型而非模糊說「架構議題」，避免 LLM 自由裁量範圍過寬誤擋。同時在 minor 清單保留「單純重構建議」，用「但不重複」限定語區分邊界，降低誤擋正常 PR 的風險。
+
+### 驗收後修正
+
+無。首次驗收即通過。
+
+### 踩坑紀錄
+
+**tests/Generated/ 非編譯目標**：`tests/Generated/` 資料夾下的 `PipelineListTests.cs` / `PipelineViewTests.cs` 沒有對應 csproj，不屬於任何已編譯專案，無法透過 `dotnet test` 驗證。這些檔案是文件性質的 reference，Roadmap 中提到的「`dotnet test` ExtractPrNumber 測試通過」實際上無法以此方式驗證。已改以 build 0 Errors + grep 確認方式完成本次 E 項驗收。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-26 | 計劃書建立（Aria）— FF 二十九 主菜 + FF 二十五子項 + 同源 tabnabbing 清掃 + ExtractPrNumber 抽 helper |
+| v2.0 | 2026-04-26 | 實作完成（Forge）— 全項驗收通過；commit 8454a0f |
