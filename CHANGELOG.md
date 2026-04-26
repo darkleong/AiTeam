@@ -167,22 +167,22 @@ CEO 升級 + 可觀測性：Token 監控 Dashboard + CEO 智慧分類 + 提案�
 
 Software Team 完全體：Reviewer / Release / Designer Agent + CI/CD + Discord 重設計 + 自然語言對話
 
-## [1.0.0] — 2026-04-01 — [Stage 6](docs/planning/Stage_6_Roadmap.md)
+## [1.0.0] — 2026-04-01 — [Stage 6](docs/_archive/early-stages/Stage_6_Roadmap.md)
 
 **MAJOR**：強化、驗收與技術債清償（Discord Vision、MudBlazor、Requirements 三層確認、E2E 驗收等 12 項）
 
-## [0.4.0] — 2026-04-01 — [Stage 5](docs/planning/Stage_5_Expansion.md)
+## [0.4.0] — 2026-04-01 — [Stage 5](docs/_archive/early-stages/Stage_5_Expansion.md)
 
 擴充 Agent：QA / Doc / Requirements + 動態 Agent 框架
 
-## [0.3.0] — 2026-03-31 — [Stage 4](docs/planning/Stage_4_Dashboard.md)
+## [0.3.0] — 2026-03-31 — [Stage 4](docs/_archive/early-stages/Stage_4_Dashboard.md)
 
 Blazor Web App Dashboard（Identity + SignalR + Aspire 基礎）
 
-## [0.2.0] — 2026-03-31 — [Stage 3](docs/planning/Stage_3_Agents.md)
+## [0.2.0] — 2026-03-31 — [Stage 3](docs/_archive/early-stages/Stage_3_Agents.md)
 
 第一批 Agent 上線：CEO / Dev / Ops（Anthropic Claude API）
 
-## [0.1.0] — 2026-03-31 — [Stage 1](docs/planning/Stage_1_Design.md) + [Stage 2](docs/planning/Stage_2_Foundation.md)
+## [0.1.0] — 2026-03-31 — [Stage 1](docs/_archive/early-stages/Stage_1_Design.md) + [Stage 2](docs/_archive/early-stages/Stage_2_Foundation.md)
 
 基礎建設：系統設計確定 + Discord Bot + Aspire AppHost + PostgreSQL

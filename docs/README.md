@@ -36,7 +36,7 @@
 
 | 文件 | 說明 |
 |------|------|
-| `Stage_1_Design.md` ~ `Stage_N_Roadmap.md` | 各 Stage 規劃書（依序遞增） |
+| `Stage_7_Roadmap.md` ~ `Stage_N_Roadmap.md` | 各 Stage 規劃書（早期 Stage 1-6 已歸檔到 [`_archive/early-stages/`](./_archive/early-stages/)） |
 | `Future_Feature.md` | 尚未排入 Stage 的功能候選清單 |
 
 ---
