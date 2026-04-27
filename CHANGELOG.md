@@ -9,6 +9,19 @@
 
 ---
 
+## [N/A] — 2026-04-27
+
+### 新增 / 修正 / 改善
+- DashboardNotificationService 服務定義與 DI 註冊（Phase 1）：統一通知機制，支援時間分級策略（3 / 5 / 8 秒）
+- 雙軌通知設計：MudAlert（同步）+ ISnackbar（非同步）並行
+- Undo 回調安全性建議：需外包 try-catch 防護例外外洩
+
+### 技術細節
+- 修改檔案：`Program.cs`（新增 `AddScoped<DashboardNotificationService>()`）、`src/AiTeam.Dashboard/Services/DashboardNotificationService.cs`（新增）
+- PR：https://github.com/feature/110-dashboard-notification-service
+
+---
+
 ## [Unreleased]
 
 - **下個 Stage（待規劃）**：Trial_v4 任務（FF 二十七延伸，驗證 Vera + Petra + Quinn 三層完整閉環）— 強候選載體 FF 十六（Dashboard 錯誤處理 UX，a11y 議題密度高）/ FF 十一（Token 守門 Dashboard 化，中優先實用）；可能搭車 FF 三十
