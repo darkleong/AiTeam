@@ -1,4 +1,3 @@
-```csharp
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -363,7 +362,4 @@ public class GitHubServiceTests : IDisposable
         method.Should().NotBeNull($"同步方法 {methodName} 應存在");
     }
 
-    // ────────────── GetLatestOpenPullRequestNumberAsync 邏輯測試 ──────────────
-
-    [Fact]
-    public async Task GetLatestOpenP
+}

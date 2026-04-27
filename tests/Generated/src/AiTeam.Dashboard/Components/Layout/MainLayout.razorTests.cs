@@ -94,47 +94,10 @@ public class MainLayoutTests
         }
     }
 
-    [Fact]
-    public void AppVersion_當版本資訊不存在時_應回傳空字串()
-    {
-        // Arrange
-        // 透過反射驗證邏輯：若 InformationalVersion 為 null 或空白，應回傳空字串
-        var versionAttribute = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>();
-
-        var layout = new TestableMainLayout();
-
-        // Act
-        var result = layout.GetAppVersion();
-
-        // Assert
-        if (versionAttribute == null || string.IsNullOrWhiteSpace(versionAttribute.InformationalVersion))
-        {
-            result.Should().BeEmpty();
-        }
-        else
-        {
-            result.Should().Be($"v{versionAttribute.InformationalVersion}");
-        }
-    }
-
-    [Fact]
-    public void AppVersion_版本資訊與組件屬性一致_應正確對應()
-    {
-        // Arrange
-        var layout = new TestableMainLayout();
-        var expectedVersion = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion;
-
-        var expected = string.IsNullOrWhiteSpace(expectedVersion)
-            ? string.Empty
-            : $"v{expectedVersion}";
-
-        // Act
-        var result = layout.GetAppVersion();
-
-        // Assert
-        result.Should().Be(expected);
-    }
+    // Stage 41 移除：以下兩個測試由 Quinn 生成時假設錯誤
+    //   ① 用 Assembly.GetExecutingAssembly() 取得測試 assembly 版本
+    //      （= AiTeam.Tests.Generated 的 1.0.0+commitHash），與 MainLayout.AppVersion
+    //      實際查詢的 Dashboard assembly 版本不同 assembly。
+    //   ② 忽略 AppVersion getter 內 `+commitHash` suffix 剝離邏輯（MainLayout.razor.cs:14-19）。
+    // 兩條斷言邏輯本身錯誤，刪除而非寫假斷言遷就（FF 三十一 嚴格版）。
 }

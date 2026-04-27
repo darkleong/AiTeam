@@ -8,4 +8,7 @@
     <Project Path="src/AiTeam.Shared/AiTeam.Shared.csproj" />
     <Project Path="src/AiTeam.Tests.Playwright/AiTeam.Tests.Playwright.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AiTeam.Tests.Generated/AiTeam.Tests.Generated.csproj" />
+  </Folder>
 </Solution>
