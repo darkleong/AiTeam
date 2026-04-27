@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.44
+> 版本：v7.45
 > 建立日期：2026-04-01
-> 最後更新：2026-04-27
+> 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -1093,7 +1093,7 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 
 ### 優先級
 
-🟡 中（v3 已完成 ✅）— v2 部分完成 + v3 已執行；FF 二十八完全成功、Top 1 部分（CLAUDE_Vera.md 漏寫 a11y `<a>` / 安全 / pattern match → FF 二十九）、Top 2 預期行為、Top 3 維持高品質；新增 FF 二十九 + FF 三十。
+🟡 中（v4 已完成 ✅，Trial 系列首次完整三層迴圈閉環試驗）— v2 部分完成 + v3 已執行 + v4 揭露結構性盲點；FF 二十八完全成功、Top 1 部分（→ FF 二十九）、Top 2 預期行為、Top 3 維持高品質；新增 FF 二十九 + FF 三十 + FF 三十二 + FF 三十三。
 
 ### v3 試驗結果（2026-04-25 執行完成）
 
@@ -1111,6 +1111,40 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 3. **Agent 執行確認訊息誤導**：「即將由 Dev 執行」實際先跑 Dev_plan → FF 二十二 子項 B 案例補完
 
 **戰略結論**：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 self-implement 品質低下根因，**非 Vera 失職**。執行層 / Quinn 測試 / Petra 路由都健康。
+
+### v4 試驗結果（2026-04-27 執行完成）
+
+✅ **試驗已執行**，任務：Dashboard 錯誤處理 UX 打磨（PR #122 **OPEN 未合併**）。**詳細紀錄**：[docs/experiments/Trial_v4_DashboardErrorUx.md](../experiments/Trial_v4_DashboardErrorUx.md)
+
+**Trial 系列首次：**
+- 完整三層品質迴圈閉環試驗（Stage 39+40+41 補強全部生效）
+- 跨完整 pipeline 試驗（Kickoff → Design → Dev_plan → Petra → Dev → Vera → Petra → QA → Doc）
+- Dashboard 路徑送出（vs v2/v3 走 Discord）
+- 有完整成本紀錄（**$4.99 USD**）
+
+**結論摘要**：
+- 🟡 **Top 1 無從驗證**：Cody PR 範圍縮水到 41 行 Service（12 Issue 中只做 1 個），無 a11y 改動觸發點
+- 🔴 **Top 2 規則對範圍縮水失效**：Stage 40 Petra Warning→blocking 升級清單沒涵蓋「PR 範圍嚴重不符計劃書」
+- 🔴 **Top 3 QA failed**：測試沒跑完，無法驗 Stage 41 嚴格版
+
+**揭露 13 個 Bug**（其中 5 個 🔴 高嚴重度）：
+1. DevPlan Appeal accept 後流程沒重新產出（Cody 自承「必須重新產出」但流程沒給機會）
+2. Dev fix 失敗時 Reviewer 仍啟動（Cody 沒修 code，Vera review 同一未修 PR）
+3. Petra 升級規則沒涵蓋「PR 範圍縮水」（41 行 vs 預期 1-2 週工程）
+4. Vera Critical 邊界 underuse（onUndo Server Circuit 斷線僅標 Warning）
+5. QA 失敗仍進 Doc + TaskGroup mark done（完成判定邏輯有 bug）
+6. token_logs 沒涵蓋 CLI Agent token（94% 成本沒進紀錄）
+7. ... 另 7 個次要 bug 詳見 Trial 紀錄
+
+**揭露的 Self-implement 適用邊界**（首次精準定義）：
+- ✅ 適合：**小範圍純技術改動**（如 Trial_v3 PR #109，三層迴圈擋得下）
+- 🔴 不適合：**跨多檔案 / 架構級重構**（如 Trial_v4 12 個 Issue，三層迴圈擋不下範圍縮水）
+
+**新發現觸發新 FF**：
+1. **FF 三十二**：Self-implement 完整性閘門（六子項解 Bug #5/#8/#9/#10/#11/#12）
+2. **FF 三十三**：Token 計費機制 CLI Agent 涵蓋（Bug #13）
+
+**戰略結論**：三層迴圈在「程式碼層面瑕疵」生效；在「self-implement 範圍縮水」失效。未來架構級重構需求應**開獨立 Stage 由 Aria 規劃 + Forge 實作**，不交 Victoria self-implement。FF 三十二 完成前不開 Trial_v5。
 
 
 ---
@@ -1149,6 +1183,149 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 ### 優先級
 
 🔵 低 — 純 UI 顯示問題，可搭車修。Stage 40 順手做或下次清 orphan task 時做。
+
+---
+
+## 三十二、Self-implement 完整性閘門（Trial_v4 揭露的流程斷裂合集）
+
+> 狀態：🔴 高 — Trial_v4 揭露 5 個 🔴 嚴重 bug + 1 個 🟡 中 bug，影響 self-implement 流程可信度
+> 提出日期：2026-04-28（Trial_v4 結案揭露）
+
+### 背景
+
+Trial_v4（Dashboard 錯誤處理 UX 打磨）首次完整三層品質迴圈閉環試驗 + 首次完整 pipeline 試驗 + 首次有成本紀錄試驗。**TaskGroup 標 done 但實際嚴重失敗**：
+- PR #122 OPEN 未合併
+- Cody 只完成 12 個 Issue 中的 1 個（41 行 Service）
+- 預期 1-2 週工程被壓縮成 5.5 分鐘 / 41 行
+- 跨 5 個流程斷裂點 + 1 個 prompt 邊界問題
+
+詳見 [docs/experiments/Trial_v4_DashboardErrorUx.md](../experiments/Trial_v4_DashboardErrorUx.md)。
+
+### 戰略意義
+
+**Stage 39+40+41 補強已建立的「Vera 審查 + Petra 閘門 + Quinn 測試」三層迴圈在「程式碼層面瑕疵」上生效**，但 Trial_v4 揭露**三層迴圈擋不下「self-implement 範圍縮水 + 流程斷裂」這類議題**。本 FF 補完六項閘門使 self-implement 流程真正可信。
+
+### 子項
+
+#### 子項 A：DevPlan 產出失敗的容錯機制（Bug #5，🔴 高）
+
+**現況**：Cody Dev_plan 階段失敗（DevPlan = 「（計畫書產出失敗，請查看 log）」17 字）→ Petra 駁回 → Cody Appeal `accept`（自承「必須重新產出完整計畫書」）→ **流程沒給她重新產出的機會，直接進入 Dev 階段**。
+
+**修法方向**：
+- DevPlan Appeal `accept` 後應 trigger Cody 重跑 Dev_plan 階段
+- 或新增 Dev_plan 重試機制（最多 N 次，仍失敗 → escalate Christ）
+
+#### 子項 B：fix loop Dev 失敗時中止機制（Bug #8，🔴 高）
+
+**現況**：第二輪 Dev fix 被 Token 守門擋下（failed）→ **第二輪 Reviewer 仍啟動 review 同一個未修的 PR** → Petra 通過 → 進 QA。
+
+**修法方向**：
+- Dev failed → 中止 fix loop → 標 TaskGroup needs_intervention 並 escalate Christ
+- 不應讓 Reviewer 跑沒被修的 PR
+
+#### 子項 C：CLAUDE_Petra.md 加「PR 範圍嚴重不符計劃書」升級規則（Bug #9，🔴 高）
+
+**現況**：Stage 40 升級清單涵蓋程式碼層面議題（重複定義 / 硬編碼 / pattern match / `target="_blank"`），但**沒涵蓋「PR 範圍嚴重不符計劃書」**——Vera 標 Info「Phase 1 only / 9 元件未遷移」時 Petra 直接放行。
+
+**修法方向**：
+- CLAUDE_Petra.md 第 4 節 Warning→blocking 升級清單新增：「Vera 報告中明確指出『未完成計劃書多數 Issue / Phase X only』類議題視為 blocking」
+- 或新增獨立 escalate 規則：「PR 完成度 < 50% 計劃書範圍 → escalate 給 Christ 確認是否分階段交付」
+
+#### 子項 D：CLAUDE_Vera.md 強化「Server Circuit 斷線必為 Critical」（Bug #10，🟡 中）
+
+**現況**：Vera 在 PR #122 抓到 onUndo 沒包 try/catch「**透過 MudBlazor 元件事件鏈傳播至 Blazor Server Circuit，可能造成 circuit 斷線**」—— 完全符合 Stage 40 補強的 Critical 規則「`@onclick` handler 內未處理可能拋例外的呼叫，且該例外會在 Server Circuit 內炸掉整個 connection → Critical」，但 Vera 自己保守標 Warning。
+
+**修法方向**：
+- CLAUDE_Vera.md 補入「**只要描述提到 Server Circuit 斷線可能性 → 必為 Critical 不得降級**」明確指引
+- 加範例反面教材引用 PR #122 onUndo 案例
+
+#### 子項 E：QA 失敗判定為 TaskGroup 失敗（Bug #11，🔴 高）
+
+**現況**：QA Quinn failed → 直接進 Doc → Doc done → **TaskGroup mark done**（QaFixRound = 0 沒進 fix loop）。
+
+**修法方向**：
+- QA failed → 不該進 Doc，應 trigger Cody fix（QaFixRound 機制應啟動）
+- 若 QA fix 也失敗 → TaskGroup status 應為 `failed` 或 `needs_intervention`，不該 mark done
+- TaskGroup 完成判定邏輯需檢查所有階段成功才 done
+
+#### 子項 F：Sage 對「無實作」升 escalate（Bug #12，🟡 中）
+
+**現況**：Doc 階段 Sage 看到 DevPlan = 「產出失敗」+ 實際 PR 只 41 行新 Service，但仍寫了歸檔（含錯的 PR URL `feature/110-...` + 「實作摘要：無實作說明」）。
+
+**修法方向**：
+- CLAUDE_Sage.md 加判準：「若 DevPlan 為空 / 失敗訊息 / 顯著少於 ImplementationNote 預期內容 → 不寫歸檔，回 escalate」
+- PR URL 不要 hardcode 格式，從 `TaskGroup.DevPrUrl` 直接讀
+
+### 規模 / 風險
+
+**規模**：M-L（六子項合計約 6-12 工作天）
+**風險**：中（每個子項獨立但都動 prompt 或 Orchestrator 流程，可能引發既有流程行為變化）
+
+**建議分解**：
+- Stage 42：子項 A + B + E（流程斷裂三大件，動 Orchestrator）
+- Stage 43：子項 C + D + F（prompt 補強三件，純 prompt 改寫）
+- 兩 Stage 完成後才開 Trial_v5
+
+### 優先級
+
+🔴 高 — Trial_v4 揭露 5 個 🔴 嚴重 bug 都在這 FF 內。**FF 三十二完成前不開 Trial_v5**——否則同樣問題會重演。
+
+---
+
+## 三十三、Token 計費機制 CLI Agent 涵蓋
+
+> 狀態：🔴 高 — Trial_v4 揭露 token_logs 只涵蓋 6% 成本
+> 提出日期：2026-04-28（Trial_v4 成本分析揭露）
+
+### 背景
+
+Trial_v4 首次有完整 API 成本紀錄（**$4.99 USD**），但對照 token_logs：
+- 紀錄：Dev 18,158 + PM 3,496 = **21,654 tokens**
+- 對應 Sonnet 約 $0.06-0.32 成本
+- **只能解釋 ~6% 的實際成本**
+
+意味著 **94% 成本走 CLI Agent**（Vera/Quinn/Sage/Kickoff/Design/Dev_plan）但**沒進 token_logs**。
+
+### 影響
+
+1. **Stage 22 Token 守門精準度問題**：守門邏輯依賴 token_logs 計算日累積。CLI Agent 沒進紀錄 → 守門無法有效擋下 CLI Agent 過度消耗。
+2. **FF 一（API 費用優化）失去資料基礎**：無法分析「哪個 Agent / 哪個階段最燒錢」進行優化。
+3. **Trial_v4 觀察揭露**：Doc 階段跑 13:30 異常長（最長階段），但無 token 數據佐證根因。
+
+### 修法方向
+
+#### 1. Claude Code CLI session 結束時的 token 計費
+
+Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。需要：
+- 修改 `ClaudeCodeService` subprocess 處理邏輯，capture session 結束的 token 摘要
+- 寫入 token_logs 時 AgentName 標 `Vera` / `Quinn` / `Cody` / `Petra` 等真 Agent
+- 對 Kickoff / Design / Dev_plan 等多 Agent 階段，需區分各 Agent 個別用量
+
+#### 2. token_logs schema 補欄位
+
+可能需要新增：
+- `Stage`（Kickoff / Design / Dev_plan / Dev / Reviewer / QA / Doc）
+- `Round`（會議 / fix iteration 輪次）
+- `CacheReadTokens` / `CacheWriteTokens`（Stage 1 已支援 prompt cache，但目前 token_logs 沒分）
+
+#### 3. Stage 22 Token 守門邏輯升級
+
+當前守門用 `SUM(InputTokens + OutputTokens)`，應改為：
+- 含 cache token（cache_read 算 0.1x cost）
+- 對「會議型 Agent」可能要設不同日限（多 Agent 會議天然 token 消耗高）
+
+### 戰略意義
+
+**FF 三十三 是 FF 一（API 費用優化）的前置條件**——沒有完整 token 涵蓋，無法做有意義的成本優化。
+
+### 規模 / 風險
+
+**規模**：M（CLI subprocess 處理 + token_logs schema migration + 守門邏輯升級）
+**風險**：中（動到多個 CLI Agent 共用機制，需充分測試）
+
+### 優先級
+
+🔴 高 — 影響 Token 守門精準度 + FF 一 資料基礎。建議與 FF 三十二 並行（兩者性質不同，可獨立 Stage 進行）。
 
 ---
 
@@ -1284,3 +1461,4 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 | 2026-04-26 | v7.42：Stage 40 完成（v3.27.0）— **FF 二十九 ✅ 完成**（CLAUDE_Vera.md 三段判準補入：安全 Critical / a11y `<a>` Warning / 業務邏輯 pattern match Warning；4 處同源 tabnabbing 全清；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper；MudLink inline rel/aria-label 確認可 forward）；**FF 二十五 Petra 子項 ✅ 完成**（CLAUDE_Petra.md 第 4 節新增「Warning→blocking 升級規則」五條清單；FF 二十五本體保留作為未來 Trial 任務 prompt design 的 reference）；**Trial_v4 前置條件閉環就緒**（FF 二十九 Vera 抓得到 + FF 二十五子項 Petra 擋得下）；首次驗收即通過、零 follow-up commits；Forge 揭露踩坑「tests/Generated/ 非編譯目標」（Quinn 寫的測試實際無法用 `dotnet test` 跑）—— 待 Christ 評估是否新開 FF |
 | 2026-04-27 | v7.43：**新增 FF 三十一**（tests/Generated/ 編譯與執行修復）— 立案來自 Stage 40 Forge 結案踩坑揭露：`tests/Generated/` 7 檔（含 Quinn Trial_v3 寫的 Playwright + xUnit）皆無 csproj、`find tests -name "*.csproj"` 0 hits；戰略定位「Quinn 測試層」是品質保證迴圈第三層（補上 Vera/Petra 兩層之後缺的塊）；修法：建 csproj + xUnit/Playwright runner config + 修積累 type/namespace 不相容 + 整合 `AiTeam.slnx`；規模 S-M、🟡 中優先；**建議 Stage 41 處理**作為 Trial_v4 真正完整驗證環境的前置條件 |
 | 2026-04-27 | v7.44：**FF 三十一 ✅ 完成** — Stage 41（v3.28.0）：建 `tests/AiTeam.Tests.Generated/` xUnit csproj（隔離 LLM 產出區，跨資料夾 Compile Include）+ AiTeam.slnx /tests/ folder + 清 3 類檔案層破損（markdown fence × 3 / 幻覺類別刪 / LLM 截斷修復）+ 連帶清除 repo 根目錄 stray AiTeam/（PR `1979f46` 歷史殘留 LLM 污染）+ MainLayout broken test 嚴格版刪除 + CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證 + JSON schema unverifiable_targets 語意分離）；dotnet test 127 Passed / 0 Failed；FF 三十一主體刪除整項移入已完成項目摘要；**「Vera 審查 + Petra 閘門 + Quinn 測試」三層品質保證迴圈閉環就緒**，Trial_v4 完整驗證環境前置條件達成 |
+| 2026-04-28 | v7.45：**Trial_v4 結案 + 新增 FF 三十二 / 三十三** — Trial_v4（Dashboard 錯誤處理 UX 打磨，PR #122 OPEN 未合併）首次完整三層迴圈閉環試驗、首次跨完整 pipeline 試驗、首次成本紀錄（$4.99 USD）；揭露 13 個 bug（5 個 🔴 嚴重）+ Self-implement 適用邊界（小範圍純技術改動 ✅ / 跨多檔架構級重構 🔴）；FF 二十七 補「v4 試驗結果」段（Top 1 🟡 / Top 2 🔴 / Top 3 🔴）；**新增 FF 三十二**（Self-implement 完整性閘門六子項：DevPlan 容錯 / fix loop 中止 / Petra 範圍縮水升級 / Vera Critical 邊界堅守 / QA 失敗判定 / Sage escalate）；**新增 FF 三十三**（Token 計費機制 CLI Agent 涵蓋，現 token_logs 只涵蓋 ~6% 成本）；戰略結論：三層迴圈在「程式碼層面瑕疵」生效，在「self-implement 範圍縮水」失效；未來架構級重構需求走正規 Stage（Aria 規劃 + Forge 實作），不交 Victoria self-implement；**FF 三十二完成前不開 Trial_v5** |
