@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.43
+> 版本：v7.44
 > 建立日期：2026-04-01
 > 最後更新：2026-04-27
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1152,72 +1152,6 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 
 ---
 
-## 三十一、tests/Generated/ 編譯與執行修復（測試品質保證迴圈第三層）
-
-> 狀態：🟡 中 — Stage 40 結案 Forge 揭露的測試基礎建設盲點
-> 提出日期：2026-04-26（Stage 40 結案實作紀錄踩坑揭露）
-
-### 背景
-
-Stage 40 結案 Forge 在實作紀錄揭露：[`tests/Generated/`](../../tests/Generated/) 資料夾下的所有 test 檔（含 Quinn Trial_v3 寫的 Playwright 測試 + xUnit `PipelineListTests.cs` / `PipelineViewTests.cs`）**沒有對應 csproj** —— 不屬於任何已編譯專案，**無法透過 `dotnet test` 執行**。
-
-實際確認（2026-04-27 Aria 驗證）：
-- `tests/Generated/` 結構鏡像 `src/`：Bot / Dashboard / Shared 三層
-- 共 7 個 test 檔（不是想像中累積很多）
-- 整個 repo `find tests -name "*.csproj"` = **0 hits**
-
-**影響**：Quinn 寫的所有 Generated 測試都是「文件性質的 reference」，無法自動執行。**「Quinn 測試品質保證」這條品質迴圈線實際上不存在**——Stage 40 驗收 E（dotnet test）已退讓為 build 0 errors + grep。
-
-### 戰略意義（為什麼要做）
-
-Stage 39（Vera 擴充 razor/css 判準 + Skipped 結果型別）+ Stage 40（Vera 補三段判準 + Petra Warning→blocking 升級）合計建立的「審查 + 閘門」兩層品質迴圈，**缺了第三層「Quinn 測試自動執行」這一塊**。
-
-完整品質保證迴圈三層：
-- **Vera 審查層**（Stage 39 + 40）✅ 補完
-- **Petra 閘門層**（Stage 40）✅ 補完
-- **Quinn 測試層**（本 FF 解）❌ **缺**
-
-修完才是 self-implement Trial_v4 的真正完整驗證環境（Trial_v3 / 之前試驗的 Top 3「Quinn 測試品質」評估線一直是空話，因為測試從沒跑過）。
-
-### 修法
-
-#### 1. 建立 csproj
-
-`tests/Generated/AiTeam.Tests.Generated.csproj`（或拆成 Bot / Dashboard / Shared 三個 csproj，依測試類型決定 — 由實作 Session 探索）：
-
-- TargetFramework 對齊主專案（net10.0）
-- ProjectReference 對應 src 專案（`AiTeam.Bot` / `AiTeam.Dashboard` / `AiTeam.Shared`）
-- xUnit + FluentAssertions（既有 test 檔已 `using` 這些套件）
-- Playwright 測試需獨立 runner config（headless + browser install + 對齊既有 `AiTeam.Tests.Playwright` 模式）
-
-#### 2. 修積累的破損
-
-7 個 test 檔從未跑過，可能積累 type / namespace / API signature 不相容（src 改過但 test 沒同步）。實作 Session 需逐檔 `dotnet build` + 修，預期項目：
-- `using` namespace 變更（例：`AiTeam.Bot.Agents` 拆解後）
-- DTO 欄位增刪
-- private method reflection 簽名變化（Stage 40 已抽 `PrNumberHelper` 改 public）
-
-#### 3. 整合進 solution
-
-- `AiTeam.slnx` 加入新 csproj
-- `dotnet test AiTeam.slnx` 能跑到所有 Generated 測試
-- CI/CD（self-hosted runner）流程確認自動執行
-
-#### 4. CLAUDE_Quinn.md 後續調整（選擇性）
-
-如果發現 Quinn 寫的測試品質有結構性問題（例如假測試 / dummy assertion），考慮 CLAUDE_Quinn.md 補測試品質判準。**本 FF 不強制做這條**——先讓測試跑起來，品質問題交給後續 Trial 觀察。
-
-### 規模 / 風險
-
-**規模**：S-M（7 檔範圍可控；不知有多少 type/namespace 不相容）
-**風險**：中（修破損可能踩到 src 改動的歷史路徑；需要對照當時 commit 評估，不要為了「讓測試過」而改測試斷言）
-
-### 優先級
-
-🟡 中 — Trial_v4 真正完整驗證環境的前置條件；影響所有未來 Stage 「dotnet test 通過」驗收環節的可信度。**建議 Stage 41 處理**。
-
----
-
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1260,6 +1194,7 @@ Stage 39（Vera 擴充 razor/css 判準 + Skipped 結果型別）+ Stage 40（Ve
 | 二十 | 大檔案拆解技術債（合集）— 四個怪物級檔案清零 | ✅ Stage 34（v3.21.0，MeetingService 1415→4 檔）+ Stage 35（v3.22.0，PmAgentService 1388→6 檔 + Agents/Pm/ 子資料夾）+ Stage 36（v3.23.0，TaskGroupService 2623→716、CommandHandler 2172→556 + 5 個子資料夾）— 累積六項拆解 SOP 已整理至 [docs/conventions/refactor-sop.md](../conventions/refactor-sop.md)；Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但漏實際搬遷，Stage 38 結案後 Aria 補完 |
 | 二十八 | Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ Reviewer 略過狀態正名為 `skipped` | ✅ Stage 39（v3.26.0，2026-04-25）— `ReviewerAgentService` 三類檔案分類 + `BuildClaudeCodeReviewPrompt` 三段共用 `AppendFileDiff` helper + 標題改名「PR 變更 diff」；CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` teal `#20c997`；TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車順手解決 Trial_v2 觀察四項（BossInteraction.Description 補 Task.Description / RuleManagement.razor MudSwitch aria-label / QA Skipped 共用 API / Mock review_skipped 情境） |
 | 二十九 | CLAUDE_Vera.md 判準補強（a11y `<a>` link + `target="_blank"` 安全 + 業務邏輯 pattern match）| ✅ Stage 40（v3.27.0，2026-04-26）— CLAUDE_Vera.md 三段判準擴充：**安全 Critical**（`<a target="_blank">` / `<MudLink Target="_blank">` 缺 `rel="noopener"` 列為 Critical，OWASP 真實安全；與 `@onclick` 未捕例外並列「唯二 Critical razor 議題」）+ **a11y Warning**（`<a>` / `<MudLink>` 缺 `aria-label` 補入既有 a11y 子段）+ **業務邏輯 pattern match Warning**（`Title.Contains("[XXX]")` 等 fragile 設計，建議改 DTO 欄位 / service / 列舉）；搭車修 4 處同源 tabnabbing（PipelineList:65 + PipelineView:32 + Home:62 + ProjectManagement:81）作為 FF 二十九判準的真實演習場；Home.razor PR 連結同步顯示 `#編號`（原寫死「PR」）；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper（消 PipelineList vs PipelineView 重複）；MudLink rel/aria-label 採 inline 寫法成功 forward 至底層 `<a>` |
+| 三十一 | tests/Generated/ 編譯與執行修復（測試品質保證迴圈第三層）| ✅ Stage 41（v3.28.0，2026-04-27）— 建 `tests/AiTeam.Tests.Generated/` xUnit csproj（與 `tests/Generated/` 隔離保持純 LLM 產出區，採 `<Compile Include="..\Generated\**\*.cs" />` 跨資料夾納入）+ AiTeam.slnx 新增 `/tests/` folder；清檔案層 3 類破損：3 檔 markdown fence（GitHubServiceTests / TaskCenter）+ 1 檔幻覺類別整檔刪（AgentSettings.razorTests.cs）+ 1 檔 LLM 截斷修復（GitHubServiceTests 半截 method）；連帶清除 repo 根目錄 stray `AiTeam/` 資料夾（同源 LLM 污染歷史殘留 PR `1979f46`）；MainLayout broken test 兩個依嚴格版「不為綠燈寫假斷言」原則刪除（Quinn 假設 Assembly.GetExecutingAssembly() 取錯 + 忽略 +commitHash 剝離邏輯）；CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證嚴格版要求 grep 證據 comment + JSON schema 新增 `unverifiable_targets` 欄位語意分離 failed_tests=可修 vs unverifiable=需 escalate）；最終 dotnet test 127 Passed / 0 Failed |
 ---
 
 ## 變更紀錄
@@ -1348,3 +1283,4 @@ Stage 39（Vera 擴充 razor/css 判準 + Skipped 結果型別）+ Stage 40（Ve
 | 2026-04-25 | v7.41：Trial_v3（self-implement 試驗 v3）執行完成 — 任務「流程追蹤頁面 PR 欄位優化」（PR #109）；新增獨立紀錄 [docs/experiments/Trial_v3_PipelinePrColumn.md](../experiments/Trial_v3_PipelinePrColumn.md)；FF 二十七 補「v3 試驗結果」段（FF 二十八 ✅ / Top 1 🟡 部分 / Top 2 🟢 預期 / Top 3 ✅ 維持）；**新增 FF 二十九**（CLAUDE_Vera.md 三處判準漏寫：`<a>` a11y / `rel="noopener"` 安全 / pattern match Warning）+ **新增 FF 三十**（tech_improvement ghost Dev task）；FF 二十二 子項 B 補 Agent 執行確認訊息誤導案例；戰略結論：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 品質低下根因，非 Vera 失職 |
 | 2026-04-26 | v7.42：Stage 40 完成（v3.27.0）— **FF 二十九 ✅ 完成**（CLAUDE_Vera.md 三段判準補入：安全 Critical / a11y `<a>` Warning / 業務邏輯 pattern match Warning；4 處同源 tabnabbing 全清；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper；MudLink inline rel/aria-label 確認可 forward）；**FF 二十五 Petra 子項 ✅ 完成**（CLAUDE_Petra.md 第 4 節新增「Warning→blocking 升級規則」五條清單；FF 二十五本體保留作為未來 Trial 任務 prompt design 的 reference）；**Trial_v4 前置條件閉環就緒**（FF 二十九 Vera 抓得到 + FF 二十五子項 Petra 擋得下）；首次驗收即通過、零 follow-up commits；Forge 揭露踩坑「tests/Generated/ 非編譯目標」（Quinn 寫的測試實際無法用 `dotnet test` 跑）—— 待 Christ 評估是否新開 FF |
 | 2026-04-27 | v7.43：**新增 FF 三十一**（tests/Generated/ 編譯與執行修復）— 立案來自 Stage 40 Forge 結案踩坑揭露：`tests/Generated/` 7 檔（含 Quinn Trial_v3 寫的 Playwright + xUnit）皆無 csproj、`find tests -name "*.csproj"` 0 hits；戰略定位「Quinn 測試層」是品質保證迴圈第三層（補上 Vera/Petra 兩層之後缺的塊）；修法：建 csproj + xUnit/Playwright runner config + 修積累 type/namespace 不相容 + 整合 `AiTeam.slnx`；規模 S-M、🟡 中優先；**建議 Stage 41 處理**作為 Trial_v4 真正完整驗證環境的前置條件 |
+| 2026-04-27 | v7.44：**FF 三十一 ✅ 完成** — Stage 41（v3.28.0）：建 `tests/AiTeam.Tests.Generated/` xUnit csproj（隔離 LLM 產出區，跨資料夾 Compile Include）+ AiTeam.slnx /tests/ folder + 清 3 類檔案層破損（markdown fence × 3 / 幻覺類別刪 / LLM 截斷修復）+ 連帶清除 repo 根目錄 stray AiTeam/（PR `1979f46` 歷史殘留 LLM 污染）+ MainLayout broken test 嚴格版刪除 + CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證 + JSON schema unverifiable_targets 語意分離）；dotnet test 127 Passed / 0 Failed；FF 三十一主體刪除整項移入已完成項目摘要；**「Vera 審查 + Petra 閘門 + Quinn 測試」三層品質保證迴圈閉環就緒**，Trial_v4 完整驗證環境前置條件達成 |

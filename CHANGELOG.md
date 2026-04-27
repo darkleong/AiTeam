@@ -11,9 +11,13 @@
 
 ## [Unreleased]
 
-- **下個 Stage（待規劃）**：Trial_v4 任務（FF 二十七延伸，驗證 Vera + Petra 閉環效果）— 需自然合適的 a11y / 安全 / form / auth 真實需求載體；可能搭車 FF 三十（tech_improvement ghost Dev task）
+- **下個 Stage（待規劃）**：Trial_v4 任務（FF 二十七延伸，驗證 Vera + Petra + Quinn 三層完整閉環）— 強候選載體 FF 十六（Dashboard 錯誤處理 UX，a11y 議題密度高）/ FF 十一（Token 守門 Dashboard 化，中優先實用）；可能搭車 FF 三十
 
 ---
+
+## [3.28.0] — 2026-04-27 — [Stage 41](docs/planning/Stage_41_Roadmap.md)
+
+`tests/Generated/` 編譯與執行修復（FF 三十一）+ CLAUDE_Quinn.md 兩條結構性 bug 防護 — 補完「Vera 審查 + Petra 閘門 + Quinn 測試」三層品質保證迴圈
 
 ## [3.27.0] — 2026-04-26 — [Stage 40](docs/planning/Stage_40_Roadmap.md)
 
