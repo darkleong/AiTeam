@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.42
+> 版本：v7.43
 > 建立日期：2026-04-01
-> 最後更新：2026-04-26
+> 最後更新：2026-04-27
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -1152,6 +1152,72 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 
 ---
 
+## 三十一、tests/Generated/ 編譯與執行修復（測試品質保證迴圈第三層）
+
+> 狀態：🟡 中 — Stage 40 結案 Forge 揭露的測試基礎建設盲點
+> 提出日期：2026-04-26（Stage 40 結案實作紀錄踩坑揭露）
+
+### 背景
+
+Stage 40 結案 Forge 在實作紀錄揭露：[`tests/Generated/`](../../tests/Generated/) 資料夾下的所有 test 檔（含 Quinn Trial_v3 寫的 Playwright 測試 + xUnit `PipelineListTests.cs` / `PipelineViewTests.cs`）**沒有對應 csproj** —— 不屬於任何已編譯專案，**無法透過 `dotnet test` 執行**。
+
+實際確認（2026-04-27 Aria 驗證）：
+- `tests/Generated/` 結構鏡像 `src/`：Bot / Dashboard / Shared 三層
+- 共 7 個 test 檔（不是想像中累積很多）
+- 整個 repo `find tests -name "*.csproj"` = **0 hits**
+
+**影響**：Quinn 寫的所有 Generated 測試都是「文件性質的 reference」，無法自動執行。**「Quinn 測試品質保證」這條品質迴圈線實際上不存在**——Stage 40 驗收 E（dotnet test）已退讓為 build 0 errors + grep。
+
+### 戰略意義（為什麼要做）
+
+Stage 39（Vera 擴充 razor/css 判準 + Skipped 結果型別）+ Stage 40（Vera 補三段判準 + Petra Warning→blocking 升級）合計建立的「審查 + 閘門」兩層品質迴圈，**缺了第三層「Quinn 測試自動執行」這一塊**。
+
+完整品質保證迴圈三層：
+- **Vera 審查層**（Stage 39 + 40）✅ 補完
+- **Petra 閘門層**（Stage 40）✅ 補完
+- **Quinn 測試層**（本 FF 解）❌ **缺**
+
+修完才是 self-implement Trial_v4 的真正完整驗證環境（Trial_v3 / 之前試驗的 Top 3「Quinn 測試品質」評估線一直是空話，因為測試從沒跑過）。
+
+### 修法
+
+#### 1. 建立 csproj
+
+`tests/Generated/AiTeam.Tests.Generated.csproj`（或拆成 Bot / Dashboard / Shared 三個 csproj，依測試類型決定 — 由實作 Session 探索）：
+
+- TargetFramework 對齊主專案（net10.0）
+- ProjectReference 對應 src 專案（`AiTeam.Bot` / `AiTeam.Dashboard` / `AiTeam.Shared`）
+- xUnit + FluentAssertions（既有 test 檔已 `using` 這些套件）
+- Playwright 測試需獨立 runner config（headless + browser install + 對齊既有 `AiTeam.Tests.Playwright` 模式）
+
+#### 2. 修積累的破損
+
+7 個 test 檔從未跑過，可能積累 type / namespace / API signature 不相容（src 改過但 test 沒同步）。實作 Session 需逐檔 `dotnet build` + 修，預期項目：
+- `using` namespace 變更（例：`AiTeam.Bot.Agents` 拆解後）
+- DTO 欄位增刪
+- private method reflection 簽名變化（Stage 40 已抽 `PrNumberHelper` 改 public）
+
+#### 3. 整合進 solution
+
+- `AiTeam.slnx` 加入新 csproj
+- `dotnet test AiTeam.slnx` 能跑到所有 Generated 測試
+- CI/CD（self-hosted runner）流程確認自動執行
+
+#### 4. CLAUDE_Quinn.md 後續調整（選擇性）
+
+如果發現 Quinn 寫的測試品質有結構性問題（例如假測試 / dummy assertion），考慮 CLAUDE_Quinn.md 補測試品質判準。**本 FF 不強制做這條**——先讓測試跑起來，品質問題交給後續 Trial 觀察。
+
+### 規模 / 風險
+
+**規模**：S-M（7 檔範圍可控；不知有多少 type/namespace 不相容）
+**風險**：中（修破損可能踩到 src 改動的歷史路徑；需要對照當時 commit 評估，不要為了「讓測試過」而改測試斷言）
+
+### 優先級
+
+🟡 中 — Trial_v4 真正完整驗證環境的前置條件；影響所有未來 Stage 「dotnet test 通過」驗收環節的可信度。**建議 Stage 41 處理**。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1281,3 +1347,4 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 | 2026-04-25 | v7.40：Stage 39 結案後補完 — (1) Stage 39 Roadmap header 升 ✅ + 文件版本 v2.0（Christ 結案 commit 漏改，Aria 補）；(2) FF 十「Agent 角色設定 Dashboard 化」擴充 Phase 1 / Phase 2 分階段：Phase 1 C# SystemPrompt（API 層 Agent，FF 十既有範圍）+ Phase 2 CLAUDE_*.md template（CLI 層 Agent，Stage 39 結案後 Christ 詢問是否可 Dashboard 編輯，Aria 推薦現在不做：內容仍在演進、修改頻率低、code review 軌跡比 DB 安全；觸發條件寫明「等 Trial_v3 完成 + CLAUDE_Vera 定型 1-2 月後 + 真實使用情境」）|
 | 2026-04-25 | v7.41：Trial_v3（self-implement 試驗 v3）執行完成 — 任務「流程追蹤頁面 PR 欄位優化」（PR #109）；新增獨立紀錄 [docs/experiments/Trial_v3_PipelinePrColumn.md](../experiments/Trial_v3_PipelinePrColumn.md)；FF 二十七 補「v3 試驗結果」段（FF 二十八 ✅ / Top 1 🟡 部分 / Top 2 🟢 預期 / Top 3 ✅ 維持）；**新增 FF 二十九**（CLAUDE_Vera.md 三處判準漏寫：`<a>` a11y / `rel="noopener"` 安全 / pattern match Warning）+ **新增 FF 三十**（tech_improvement ghost Dev task）；FF 二十二 子項 B 補 Agent 執行確認訊息誤導案例；戰略結論：審查層 CLAUDE_Vera.md 判準邊界覆蓋不全 = Stage 37 品質低下根因，非 Vera 失職 |
 | 2026-04-26 | v7.42：Stage 40 完成（v3.27.0）— **FF 二十九 ✅ 完成**（CLAUDE_Vera.md 三段判準補入：安全 Critical / a11y `<a>` Warning / 業務邏輯 pattern match Warning；4 處同源 tabnabbing 全清；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper；MudLink inline rel/aria-label 確認可 forward）；**FF 二十五 Petra 子項 ✅ 完成**（CLAUDE_Petra.md 第 4 節新增「Warning→blocking 升級規則」五條清單；FF 二十五本體保留作為未來 Trial 任務 prompt design 的 reference）；**Trial_v4 前置條件閉環就緒**（FF 二十九 Vera 抓得到 + FF 二十五子項 Petra 擋得下）；首次驗收即通過、零 follow-up commits；Forge 揭露踩坑「tests/Generated/ 非編譯目標」（Quinn 寫的測試實際無法用 `dotnet test` 跑）—— 待 Christ 評估是否新開 FF |
+| 2026-04-27 | v7.43：**新增 FF 三十一**（tests/Generated/ 編譯與執行修復）— 立案來自 Stage 40 Forge 結案踩坑揭露：`tests/Generated/` 7 檔（含 Quinn Trial_v3 寫的 Playwright + xUnit）皆無 csproj、`find tests -name "*.csproj"` 0 hits；戰略定位「Quinn 測試層」是品質保證迴圈第三層（補上 Vera/Petra 兩層之後缺的塊）；修法：建 csproj + xUnit/Playwright runner config + 修積累 type/namespace 不相容 + 整合 `AiTeam.slnx`；規模 S-M、🟡 中優先；**建議 Stage 41 處理**作為 Trial_v4 真正完整驗證環境的前置條件 |
