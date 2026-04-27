@@ -50,12 +50,17 @@
 
 ### 實作項目
 
-#### 1. 建立 csproj（位置由 Forge 決定）
+#### 1. 建立 csproj
 
-**csproj 位置候選**（由 Forge Plan Mode 探索選擇）：
-- 候選 A：`tests/AiTeam.Tests.Generated/AiTeam.Tests.Generated.csproj`（從 `tests/Generated/` 取出 csproj 到上層獨立資料夾，保持 `tests/Generated/` 純 LLM 產出區） — Aria 推薦
-- 候選 B：`tests/Generated/AiTeam.Tests.Generated.csproj`（csproj 直接放 Generated/ 內）
-- 候選 C：拆三個 csproj 對應 src 三個專案（Bot / Dashboard / Shared）— 結構工整但維護成本高，**不建議**
+**csproj 位置**：`tests/AiTeam.Tests.Generated/AiTeam.Tests.Generated.csproj`（**Christ 2026-04-27 拍板**）。
+
+理由：把 csproj 從 `tests/Generated/` 取出到上層獨立資料夾，**保持 `tests/Generated/` 純 LLM 產出區**——避免 Quinn 未來看到 csproj 後嘗試「自己改 csproj 加 reference」造成新的混亂。
+
+實作層 csproj 仍透過 `<Compile Include="../Generated/**/*.cs" />` 把 Generated/ 內容納入編譯範圍（具體 Include pattern 由 Forge 探索）。
+
+> 拒絕的方案：
+> - 候選 B：`tests/Generated/AiTeam.Tests.Generated.csproj`（csproj 與 LLM 產出檔混放）
+> - 候選 C：拆三個 csproj 對應 src 三個專案（結構工整但維護成本高）
 
 **csproj 內容**：
 - `TargetFramework`：`net10.0`（對齊主專案）
@@ -113,9 +118,21 @@ CLAUDE_Quinn.md 補入：
 
 明確指示：「測試檔案輸出**純 C# source code**，**不要**包 ```csharp ```（markdown code fence）。檔案內容必須是 valid C#（從 `using` 或 `namespace` 開始），可以直接被 `dotnet build` 編譯」。
 
-#### B. 測試標的存在性驗證
+#### B. 測試標的存在性驗證（**Christ 2026-04-27 拍板採嚴格版**）
 
-明確指示：「寫測試前**必須先 grep / Read 確認測試的類別 / 方法存在於 codebase**。不要憑想像或自然語言需求描述就寫『測試 X 類別的 Y 方法』。如果類別 / 方法不存在，先回報 Petra / Christ 而非生成假測試」。
+明確指示：「寫測試前**必須先 Grep / Read 確認測試的類別 / 方法存在於 codebase**。具體要求：
+
+1. **每個測試類別開頭必須有 comment 標註驗證證據**，格式：
+   ```csharp
+   // 測試標的：AiTeam.Dashboard.Components.Pages.Tasks.PipelineList
+   // 驗證：grep -r 'class PipelineList' src/AiTeam.Dashboard/ → 命中 PipelineList.razor.cs:N
+   ```
+2. **不接受憑想像 / 自然語言需求描述就寫測試**（例：『測試 X 類別的 Y 方法』但 X 類別不存在）。
+3. **若測試標的不存在於 codebase**，**不得生成假測試**——回報 Petra / Christ 並標記 `escalate`。
+
+範例反面教材（Stage 41 探索揭露）：`AgentSettings.razorTests.cs` 測試 `Customer Service Agent / Sales Agent / Technical Support Agent` 三個 codebase 中**完全不存在**的頁面 → 整檔被 Stage 41 刪除。」
+
+**Christ 註記**：「先嚴格一些，實測後有需要再調整」—— Stage 41 採此嚴格版，未來 Trial 若發現過嚴擋住正常產出再評估放寬。
 
 ### 寫作風格
 
@@ -230,3 +247,4 @@ CLAUDE_Quinn.md 補入：
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-27 | 計劃書建立（Aria）— FF 三十一 主菜（建 xUnit csproj + 修 7 檔破損）+ CLAUDE_Quinn.md 兩條結構性 bug 防護搭車 |
+| v1.1 | 2026-04-27 | Christ 三項拍板鎖定：① csproj 位置採候選 A（`tests/AiTeam.Tests.Generated/`，與 Generated/ 隔離）② 修破損採嚴格版「不為綠燈寫假斷言」③ CLAUDE_Quinn.md 測試標的存在性驗證採嚴格版（要求每個測試類別開頭 comment 標註 grep 驗證證據） |
