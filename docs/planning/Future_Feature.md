@@ -1,39 +1,9 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.50
+> 版本：v7.51
 > 建立日期：2026-04-01
 > 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
-
----
-
-## 一、API 費用優化
-
-### 背景
-
-目前各 Agent 採用混合模型策略：
-- **核心 Agent**（CEO / Dev / Reviewer）：`claude-sonnet-4-6`（品質優先）
-- **唯讀探索 Agent**（Requirements / Designer / Doc）：`claude-haiku-4-5`（成本優先）
-- **QA**：`claude-sonnet-4-6`（Claude Code CLI）
-- **Release / Ops**：`claude-sonnet-4-6`（直接 API call，消耗低）
-
-**已執行的優化：** Rosa、Demi、Sage 從 Sonnet 降級為 Haiku，預估節省 25-30% 整體 API 費用（2026-04-07）。
-
-### 未來優化方向
-
-- **Prompt Caching**：Anthropic 支援 Prompt Cache，cache read 僅需 10% 費用。對每次都帶入的規則清單、CLAUDE_Victoria.md 模板特別有效
-- **Batch API**：非即時任務（如 Doc Agent）可走 Batch API，享 50% 折扣
-- **模型持續評估**：隨新模型發布（價格持續下降），定期評估是否可進一步降級
-- **Victoria turns 優化**：減少 Claude Code 的 maxTurns 或優化 prompt 長度，降低多輪對話成本
-
-### 行動建議
-
-- 持續觀察 Token 監控 Dashboard 的實際消耗數據
-- Prompt Caching 是下一個投資報酬率最高的優化方向
-
-### 優先級
-
-🔵 低優先級 — 已完成第一輪降級，後續視消耗數據評估
 
 ---
 
@@ -266,52 +236,6 @@ Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在�
 
 ---
 
-## 六、測試環境隔離（Docker Compose Test Stack）
-
-### 背景
-
-目前 Playwright CI 在 self-hosted runner（production 機器）上直接操作 `docker-compose.prod.yml`，導致測試啟動/關閉會影響 production 容器。Stage 16 驗收時 Dashboard 容器就是被 `playwright.yml` 的 `Stop Dashboard`（`if: always()`）殺掉的。
-
-根本原因是單機環境下沒有 production / test 隔離，CI 和正式服務共用同一組 container name 和 port。
-
-### 期望行為
-
-feature branch CI 觸發時，自動在測試區部署並跑 Playwright，完全不影響 production。
-
-### 設計方向
-
-同一台 Windows 11 機器，用 port 和 container name 隔離：
-
-| | 正式區 | 測試區 |
-|---|---|---|
-| Dashboard | `localhost:5051` | `localhost:5061` |
-| PostgreSQL | `aiteam-postgres`（volume: prod-data） | `aiteam-test-postgres`（volume: test-data） |
-| Compose file | `docker-compose.prod.yml` | `docker-compose.test.yml` |
-
-**`docker-compose.test.yml`：**
-- 不同的 container name + project name（與 production 完全不衝突）
-- 不同的 port mapping（5061 / 5462）
-- 獨立的 postgres volume
-- 使用 ghcr.io 上已 build 好的 image（不重複 build）
-
-**`playwright.yml` 改版：**
-```
-1. docker compose -f docker-compose.test.yml up -d
-2. health check → localhost:5061
-3. 跑 Playwright
-4. docker compose -f docker-compose.test.yml down  ← 殺的是測試區
-```
-
-### 資源評估
-
-現有環境 RAM 15.21GB，目前使用 679MB（Bot + PostgreSQL + pgAdmin）。測試區估計額外消耗 500MB-1GB，完全沒問題。測試區只在 CI 跑時啟動，平常不佔資源。
-
-### 優先級
-
-🔵 低優先級 — Dashboard 存取分層（Stage 22）完成後，Playwright 直接打 localhost 免登入，CI 不再需要啟停容器，本項急迫性大幅降低。待客戶專案（七）需要完整隔離時再重新評估
-
----
-
 ## 七、客戶專案交付流程與驗收閘門
 
 ### 背景
@@ -377,71 +301,6 @@ AiTeam 的定位不只是開發自身系統，未來也會替客戶開發專案�
 🟡 中優先級 — AiTeam 開始承接客戶專案時為前置必要條件，目前仍以自身開發為主
 
 ---
-
-## 八、開發流程重構（多人會議制 + 糾錯機制）
-
-> **Phase 1 全部完成 + Phase 2 第三項（LLM→CLI）完成**，詳見 [已完成項目摘要]。
-> 本 FF 主體聚焦 Phase 2 剩餘兩個機制：循環偵測 + 新鮮視角。
-
-### 完成歷程快照
-
-- **Phase 1**（七階段全流程：需求→設計→開發→審查→QA→歸檔→上線）：✅ Stage 23 / 24 / 25a / 25b（v3.7.0 → v3.10.0）
-- **Phase 2 第三項**（LLM API → Claude Code CLI 全面升級，5 個申訴環節保留 codebase 存取）：✅ Stage 30（v3.17.0）
-- **Phase 2 剩餘**：循環偵測 + 新鮮視角（本 FF 主體）
-
-### 背景（原始動機，Phase 1/2 共用）
-
-兩起已知事故觸發本 FF：
-1. **Vera 誤判事故**：Vera 持續報告 false critical、Cody 無法反駁（單向權力結構），直到 Christ 手動介入才發現
-2. **實作 Session 死循環事故**：Session 反覆做無效修正，沒有機制偵測循環模式
-
-Phase 1 已用「多人會議 + 雙向 Review + Petra 仲裁」解決第 1 起；第 2 起則等 Phase 2 剩餘機制處理。
-
-### Phase 2 剩餘機制
-
-**循環偵測（Loop Detection）**：追蹤每次修正的 diff，偵測是否在反覆修改同一段程式碼（oscillation）。比單純輪次計數更聰明——兩輪都在改同一行 vs 兩輪改不同區塊，前者要升級處理，後者是正常迭代。
-
-**新鮮視角（Fresh Eyes）**：熔斷觸發後，啟動全新獨立 Session 診斷問題根因（不帶前面的對話歷史）。對標現實：叫一個不在脈絡中的同事過來看問題。Stage 30 的「新開 session + 強化 prompt」模式是此機制的前置技術。
-
-### 觸發條件（評估是否真的需要做）
-
-- Stage 30 後觀察 2-4 週，看 Review Appeal / Dev_plan Appeal 是否仍有反覆修改同一段、無法收斂的案例
-- 若收斂性已夠（輪次上限 + Petra 仲裁已足），可能不需要循環偵測
-- 若仍有死循環，再評估本機制的投資報酬
-
-### 優先級
-
-🔵 低 — 剩餘兩機制是「保險絲」類型，等實際運行數據觸發再做。
-
-## 九、Agent 任務序列 — 後續議題
-
-> 核心機制已完成：Stage 27a（v3.12.0）+ Stage 27b（v3.13.0），詳見已完成項目摘要。
-> 本 FF 剩下 PM 佇列化 1 個議題 + 3 個未實作擴充方向。
-
-### 📌 PM（Petra）佇列化議題（待決策）
-
-Petra 是 `TaskGroupService` 中的 inline `await` 閘門，不在 `AgentQueueProcessor.SemaphoreGroups` 的 8 個 executor key 中。`/stop-all` 不影響她，Dashboard 也不顯示她的佇列狀態。
-
-**待討論**：
-- 把她納入 queue 機制？還是另外設計？
-- inline `await` 改成 queue 是否會造成流程阻塞（Petra 上游等她時全部塞住）？
-- 「Petra 暫停中，流程卡在審核點」語意是否合理？
-
-### ✅ 已釐清議題
-
-- **PM 執行路徑**：Petra 確認走 Claude Code CLI（`PmAgentService` 用 `RunMeetingSessionAsync`），Stage 30 所有 5 個申訴環節已升級，詳見 FF 八 Phase 2 第三項
-- **Dashboard pause/resume 操作按鈕**：已移至 FF 十五（Dashboard 與 Discord 功能平等）剩餘子項處理
-
-### 未實作的設計方向（保留供未來參考）
-
-原始設計規劃但尚未實作：
-- **Maya 自動化部署流程**：Maya 發送 Graceful Shutdown → 確認全員 Stopped → 執行部署 → 自動恢復
-- **Error 狀態阻塞 + 手動重試/取消**：Error 任務留在 queue 頭部，Dashboard 提供重試/取消按鈕
-- **優先級支援**：修正任務優先、緊急上報可插隊、中斷恢復排入隊首
-
-### 優先級
-
-🔵 低優先級 — 核心佇列已完成，剩餘為擴充性需求
 
 ## 十、Dashboard UI 細節打磨（第四批）
 
@@ -1853,6 +1712,10 @@ Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
 | 二十八 | Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ Reviewer 略過狀態正名為 `skipped` | ✅ Stage 39（v3.26.0，2026-04-25）— `ReviewerAgentService` 三類檔案分類 + `BuildClaudeCodeReviewPrompt` 三段共用 `AppendFileDiff` helper + 標題改名「PR 變更 diff」；CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` teal `#20c997`；TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車順手解決 Trial_v2 觀察四項（BossInteraction.Description 補 Task.Description / RuleManagement.razor MudSwitch aria-label / QA Skipped 共用 API / Mock review_skipped 情境） |
 | 二十九 | CLAUDE_Vera.md 判準補強（a11y `<a>` link + `target="_blank"` 安全 + 業務邏輯 pattern match）| ✅ Stage 40（v3.27.0，2026-04-26）— CLAUDE_Vera.md 三段判準擴充：**安全 Critical**（`<a target="_blank">` / `<MudLink Target="_blank">` 缺 `rel="noopener"` 列為 Critical，OWASP 真實安全；與 `@onclick` 未捕例外並列「唯二 Critical razor 議題」）+ **a11y Warning**（`<a>` / `<MudLink>` 缺 `aria-label` 補入既有 a11y 子段）+ **業務邏輯 pattern match Warning**（`Title.Contains("[XXX]")` 等 fragile 設計，建議改 DTO 欄位 / service / 列舉）；搭車修 4 處同源 tabnabbing（PipelineList:65 + PipelineView:32 + Home:62 + ProjectManagement:81）作為 FF 二十九判準的真實演習場；Home.razor PR 連結同步顯示 `#編號`（原寫死「PR」）；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper（消 PipelineList vs PipelineView 重複）；MudLink rel/aria-label 採 inline 寫法成功 forward 至底層 `<a>` |
 | 三十一 | tests/Generated/ 編譯與執行修復（測試品質保證迴圈第三層）| ✅ Stage 41（v3.28.0，2026-04-27）— 建 `tests/AiTeam.Tests.Generated/` xUnit csproj（與 `tests/Generated/` 隔離保持純 LLM 產出區，採 `<Compile Include="..\Generated\**\*.cs" />` 跨資料夾納入）+ AiTeam.slnx 新增 `/tests/` folder；清檔案層 3 類破損：3 檔 markdown fence（GitHubServiceTests / TaskCenter）+ 1 檔幻覺類別整檔刪（AgentSettings.razorTests.cs）+ 1 檔 LLM 截斷修復（GitHubServiceTests 半截 method）；連帶清除 repo 根目錄 stray `AiTeam/` 資料夾（同源 LLM 污染歷史殘留 PR `1979f46`）；MainLayout broken test 兩個依嚴格版「不為綠燈寫假斷言」原則刪除（Quinn 假設 Assembly.GetExecutingAssembly() 取錯 + 忽略 +commitHash 剝離邏輯）；CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證嚴格版要求 grep 證據 comment + JSON schema 新增 `unverifiable_targets` 欄位語意分離 failed_tests=可修 vs unverifiable=需 escalate）；最終 dotnet test 127 Passed / 0 Failed |
+| 一 | API 費用優化（第一輪降級）| ✅ 第一輪降級完成（2026-04-07）— Rosa / Demi / Sage 從 Sonnet 降為 Haiku，預估省 25-30% 整體 API 費用。剩餘優化方向（Prompt Caching / Batch API / 模型評估 / Victoria turns 優化）為觸發條件式 backlog（視 Token Dashboard 數據累積評估），不獨立列為 FF |
+| 六 | 測試環境隔離（Docker Compose Test Stack）| ⇒ Stage 22（v3.6.0，2026-04-12）大幅吸收 — Dashboard 存取分層 + Docker port 收緊後 Playwright CI 直接打 localhost 免登入，本項急迫性大幅降低；剩餘客戶專案完整隔離需求併入 FF 七（客戶專案交付流程與驗收閘門） |
+| 八 | 開發流程重構（多人會議制 + 糾錯機制）| ✅ Phase 1 全部完成 + Phase 2 第三項完成 — Stage 23/24（v3.7.0/v3.8.0，Review Appeal + QA 流程 Petra 判斷層）+ Stage 25a（v3.9.0，Kick-off 會議）+ Stage 25b（v3.10.0，設計會議）+ Stage 30（v3.17.0，5 個申訴環節 LLM API → Claude Code CLI 升級）。剩餘 Phase 2「循環偵測 + 新鮮視角」兩個保險絲機制為觸發條件式 backlog（觀察反覆修改同段未收斂案例後再評估），git history 保留原設計脈絡 |
+| 九 | Agent 任務序列 — 核心佇列機制 | ✅ Stage 27a（v3.12.0，2026-04-15）+ Stage 27b（v3.13.0，2026-04-15）— DB-as-Queue + per-agent SemaphoreSlim(1,1) + AgentQueueProcessor + Agent 狀態管理（Active/Paused/Stopped）+ 5 個 Discord 指令 + Dashboard 佇列視覺化 + SignalR。剩餘擴充性需求（PM Petra 佇列化 / Maya 自動化部署 / Error 狀態阻塞重試 / 優先級支援）為觸發條件式 backlog，git history 保留原設計脈絡 |
 ---
 
 ## 變更紀錄
@@ -1946,5 +1809,6 @@ Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
 | 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
+| 2026-04-28 | v7.51：**封存 4 個核心已完成的 FF**（FF 一 / 六 / 八 / 九）— Christ 觀察文件接近 2000 行後 Aria 掃出強候選封存 4 個：① FF 一（API 費用優化第一輪降級已完成 2026-04-07，剩餘優化方向轉 backlog）② FF 六（Stage 22 大幅吸收，剩餘客戶專案隔離併入 FF 七）③ FF 八（Phase 1 全部完成 + Phase 2 第三項 Stage 30 完成，剩 Phase 2「循環偵測 + 新鮮視角」兩保險絲機制轉 backlog）④ FF 九（Stage 27a/27b 核心佇列完成，剩 PM 佇列化 / Maya 部署 / Error 阻塞 / 優先級支援等擴充性需求轉 backlog）；4 個 FF 主體刪除（淨 -140 行），「已完成項目摘要」表格新增 4 列 entry，剩餘 backlog 設計脈絡保留在 git history；瘦身後 ~1810 行（從 1949 → 1810，約 -7%） |
 | 2026-04-28 | v7.50：**Stage 42 完成（v3.29.0）— FF 三十二 prompt 補強類 C+D+F+G ✅**：CLAUDE_Petra.md 第 4 節新增「PR 範圍嚴重不符計劃書」升級條目（首句明寫不論 Vera 原標 Info / Warning / Critical 皆適用）+ 獨立「特殊規則（直接 escalate）」段（`⚠️ ESCALATE_NEEDED` → escalate，不走 revise loop）；CLAUDE_Vera.md「Blazor 例外處理」段擴充三條件判準（涵蓋 `@onclick` / `@onchange` / MudBlazor `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）+ PR #122 onUndo 反面教材 + 不得降級規則（保守用詞「可能 / 或許」不豁免）+ 新增「PR description 判讀」段（`⚠️ ESCALATE_NEEDED` → 必標 critical 議題）；CLAUDE_Sage.md 新增「品質下限判準」段含 escalate JSON 格式 + 「PR URL 來源規則」段（從 prompt `PR 連結：` 欄位讀，不自行拼湊）+ 修訂第 60 行原「無實作說明」直接放行規則為 escalate；CLAUDE_Cody.md 新增「Dev 階段結束時的自我檢查（強制要求）」段（✅/❌ Issue + 完成度判定 + 80% 門檻 + 三條禁止）；**Marker 字面一致性驗證 ✅**（grep 三檔 `⚠️ ESCALATE_NEEDED` 完全相同）；探索揭露 Sage 路由端目前無 escalate 機制（DocAgentService 輸出 true/false），下游處理待 Stage 43 子項 E；FF 三十二 主體保留（A/B/E 子項待 Stage 43），子項分類段標四子項 ✅；本 Stage 純 prompt 補強，無 Bot Orchestrator / DB / UI 變動，真實生效驗證留 Trial_v5 |
 | 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
