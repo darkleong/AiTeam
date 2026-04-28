@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.48
+> 版本：v7.49
 > 建立日期：2026-04-01
 > 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1652,6 +1652,164 @@ Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
 
 ---
 
+## 三十六、AiTeam v4 架構雙支柱研究（spike）
+
+> 狀態：⚪ 待觀察 — 架構級躍進，需 spike 先驗證；等 Trial_v5 結果後啟動
+> 提出日期：2026-04-28（Trial_v4 結案後 Christ + Aria 戰略討論）
+
+### 背景
+
+Trial_v4 揭露多數 bug 根因**不是「補丁不夠」，是「pipeline 硬編碼」**：
+
+| Bug | pipeline 硬編碼具體點 | 動態調度下會怎麼做 |
+|---|---|---|
+| #5 DevPlan Appeal accept 後沒重新產出 | 「accept → 下階段」寫死 | PM 看「accept 但沒產出」→ 召開重新產出會議 |
+| #8 Dev fix 失敗仍 Reviewer | 「Dev → Reviewer」寫死 | PM 看「Dev failed」→ 召開 Token 危機會議 |
+| #9 Petra 沒升範圍縮水 blocking | Petra 升級規則硬編碼 | PM 看到範圍縮水 → 召開範圍協商會議（拉 Christ）|
+| #11 QA failed 仍進 Doc | 「QA → Doc」寫死 | PM 看「QA failed」→ 召開 QA 修復會議 |
+
+**FF 三十二 七子項本質上是「給硬編碼補丁」**——動態調度才是真正解根因。
+
+Christ 2026-04-28 提出兩個 paired 戰略洞察：
+1. **流程動態化**：PM 跳脫固定 pipeline 的能力（職務即函式 / 人員即函式集合 / PM 動態調度）
+2. **PM per-task session**：Petra 對每個 Task 開長 session 累積記憶，跨階段「掌握全貌」
+
+兩支柱缺一不可：沒 PM 持久化記憶 → PM 動態調度只是亂跳；沒動態調度 → PM 累積記憶用不到。
+
+### 戰略意義
+
+**這可能是 AiTeam 從 v3 到 v4 的關鍵架構躍進**——對齊行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns 都認為「固定 pipeline = v1 設計，動態調度 = v2 設計」）。
+
+### 兩大支柱詳述
+
+#### 第一支柱：流程動態化（PM 跳脫固定 pipeline）
+
+**抽象模型**：
+- **職務 = 函式**（清楚 input/output）：例 `Reviewer(PR diff, codebase) → ReviewReport`
+- **人員 = 函式集合**（一 Agent 可身兼多職）：Petra 同時是 PM + 會議主持人 + 仲裁者
+- **PM = 動態調度器**（依狀況尋找職務並組合）
+
+**Hybrid 模型才是 sweet spot**（不是 pure dynamic）：
+- 真實 PM 也走 SOP（敏捷 / 瀑布 / 看板）
+- 「動態」是在 SOP 之上的「異常處理」
+- 完全自由 PM = 不可預測 / 無 audit / 風險高
+
+```
+Phase 1（當前）：固定 pipeline
+Phase 2（FF 三十二/三十四/三十五 補丁）：固定 + 補丁
+Phase 3（本 FF 目標，Hybrid）：⭐
+  - 主 pipeline 仍存在（提供預設路徑 + audit trail）
+  - PM 有「條件邊」決策能力（依狀況觸發 sub-flow）
+Phase 4（理想終點）：Pure dynamic orchestration
+```
+
+#### 第二支柱：PM per-task session（持久化記憶）
+
+**目前 Petra（stateless）**：每次 LLM call 重新看資料 → 不記得前面階段警訊。
+
+**Phase 3 Petra（per-task session）**：
+- 從 Task 啟動建立 session，全程累積
+- Rosa 拆 Issue / Demi UI 評估 / Dev_plan / Vera review 都在同一 session 內
+- Petra 記得 Cody Dev_plan 階段的所有警訊 + Vera review 細節 + Quinn 測試品質
+- 動態決策時可基於「整個 task 的累積記憶」而非「當下 input」
+
+**Stage 15 Victoria 已驗證長 session 持久化技術可行**（Session DB 持久化、SemaphoreSlim、CLAUDE.md.bak crash 防護），但 Petra 還沒走這條路。
+
+### 成本分析（Aria 修正過誇張描述後的精確估算）
+
+CLI Session Resume 機制（`--resume`）+ Prompt Caching 大幅緩解成本：
+
+| 場景 | per-task session 成本 vs stateless |
+|---|---|
+| 短連續決策（< 5 分鐘，cache hit）| **1.5-2x** ✅ 可接受 |
+| 5 分鐘 - 1 小時內 | 1.7-3x（cache 加價 1h TTL）🟡 |
+| 跨等待 / 跨 Bot 重啟（Trial_v4 等 8h，cache 過期）| **3-5x** ⚠️ 較貴但不天價 |
+
+**實際增量約 $0.30-0.50 / task**（vs stateless）—— 遠低於解 5-7 個 🔴 嚴重 bug 的價值。
+
+> **重要修正**：Aria 在初期討論曾誤用「成本爆炸 5-50x」誇張描述，Christ 質問「不能用 CLI session resume 嗎？」後重新精確算過得 1.5-5x。**請未來討論者勿引用「5-50x」描述**。詳見 `workflow_aria.md` 第七節 #15。
+
+### 研究範圍（spike 任務）
+
+1. **行業先例研究**：
+   - AutoGen（Microsoft）/ LangGraph / CrewAI / Anthropic Multi-Agent Patterns
+   - 提取「動態調度 + PM 持久化」的設計模式
+
+2. **Stage 15 Victoria 經驗適用性評估**：
+   - 既有長 session 設計能否套用到 Petra
+   - SemaphoreSlim / Session DB / CLAUDE.md.bak 等機制差異
+
+3. **成本策略設計**：
+   - Prompt Cache 5 min vs 1h TTL 取捨
+   - Context Compaction（定期摘要前面歷史）設計
+   - 跨等待期的 cache 續期策略（dummy call 維持 cache）
+
+4. **Hybrid vs Pure Dynamic 對比**：
+   - 可預測性 / 可測試性 / Crash Recovery / 老闆審計需求
+   - 推薦 Hybrid 還是 Pure Dynamic？
+
+5. **遷移成本評估**：
+   - 從現有 v3 pipeline 遷到 Hybrid 要動哪些核心
+   - 既有 FF 三十二/三十五 是否被吸收？哪些仍獨立？
+
+### 預期產出
+
+1. **spike 報告**（推薦方案 + 漸進路徑 + 風險評估）
+2. **小 prototype**（建議：先做「Petra per-task session 在簡單流程」單點實驗）
+3. **遷移計劃**（若推薦走 Phase 3，估算 Stage 數 + 工作量）
+
+### 啟動觸發條件（待 Trial_v5 後評估）
+
+```
+Trial_v5 結果若顯示 FF 三十二 補丁夠 → FF 三十六 維持 ⚪ 待觀察（不啟動）
+Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
+```
+
+**FF 三十六 不該倉促啟動**——先做 FF 三十二/三十三/三十四/三十五 + Trial_v5 驗證，資料夠了再決定是否走 Phase 3。
+
+### 對既有 FF 的影響（Phase 3 啟動後重評估）
+
+| FF | Phase 3 後仍需要嗎 |
+|---|---|
+| FF 三十二 子項 A（DevPlan 重新產出）| 🟡 部分被吸收（PM 動態決定）但 Cody prompt 規則仍需 |
+| FF 三十二 子項 B（fix loop 中止）| 🟡 部分被吸收 |
+| FF 三十二 子項 C-G（prompt 補強）| ✅ 仍需要（職務 prompt 是 Hybrid 的基礎）|
+| FF 三十三（Token CLI 涵蓋）| ✅ 完全獨立，仍需做 |
+| FF 三十四（流程暫停）| ✅ Hybrid 下變成「PM 暫停尋找下一個 action」 |
+| FF 三十五（自動拆任務）| 🟡 部分被吸收（PM 看狀況自然開 sub-task），但「Petra 在 Design 後 propose」這個觸發點仍清晰 |
+
+### 規模 / 風險
+
+**規模**：**XL**（架構級躍進）
+- 動 Orchestrator 核心架構（從 pipeline 改為 state machine）
+- DB schema 可能改動（session 持久化欄位 / 條件邊紀錄）
+- 所有 Agent prompt 重新設計（職務即函式 contract）
+- Mock 模式重寫（動態流程怎麼模擬？）
+- Crash Recovery 重新設計（PM 動態決策狀態恢復）
+- 跟 FF 三十二/三十三/三十四/三十五 全部交互
+
+**風險**：**高**
+- 架構級改動風險最大
+- 「無限迴圈」/「不可預測」/「複雜度爆炸」需設計避免
+- spike 結論若推 Pure Dynamic → 風險更高
+
+### 優先級
+
+⚪ 待觀察 — **不要倉促啟動**。
+
+啟動條件：
+- 先 Stage 42-46（FF 三十二/三十三/三十四/三十五）+ Trial_v5 完成
+- Trial_v5 結果若補丁仍踩根因 → 啟動 spike Stage 47+
+- Trial_v5 結果若補丁夠用 → FF 三十六 永久 ⚪ 待觀察
+
+戰略意義保留紀錄價值：即使不啟動，也是 AiTeam 未來架構演進的關鍵候選方向。
+
+### 詳細討論脈絡
+
+完整討論見 `workflow_aria.md` 第七節 **自省點 #15**「Pipeline 硬編碼 vs 動態調度 + PM per-task session」（含 Christ 提議全脈絡 + Aria 自省「Token 爆炸」描述精確化 + Hybrid 模型推薦理由）。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1788,3 +1946,4 @@ Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
 | 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
+| 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
