@@ -109,6 +109,14 @@ public class PmRoutingService(
         string testReportJson,
         CancellationToken ct = default)
     {
+        // Stage 43-E：qa_fix_loop_fail 場景持續回 code_bug 路由，讓 QaFixRound 累計觸發 escalate
+        // 不切換 FailScenario（持續到 QaCoordinationService 的 QaFixRound >= max 觸發 needs_intervention）
+        if (MockClaudeCodeService.FailScenario == "qa_fix_loop_fail")
+        {
+            logger.LogInformation("[MockMode/QaFixLoop] Petra 模擬路由 code_bug，QaFixRound 累計觸發 escalate");
+            return new QaFailureDecision("code_bug", "[MOCK] qa_fix_loop_fail：持續 code_bug 累計觸發 escalate");
+        }
+
         var prompt       = BuildQaFailureAssessPrompt(group, testReportJson);
         var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildQaAssessSystemPrompt();
