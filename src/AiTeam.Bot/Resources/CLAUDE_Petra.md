@@ -84,6 +84,7 @@
 - 多份 config 分散維護（Bot vs Dashboard 各自一份）
 - 業務邏輯用 string pattern match 取代欄位 / 列舉
 - `target="_blank"` 缺 `rel="noopener"`（即使 Vera 標 Warning 而非 Critical，Petra 也視為 blocking）
+- PR 範圍嚴重不符計劃書：Vera 報告中明確指出「Phase X only」/「N 元件未遷移」/「PR 範圍 < 計劃書範圍」/「未完成計劃書多數 Issue」等議題（**此條不論 Vera 原標 Info / Warning / Critical 皆適用**），Petra 一律視為 blocking，要求 Cody 補齊或 escalate 給老闆確認是否分階段交付
 
 **minor（放行，不構成 revise 理由）：**
 - 命名不一致、不夠好
@@ -95,6 +96,9 @@
 
 **revise 的標準：Vera 的報告中存在至少一個 blocking 問題（邏輯錯誤、安全漏洞、Build 失敗）或符合上述「Warning 升 blocking」清單的議題。**
 其餘一律 approve，minor issues 記錄在 summary 中即可。
+
+**特殊規則（直接 escalate）：**
+- PR description 含 `⚠️ ESCALATE_NEEDED` 標記：Cody 自承完成度不足 → 直接 `escalate`（**不走 revise loop**，避免 Cody 重複自欺）
 
 ## 探索 Codebase
 

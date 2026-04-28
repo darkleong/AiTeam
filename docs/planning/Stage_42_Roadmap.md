@@ -346,8 +346,48 @@ PR 提交前，**必須**在 PR description 列出：
 
 ---
 
+---
+
+## 實作紀錄
+
+**實作日期**：2026-04-28  
+**版本**：v3.29.0  
+**狀態**：✅ 實作完成，等待 Aria 閘門二 + Christ 驗收
+
+### 修改檔案
+
+| 檔案 | 修改內容 |
+|------|---------|
+| `src/AiTeam.Bot/Resources/CLAUDE_Petra.md` | 子項 C：Warning→blocking 清單新增「PR 範圍嚴重不符計劃書」條目；新增「特殊規則（直接 escalate）」段含 `⚠️ ESCALATE_NEEDED` 觸發條件 |
+| `src/AiTeam.Bot/Resources/CLAUDE_Vera.md` | 子項 D：「Blazor 例外處理」段擴充為三條件 Server Circuit 判準 + 反面教材（PR #122 onUndo）+ 不得降級規則；子項 G-2：新增「PR description 判讀」段 |
+| `src/AiTeam.Bot/Resources/CLAUDE_Sage.md` | 子項 F：新增「品質下限判準」段（escalate JSON 格式）+ 「PR URL 來源規則」段；修訂「無實作說明」直接放行規則改為 escalate |
+| `src/AiTeam.Bot/Resources/CLAUDE_Cody.md` | 子項 G-1：新增「Dev 階段結束時的自我檢查（強制要求）」段（✅/❌ Issue 清單 + 80% 門檻 + ESCALATE_NEEDED 標記） |
+| `src/Directory.Build.props` | 版本 bump：3.28.0 → 3.29.0 |
+
+### 探索發現（子項 F 前置調查）
+
+- Sage prompt 中 PR URL 以純文字 `PR 連結：{URL}` 形式注入，非 JSON 欄位
+- `implementation_note` 直接從 `TaskGroup.ImplementationNote` 傳入
+- **⚠️ Sage 路由端目前無 escalate 機制**（`DocAgentService.cs` 輸出只有 true/false）— Stage 43 子項 E 才會加下游處理。本 Stage 完成後若 Sage 觸發 escalate 行為，下游可能仍走既有 done/failed 路徑。本 Stage 先補 prompt 規則，Stage 43 自然涵蓋下游處理。
+
+### 靜態驗收結果
+
+- `⚠️ ESCALATE_NEEDED` marker 三檔（Cody / Vera / Petra）字面完全一致 ✅
+- 子項 C grep 命中：`ESCALATE_NEEDED` × 1（特殊規則段）、`Phase`/`未遷移`/`範圍嚴重` × 1 ✅
+- 子項 D grep 命中：`Server Circuit` × 3、`事件鏈` × 2、`onUndo` × 1、`不得降級` × 1 ✅
+- 子項 F grep 命中：`escalate` × 4、`品質下限` × 1、`PR 連結` × 2 ✅
+- 子項 G grep 命中：`ESCALATE_NEEDED` × 1、`自我檢查` × 1、`完成度` × 2 ✅
+
+### 不在本 Stage 範圍（留 Stage 43）
+
+- Sage 路由端 escalate 下游處理（子項 E）
+- Sage PR URL hardcode 的程式碼修正（待 Stage 43 確認是否已修或搭車）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-28 | 計劃書建立（Aria）— FF 三十二 prompt 補強類四子項（C / D / F / G）合一 Stage |
+| v1.1 | 2026-04-28 | 實作完成（Forge）— 四子項全寫入 CLAUDE_*.md，子項 C 採方案 A（特殊 escalate 段獨立），子項 F 揭露 Sage 路由端 escalate 待 Stage 43 |

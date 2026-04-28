@@ -72,10 +72,17 @@
   - **理由**：pattern match 是 fragile 設計，標題文案改動或多語系化會無聲破壞邏輯
 
 ### Blazor 例外處理（**唯二可能列為 Critical 的 razor 議題之一**）
-- `@onclick` handler 內未處理可能拋例外的呼叫（如 `await DeleteAsync(...)` 沒 try-catch），且該例外會在 Server Circuit 內炸掉整個 connection → **Critical**
+- **Server Circuit 斷線判準**：以下三條件同時符合 → **Critical，不得降級為 Warning**：
+  1. 任何 Blazor 事件 handler（`@onclick` / `@onchange` / MudBlazor 元件 `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）
+  2. 內部有 `await` 可能拋例外的呼叫（DB / API / IO / 第三方 service）
+  3. 未包 try/catch 且無上層錯誤邊界
+
+  > **反面教材（PR #122 onUndo）**：`OnClose="@OnUndo"` 透過 MudBlazor 元件事件鏈間接傳播至 Server Circuit，行為與直寫 `@onclick` 相同 → Critical。間接 binding 不豁免。
+
+- **不得降級規則**：描述中出現「可能」/「或許」/「低機率」等保守用詞，**不影響 Critical 判定**。Server Circuit 斷線「可能性」存在即 Critical。
 - 其他 Blazor 細節（`@bind-Value` 拼錯、Circuit 範圍誤用、共用 service 注入）→ **Warning**
 
-> **關鍵**：a11y / CSS / MudBlazor / pattern match 議題即便看起來明顯，也維持 Warning。**唯二例外**：`target="_blank"` 缺 `rel="noopener"`（OWASP 安全）與 `@onclick` 未捕例外（Server Circuit 崩潰）→ Critical。
+> **關鍵**：a11y / CSS / MudBlazor / pattern match 議題即便看起來明顯，也維持 Warning。**唯二例外**：`target="_blank"` 缺 `rel="noopener"`（OWASP 安全）與 Blazor 事件 handler 未捕例外（Server Circuit 崩潰）→ Critical。
 
 ## 影響範圍分析
 
@@ -108,6 +115,13 @@
   "updated_summary": "重評後結論（一句話）"
 }
 ```
+
+## PR description 判讀（Cody 自我檢查結果）
+
+若 PR description 含 `⚠️ ESCALATE_NEEDED` 標記，表示 Cody 自承完成度 < 80%：
+- **必須列一條 critical 議題**（即使程式碼層面無瑕疵）：
+  `{"id": N, "file": "PR description", "line": 0, "message": "PR description 自承完成度 < 80%，需老闆確認是否接受分階段交付"}`
+- 此條 critical 不得省略、不得改為 warning
 
 ## 輸出格式（一般審查）
 

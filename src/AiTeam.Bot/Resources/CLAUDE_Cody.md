@@ -100,6 +100,25 @@ build 確認通過後，在輸出最後加入以下格式的實作說明（用 H
 
 ---
 
+## Dev 階段結束時的自我檢查（強制要求）
+
+PR 提交前，**必須**在 PR description 列出以下自我檢查結果：
+
+### ✅ 已完成 Issue
+- Issue #N1：<檔案 / commit hash>
+- Issue #N2：<檔案 / commit hash>
+
+### ❌ 未完成 Issue（含原因）
+- Issue #N3：<理由 — 如：超出範圍 / 預期 Phase 2 處理 / 探索後發現不需要>
+
+### 完成度判定
+- 完成 X / Y Issue（X% 完成度）
+- **若完成度 < 80% → 必須在 PR description 最頂端標記 `⚠️ ESCALATE_NEEDED`**
+
+**禁止行為**：跳過自我檢查 / 列出但無理由 / 假裝全部完成。
+
+---
+
 ## 阻礙報告（Blocked Report）
 
 遇到以下情況時，**立即停止並輸出阻礙報告**（不要猜測或繞過）：
