@@ -335,21 +335,35 @@ Stage 42 探索揭露 Sage prompt 收 PR URL 是純文字 `PR 連結：{URL}` �
 | **風險代價** | **高**（動核心 Orchestrator 流程，bug 可能讓 TaskGroup 卡住或誤標完成） |
 | **範本可用度** | **中**（FixIteration / BossInteraction / QaFixRound / Skipped 全鏈路 mapping 機制都有，但組合方式新） |
 
-**Context 粗估**：
-- Raw 80-120K（多 service 對照 + Migration + Mock 4 場景 + Dashboard 多點 mapping）
-- × 1.5-1.6 倍率（跨層實作 + 多 Mock 驗收類）
-- = **130-190K**
-- Sonnet 200K 邊界緊（Stage 31 75% / Stage 34 80% 教訓 + Stage 42 ×1.89 反例提醒「估算容易低估」）
+### Context 精確估算（Stage 42 ×1.89 反例校準後新公式）
+
+> 2026-04-28 Christ 點破公式漏估「對話 turn 成本」+「開場固定成本低估」後，本 Stage 改用 6 項分解公式（詳見 workflow_aria 第二節 B）。
+
+| 項目 | 估算 |
+|---|---|
+| 開場固定成本（system + CLAUDE.md + memory + conventions：csharp / blazor / ef-core / mudblazor 至少要讀） | **~32K**（19K 基底 + 13K conventions） |
+| 工作 raw（Entities.cs + 5 service + Migration + Mock 4 場景 + Dashboard 多 mapping 點 read + edit） | ~80-120K |
+| Grep / Bash 工具輸出（grep `Status = "done"` / mapping 點 / Mock 場景 / docker logs / dotnet build & test） | ~10-15K |
+| **對話 turn 成本**（Plan Mode 4-8 turn + 閘門一可能 1-2 輪 + 實作期 build/test 5-10 turn + 結案 2-4 turn = 12-24 turn × ~5K） | **~35-45K** |
+| Edit 反覆對齊（5 service 跨檔對照 + 全鏈路 mapping 9+ 處對齊 + Mock 4 場景對齊既有風格） | ~20-30K |
+| 驗收期間 Mock 跑 + log 觀察 + 多輪修正 buffer | ~25K |
+| **總和** | **~202-267K** |
+
+→ **Sonnet 200K 完全不夠**（甚至 Sonnet 200K 拆 Session 都可能緊）
+
+→ **Opus 1M 200K 內負擔 20-27%**，仍是舒適區但要警覺（不能掉以輕心）
 
 **選 Opus 1M + medium 理由**：
-- Context 估 130-190K，**Sonnet 200K + high 雖可塞但邊界危險**（一旦驗收期間多輪修正吃 +25K buffer 直接破 200K）
-- Opus 1M 200K 內負擔約 13-19%，舒適區
+- 完整公式估 ~200-270K，**Sonnet 200K 不可能塞下**（不再是「邊界緊」是「絕對不夠」）
+- Opus 1M 200K 內負擔 20-27%，舒適但不揮霍
 - 三子項 escalate 機制共用 + 跨層流程，**Opus 推理品質有顯著加分**（Sonnet 跨多 service 設計判斷容易掉鏈）
 - 三子項彼此關聯（A 失敗 → escalate / B 失敗 → escalate / E 失敗 → escalate）值得一氣呵成，**不拆 Session**
 
 **替代方案**：
-- 若 Christ 偏好省成本 → **Sonnet 200K + high**（但要做好 80% 邊界吃緊心理準備，可能驗收期需拆 Session 補充修）
-- 拆 Session 方案：Session A = 子項 A（DevPlan 重產） / Session B = 子項 B + E + F 搭車（escalate 機制 + 新狀態 + Migration） — 但兩 Session 都要載入 escalate / BossInteraction context，重複成本不划算
+- **拆 Session 方案**（如果堅持用 Sonnet）：Session A = 子項 A + 共用 escalate 基礎建設（DevPlanRevision + BossInteraction 新 InteractionType + needs_intervention 新狀態 + Migration）/ Session B = 子項 B + E + F 搭車（套用 Session A 建好的基礎建設）— 兩 Session 各 ~120K，但 Session B 要載 Session A 產出的 schema/型別，重複成本約 30-40K，整體不划算
+- **Sonnet 200K + high**：**不推薦**（粗估 200K+ 必爆 context，多輪驗收後 compact 風險高）
+
+**Stage 42 校準提醒**：Stage 42 純 prompt 改寫實際 104K（Aria 原估 50-60K，×1.89）— 那次反例後校準公式新增「對話 turn 成本」項。本 Stage 跨層實作 + Mock 驗收 + 三子項討論密度高，turn 成本一定比 Stage 42 多。**估 200K+ 不誇張**。
 
 ---
 
@@ -381,3 +395,4 @@ Stage 42 探索揭露 Sage prompt 收 PR URL 是純文字 `PR 連結：{URL}` �
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-28 | 計劃書建立（Aria）— FF 三十二 Orchestrator 改動類三子項（A / B / E）+ Stage 42 子項 F 搭車合一 Stage |
+| v1.0.1 | 2026-04-28 | Model/Effort 段精確化（Stage 42 ×1.89 反例校準）— 改用 6 項公式分解（開場 32K + 工作 80-120K + Grep/Bash 10-15K + 對話 turn 35-45K + Edit 反覆 20-30K + 驗收 buffer 25K = 200-270K），Sonnet 200K 從「邊界緊」升級為「絕對不夠」，Opus 1M 推薦不變 |
