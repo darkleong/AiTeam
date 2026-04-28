@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.46
+> 版本：v7.47
 > 建立日期：2026-04-01
 > 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1256,15 +1256,83 @@ Trial_v4（Dashboard 錯誤處理 UX 打磨）首次完整三層品質迴圈閉�
 - CLAUDE_Sage.md 加判準：「若 DevPlan 為空 / 失敗訊息 / 顯著少於 ImplementationNote 預期內容 → 不寫歸檔，回 escalate」
 - PR URL 不要 hardcode 格式，從 `TaskGroup.DevPrUrl` 直接讀
 
+#### 子項 G：Cody 自我檢查 PR 範圍 vs DesignPlan（Trial_v4 第二維度盲點，🟡 中）
+
+**現況揭露**：Trial_v4 中 Cody 自認 Dev 階段「完成」（Status=done + 產出 PR），但客觀上只做 12 個 Issue 中的 1 個。**沒有任何 Agent 把「Cody PR 範圍 vs DesignPlan 12 Issue」做客觀對照檢查**。
+
+每個下游 Agent 都「各管一攤」（Vera 看程式碼瑕疵 / Petra 看 Vera 報告 / Quinn 跑測試 / Sage 寫文件），**沒人問「PR 是否完成 Plan 該做的全部？」**。
+
+子項 C/D/F 都是「下游被動發現」，缺**「Cody 主動自我檢查」這條主動機制**。
+
+**修法方向**（純 prompt + 下游 Vera/Petra 一條判讀規則）：
+
+CLAUDE_Cody.md 補入「Dev 階段結束時的自我檢查（強制要求）」段：
+
+```markdown
+## Dev 階段結束時的自我檢查（強制要求）
+
+PR 提交前，**必須**在 PR description 列出：
+
+### ✅ 已完成 Issue
+- Issue #N1：<檔案 / commit hash>
+- Issue #N2：<檔案 / commit hash>
+
+### ❌ 未完成 Issue（含原因）
+- Issue #N3：<理由 — 如：超出範圍 / 預期 Phase 2 處理 / 探索後發現不需要>
+
+### 完成度判定
+- 完成 X / Y Issue（X% 完成度）
+- **若 < 80% 完成度 → 必須在 PR description 標記 `⚠️ ESCALATE_NEEDED`**
+
+不允許「跳過自我檢查」/「列出但無理由」/「假裝全做」。
+```
+
+**下游配合**（Vera + Petra 加一條判讀規則）：
+- Vera review prompt 補：「若 PR description 含 `⚠️ ESCALATE_NEEDED` → 必標 Critical 議題」
+- Petra Warning→blocking 升級規則補：「PR description 含 `⚠️ ESCALATE_NEEDED` → 直接 escalate（不走 fix loop）」
+
+**這個機制 0 Orchestrator 改動**——純 prompt 補強。
+
 ### 規模 / 風險
 
-**規模**：M-L（六子項合計約 6-12 工作天）
+**規模**：M-L（七子項合計約 8-14 工作天）
 **風險**：中（每個子項獨立但都動 prompt 或 Orchestrator 流程，可能引發既有流程行為變化）
 
-**建議分解**：
-- Stage 42：子項 A + B + E（流程斷裂三大件，動 Orchestrator）
-- Stage 43：子項 C + D + F（prompt 補強三件，純 prompt 改寫）
-- 兩 Stage 完成後才開 Trial_v5
+### 子項分類與 Stage 排序建議
+
+子項按「動什麼」分為兩類：
+
+**Prompt 補強類（4 子項，輕量，動 CLAUDE_*.md + 重啟容器即生效）**：
+- 子項 C：CLAUDE_Petra.md 加範圍縮水升級規則
+- 子項 D：CLAUDE_Vera.md 強化 Server Circuit Critical 邊界
+- 子項 F：CLAUDE_Sage.md 加無實作 escalate 規則
+- 子項 G：CLAUDE_Cody.md 加 PR 自我檢查 + Vera/Petra 加 ESCALATE_NEEDED 判讀
+
+**Orchestrator 改動類（3 子項，重，動核心流程 + DB schema）**：
+- 子項 A：DevPlan Appeal accept 後 trigger 重新產出
+- 子項 B：Dev fix 失敗時中止 fix loop（不啟動 Reviewer）
+- 子項 E：QA 失敗判定為 TaskGroup 失敗（不進 Doc）
+
+**Stage 排序建議**：
+- **Stage 42**：Prompt 補強類 4 子項（C+D+F+G，性質一致 + 風險低 + 立刻見效）
+- **Stage 43**：Orchestrator 改動類 3 子項（A+B+E，動核心流程 + 風險高，建議與 FF 三十四 排序時評估是否合併）
+- **兩 Stage 完成後才開 Trial_v5**
+
+### 替代方案：Petra 升級為 Claude Code CLI 審核 Vera report（暫不採納）
+
+**Christ 2026-04-28 拍板採 Y（純 prompt 補強）路線**，原因：
+1. Bug #9 真實根因不是「Petra 看不到」（Vera Info 已明寫「Phase 1 only / 9 元件未遷移」），而是「Petra 不知道該擋」 → 改 prompt 比改機制有效
+2. 系統設計初衷：Vera 是查證者 / Petra 是路由者，分工避免重複工作
+3. 成本與速度 trade-off（Claude CLI 每輪 +$0.10-0.30 + 1-3 分鐘）
+
+**Christ 註記**：「**至少依目前的架構/設計/狀態**，的確是不需要的」——保留未來重評估的後門。
+
+**未來重評估觸發條件**：
+- Trial_v5/v6 跑完發現 prompt 補強仍擋不下範圍縮水
+- AiTeam 架構有重大變化（如多專案 / Petra 角色升級）
+- 「獨立第二意見」需求出現（不只看 Vera 結論）
+
+若觸發 → 立新 FF 三十六「Petra 審查層升級為 Claude Code CLI」獨立評估。
 
 ### 優先級
 
@@ -1404,6 +1472,172 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 
 ---
 
+## 三十五、自動拆任務機制（Petra 在 Design 階段 propose 拆 sub-task）
+
+> 狀態：⭐ **戰略級 FF** — 解 Trial_v4 揭露的「self-implement 範圍縮水」根因
+> 提出日期：2026-04-28（Trial_v4 結案後 Christ + Aria 深度討論）
+> 前置條件：**FF 三十二（完整七子項）+ FF 三十三 必先完成**
+
+### 背景
+
+Trial_v4 揭露：**Cody 對大需求一定縮水**。
+- 預期 12 個 Issue（1-2 週工程量）→ 實際做 1 個 Issue（41 行 Service / 5.5 分鐘）
+- 三層迴圈（Vera + Petra + Quinn）擋不下「PR 範圍嚴重不符計劃書」議題
+
+對照 real-world 團隊：大需求進來會被 PM 拆 epic → user stories（每個獨立 PR）→ 用 milestone / sprint 組織進度。
+
+**AiTeam 缺的不是「拆解能力」**（Rosa 已會拆 Issue）**，是「拆解後分多個獨立 task / 多個 PR」**。
+
+### 戰略意義
+
+**這可能是 AiTeam 從「玩具系統」升級到「真實開發團隊」的關鍵躍進**：
+- 解 Trial_v4 self-implement 範圍縮水根因
+- 對齊 real-world 團隊運作模式
+- 配合 FF 三十二 完整性閘門 → self-implement 真正可信
+
+### 設計方案：Design 階段 Petra propose 拆（B 階段攔截）
+
+**為什麼選 Petra（不選 Victoria）**：
+- Petra（PM 視角）= 看專案內 Issue 拆解 → 適合單專案內拆 task
+- Victoria（CEO 視角）= 看公司多專案全貌 → 適合跨專案拆 task（Phase 2 擴充）
+
+**為什麼選 Design 階段（不選 Kickoff 結束）**：
+- Kickoff 階段沒拆 Issue（Rosa 在 Design 階段才拆）
+- Petra 必須等看完 Rosa 拆出的精確 Issue 數量才能精準提拆 task
+- Design 階段 Petra 綜合整理時 = Issue 拆解 + 五人風險識別都已完成 → 拆 task 提案最精準
+
+**完整流程**：
+
+```
+Kickoff（5 人 × N 輪）→ 產出方向 / 決策 / 風險（無 Issue 拆解）
+  ↓
+Christ 按繼續
+  ↓
+Design 階段：
+  Petra 前置判斷需求 → Rosa 拆 Issue → Demi UI 評估
+  → Round 1 五人發言（Cody grep / Quinn 揭露結構陷阱）
+  → Petra 綜合整理時判斷：
+     - Issue 數 ≥ 閾值（如 8 個）or
+     - 跨多 P0/P1/P2 階段 or
+     - 預估改動行數 ≥ N 行
+  → 觸發拆 task 提案
+  ↓
+卡片 1：「設計規劃確認」（既有）
+  顯示：DesignPlan 全文
+  按鈕：[繼續] [修改] [停止] [重開會議]
+  ↓ 按 [繼續]
+卡片 2：「Petra 建議拆任務」（新增）
+  顯示：
+    Phase 1（基礎）：Issue 2 → 預估 X 分鐘
+    Phase 2（遷移）：Issue 3-9 → 預估 Y 分鐘
+    Phase 3（收尾）：Issue 10-12 → 預估 Z 分鐘
+  按鈕：
+    [採納 Petra 方案] → 自動建 N 個依賴 sub-task
+    [修改方案]      → 開文字輸入卡讓 Christ 改
+    [不拆繼續原樣]   → 退回單一 task 流程
+    [停止]          → 取消整個任務
+```
+
+若 Petra 判定不需拆（Issue < 閾值）→ 卡片 2 不出現，直接進 Dev_plan。
+
+### 設計細節（Christ + Aria 已拍板）
+
+#### 細節 1：兩段確認（Christ 採納 C）
+- 卡片 1（DesignPlan 確認）+ 卡片 2（拆 task 確認）分開
+- 老闆有完整資訊：先看設計品質，再看拆解策略
+
+#### 細節 2：sub-task 共享 Phase 1 Kickoff/Design（Christ 採納 B）
+- sub-task 不重跑 Kickoff/Design（成本省 ×N 倍）
+- 各自跑 Dev_plan + Petra + Dev + Reviewer + Petra + QA + Doc + PR
+- 共享 parent TaskGroup 的 Kickoff/Design 結論
+
+#### 細節 3：依賴鏈順序（Aria 推薦 (a) Sequential）
+- Phase 1 PR merged → Phase 2 啟動 → Phase 2 PR merged → Phase 3 啟動
+- 理由：Cody subprocess 一次只能跑一個 + Phase 2 通常依賴 Phase 1 產出
+- 平行 (Parallel) 留作未來進階
+
+#### 細節 4：sub-task PR 策略（Aria 推薦 (a) 各自獨立 PR）
+- `main` → `feature/phase1` → PR → merged → Phase 2 從 main rebase 出新 branch
+- 跟 AiTeam 既有「一 task 一 PR」設計對齊
+- Vera review 範圍清楚 / GitHub Issues link 乾淨
+
+#### 細節 5：epic 機制（Aria 推薦 (b) DB 內表達）
+- `task_groups` 加 `ParentGroupId` / `SplitFromGroupId` 欄位 + Migration
+- Dashboard UI 顯示 epic 進度卡（聚合 sub-task 進度）
+- 不依賴 GitHub Milestone（避免外部依賴）
+
+#### 細節 6：sub-task Dev_plan 失敗 → **鎖死前置條件**
+- FF 三十二完整七子項（含子項 G）必先完成
+- FF 三十三（Token 計費 CLI Agent 涵蓋）必先完成
+- 否則拆 N 個 sub-task → 任一個踩 Trial_v4 同樣 bug = 風險加總
+
+### 多專案場景擴充（Phase 2，未來真正多專案後做）
+
+**A 階段攔截：Victoria 跨專案拆**
+
+當 AiTeam 真的開始管多個專案時：
+
+```
+Christ 提需求：「AiTeam 跟 ClientApp 兩專案都加雙因素認證」
+  ↓
+Victoria（CEO 視角看公司）智慧分類時判斷：
+  「這需求跨 AiTeam + ClientApp 兩專案」
+  → 拆兩個 parent TaskGroup：
+    - Task A：AiTeam 加 2FA（指派 AiTeam 團隊）
+    - Task B：ClientApp 加 2FA（指派 ClientApp 團隊）
+  ↓
+各 parent TaskGroup 進入自己專案的 Kickoff/Design
+  → Petra 在 Design 階段可再決定要不要拆 sub-task（B 階段）
+```
+
+**等 AiTeam 真的支援多專案時才做這層**——目前 AiTeam 主要管自己的 repo，多專案是未來願景，不是當下需求。
+
+### 還未拍板的設計細節（Stage 規劃時討論）
+
+1. **拆 task 智慧度**：
+   - (a) LLM 判斷（Petra prompt 給判準）
+   - (b) 固定規則（Issue ≥ 8 → 自動拆）
+   - (c) 兩者並存（規則先過濾，LLM 細化拆法）
+   
+2. **失敗處理**：
+   - sub-task 失敗 → 後續 sub-task 不啟動還是獨立繼續？
+   - epic 整體狀態：partial done / pending / failed？
+
+3. **Mock 模式對應**：
+   - `/mock` 怎麼模擬「拆 task → N 個 sub-task pipeline」場景？
+   - 至少要驗證拆任務確認卡顯示 + 依賴鏈執行
+
+4. **Dashboard UI 設計**：
+   - 流程追蹤頁怎麼顯示「epic 進度卡」+ sub-task 進度？
+   - 跟 FF 三十四（流程暫停）整合：暫停 sub-task 還是整個 epic？
+
+### 規模 / 風險
+
+**規模**：**L**
+- 動 Orchestrator 核心（依賴鏈執行邏輯 + Petra 拆 task 提案）
+- DB schema migration（`task_groups` 加 `ParentGroupId` / `SplitFromGroupId`）
+- Dashboard UI 多處（兩段確認卡 + epic 進度 + sub-task 可視化）
+- Discord 互動（拆任務確認）
+- CLAUDE_Petra.md 拆 task 判準補強
+- Mock 模式對應
+- 跟 FF 三十二 / 三十三 / 三十四 全交互
+
+**風險**：**中-高**
+- 動核心流程改變既有行為
+- 跨多個既有 FF 互動（一處錯影響面廣）
+- Phase 2 多專案支援設計需另開研究
+
+### 優先級
+
+⭐ **戰略級 🔴 高** — 解 Trial_v4 self-implement 範圍縮水根因 + 對齊 real-world 團隊模式
+
+**前置條件鎖死**：
+- 必先 FF 三十二 完整七子項（**Stage 42 + 43**）
+- 必先 FF 三十三（**Stage 44 或與 32 並行**）
+- 然後才開 FF 三十五（**Stage 45+**）
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1538,3 +1772,4 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 | 2026-04-27 | v7.44：**FF 三十一 ✅ 完成** — Stage 41（v3.28.0）：建 `tests/AiTeam.Tests.Generated/` xUnit csproj（隔離 LLM 產出區，跨資料夾 Compile Include）+ AiTeam.slnx /tests/ folder + 清 3 類檔案層破損（markdown fence × 3 / 幻覺類別刪 / LLM 截斷修復）+ 連帶清除 repo 根目錄 stray AiTeam/（PR `1979f46` 歷史殘留 LLM 污染）+ MainLayout broken test 嚴格版刪除 + CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證 + JSON schema unverifiable_targets 語意分離）；dotnet test 127 Passed / 0 Failed；FF 三十一主體刪除整項移入已完成項目摘要；**「Vera 審查 + Petra 閘門 + Quinn 測試」三層品質保證迴圈閉環就緒**，Trial_v4 完整驗證環境前置條件達成 |
 | 2026-04-28 | v7.45：**Trial_v4 結案 + 新增 FF 三十二 / 三十三** — Trial_v4（Dashboard 錯誤處理 UX 打磨，PR #122 OPEN 未合併）首次完整三層迴圈閉環試驗、首次跨完整 pipeline 試驗、首次成本紀錄（$4.99 USD）；揭露 13 個 bug（5 個 🔴 嚴重）+ Self-implement 適用邊界（小範圍純技術改動 ✅ / 跨多檔架構級重構 🔴）；FF 二十七 補「v4 試驗結果」段（Top 1 🟡 / Top 2 🔴 / Top 3 🔴）；**新增 FF 三十二**（Self-implement 完整性閘門六子項：DevPlan 容錯 / fix loop 中止 / Petra 範圍縮水升級 / Vera Critical 邊界堅守 / QA 失敗判定 / Sage escalate）；**新增 FF 三十三**（Token 計費機制 CLI Agent 涵蓋，現 token_logs 只涵蓋 ~6% 成本）；戰略結論：三層迴圈在「程式碼層面瑕疵」生效，在「self-implement 範圍縮水」失效；未來架構級重構需求走正規 Stage（Aria 規劃 + Forge 實作），不交 Victoria self-implement；**FF 三十二完成前不開 Trial_v5** |
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
+| 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
