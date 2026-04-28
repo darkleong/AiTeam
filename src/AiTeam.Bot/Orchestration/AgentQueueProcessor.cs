@@ -36,10 +36,12 @@ public class AgentQueueProcessor(
     private readonly DiscordSettings _discord = discordSettings.Value;
 
     // Semaphore key → 可匹配的 AssignedAgent 名稱列表
-    // Dev_plan 和 Dev 共用 "Dev" semaphore，避免同時操作同一 workspace
+    // Dev_plan / Dev_fix 都和 Dev 共用 "Dev" semaphore，避免同時操作同一 workspace
+    // Stage 43：補 "Dev_fix"（Stage 24 QaCoordinationService.cs:159 走 code_bug 路由時用 WorkflowStep("Dev_fix")
+    // AssignedAgent="Dev_fix"，既有設計缺漏未涵蓋此 key 導致 dequeue 抓不到任務）
     private static readonly Dictionary<string, string[]> SemaphoreGroups = new()
     {
-        [AgentNames.Dev]          = [AgentNames.Dev, "Dev_plan"],
+        [AgentNames.Dev]          = [AgentNames.Dev, "Dev_plan", "Dev_fix"],
         [AgentNames.Reviewer]     = [AgentNames.Reviewer],
         [AgentNames.Qa]           = [AgentNames.Qa],
         [AgentNames.Doc]          = [AgentNames.Doc],
@@ -53,10 +55,12 @@ public class AgentQueueProcessor(
     private readonly Dictionary<string, SemaphoreSlim> _semaphores =
         SemaphoreGroups.Keys.ToDictionary(k => k, _ => new SemaphoreSlim(1, 1));
 
-    /// <summary>AssignedAgent → executor key（"Dev_plan" 映射到 "Dev"）。</summary>
+    /// <summary>AssignedAgent → executor key（"Dev_plan" / "Dev_fix" 都映射到 "Dev"）。
+    /// Stage 43：補 "Dev_fix"（既有缺漏，與 SemaphoreGroups 同步修）。</summary>
     private static string GetExecutorKey(string assignedAgent) => assignedAgent switch
     {
         "Dev_plan" => AgentNames.Dev,
+        "Dev_fix"  => AgentNames.Dev,
         _          => assignedAgent
     };
 
