@@ -695,7 +695,16 @@ public class DevAgentService(
 
                 var planContent = failPlan
                     ? "（計畫書產出失敗，請查看 log）"
-                    : "[MOCK] Cody Dev_plan 完成\n\n## 實作說明\n這是 Mock 模式產生的計畫書，已通過 IsDevPlanFailed 結構檢查。\n\n## 變更檔案\n- src/Mock.cs\n";
+                    : "[MOCK] Cody Dev_plan 模擬產出完成\n\n" +
+                      "## 實作說明\n" +
+                      "這是 Mock 模式產生的計畫書，用於 Stage 43 dev_plan_fail_retry 等場景驗收。" +
+                      "內容已通過 IsDevPlanFailed 結構檢查（含「## 實作說明」與「## 變更檔案」段落，總字數 > 100）。\n" +
+                      "本 mock plan 不對應任何真實實作，僅供流程驗收使用。\n\n" +
+                      "## 變更檔案\n" +
+                      "- src/Mock.cs（模擬實作目標檔案）\n" +
+                      "- tests/Mock/MockTest.cs（模擬測試檔）\n\n" +
+                      "## 預期影響\n" +
+                      "純 Mock 模式產出，不會影響實際 codebase。\n";
 
                 AddLog(task, $"[MOCK] Cody Dev_plan 模擬產出（{(failPlan ? "失敗" : "成功")}）", "running");
                 await taskRepository.SaveAsync(cancellationToken);
