@@ -51,6 +51,11 @@
                 <MudSelectItem Value="@("fail_qa")">❌ 失敗測試 — QA 失敗</MudSelectItem>
                 <MudSelectItem Value="@("fail_dev_plan")">❌ 失敗測試 — Dev_plan Appeal 失敗</MudSelectItem>
                 <MudSelectItem Value="@("review_skipped")">⏭️ 略過驗收 — Vera 略過（無可審檔案）</MudSelectItem>
+                @* Stage 43：FF 三十二 Orchestrator 行為層 4 場景 *@
+                <MudSelectItem Value="@("dev_plan_fail_retry")">🔄 Stage43 — DevPlan 重產成功（第 1 次失敗 → 第 2 次成功）</MudSelectItem>
+                <MudSelectItem Value="@("dev_plan_fail_escalate")">⚠️ Stage43 — DevPlan 重產上限（連 2 次失敗 → escalate）</MudSelectItem>
+                <MudSelectItem Value="@("dev_failed_intervention")">⚠️ Stage43 — Dev 失敗中止（needs_intervention）</MudSelectItem>
+                <MudSelectItem Value="@("qa_failed_fix_then_intervention")">⚠️ Stage43 — QA fix loop 上限（needs_intervention）</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">

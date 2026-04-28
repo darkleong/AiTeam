@@ -58,7 +58,10 @@ public class DashboardBotService(
     /// <summary>
     /// Stage 32：呼叫 /internal/mock/scenario，觸發 Mock 情境（fire-and-forget）。
     /// scenario 對應 Discord /mock workflow 選項（new_feature / bug_fix / tech_improvement /
-    /// new_feature_with_proposal / fail_review / fail_qa / fail_dev_plan）。
+    /// new_feature_with_proposal / fail_review / fail_qa / fail_dev_plan / review_skipped /
+    /// dev_plan_fail_retry / dev_plan_fail_escalate / dev_failed_intervention /
+    /// qa_failed_fix_then_intervention）— Stage 39 / 43 擴充。
+    /// 字串純透傳到 Bot /internal/mock/scenario，由 MockScenarioService 處理；新增場景無需改動此 Service。
     /// </summary>
     public async Task<bool> TriggerMockScenarioAsync(
         string scenario, string? title, string? project, CancellationToken cancellationToken = default)

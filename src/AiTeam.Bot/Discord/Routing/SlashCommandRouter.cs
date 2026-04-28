@@ -111,7 +111,12 @@ public class SlashCommandRouter(
                     .AddChoice("【失敗測試】Review Appeal（Vera 拒絕 → Cody 反駁）", "fail_review")
                     .AddChoice("【失敗測試】QA 失敗（Quinn 失敗 → Petra 路由）", "fail_qa")
                     .AddChoice("【失敗測試】Dev_plan Appeal（Petra 拒絕 → Cody 反駁）", "fail_dev_plan")
-                    .AddChoice("【略過驗收】Vera 略過（無可審檔案 → skipped）", "review_skipped"))
+                    .AddChoice("【略過驗收】Vera 略過（無可審檔案 → skipped）", "review_skipped")
+                    // Stage 43：FF 三十二 Orchestrator 行為層 4 場景
+                    .AddChoice("【失敗測試/Stage43】DevPlan 重產成功（第 1 次失敗 → accept → 第 2 次成功）", "dev_plan_fail_retry")
+                    .AddChoice("【失敗測試/Stage43】DevPlan 重產上限（連 2 次失敗 → escalate）", "dev_plan_fail_escalate")
+                    .AddChoice("【失敗測試/Stage43】Dev 失敗中止（needs_intervention）", "dev_failed_intervention")
+                    .AddChoice("【失敗測試/Stage43】QA fix loop 上限（連 N 輪失敗 → needs_intervention）", "qa_failed_fix_then_intervention"))
                 .AddOption("title", ApplicationCommandOptionType.String, "（選用）模擬任務標題", isRequired: false)
                 .Build(),
         };
