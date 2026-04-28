@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.45
+> 版本：v7.46
 > 建立日期：2026-04-01
 > 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1329,6 +1329,81 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 
 ---
 
+## 三十四、TaskGroup 流程暫停機制
+
+> 狀態：🟡 中 — Trial_v4 觀察期間 Christ 提出
+> 提出日期：2026-04-28（Trial_v4 進行中觀察 Kickoff 後等 8h 才繼續、流程進到一半發現走偏無法暫停等場景）
+
+### 背景
+
+目前 AiTeam 已有兩種暫停機制，但**缺 TaskGroup 層級**：
+
+| 層級 | 已存在 | 場景 |
+|------|------|------|
+| **Agent 層級 pause**（Stage 27b）| ✅ `/pause Cody` / Dashboard pause/resume 按鈕 | 暫停 Cody 整個 Agent（不接新任務）|
+| **全域緊急停止**（Stage 33）| ✅ 全部暫停 / 全部恢復 | 一鍵全停 |
+| **TaskGroup 層級 pause** | ❌ **目前沒有** | 暫停**某個任務的流程**（不影響其他任務）|
+
+**真實使用場景**（Trial_v4 觀察）：
+1. **跨階段間暫停**：Kickoff 結束後等老闆按繼續 8 小時，期間如果想插入「讓系統暫停別動」（例如下班 / 想等明天再繼續）→ 目前無此選項
+2. **流程走偏的即時干預**：看到 Cody Dev 階段邊跑邊發現走偏 → 立即暫停（vs 全 stop / vs 等跑完再失敗）
+3. **等外部條件**：流程跑到一半發現需要等什麼（例如想等 Christ 看完文件才繼續）→ 暫停而非取消
+
+### 設計層面要考慮的三個點（Aria 2026-04-28 初步提出）
+
+#### 1. 暫停粒度
+
+候選方案：
+- **A. TaskGroup 級別**：整個任務的流程都暫停（最粗）—— UI 簡單，但若任務跑到 Doc 階段才想暫停 Doc 不影響前面已完成階段，難以區分
+- **B. Stage 階段級別**：暫停「下個階段啟動」（卡在當前階段間）—— 最自然，符合 Trial_v4 觀察的「跨階段間暫停」場景
+- **C. Task 級別**：暫停某個進行中的 Task（例：暫停當前 Reviewer 跑到一半的 task）—— 最細，但 Cody 已 fork subprocess 可能無法中途乾淨暫停
+
+**Aria 初判**：B 是 sweet spot——粒度清楚 + 符合大多場景 + 實作可控（在 Orchestrator 階段轉換點檢查 pause flag）。C 留作 Phase 2 進階功能。
+
+#### 2. 暫停動作
+
+候選機制：
+- **a. 阻擋下一階段啟動**：當前 task 跑完才生效（passive）—— 安全但有延遲
+- **b. Kill 當前 running task**：立刻終止 Cody subprocess（active）—— 快但有副作用（subprocess kill 可能 leak / 已寫一半 commit / partial PR push）
+- **c. 兩者皆可（按鈕區分）**：「暫停在當前階段結束後」+「立即取消當前 + 暫停」
+
+**Aria 初判**：先做 a（被動暫停），c 留作後續評估。理由：a 簡單可靠，b 風險高（Stage 14 雖然有 cancel kill 機制但用在「取消任務」場景，不是「暫停後恢復」場景）。
+
+#### 3. 恢復機制（從哪個 checkpoint 繼續）
+
+關鍵問題：
+- 暫停在 Kickoff 結束 → 恢復：直接進 Design ✅
+- 暫停在 Dev 階段（被動）→ Dev 跑完後等待 → 恢復：進 Reviewer ✅
+- 暫停在 Dev 階段（主動 kill）→ 部分 commit / partial PR → 恢復：**從哪繼續？**重跑 Dev？接受半成品繼續？這個 case 是難題
+
+**Aria 初判**：搭配上面 #2 a 機制（被動暫停）→ 恢復機制簡單（從下個階段繼續）。如果做 b（主動 kill），需要設計「rewind to last checkpoint」邏輯（複雜度高）。
+
+### 與既有機制的關係
+
+- **Stage 27b Agent pause**：用來暫停 Agent 不接新任務，不影響當前在跑的 task。本 FF 的「TaskGroup pause」性質不同，是**暫停某個任務流程的進展**。兩者可並存：Cody pause 中 + TaskGroup A 暫停 + TaskGroup B 也暫停。
+- **Stage 33 緊急停止**：全域 emergency stop。本 FF 是更精準的單任務 pause。
+- **Crash Recovery（Stage 31/37）**：Bot 重啟後恢復被中斷的 orchestration。**暫停機制要與 Crash Recovery 對齊**——pause 狀態不該被誤認為 stuck 而 auto-recover。
+
+### 規模 / 風險
+
+**規模**：M-L
+- 動 Orchestrator 流程（在階段轉換點檢查 pause flag）
+- AgentQueueProcessor 對 paused TaskGroup 不消費下一階段
+- DB schema：`task_groups` 加 `IsPaused` / `PausedAt` / `PausedBy` 欄位 + Migration
+- Dashboard UI：流程追蹤頁 + Drawer 加暫停 / 恢復按鈕
+- Crash Recovery 邏輯要排除 paused TaskGroup
+
+**風險**：中
+- 動 Orchestrator 核心流程容易引發既有行為變化
+- 跨 Crash Recovery / 等待類互動（BossInteraction）/ Appeal flow 多處交互
+- 主動 kill（如果做）對 Cody subprocess 影響需充分測試
+
+### 優先級
+
+🟡 中 — Trial_v4 揭露的真實 UX 痛點（等 8h 期間想暫停無選項），但**非阻擋現有功能**。建議與 FF 三十二 / 三十三 排序時評估，三選二 / 三選三的決策由 Christ 拍板。
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1462,3 +1537,4 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 | 2026-04-27 | v7.43：**新增 FF 三十一**（tests/Generated/ 編譯與執行修復）— 立案來自 Stage 40 Forge 結案踩坑揭露：`tests/Generated/` 7 檔（含 Quinn Trial_v3 寫的 Playwright + xUnit）皆無 csproj、`find tests -name "*.csproj"` 0 hits；戰略定位「Quinn 測試層」是品質保證迴圈第三層（補上 Vera/Petra 兩層之後缺的塊）；修法：建 csproj + xUnit/Playwright runner config + 修積累 type/namespace 不相容 + 整合 `AiTeam.slnx`；規模 S-M、🟡 中優先；**建議 Stage 41 處理**作為 Trial_v4 真正完整驗證環境的前置條件 |
 | 2026-04-27 | v7.44：**FF 三十一 ✅ 完成** — Stage 41（v3.28.0）：建 `tests/AiTeam.Tests.Generated/` xUnit csproj（隔離 LLM 產出區，跨資料夾 Compile Include）+ AiTeam.slnx /tests/ folder + 清 3 類檔案層破損（markdown fence × 3 / 幻覺類別刪 / LLM 截斷修復）+ 連帶清除 repo 根目錄 stray AiTeam/（PR `1979f46` 歷史殘留 LLM 污染）+ MainLayout broken test 嚴格版刪除 + CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證 + JSON schema unverifiable_targets 語意分離）；dotnet test 127 Passed / 0 Failed；FF 三十一主體刪除整項移入已完成項目摘要；**「Vera 審查 + Petra 閘門 + Quinn 測試」三層品質保證迴圈閉環就緒**，Trial_v4 完整驗證環境前置條件達成 |
 | 2026-04-28 | v7.45：**Trial_v4 結案 + 新增 FF 三十二 / 三十三** — Trial_v4（Dashboard 錯誤處理 UX 打磨，PR #122 OPEN 未合併）首次完整三層迴圈閉環試驗、首次跨完整 pipeline 試驗、首次成本紀錄（$4.99 USD）；揭露 13 個 bug（5 個 🔴 嚴重）+ Self-implement 適用邊界（小範圍純技術改動 ✅ / 跨多檔架構級重構 🔴）；FF 二十七 補「v4 試驗結果」段（Top 1 🟡 / Top 2 🔴 / Top 3 🔴）；**新增 FF 三十二**（Self-implement 完整性閘門六子項：DevPlan 容錯 / fix loop 中止 / Petra 範圍縮水升級 / Vera Critical 邊界堅守 / QA 失敗判定 / Sage escalate）；**新增 FF 三十三**（Token 計費機制 CLI Agent 涵蓋，現 token_logs 只涵蓋 ~6% 成本）；戰略結論：三層迴圈在「程式碼層面瑕疵」生效，在「self-implement 範圍縮水」失效；未來架構級重構需求走正規 Stage（Aria 規劃 + Forge 實作），不交 Victoria self-implement；**FF 三十二完成前不開 Trial_v5** |
+| 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
