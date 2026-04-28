@@ -125,7 +125,8 @@ public partial class PipelineList : IAsyncDisposable
     /// </summary>
     private void OnGroupStatusChangedAsync(string newStatus)
     {
-        if (newStatus is not ("done" or "failed" or "cancelled" or "skipped")) return;
+        // Stage 43：needs_intervention 也算終態（task 階段已停，等待 Christ 介入決定）
+        if (newStatus is not ("done" or "failed" or "cancelled" or "skipped" or "needs_intervention")) return;
 
         _ = Task.Run(async () =>
         {

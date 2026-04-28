@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Configuration;
@@ -13,6 +14,7 @@ using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -235,14 +237,20 @@ public class TaskGroupService(
             return;
         }
 
-        // ── Dev 初次失敗 → 通知老闆介入 ──
-        if (completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase) && !result.Success)
+        // ── Stage 43-B：Dev / Dev_fix 失敗 → 中止 fix loop + needs_intervention ──
+        // 既有 line 239 只比對 "Dev"，漏 "Dev_fix"（AgentQueueProcessor.cs:256 傳 task.WorkflowAgentKey
+        // 在 fix loop 時為 "Dev_fix"）。本 Stage 涵蓋兩者，但排除 "Dev_plan"（由 AppealOrchestrationService 處理）。
+        if ((completedAgent.Equals("Dev",     StringComparison.OrdinalIgnoreCase) ||
+             completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase))
+            && !result.Success)
         {
-            logger.LogError("Dev Agent 執行失敗，停止工作流程：Group={Id}，原因：{Summary}",
-                group.Id, result.Summary);
-            taskRepo.UpdateGroupStatus(group, "failed");
+            var isFixLoop = completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase);
+            logger.LogError("Dev{Phase} 執行失敗，停止工作流程：Group={Id}，原因：{Summary}",
+                isFixLoop ? "_fix" : " 初次", group.Id, result.Summary);
+            taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+            group.InterventionReason = $"Dev {(isFixLoop ? "fix" : "初次")} 失敗：{result.Summary}";
             await taskRepo.SaveAsync(cancellationToken);
-            await NotifyBossInterventionAsync(group, cancellationToken);
+            await NotifyBossDevFailedInterventionAsync(group, isFixLoop, result.Summary, cancellationToken);
             return;
         }
 
@@ -280,13 +288,18 @@ public class TaskGroupService(
                 break;
 
             case NextAction.NotifyBossMerge:
-                taskRepo.UpdateGroupStatus(group, "done");
-                await taskRepo.SaveAsync(cancellationToken);
-                await NotifyBossMergeAsync(group, cancellationToken);
+                // Stage 43-E：透過守門 method 統一 mark done（檢查所有 task 無 failed/needs_intervention）
+                await MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
+                if (group.Status == TaskStatus.Done)
+                    await NotifyBossMergeAsync(group, cancellationToken);
+                else
+                    await NotifyBossInterventionAsync(group, cancellationToken);
                 break;
 
             case NextAction.NotifyBossIntervention:
-                taskRepo.UpdateGroupStatus(group, "failed");
+                // Stage 43：fix loop 超限 = 介入後可恢復 → needs_intervention（與 failed 語意分離）
+                taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                group.InterventionReason ??= $"Vera fix loop 超 {group.FixIteration} 次仍有問題";
                 await taskRepo.SaveAsync(cancellationToken);
                 await NotifyBossInterventionAsync(group, cancellationToken);
                 break;
@@ -459,6 +472,81 @@ public class TaskGroupService(
             taskGroupId: group.Id);
     }
 
+    /// <summary>
+    /// Stage 43-E：統一 mark done 守門。檢查 group 下所有 TaskItem，若有任何 failed/needs_intervention →
+    /// group 不 mark done，改 mark needs_intervention（呼應 Trial_v4 Bug #11，避免分散判定漏壞 task）。
+    ///
+    /// 取代分散在 4 處的 `taskRepo.UpdateGroupStatus(group, "done")`：
+    ///   - TaskGroupService.HandleAgentCompletedAsync NotifyBossMerge
+    ///   - QaCoordinationService passed → done
+    ///   - QaCoordinationService no_applicable_tests + approve + Merge → done
+    ///   - QaCoordinationService env_or_test_issue + Merge → done
+    /// </summary>
+    public async Task MarkGroupDoneOrInterventionAsync(
+        TaskGroup group, TaskRepository taskRepo, CancellationToken ct)
+    {
+        await taskRepo.SaveAsync(ct);
+
+        // 重抓 group 含 Tasks 確保 Tasks 集合最新（其他 scope 可能已寫入新 task）
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var fresh = await db.TaskGroups
+            .Include(g => g.Tasks)
+            .FirstOrDefaultAsync(g => g.Id == group.Id, ct);
+
+        var tasks = fresh?.Tasks ?? group.Tasks;
+        var anyBad = tasks.Any(t => t.Status is "failed" or "needs_intervention");
+
+        if (anyBad)
+        {
+            taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+            group.InterventionReason ??= "存在未處理的 failed / needs_intervention task";
+            logger.LogWarning("MarkGroupDoneOrIntervention：group {Id} 有 failed/needs_intervention task → needs_intervention",
+                group.Id);
+        }
+        else
+        {
+            taskRepo.UpdateGroupStatus(group, TaskStatus.Done);
+        }
+        await taskRepo.SaveAsync(ct);
+    }
+
+    /// <summary>
+    /// Stage 43-B：Dev / Dev_fix 失敗 → 中止 fix loop，通知老闆介入。
+    /// 與 NotifyBossInterventionAsync（fix loop 超限走 intervention type）區分用 dev_failed_intervention 細類。
+    /// </summary>
+    public async Task NotifyBossDevFailedInterventionAsync(
+        TaskGroup group, bool isFixLoop, string failSummary, CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        var phaseLabel = isFixLoop ? "Dev_fix" : "Dev";
+        await ceoChannel.SendMessageAsync(
+            $"⚠️ **{group.Title}** — {phaseLabel} 階段失敗，已中止流程。\n" +
+            $"原因：{(failSummary.Length > 300 ? failSummary[..300] + "..." : failSummary)}\n" +
+            $"PR：{group.DevPrUrl ?? "（無）"}");
+
+        logger.LogWarning("TaskGroup {Id} {Phase} failed，中止 fix loop（Reason={R}）",
+            group.Id, phaseLabel, failSummary);
+
+        _ = interactionService.CreateInteractionAsync(
+            "dev_failed_intervention",
+            title:                $"{phaseLabel} 失敗：{group.Title}",
+            description:          $"{phaseLabel} 階段失敗，已中止流程，需要您決定後續處理。原因：{(failSummary.Length > 500 ? failSummary[..500] + "..." : failSummary)}",
+            project:              group.Project,
+            agentName:            AgentNames.Dev,
+            availableActionsJson: InteractionService.DevFailedInterventionActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString(),
+                phase     = phaseLabel,
+                isFixLoop
+            }),
+            taskGroupId: group.Id);
+    }
+
     public async Task NotifyBossInterventionAsync(TaskGroup group, CancellationToken cancellationToken)
     {
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
@@ -562,12 +650,167 @@ public class TaskGroupService(
             }
 
             case "devplan_escalate":
+            case "dev_plan_unable":
+                // Stage 43-A：dev_plan_unable 重用 devplan_escalate 路由（按鈕行為相同）
                 if (contextJson is not null)
                     await appealOrchestration.HandleDevPlanEscalationAsync(contextJson, action, ct);
                 break;
 
+            case "dev_failed_intervention":
+                if (contextJson is not null)
+                    await HandleDevFailedInterventionAsync(contextJson, action, ct);
+                break;
+
+            case "qa_failed_intervention":
+                if (contextJson is not null)
+                    await HandleQaFailedInterventionAsync(contextJson, action, ct);
+                break;
+
+            case "sage_escalate":
+                if (contextJson is not null)
+                    await HandleSageEscalateAsync(contextJson, action, ct);
+                break;
+
             default:
                 logger.LogInformation("InteractionProcessor：無需處理的互動類型（{Type}）", interactionType);
+                break;
+        }
+    }
+
+    // ============================================================
+    //  Stage 43：4 個新 BossInteraction type 的回覆分派
+    // ============================================================
+
+    /// <summary>Stage 43-B：Dev / Dev_fix failed intervention 路由（skip / retry / abort）。</summary>
+    private async Task HandleDevFailedInterventionAsync(string contextJson, string action, CancellationToken ct)
+    {
+        using var doc  = JsonDocument.Parse(contextJson);
+        if (!doc.RootElement.TryGetProperty("groupId", out var g)
+            || !Guid.TryParse(g.GetString(), out var groupId))
+            return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group    = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null) return;
+
+        switch (action)
+        {
+            case "dev_intervention_skip":
+                // 略過進下一階段 → fire Reviewer
+                logger.LogInformation("Dev failed 介入：略過進 Reviewer（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "running");
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Reviewer)], ct);
+                break;
+
+            case "dev_intervention_retry":
+                // 重啟 Dev
+                logger.LogInformation("Dev failed 介入：重啟 Dev（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "running");
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], ct);
+                break;
+
+            case "dev_intervention_abort":
+                // 放棄任務
+                logger.LogInformation("Dev failed 介入：放棄任務（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(ct);
+                break;
+
+            default:
+                logger.LogWarning("Unknown dev_failed_intervention action: {A}", action);
+                break;
+        }
+    }
+
+    /// <summary>Stage 43-E：QA failed intervention 路由（continue / skip / abort）。</summary>
+    private async Task HandleQaFailedInterventionAsync(string contextJson, string action, CancellationToken ct)
+    {
+        using var doc  = JsonDocument.Parse(contextJson);
+        if (!doc.RootElement.TryGetProperty("groupId", out var g)
+            || !Guid.TryParse(g.GetString(), out var groupId))
+            return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group    = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null) return;
+
+        switch (action)
+        {
+            case "qa_intervention_continue":
+                // 再試一輪 QA
+                logger.LogInformation("QA failed 介入：再試一輪 QA（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "running");
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Qa)], ct);
+                break;
+
+            case "qa_intervention_skip":
+                // 略過進 Doc
+                logger.LogInformation("QA failed 介入：略過進 Doc（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "running");
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Doc)], ct);
+                break;
+
+            case "qa_intervention_abort":
+                logger.LogInformation("QA failed 介入：放棄任務（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "failed");
+                await taskRepo.SaveAsync(ct);
+                break;
+
+            default:
+                logger.LogWarning("Unknown qa_failed_intervention action: {A}", action);
+                break;
+        }
+    }
+
+    /// <summary>Stage 43-F：Sage escalate 路由（retry / skip / abort）。</summary>
+    private async Task HandleSageEscalateAsync(string contextJson, string action, CancellationToken ct)
+    {
+        using var doc  = JsonDocument.Parse(contextJson);
+        if (!doc.RootElement.TryGetProperty("groupId", out var g)
+            || !Guid.TryParse(g.GetString(), out var groupId))
+            return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group    = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null) return;
+
+        switch (action)
+        {
+            case "sage_retry":
+                // 重跑 Doc 階段
+                logger.LogInformation("Sage escalate：重跑 Doc（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "running");
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await FireStepsAsync(group, [new WorkflowStep(AgentNames.Doc)], ct);
+                break;
+
+            case "sage_skip":
+                // 略過歸檔，標完成（透過守門 method 確認）
+                logger.LogInformation("Sage escalate：略過歸檔標完成（Group={Id}）", groupId);
+                group.InterventionReason = null;
+                await taskRepo.SaveAsync(ct);
+                await MarkGroupDoneOrInterventionAsync(group, taskRepo, ct);
+                break;
+
+            case "sage_abort":
+                logger.LogInformation("Sage escalate：保持 needs_intervention（Group={Id}）", groupId);
+                // 保持 needs_intervention 狀態（不變）
+                break;
+
+            default:
+                logger.LogWarning("Unknown sage_escalate action: {A}", action);
                 break;
         }
     }

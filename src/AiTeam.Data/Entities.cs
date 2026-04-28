@@ -53,7 +53,12 @@ public class TaskGroup
     /// <summary>Stage 13：專案 FK（對應 projects.id），舊資料為 null。</summary>
     public Guid? ProjectId { get; set; }
     public Project? ProjectRef { get; set; }
-    public string Status { get; set; } = "pending"; // pending / running / done / failed
+    public string Status { get; set; } = "pending"; // pending / running / done / failed / needs_intervention
+    // Stage 43：failed 與 needs_intervention 語意分離。
+    //   failed              = 明確失敗已不可挽救（如 Petra 終評不通過、Vera Review Appeal 無共識、Dev Blocker）
+    //   needs_intervention  = Christ 介入後可恢復（DevPlan 重產上限 / Dev fix failed / QA fix loop 上限 / Sage escalate）
+    /// <summary>Stage 43：需介入時的原因摘要（如「Dev fix failed: Token 守門擋下」/「QA 修復連 3 輪失敗」）。null = 無介入。</summary>
+    public string? InterventionReason { get; set; }
     public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
     public string? IssueUrls { get; set; }   // JSONB string[]
     public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md（舊欄位，保留相容，新資料不再使用）
@@ -63,7 +68,9 @@ public class TaskGroup
     public int FixIteration { get; set; } = 0; // 防止無限 Review loop，超過 3 次升級給老闆
     /// <summary>Stage 16：Cody 產出的實作計畫書全文（Petra 審核通過後帶給 Dev coding 用）。</summary>
     public string? DevPlan { get; set; }
-    /// <summary>Stage 16：Dev_plan 修正次數（獨立於 FixIteration，避免與 Vera fix loop 互相干擾）。</summary>
+    /// <summary>Stage 16：Dev_plan 修正次數（獨立於 FixIteration，避免與 Vera fix loop 互相干擾）。
+    /// Stage 43：用於 DevPlan 重產次數計數（accept 後 plan 仍失敗 → 重新呼叫 Cody Dev_plan agent），上限 2 次。
+    /// 與 DevPlanAppealRoundA（Cody-Petra 對話迴圈計數）獨立不互相干擾。</summary>
     public int DevPlanRevision { get; set; } = 0;
     /// <summary>Stage 23：Cody 產出的結構化實作說明（Vera 審查與 QA 測試參考）。</summary>
     public string? ImplementationNote { get; set; }

@@ -47,6 +47,29 @@ public class QaAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 43-E：qa_fix_loop_fail 情境 — 持續回 failed 報告，讓 Petra 走 code_bug 路由 + QaFixRound 累計
+            //   不切換 FailScenario（持續失敗直到 QaFixRound >= max 由 QaCoordinationService 觸發 escalate）
+            if (MockClaudeCodeService.FailScenario == "qa_fix_loop_fail")
+            {
+                logger.LogInformation("[MockMode/QaFixLoop] Quinn 持續回失敗報告（QaFixRound 累計觸發 escalate）");
+                AddLog(task, "[MOCK-FAIL] Quinn 模擬 QA 連敗中...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Title);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                AddLog(task, "[MOCK-FAIL] Quinn 持續失敗（fix loop）", "failed");
+                taskRepository.UpdateStatus(task, "failed");
+                await taskRepository.SaveAsync(cancellationToken);
+                var loopFailReport = new QaReport
+                {
+                    Status      = "failed",
+                    PassedTests = [],
+                    FailedTests = ["[MOCK-FAIL] QaFixLoop::Persistent"],
+                    Summary     = "[MOCK-FAIL] QA fix loop 持續失敗（驗收 needs_intervention 觸發點）"
+                };
+                return new AgentExecutionResult(true, "[MOCK-FAIL] QA fix loop 持續失敗",
+                    TestReport: JsonSerializer.Serialize(loopFailReport, JsonOptions));
+            }
+
             // 強制失敗情境：回傳 QA 失敗報告，觸發 Petra 判斷路由
             if (MockClaudeCodeService.FailScenario == "qa_failure")
             {

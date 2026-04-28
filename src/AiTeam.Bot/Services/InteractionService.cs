@@ -39,6 +39,22 @@ public class InteractionService(
     public const string DevPlanEscalateActionsJson =
         """[{"id":"devplan_skip","label":"跳過審閱，直接開發","color":"warning"},{"id":"devplan_abort","label":"放棄任務","color":"error"}]""";
 
+    /// <summary>Stage 43-A：DevPlan 重產上限 — Cody 連續 N 次無法產出可用計畫書，需老闆決策。</summary>
+    public const string DevPlanUnableActionsJson =
+        """[{"id":"devplan_unable_skip","label":"跳過，直接開發","color":"warning"},{"id":"devplan_unable_abort","label":"放棄任務","color":"error"}]""";
+
+    /// <summary>Stage 43-B：Dev / Dev_fix 失敗 — 中止 fix loop，需老闆介入。</summary>
+    public const string DevFailedInterventionActionsJson =
+        """[{"id":"dev_intervention_skip","label":"略過進下一階段","color":"warning"},{"id":"dev_intervention_retry","label":"重啟 Dev","color":"info"},{"id":"dev_intervention_abort","label":"放棄任務","color":"error"}]""";
+
+    /// <summary>Stage 43-E：QA 連續失敗上限 — 需人工介入。</summary>
+    public const string QaFailedInterventionActionsJson =
+        """[{"id":"qa_intervention_continue","label":"再試一輪","color":"warning"},{"id":"qa_intervention_skip","label":"略過 QA 進下一階段","color":"info"},{"id":"qa_intervention_abort","label":"放棄任務","color":"error"}]""";
+
+    /// <summary>Stage 43-F：Sage escalate — 文件無法歸檔，需老闆決策。</summary>
+    public const string SageEscalateActionsJson =
+        """[{"id":"sage_retry","label":"重跑歸檔","color":"warning"},{"id":"sage_skip","label":"略過歸檔，標完成","color":"info"},{"id":"sage_abort","label":"標需介入","color":"error"}]""";
+
     public const string EmptyActionsJson = "[]";
 
     /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>

@@ -1,9 +1,12 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Microsoft.Extensions.Configuration;
 
@@ -20,6 +23,7 @@ public class DocAgentService(
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
     AppSettingsService appSettings,
+    InteractionService interactionService,
     IConfiguration configuration,
     ILogger<DocAgentService> logger) : IAgentExecutor
 {
@@ -74,6 +78,11 @@ public class DocAgentService(
             // 從 DB 讀取 Cody 實作說明、Vera 審查摘要與 Quinn 測試報告（透過 GroupId）
             var (implementationNote, lastReviewBody, testReport) = await GetGroupContextAsync(task, cancellationToken);
 
+            // Stage 43-F：較早取 group 以拿 DevPrUrl 給 Sage prompt（避免 hardcode 拼湊路徑）
+            TaskGroup? group = null;
+            if (task.GroupId is not null)
+                group = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
+
             // Clone PR branch（write mode，Sage 會直接寫入檔案）
             writePath = gitHubService.CloneOrPull(owner, repo, $"saged-{task.Id:N}"[..8]);
             gitHubService.CreateAndCheckoutBranch(writePath, headRef);
@@ -81,24 +90,37 @@ public class DocAgentService(
             await taskRepository.SaveAsync(cancellationToken);
 
             // 執行 Claude Code（write mode）讓 Sage 自行寫入 CHANGELOG + archive
-            var success = await RunClaudeCodeArchiveAsync(
-                task, writePath, prNumber, headRef, implementationNote, lastReviewBody, testReport, cancellationToken);
+            var (success, escalateReason) = await RunClaudeCodeArchiveAsync(
+                task, writePath, prNumber, headRef, group?.DevPrUrl,
+                implementationNote, lastReviewBody, testReport, cancellationToken);
+
+            // Stage 43-F：Sage escalate 路徑（CLAUDE_Sage.md 規定的品質下限不足判斷）
+            if (escalateReason is not null)
+            {
+                logger.LogWarning("Sage escalate（PR #{N}）：{Reason}", prNumber, escalateReason);
+                if (group is not null)
+                {
+                    taskRepository.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                    group.InterventionReason = $"Sage escalate：{escalateReason}";
+                    await taskRepository.SaveAsync(cancellationToken);
+                }
+                await NotifyBossSageEscalateAsync(task, group, prNumber, escalateReason, cancellationToken);
+                AddLog(task, $"Sage escalate：{escalateReason}", "failed");
+                await taskRepository.SaveAsync(cancellationToken);
+                return new AgentExecutionResult(true, $"Sage escalate（不歸檔）：{escalateReason}");
+            }
 
             if (!success)
                 return new AgentExecutionResult(true, $"PR #{prNumber} 歸檔無輸出，略過提交");
 
             // Stage 29-1：歸檔完成後存入 TaskGroup.ArchiveContent（供 Dashboard 折疊面板顯示）
-            if (task.GroupId is not null)
+            if (group is not null)
             {
                 var archivePath = Path.Combine(writePath, "docs", "archive", $"pr{prNumber}-archive.md");
                 if (File.Exists(archivePath))
                 {
-                    var group = await taskRepository.GetGroupByIdAsync(task.GroupId.Value, cancellationToken);
-                    if (group is not null)
-                    {
-                        group.ArchiveContent = await File.ReadAllTextAsync(archivePath, cancellationToken);
-                        await taskRepository.SaveAsync(cancellationToken);
-                    }
+                    group.ArchiveContent = await File.ReadAllTextAsync(archivePath, cancellationToken);
+                    await taskRepository.SaveAsync(cancellationToken);
                 }
             }
 
@@ -128,11 +150,12 @@ public class DocAgentService(
 
     // ────────────── Claude Code 歸檔執行 ──────────────
 
-    private async Task<bool> RunClaudeCodeArchiveAsync(
+    private async Task<(bool ArchivedSuccessfully, string? EscalateReason)> RunClaudeCodeArchiveAsync(
         TaskItem task,
         string repoLocalPath,
         int prNumber,
         string headRef,
+        string? prUrlFromGroup,
         string? implementationNote,
         string? lastReviewBody,
         string? testReport,
@@ -150,10 +173,15 @@ public class DocAgentService(
                 await File.WriteAllTextAsync(claudeMdPath,
                     await File.ReadAllTextAsync(templatePath, cancellationToken), cancellationToken);
 
+            // Stage 43-F：PR URL 直接讀 group.DevPrUrl，避免 hardcode 從 headRef 拼湊（headRef 是 branch ref，不是 PR URL）
+            var prLink = !string.IsNullOrWhiteSpace(prUrlFromGroup)
+                ? prUrlFromGroup
+                : $"https://github.com/{headRef.Replace("refs/heads/", "")}（PR #{prNumber}）";
+
             var sb = new StringBuilder();
             sb.AppendLine($"## PR #{prNumber}（branch: {headRef}）");
             sb.AppendLine($"**任務標題**：{task.Title.Replace($"（{AgentName}）", "").Trim()}");
-            sb.AppendLine($"**PR 連結**：https://github.com/{headRef.Replace("refs/heads/", "")}（PR #{prNumber}）");
+            sb.AppendLine($"**PR 連結**：{prLink}");
             sb.AppendLine($"**日期**：{DateTime.UtcNow:yyyy-MM-dd}");
             sb.AppendLine();
 
@@ -195,18 +223,23 @@ public class DocAgentService(
             if (!result.Success)
             {
                 logger.LogWarning("Sage Claude Code 執行未成功（exitCode={Code}）", result.ExitCode);
-                return false;
+                return (false, null);
             }
+
+            // Stage 43-F：解析 Sage 輸出 — 若 decision=escalate 則不寫歸檔，回傳 escalate reason
+            var escalateReason = TryParseSageEscalate(result.Output);
+            if (escalateReason is not null)
+                return (false, escalateReason);
 
             // 確認目標檔案是否存在
             var archivePath = Path.Combine(repoLocalPath, "docs", "archive", $"pr{prNumber}-archive.md");
             if (!File.Exists(archivePath))
             {
                 logger.LogWarning("Sage 未建立 archive 檔案，嘗試手動建立：{Path}", archivePath);
-                return false;
+                return (false, null);
             }
 
-            return true;
+            return (true, null);
         }
         finally
         {
@@ -233,6 +266,62 @@ public class DocAgentService(
             logger.LogWarning(ex, "GetGroupContextAsync 讀取失敗（GroupId={Id}）", task.GroupId);
             return (null, null, null);
         }
+    }
+
+    // ────────────── Stage 43-F：Sage escalate JSON 解析 + 通知 ──────────────
+
+    /// <summary>
+    /// 解析 Sage CLI Output 中的 escalate JSON（CLAUDE_Sage.md 規定格式）：
+    ///   {"decision": "escalate", "reason": "...", "evidence": "..."}
+    /// 回傳 escalate reason（含 evidence）；若非 escalate 或解析失敗則回 null。
+    /// </summary>
+    private static string? TryParseSageEscalate(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        try
+        {
+            var start = output.IndexOf('{');
+            var end   = output.LastIndexOf('}');
+            if (start < 0 || end < 0 || end <= start) return null;
+            var json = output[start..(end + 1)];
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("decision", out var d)) return null;
+            if (d.GetString() != "escalate") return null;
+
+            var reason   = doc.RootElement.TryGetProperty("reason",   out var r) ? r.GetString() ?? "" : "";
+            var evidence = doc.RootElement.TryGetProperty("evidence", out var e) ? e.GetString() ?? "" : "";
+            return string.IsNullOrWhiteSpace(evidence) ? reason : $"{reason}\n證據：{evidence}";
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Stage 43-F：Sage escalate 時建立 BossInteraction，使用 sage_escalate type。</summary>
+    private async Task NotifyBossSageEscalateAsync(
+        TaskItem task, TaskGroup? group, int prNumber, string reason, CancellationToken cancellationToken)
+    {
+        var title       = $"Sage 歸檔 escalate（PR #{prNumber}）";
+        var description = reason.Length > 1500 ? reason[..1500] + "..." : reason;
+
+        await interactionService.CreateInteractionAsync(
+            "sage_escalate",
+            title:                title,
+            description:          description,
+            project:              group?.Project ?? task.Project?.Name,
+            agentName:            AgentName,
+            availableActionsJson: InteractionService.SageEscalateActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                groupId   = group?.Id.ToString() ?? "",
+                taskId    = task.Id.ToString(),
+                prNumber,
+                prUrl     = group?.DevPrUrl ?? ""
+            }),
+            taskGroupId: group?.Id,
+            taskItemId:  task.Id);
+
+        logger.LogWarning("Sage escalate 已建 BossInteraction（PR #{N}, GroupId={Id}）",
+            prNumber, group?.Id);
+        await Task.CompletedTask;
     }
 
     // ────────────── 輔助 ──────────────

@@ -124,6 +124,7 @@ public class DashboardTaskService(AppDbContext db)
                     ReviewAppealRoundA = g.ReviewAppealRoundA,
                     DevPlanAppealLog   = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
+                    InterventionReason  = g.InterventionReason,
                 })
                 .ToListAsync(cancellationToken);
         }
@@ -174,6 +175,7 @@ public class DashboardTaskService(AppDbContext db)
                     ReviewAppealRoundA  = g.ReviewAppealRoundA,
                     DevPlanAppealLog    = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
+                    InterventionReason  = g.InterventionReason,
                 })
                 .ToListAsync(cancellationToken);
 
@@ -218,6 +220,7 @@ public class DashboardTaskService(AppDbContext db)
                     ReviewAppealRoundA  = g.ReviewAppealRoundA,
                     DevPlanAppealLog    = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
+                    InterventionReason  = g.InterventionReason,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
         }

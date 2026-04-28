@@ -673,6 +673,49 @@ public class DevAgentService(
         // Stage 17：MockMode early return — 跳過所有 GitHub 操作，回傳模擬 PR URL
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 43-A：Dev_plan 階段的 mock 控制（dev_plan_fail_retry / dev_plan_fail_escalate）
+            if (IsDevPlanMode(task.Description))
+            {
+                var fs = MockClaudeCodeService.FailScenario;
+                bool failPlan = false;
+                if (fs == "dev_plan_retry_round1")
+                {
+                    MockClaudeCodeService.FailScenario = "dev_plan_retry_round2";
+                    failPlan = true;
+                }
+                else if (fs == "dev_plan_retry_round2")
+                {
+                    MockClaudeCodeService.FailScenario = null; // 重產成功
+                }
+                else if (fs == "dev_plan_escalate_loop")
+                {
+                    // 不切換，持續失敗（直到 DevPlanRevision >= 2 觸發 escalate）
+                    failPlan = true;
+                }
+
+                var planContent = failPlan
+                    ? "（計畫書產出失敗，請查看 log）"
+                    : "[MOCK] Cody Dev_plan 完成\n\n## 實作說明\n這是 Mock 模式產生的計畫書，已通過 IsDevPlanFailed 結構檢查。\n\n## 變更檔案\n- src/Mock.cs\n";
+
+                AddLog(task, $"[MOCK] Cody Dev_plan 模擬產出（{(failPlan ? "失敗" : "成功")}）", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                return new AgentExecutionResult(true,
+                    $"[MOCK] DevPlan 已產出（{planContent.Length} 字）",
+                    OutputContent: planContent);
+            }
+
+            // Stage 43-B：dev_failed_after_review 情境 — Dev 階段失敗（模擬 Token 守門擋下）
+            if (MockClaudeCodeService.FailScenario == "dev_failed_after_review")
+            {
+                MockClaudeCodeService.FailScenario = null;
+                logger.LogInformation("[MockMode/DevFailed] Dev 模擬失敗（Token 守門擋下）");
+                AddLog(task, "[MOCK-FAIL] Dev 模擬失敗（Token 守門擋下）", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                return new AgentExecutionResult(false, "[MOCK-FAIL] Dev 失敗：模擬 Token 守門擋下");
+            }
+
             const string mockPrUrl = "https://github.com/mock/repo/pull/999";
             logger.LogInformation("[MockMode] DevAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Dev Agent 模擬執行中...", "running");

@@ -165,39 +165,54 @@ public partial class InteractionCenter : IAsyncDisposable
 
     internal static string GetInteractionIcon(string type) => type switch
     {
-        "ceo_confirm"      => Icons.Material.Filled.Assignment,
-        "exec_confirm"     => Icons.Material.Filled.PlayArrow,
-        "proposal"         => Icons.Material.Filled.Description,
-        "kickoff"          => Icons.Material.Filled.Groups,
-        "design"           => Icons.Material.Filled.DesignServices,
-        "devplan_escalate" => Icons.Material.Filled.Warning,
-        "merge_notify"     => Icons.Material.Filled.CheckCircle,
-        "intervention"     => Icons.Material.Filled.Error,
-        _                  => Icons.Material.Filled.Notifications
+        "ceo_confirm"             => Icons.Material.Filled.Assignment,
+        "exec_confirm"            => Icons.Material.Filled.PlayArrow,
+        "proposal"                => Icons.Material.Filled.Description,
+        "kickoff"                 => Icons.Material.Filled.Groups,
+        "design"                  => Icons.Material.Filled.DesignServices,
+        "devplan_escalate"        => Icons.Material.Filled.Warning,
+        "merge_notify"            => Icons.Material.Filled.CheckCircle,
+        "intervention"            => Icons.Material.Filled.Error,
+        // Stage 43
+        "dev_plan_unable"         => Icons.Material.Filled.WarningAmber,
+        "dev_failed_intervention" => Icons.Material.Filled.BuildCircle,
+        "qa_failed_intervention"  => Icons.Material.Filled.BugReport,
+        "sage_escalate"           => Icons.Material.Filled.NoteAlt,
+        _                         => Icons.Material.Filled.Notifications
     };
 
     internal static Color GetInteractionColor(string type) => type switch
     {
-        "devplan_escalate" => Color.Warning,
-        "merge_notify"     => Color.Success,
-        "intervention"     => Color.Error,
-        "proposal"         => Color.Info,
-        "kickoff"          => Color.Info,
-        "design"           => Color.Info,
-        _                  => Color.Default
+        "devplan_escalate"        => Color.Warning,
+        "merge_notify"            => Color.Success,
+        "intervention"            => Color.Error,
+        "proposal"                => Color.Info,
+        "kickoff"                 => Color.Info,
+        "design"                  => Color.Info,
+        // Stage 43：介入類用 Warning（amber，與 failed Error 紅色分離）
+        "dev_plan_unable"         => Color.Warning,
+        "dev_failed_intervention" => Color.Warning,
+        "qa_failed_intervention"  => Color.Warning,
+        "sage_escalate"           => Color.Warning,
+        _                         => Color.Default
     };
 
     internal static string GetInteractionLabel(string type) => type switch
     {
-        "ceo_confirm"      => "CEO 決策確認",
-        "exec_confirm"     => "Agent 執行確認",
-        "proposal"         => "提案確認",
-        "kickoff"          => "Kickoff 確認",
-        "design"           => "設計確認",
-        "devplan_escalate" => "Dev_plan 升級",
-        "merge_notify"     => "全流程完成",
-        "intervention"     => "需要介入",
-        _                  => type
+        "ceo_confirm"             => "CEO 決策確認",
+        "exec_confirm"            => "Agent 執行確認",
+        "proposal"                => "提案確認",
+        "kickoff"                 => "Kickoff 確認",
+        "design"                  => "設計確認",
+        "devplan_escalate"        => "Dev_plan 升級",
+        "merge_notify"            => "全流程完成",
+        "intervention"            => "需要介入",
+        // Stage 43
+        "dev_plan_unable"         => "DevPlan 重產失敗",
+        "dev_failed_intervention" => "Dev 失敗介入",
+        "qa_failed_intervention"  => "QA 失敗介入",
+        "sage_escalate"           => "Sage 歸檔升級",
+        _                         => type
     };
 
     private static Color GetActionColor(string? action) => action switch

@@ -34,4 +34,7 @@ public class TaskGroupDto
     public int     ReviewAppealRoundA  { get; set; }
     public string? DevPlanAppealLog    { get; set; }
     public int     DevPlanAppealRoundA { get; set; }
+
+    /// <summary>Stage 43：needs_intervention 狀態下的原因摘要（Dashboard 任務詳情顯示用）。</summary>
+    public string? InterventionReason  { get; set; }
 }

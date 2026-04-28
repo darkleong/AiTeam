@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Configuration;
@@ -295,12 +296,47 @@ public class AppealOrchestrationService(
             group.DevPlan = result.OutputContent ?? result.Summary;
             await taskRepo.SaveAsync(cancellationToken);
 
+            // ── Stage 43-A：DevPlan 失敗判定 + 重產上限守門 ──
+            var (planFailed, planFailReason) = PmAgentCommons.IsDevPlanFailed(group.DevPlan);
+            if (planFailed && group.DevPlanRevision >= 2)
+            {
+                logger.LogWarning("DevPlan 重產 {N} 次仍失敗（Group={Id}，原因：{Reason}），escalate",
+                    group.DevPlanRevision, group.Id, planFailReason);
+                taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{planFailReason}";
+                await taskRepo.SaveAsync(cancellationToken);
+                await NotifyBossDevPlanUnableAsync(group, planFailReason ?? "", cancellationToken);
+                return false;
+            }
+
             var (petraDevPlanReview, petraDevPlanTaskId) =
                 await RunPetraDevPlanReviewAsync(group, result, projectId, cancellationToken);
 
             switch (petraDevPlanReview.Decision)
             {
                 case "approve":
+                    // Stage 43-A：approve 路徑也檢查 plan 真實可用性（涵蓋 Petra LLM fallback approve 但 plan 仍是失敗訊息的情況）
+                    var (approveStillFailed, approveStillFailReason) = PmAgentCommons.IsDevPlanFailed(group.DevPlan);
+                    if (approveStillFailed)
+                    {
+                        if (group.DevPlanRevision >= 2)
+                        {
+                            logger.LogWarning("DevPlan approve 但 plan 仍失敗，重產達上限（Group={Id}）", group.Id);
+                            taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                            group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{approveStillFailReason}";
+                            await taskRepo.SaveAsync(cancellationToken);
+                            await NotifyBossDevPlanUnableAsync(group, approveStillFailReason ?? "", cancellationToken);
+                            return false;
+                        }
+                        group.DevPlanRevision++;
+                        group.DevPlanAppealRoundA = 0;
+                        await taskRepo.SaveAsync(cancellationToken);
+                        logger.LogInformation("DevPlan approve 但失敗，觸發重產第 {N} 輪（Group={Id}）",
+                            group.DevPlanRevision, group.Id);
+                        var tgsApprove = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                        await tgsApprove.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                        return false;
+                    }
                     return true; // 繼續走後續 dispatcher → 觸發 Dev
 
                 case "revise":
@@ -310,9 +346,35 @@ public class AppealOrchestrationService(
                         petraDevPlanTaskId, appealApproved, group, cancellationToken);
                     if (appealApproved)
                     {
-                        logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
-                        var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                        await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                        // Stage 43-A：accept 後檢查 plan 是否真的可用，若仍失敗 → 觸發重產
+                        var (stillFailed, stillFailReason) = PmAgentCommons.IsDevPlanFailed(group.DevPlan);
+                        if (stillFailed)
+                        {
+                            if (group.DevPlanRevision >= 2)
+                            {
+                                logger.LogWarning("DevPlan Appeal accept 但 plan 仍失敗，重產已達上限（Group={Id}）", group.Id);
+                                taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                                group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{stillFailReason}";
+                                await taskRepo.SaveAsync(cancellationToken);
+                                await NotifyBossDevPlanUnableAsync(group, stillFailReason ?? "", cancellationToken);
+                            }
+                            else
+                            {
+                                group.DevPlanRevision++;
+                                group.DevPlanAppealRoundA = 0; // 重置 Appeal 對話計數，重產輪次重新開始
+                                await taskRepo.SaveAsync(cancellationToken);
+                                logger.LogInformation("DevPlan accept 但失敗，觸發重產第 {N} 輪（Group={Id}，原因：{Reason}）",
+                                    group.DevPlanRevision, group.Id, stillFailReason);
+                                var tgsRetry = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                                await tgsRetry.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                            }
+                        }
+                        else
+                        {
+                            logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
+                            var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                            await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                        }
                     }
                     else
                     {
@@ -578,6 +640,62 @@ public class AppealOrchestrationService(
             project:              group.Project,
             agentName:            AgentNames.Pm,
             availableActionsJson: InteractionService.DevPlanEscalateActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString()
+            }),
+            discordMessageId: (decimal)msg.Id,
+            taskGroupId:      group.Id);
+    }
+
+    /// <summary>
+    /// Stage 43-A：DevPlan 重產上限 escalate（與 Petra 終評不通過區分）。
+    /// Cody 連續 N 次無法產出可用計畫書，需老闆決策（跳過 → 直接讓 Cody coding；放棄 → 結束任務）。
+    /// </summary>
+    public async Task NotifyBossDevPlanUnableAsync(
+        TaskGroup group,
+        string failReason,
+        CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        var devPlanPreview = string.IsNullOrWhiteSpace(group.DevPlan)
+            ? "（無）"
+            : group.DevPlan.Length > 800 ? group.DevPlan[..800] + "\n...（完整內容見 DB DevPlan 欄位）" : group.DevPlan;
+
+        var embed = new EmbedBuilder()
+            .WithTitle("⚠️ DevPlan 重產失敗：需要介入")
+            .WithColor(Color.Orange)
+            .AddField("任務", group.Title)
+            .AddField("問題", $"Cody Dev_plan 重產 {group.DevPlanRevision} 次仍無法產出可用計畫書")
+            .AddField("失敗原因", failReason)
+            .AddField("最後一次 DevPlan 內容", devPlanPreview)
+            .WithFooter("⏭️ 跳過 = 直接讓 Cody coding（無計畫書）；❌ 放棄 = 結束此任務")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        // Stage 43-A：重用既有 escalate_devplan_* button id（行為相同：skip → fire Dev / abort → mark failed）
+        var buttons = new ComponentBuilder()
+            .WithButton("⏭️ 跳過，直接 coding", "escalate_devplan_skip",  ButtonStyle.Secondary)
+            .WithButton("❌ 放棄此任務",         "escalate_devplan_abort", ButtonStyle.Danger)
+            .Build();
+
+        var msg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+
+        var commandHandler = serviceProvider.GetRequiredService<CommandHandler>();
+        commandHandler.RegisterDevPlanEscalation(msg.Id, group.Id);
+
+        logger.LogWarning("TaskGroup {Id} DevPlan 重產失敗，升級給老闆（Reason={R}）", group.Id, failReason);
+
+        _ = interactionService.CreateInteractionAsync(
+            "dev_plan_unable",
+            title:                $"DevPlan 重產失敗：{group.Title}",
+            description:          $"Cody Dev_plan 重產 {group.DevPlanRevision} 次仍失敗：{failReason}",
+            project:              group.Project,
+            agentName:            AgentNames.Pm,
+            availableActionsJson: InteractionService.DevPlanUnableActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId = ceoChannel.Id.ToString(),

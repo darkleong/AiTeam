@@ -1,12 +1,17 @@
 using System.Text.Json;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
+using Discord;
+using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Orchestration.Qa;
 
@@ -90,9 +95,12 @@ public class QaCoordinationService(
             var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
             if (decision.Action == NextAction.NotifyBossMerge)
             {
-                taskRepo.UpdateGroupStatus(group, "done");
-                await taskRepo.SaveAsync(cancellationToken);
-                await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                // Stage 43-E：透過守門 method 統一 mark done
+                await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
+                if (group.Status == TaskStatus.Done)
+                    await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                else
+                    await tgs.NotifyBossInterventionAsync(group, cancellationToken);
             }
             else if (decision.Action == NextAction.FireAgents)
             {
@@ -113,9 +121,12 @@ public class QaCoordinationService(
                 var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
                 if (decision.Action == NextAction.NotifyBossMerge)
                 {
-                    taskRepo.UpdateGroupStatus(group, "done");
-                    await taskRepo.SaveAsync(cancellationToken);
-                    await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                    // Stage 43-E：透過守門 method 統一 mark done
+                    await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
+                    if (group.Status == TaskStatus.Done)
+                        await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                    else
+                        await tgs.NotifyBossInterventionAsync(group, cancellationToken);
                 }
                 else if (decision.Action == NextAction.FireAgents)
                 {
@@ -124,9 +135,11 @@ public class QaCoordinationService(
             }
             else
             {
-                taskRepo.UpdateGroupStatus(group, "failed");
+                // Stage 43-E：no_applicable_tests + reject = Christ 介入後可恢復 → needs_intervention
+                taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                group.InterventionReason = $"QA no_applicable_tests，Petra 判斷不可放行：{noTestDecision.Routing}";
                 await taskRepo.SaveAsync(cancellationToken);
-                await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+                await NotifyBossQaFailedInterventionAsync(group, $"QA 無適用測試且 Petra 判斷不可放行", cancellationToken);
             }
             return;
         }
@@ -137,9 +150,11 @@ public class QaCoordinationService(
         {
             logger.LogWarning("QA 修復超過上限（Round={Round}），升級老闆（Group={Id}）",
                 group.QaFixRound, group.Id);
-            taskRepo.UpdateGroupStatus(group, "failed");
+            // Stage 43-E：QaFixRound 超限 = 介入後可恢復 → needs_intervention
+            taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+            group.InterventionReason = $"QA 修復連 {group.QaFixRound} 輪失敗（上限 {qaFixMaxRounds}）";
             await taskRepo.SaveAsync(cancellationToken);
-            await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+            await NotifyBossQaFailedInterventionAsync(group, $"QA 修復連 {group.QaFixRound} 輪失敗", cancellationToken);
             return;
         }
 
@@ -170,9 +185,12 @@ public class QaCoordinationService(
                     var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
                     if (decision.Action == NextAction.NotifyBossMerge)
                     {
-                        taskRepo.UpdateGroupStatus(group, "done");
-                        await taskRepo.SaveAsync(cancellationToken);
-                        await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                        // Stage 43-E：透過守門 method 統一 mark done
+                        await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
+                        if (group.Status == TaskStatus.Done)
+                            await tgs.NotifyBossMergeAsync(group, cancellationToken);
+                        else
+                            await tgs.NotifyBossInterventionAsync(group, cancellationToken);
                     }
                     else if (decision.Action == NextAction.FireAgents)
                     {
@@ -181,11 +199,54 @@ public class QaCoordinationService(
                     break;
 
                 default: // escalate_boss
-                    taskRepo.UpdateGroupStatus(group, "failed");
+                    // Stage 43-E：Petra 判斷 escalate_boss = 介入後可恢復 → needs_intervention
+                    taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
+                    group.InterventionReason = $"QA 失敗 Petra 判斷 escalate_boss：{failureDecision.Instructions}";
                     await taskRepo.SaveAsync(cancellationToken);
-                    await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+                    await NotifyBossQaFailedInterventionAsync(group, failureDecision.Instructions ?? "Petra escalate_boss", cancellationToken);
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// Stage 43-E：QA failed → 中止流程，通知老闆介入。
+    /// 與 NotifyBossInterventionAsync（Vera fix loop 超限走 intervention type）區分用 qa_failed_intervention 細類。
+    /// </summary>
+    private async Task NotifyBossQaFailedInterventionAsync(
+        TaskGroup group, string failReason, CancellationToken cancellationToken)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var interactionService = scope.ServiceProvider.GetRequiredService<InteractionService>();
+        var discordClient      = scope.ServiceProvider.GetRequiredService<DiscordSocketClient>();
+        var discordSettings    = scope.ServiceProvider.GetRequiredService<IOptions<DiscordSettings>>().Value;
+
+        var ceoChannelId = discordSettings.Channels.CeoChannel;
+        if (ulong.TryParse(ceoChannelId, out var ceoId) &&
+            discordClient.GetChannel(ceoId) is IMessageChannel ceoChannel)
+        {
+            await ceoChannel.SendMessageAsync(
+                $"⚠️ **{group.Title}** — QA 階段失敗連續 {group.QaFixRound} 輪，已中止流程。\n" +
+                $"原因：{(failReason.Length > 300 ? failReason[..300] + "..." : failReason)}\n" +
+                $"PR：{group.DevPrUrl ?? "（無）"}");
+        }
+
+        logger.LogWarning("TaskGroup {Id} QA failed 中止（Reason={R}）", group.Id, failReason);
+
+        _ = interactionService.CreateInteractionAsync(
+            "qa_failed_intervention",
+            title:                $"QA 失敗：{group.Title}",
+            description:          $"QA 階段失敗連續 {group.QaFixRound} 輪，需要您決定後續處理。原因：{(failReason.Length > 500 ? failReason[..500] + "..." : failReason)}",
+            project:              group.Project,
+            agentName:            AgentNames.Qa,
+            availableActionsJson: InteractionService.QaFailedInterventionActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId   = ceoChannelId,
+                groupId     = group.Id.ToString(),
+                qaFixRound  = group.QaFixRound,
+                prUrl       = group.DevPrUrl ?? ""
+            }),
+            taskGroupId: group.Id);
     }
 }

@@ -395,4 +395,128 @@ Stage 42 探索揭露 Sage prompt 收 PR URL 是純文字 `PR 連結：{URL}` �
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-28 | 計劃書建立（Aria）— FF 三十二 Orchestrator 改動類三子項（A / B / E）+ Stage 42 子項 F 搭車合一 Stage |
+| v2.0 | 2026-04-28 | 實作紀錄補完（Forge） |
+
+---
+
+## 實作紀錄（v3.30.0，Forge）
+
+### Roadmap 描述校準（Aria 提醒落地 — 自省點 #16 二次檢查 SOP 結果）
+
+**Phase 1 探索揭露 Roadmap 子項 E 描述偏差**：
+
+- Roadmap 原描述：「QA failed → 直接進 Doc → Doc done → TaskGroup mark done」「QaFixRound = 0 沒進 fix loop」「目前 bug 是觸發點壞了」「目前 bypass」
+- Codebase 真實情況：
+  - **QA fix loop 已活著**：`QaCoordinationService.HandleQaCompletedInnerAsync` (src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs:56-190) 已有完整 4-routing（code_bug / back_to_reviewer / env_or_test_issue / escalate_boss），由 `PmRoutingService.AssessQaFailureAsync` 決策
+  - **真實 bug 是兩個**：
+    - ① `escalate_boss` 路徑（line 184）標 `failed`，與「明確失敗已不可挽救」語意混淆，應為「Christ 介入後可恢復」
+    - ② `done` 判定分散在 5 處（WorkflowEngine NotifyBossMerge / QaCoordinationService 3 處 / Sage 路徑），缺集中守門
+- 本 Stage 實際解：
+  - 把 3 處 escalate_boss / no_applicable_tests reject / QaFixRound 超限 標 `failed` 改為標 `needs_intervention`
+  - 新增 `MarkGroupDoneOrInterventionAsync` 集中守門 method，取代 4 處分散 mark done
+
+**這條校準避免結案後 Future_Feature 或 CHANGELOG 留下「QA fix loop 從零打造」的錯誤描述**。
+
+### 實作清單（10 大塊）
+
+1. **基礎建設**：
+   - [src/AiTeam.Shared/Constants/TaskStatus.cs](../../src/AiTeam.Shared/Constants/TaskStatus.cs) 加 `NeedsIntervention = "needs_intervention"` 常數
+   - [src/AiTeam.Data/Entities.cs](../../src/AiTeam.Data/Entities.cs) TaskGroup.Status comment 補 `needs_intervention` + 新欄位 `InterventionReason` + `DevPlanRevision` comment 加 Stage 43 用途說明
+   - Migration `Stage43NeedsInterventionStatus`（純加 InterventionReason text 欄位，無 schema 破壞性變更）
+   - [src/Directory.Build.props](../../src/Directory.Build.props) v3.29.0 → v3.30.0
+
+2. **InteractionService 4 個新 AvailableActionsJson 常數**（[InteractionService.cs:42-56](../../src/AiTeam.Bot/Services/InteractionService.cs)）：
+   - `DevPlanUnableActionsJson`（Stage 43-A）
+   - `DevFailedInterventionActionsJson`（Stage 43-B）
+   - `QaFailedInterventionActionsJson`（Stage 43-E）
+   - `SageEscalateActionsJson`（Stage 43-F）
+
+3. **子項 A：DevPlan 重產機制**：
+   - [PmAgentCommons.cs:209-228](../../src/AiTeam.Bot/Agents/Pm/PmAgentCommons.cs) 加 `IsDevPlanFailed` static helper（多重 OR 條件：null / 字數 < 100 / 含失敗關鍵字 / 缺結構 marker）
+   - [AppealOrchestrationService.cs:280-360](../../src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs) `HandleDevPlanCompletedAsync`：
+     - 入口加 IsDevPlanFailed 判定 + DevPlanRevision >= 2 escalate
+     - approve 路徑加二次檢查（涵蓋 Petra LLM fallback approve 但 plan 仍失敗的情況）
+     - revise → Appeal accept 後加二次檢查 + DevPlanRevision++ 觸發重產
+   - 加 `NotifyBossDevPlanUnableAsync` 新 method（建 `dev_plan_unable` BossInteraction，重用既有 `escalate_devplan_skip/abort` Discord button id）
+
+4. **子項 B：Dev / Dev_fix failed 中止 fix loop**：
+   - [TaskGroupService.cs:238-253](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs) line 239 比對改為 `Dev || Dev_fix`（涵蓋 fix loop 場景，呼應 Phase 1 grep 結果：AgentQueueProcessor.cs:256 傳 `task.WorkflowAgentKey` = "Dev_fix"）
+   - mark `failed` 改 `needs_intervention` + InterventionReason
+   - 加 `NotifyBossDevFailedInterventionAsync` 新 method（建 `dev_failed_intervention` BossInteraction）
+
+5. **子項 E：QA needs_intervention + done 守門**：
+   - [QaCoordinationService.cs](../../src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs) 3 處 escalate 路徑 mark `failed` → `needs_intervention`：
+     - line 127（no_applicable_tests + reject）
+     - line 140（QaFixRound 超限）
+     - line 184（escalate_boss routing）
+   - 加 `NotifyBossQaFailedInterventionAsync` 新 method（建 `qa_failed_intervention` BossInteraction）
+   - [TaskGroupService.cs](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs) 加 `MarkGroupDoneOrInterventionAsync` 守門 method（檢查所有 task 無 failed/needs_intervention 才 mark done）
+   - 替換 4 處分散的 mark done 點：TaskGroupService NotifyBossMerge + QaCoordinationService 3 處
+   - **DI 確認**：QaCoordinationService 已用 `IServiceProvider.GetRequiredService<TaskGroupService>()` lazy resolve（line 86），無需新加注入；兩者皆 Singleton（Program.cs:124 + 130）lifetime 對齊
+
+6. **子項 F：Sage escalate 下游 + PR URL hardcode**：
+   - [DocAgentService.cs](../../src/AiTeam.Bot/Agents/DocAgentService.cs) 構造加 `InteractionService` 注入
+   - 加 `TryParseSageEscalate` helper 解析 CLAUDE_Sage.md 規定的 escalate JSON 格式（`{"decision":"escalate","reason","evidence"}`）
+   - 加 `NotifyBossSageEscalateAsync` 建 `sage_escalate` BossInteraction
+   - **PR URL hardcode 修**：line 156 既有 `https://github.com/{headRef}（PR #{prNumber}）` 改為 fallback 機制 — 優先讀 `group.DevPrUrl`（從 ExecuteTaskAsync 較早取出傳入），無時 fallback 到既有拼湊
+   - `RunClaudeCodeArchiveAsync` 簽名改回傳 `(bool ArchivedSuccessfully, string? EscalateReason)` tuple
+   - escalate 路徑 ExecuteTaskAsync 主動 mark `needs_intervention` + 建 BossInteraction，避免 fall-through 重複觸發 `intervention` type
+
+7. **ProcessBossResponseAsync 4 個新 type 分派**（[TaskGroupService.cs](../../src/AiTeam.Bot/Orchestration/TaskGroupService.cs)）：
+   - `dev_plan_unable` 重用 `devplan_escalate` 路由（行為相同）
+   - `dev_failed_intervention` → `HandleDevFailedInterventionAsync`（skip / retry / abort）
+   - `qa_failed_intervention` → `HandleQaFailedInterventionAsync`（continue / skip / abort）
+   - `sage_escalate` → `HandleSageEscalateAsync`（retry / skip / abort）
+
+8. **Mock 4 場景**（對齊既有 FailScenario 字串狀態機 + prompt-content 動態判斷風格）：
+   - `dev_plan_fail_retry`：[DevAgentService.cs](../../src/AiTeam.Bot/Agents/DevAgentService.cs) MockMode 區塊加 IsDevPlanMode 分支 — round1 回失敗訊息切 round2、round2 回成功 plan
+   - `dev_plan_fail_escalate`：FailScenario `dev_plan_escalate_loop` 不切換，持續回失敗到 DevPlanRevision >= 2 觸發 escalate
+   - `dev_failed_intervention`：FailScenario `dev_failed_after_review` → Dev 階段直接回 Failed（簡化驗收，line 239 改動的 `Dev || Dev_fix` 比對都驗到）
+   - `qa_failed_fix_then_intervention`：[QaAgentService.cs](../../src/AiTeam.Bot/Agents/QaAgentService.cs) 加 `qa_fix_loop_fail` 分支 — 持續回 failed report 讓 Petra 走 code_bug 路由 + QaFixRound 累計觸發 escalate
+
+9. **Dashboard mapping 13 處 needs_intervention**：
+   - [TaskStatus.cs](../../src/AiTeam.Shared/Constants/TaskStatus.cs) 加 `NeedsIntervention` 常數
+   - [Entities.cs](../../src/AiTeam.Data/Entities.cs) TaskGroup.Status comment + InterventionReason 欄位
+   - [StatusBadge.razor](../../src/AiTeam.Dashboard/Components/Shared/StatusBadge.razor) GetLabel 加 `needs_intervention => "需介入"` + class name 處理底線（`Replace('_','-')`）
+   - [PipelineView.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineView.razor.cs) HandleTaskUpdateAsync 終態加 needs_intervention / Group 狀態推算優先順序加 needs_intervention / IsRevision 加 needs_intervention / GetLogColor 加 needs_intervention => Color.Warning
+   - [PipelineList.razor](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineList.razor) 狀態篩選加「需介入」選項
+   - [PipelineList.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineList.razor.cs) OnGroupStatusChangedAsync 終態加 needs_intervention
+   - [app.css](../../src/AiTeam.Dashboard/wwwroot/css/app.css) 加 `--color-status-needs-intervention: #f59e0b;` (amber) + `.status-needs-intervention` class
+   - [InteractionCenter.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs) GetInteractionIcon/Color/Label 加 4 個新 type
+   - [TaskGroupDto.cs](../../src/AiTeam.Shared/Dtos/TaskGroupDto.cs) 加 InterventionReason 屬性
+   - [DashboardTaskService.cs](../../src/AiTeam.Dashboard/Services/DashboardTaskService.cs) 3 個 GroupDto Select 加 InterventionReason mapping
+
+10. **Build / Migration / 驗證**：
+    - `dotnet build AiTeam.slnx` → ✅ 0 Errors（34 既有 NU1902 套件警告，皆與本 Stage 無關）
+    - `dotnet test --filter "FullyQualifiedName!~Playwright"` → ✅ Passed 127 / Failed 0
+    - Migration 檔案 `20260428075636_Stage43NeedsInterventionStatus.cs` 已生成（純加 InterventionReason 欄位）
+    - 本機 `dotnet ef database update` 失敗（PostgreSQL 在 docker network 內，5432 未暴露到 host）— **Bot 容器啟動 Program.cs:177 會自動 MigrateAsync，push 後 CI/CD rebuild 自動套用**
+
+### 探索成果輔助修正記錄
+
+- **`completedAgent` 字串歧義（Phase 1 grep 確認 Bug #8 修法生效）**：
+  - AgentQueueProcessor.cs:256 `var workflowKey = task.WorkflowAgentKey ?? task.AssignedAgent;`
+  - line 262 `HandleAgentCompletedAsync(group.Id, workflowKey, ...)`
+  - 在 fix loop 時 workflowKey="Dev_fix"（TaskGroupService.cs BuildTaskDescription 設 `IsFixLoop=true → WorkflowAgentKey="Dev_fix"`）
+  - 既有 line 239 `Equals("Dev")` 漏 "Dev_fix" → 本 Stage 改為 `Equals("Dev") || Equals("Dev_fix")`，並排除 "Dev_plan"（後者由 AppealOrchestrationService 處理）
+
+- **Sage PR URL hardcode 確認**：DocAgentService.cs:156 確實有 `https://github.com/{headRef}（PR #{prNumber}）` 拼湊（headRef 是 branch ref 不是 PR URL）。本 Stage 改為優先讀 `group.DevPrUrl` 並 fallback 到既有拼湊。
+
+- **TaskStatus 命名衝突解決**：`AiTeam.Shared.Constants.TaskStatus` vs `System.Threading.Tasks.TaskStatus` 衝突。在 4 個受影響檔案頂端加 `using TaskStatus = AiTeam.Shared.Constants.TaskStatus;` alias 解決，避免動原 namespace。
+
+### 不在範圍但搭車記錄
+
+無。本 Stage 嚴格按計劃書 A+B+E+F 四子項實作，未引入額外搭車修正。
+
+### 後續驗收項目
+
+push 後等 CI/CD 自動部署完成（aiteam-bot 容器重啟 + Migration 自動套用），由 Christ 在 Dashboard 觸發 4 個新 Mock 場景驗收：
+1. `dev_plan_fail_retry` → 預期 DevPlanRevision=1，最終 plan 通過判定，進 Dev
+2. `dev_plan_fail_escalate` → 預期 DevPlanRevision=2，TaskGroup.Status=needs_intervention，操作中心 dev_plan_unable 卡片
+3. `dev_failed_intervention` → 預期 Reviewer 不啟動，TaskGroup.Status=needs_intervention，操作中心 dev_failed_intervention 卡片
+4. `qa_failed_fix_then_intervention` → 預期 QaFixRound 累計到上限，TaskGroup.Status=needs_intervention，Doc 未啟動
+
+外加既有 `new_feature_with_proposal` 場景跑 done 守門 method 回歸驗證。
+
+驗收 DB 指令：`docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c "SELECT \"Status\", \"InterventionReason\", \"DevPlanRevision\", \"QaFixRound\" FROM task_groups ORDER BY \"CreatedAt\" DESC LIMIT 5"`
 | v1.0.1 | 2026-04-28 | Model/Effort 段精確化（Stage 42 ×1.89 反例校準）— 改用 6 項公式分解（開場 32K + 工作 80-120K + Grep/Bash 10-15K + 對話 turn 35-45K + Edit 反覆 20-30K + 驗收 buffer 25K = 200-270K），Sonnet 200K 從「邊界緊」升級為「絕對不夠」，Opus 1M 推薦不變 |

@@ -69,7 +69,8 @@ public partial class PipelineView : IAsyncDisposable
         {
             // 找到對應步驟，直接更新狀態
             step.Task.Status = update.Status;
-            if (update.Status is "done" or "failed" or "cancelled" or "skipped")
+            // Stage 43：needs_intervention 也算終態（task 階段已停，等待 Christ 介入決定）
+            if (update.Status is "done" or "failed" or "cancelled" or "skipped" or "needs_intervention")
             {
                 step.Task.CompletedAt = DateTime.UtcNow;
                 // 步驟完成時同步更新 Group content 欄位（Agent 可能已寫入歸檔報告等資料）
@@ -92,8 +93,11 @@ public partial class PipelineView : IAsyncDisposable
         {
             var prevStatus = Group.Status;
 
+            // Stage 43：優先順序 — failed > needs_intervention > running > done
             if (_steps.Any(s => s.Task.Status == "failed"))
                 Group.Status = "failed";
+            else if (_steps.Any(s => s.Task.Status == "needs_intervention"))
+                Group.Status = "needs_intervention";
             else if (_steps.All(s => s.Task.Status is "done" or "cancelled" or "skipped"))
                 Group.Status = "done";
             else if (_steps.Any(s => s.Task.Status == "running"))
@@ -228,7 +232,7 @@ public partial class PipelineView : IAsyncDisposable
 
     private static bool IsCompleted(string status)  => status is "done" or "skipped";
     private static bool IsFailed(string status)      => status is "failed" or "error";
-    private static bool IsRevision(string status)    => status is "revision" or "reviewing";
+    private static bool IsRevision(string status)    => status is "revision" or "reviewing" or "needs_intervention";
 
     private static Color GetLogColor(string status) => status switch
     {
@@ -238,6 +242,7 @@ public partial class PipelineView : IAsyncDisposable
         "revision"           => Color.Warning,
         "reviewing"          => Color.Warning,
         "skipped"            => Color.Tertiary,
+        "needs_intervention" => Color.Warning,  // Stage 43：amber
         _                    => Color.Default
     };
 

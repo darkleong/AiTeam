@@ -58,17 +58,31 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "dev_plan_appeal";
         else if (scenario == "review_skipped")
             MockClaudeCodeService.FailScenario = "review_skipped"; // Stage 39：Vera 略過驗收情境
+        // ── Stage 43 新增 4 場景 ──
+        else if (scenario == "dev_plan_fail_retry")
+            MockClaudeCodeService.FailScenario = "dev_plan_retry_round1";   // 第 1 次失敗 → accept → 第 2 次成功
+        else if (scenario == "dev_plan_fail_escalate")
+            MockClaudeCodeService.FailScenario = "dev_plan_escalate_loop";  // 連續失敗到 DevPlanRevision >= 2 → escalate
+        else if (scenario == "dev_failed_intervention")
+            MockClaudeCodeService.FailScenario = "dev_failed_after_review"; // Dev 成功 → Vera Critical → Dev_fix 失敗
+        else if (scenario == "qa_failed_fix_then_intervention")
+            MockClaudeCodeService.FailScenario = "qa_fix_loop_fail";        // QA 連 N 輪失敗 → escalate
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
-            "bug_fix"                   => (WorkflowType.BugFix,          "Bug 修復",              "Dev"),
-            "tech_improvement"          => (WorkflowType.TechImprovement, "技術改善",              "Dev_plan"),
-            "new_feature_with_proposal" => (WorkflowType.NewFeature,      "新功能（含提案）",       "Dev_plan"),
-            "fail_review"               => (WorkflowType.NewFeature,      "失敗測試-ReviewAppeal", "Dev"),
-            "fail_qa"                   => (WorkflowType.NewFeature,      "失敗測試-QA失敗",       "Dev"),
-            "fail_dev_plan"             => (WorkflowType.NewFeature,      "失敗測試-DevPlanAppeal", "Dev_plan"),
-            "review_skipped"            => (WorkflowType.NewFeature,      "Vera 略過驗收",         "Dev"),
-            _                           => (WorkflowType.NewFeature,      "新功能",                "Dev_plan")
+            "bug_fix"                       => (WorkflowType.BugFix,          "Bug 修復",                  "Dev"),
+            "tech_improvement"              => (WorkflowType.TechImprovement, "技術改善",                  "Dev_plan"),
+            "new_feature_with_proposal"     => (WorkflowType.NewFeature,      "新功能（含提案）",           "Dev_plan"),
+            "fail_review"                   => (WorkflowType.NewFeature,      "失敗測試-ReviewAppeal",     "Dev"),
+            "fail_qa"                       => (WorkflowType.NewFeature,      "失敗測試-QA失敗",           "Dev"),
+            "fail_dev_plan"                 => (WorkflowType.NewFeature,      "失敗測試-DevPlanAppeal",     "Dev_plan"),
+            "review_skipped"                => (WorkflowType.NewFeature,      "Vera 略過驗收",             "Dev"),
+            // Stage 43
+            "dev_plan_fail_retry"           => (WorkflowType.NewFeature,      "失敗測試-DevPlanRetry",     "Dev_plan"),
+            "dev_plan_fail_escalate"        => (WorkflowType.NewFeature,      "失敗測試-DevPlanEscalate",  "Dev_plan"),
+            "dev_failed_intervention"       => (WorkflowType.NewFeature,      "失敗測試-DevFailedIntervention", "Dev"),
+            "qa_failed_fix_then_intervention" => (WorkflowType.NewFeature,    "失敗測試-QAFixIntervention",  "Dev"),
+            _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
         var title   = string.IsNullOrWhiteSpace(customTitle)

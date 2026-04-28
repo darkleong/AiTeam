@@ -23,6 +23,7 @@
     --color-status-reviewing: #7c3aed;
     --color-status-cancelled: #6c757d;
     --color-status-skipped:   #20c997;
+    --color-status-needs-intervention: #f59e0b;  /* Stage 43：amber，與 failed 紅色分離 */
 
     --shadow-card:             0 2px 8px rgba(0, 0, 0, 0.08);
     --radius-card:             8px;
@@ -154,6 +155,7 @@ body {
 .status-reviewing { background: var(--color-status-reviewing); }
 .status-cancelled { background: var(--color-status-cancelled); }
 .status-skipped   { background: var(--color-status-skipped);   }
+.status-needs-intervention { background: var(--color-status-needs-intervention); }
 
 /* ========================================
    工具類別

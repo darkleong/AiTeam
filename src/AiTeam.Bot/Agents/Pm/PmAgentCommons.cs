@@ -197,6 +197,33 @@ public class PmAgentCommons(
         catch { return null; }
     }
 
+    // ────────────── Stage 43-A：DevPlan 失敗判定（多重 OR） ──────────────
+
+    /// <summary>
+    /// 判定 DevPlan 是否為「失敗訊息」（用於 Cody Dev_plan agent 產出後檢查是否值得進 Dev 階段）。
+    /// 多重 OR 條件，依序檢查並回報命中項：
+    ///   ① null 或字數 &lt; 100 → "DevPlan 為空或字數 &lt; 100"
+    ///   ② 含「產出失敗」/「請查看 log」/「無法產出」任一 → "DevPlan 含失敗關鍵字"
+    ///   ③ 缺結構 marker（"## 實作說明" 或常見實作章節）→ "DevPlan 結構不完整"
+    /// </summary>
+    public static (bool Failed, string? Reason) IsDevPlanFailed(string? devPlan)
+    {
+        if (string.IsNullOrWhiteSpace(devPlan) || devPlan.Length < 100)
+            return (true, "DevPlan 為空或字數 < 100");
+
+        if (devPlan.Contains("產出失敗") || devPlan.Contains("請查看 log") || devPlan.Contains("無法產出"))
+            return (true, "DevPlan 含失敗關鍵字");
+
+        // Cody Dev_plan 期望結構：「## 實作說明」 or「## 實作步驟」or「## 變更檔案」其中之一
+        if (!devPlan.Contains("## 實作說明") &&
+            !devPlan.Contains("## 實作步驟") &&
+            !devPlan.Contains("## 變更檔案") &&
+            !devPlan.Contains("## 實作項目"))
+            return (true, "DevPlan 結構不完整（缺實作說明/步驟/檔案章節）");
+
+        return (false, null);
+    }
+
     // ────────────── 內部 DTO（JSON parse 用）──────────────
 
     private sealed class PetraReviewDto
