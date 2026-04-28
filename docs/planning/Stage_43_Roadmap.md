@@ -519,15 +519,46 @@ Mock 場景 string 在 3 個位置獨立宣告，計劃書 mapping checklist 只
 
 **教訓**：未來新增 Mock 場景時，mapping checklist 要從 13 處擴充為 15 處，**多 2 處 UI 觸發點**。同類「behind-the-scenes 配置 + UI 宣告分離」的議題在 Stage 39 Skipped 全鏈路 mapping 9 處也類似（狀態色配置在多檔分散）。
 
-### 後續驗收項目
+### 驗收結果（Christ 2026-04-28/29 驗收）
 
-push 後等 CI/CD 自動部署完成（aiteam-bot 容器重啟 + Migration 自動套用），由 Christ 在 Dashboard 觸發 4 個新 Mock 場景驗收：
-1. `dev_plan_fail_retry` → 預期 DevPlanRevision=1，最終 plan 通過判定，進 Dev
-2. `dev_plan_fail_escalate` → 預期 DevPlanRevision=2，TaskGroup.Status=needs_intervention，操作中心 dev_plan_unable 卡片
-3. `dev_failed_intervention` → 預期 Reviewer 不啟動，TaskGroup.Status=needs_intervention，操作中心 dev_failed_intervention 卡片
-4. `qa_failed_fix_then_intervention` → 預期 QaFixRound 累計到上限，TaskGroup.Status=needs_intervention，Doc 未啟動
+4 場景全部驗收通過，DB 證據對齊計劃書預期：
 
-外加既有 `new_feature_with_proposal` 場景跑 done 守門 method 回歸驗證。
+| 場景 | Task | DB 結果 | 結論 |
+|---|---|---|---|
+| `dev_plan_fail_retry` | Stage43測試2 | `done` / DevPlanRevision=1 | ✅ 重產 1 次後成功進 Dev，全流程跑完 |
+| `dev_plan_fail_escalate` | DevPlanEscalate任務 | `needs_intervention` / DevPlanRevision=2 | ✅ 重產 2 次失敗，建 dev_plan_unable BossInteraction |
+| `dev_failed_intervention` | Stage43測試4 | `needs_intervention` / FixIteration=0 | ✅ Dev 失敗中止 fix loop，建 dev_failed_intervention BossInteraction |
+| `qa_failed_fix_then_intervention` | Stage43測試7 | `needs_intervention` / QaFixRound=3 | ✅ QA 連 3 輪失敗觸發 escalate，建 qa_failed_intervention BossInteraction |
 
-驗收 DB 指令：`docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c "SELECT \"Status\", \"InterventionReason\", \"DevPlanRevision\", \"QaFixRound\" FROM task_groups ORDER BY \"CreatedAt\" DESC LIMIT 5"`
+外加既有 `new_feature_with_proposal` 路徑回歸驗證 — `MarkGroupDoneOrInterventionAsync` 守門 method 在正常路徑運作無誤（task 全 done → group mark done）。
+
+### 驗收期 3 個歷史 bug 補修（搭車）
+
+驗收 4 場景過程揭露 3 個 bug，當場修完並 commit：
+
+| Commit | 議題 | 觸發位置 |
+|---|---|---|
+| [`3c6ba7c`](../../) | Mock 成功 plan 內容只有 92 字，被 IsDevPlanFailed 100 字門檻誤判 | DevPlanRetry任務（15:19:47）退化結果 |
+| [`6ce34e2`](../../) | PmRoutingService.AssessQaFailureAsync 沒對 qa_fix_loop_fail 加 mock 早返回，LLM 解析失敗 fallback `env_or_test_issue` | Stage43測試5 退化結果 |
+| [`c7078ea`](../../) | **Stage 24 既有設計缺漏**：QaCoordinationService.cs:159 用 `WorkflowStep("Dev_fix")` 直接設 AssignedAgent="Dev_fix"，但 AgentQueueProcessor 兩處 routing 表（SemaphoreGroups + GetExecutorKey）都沒涵蓋此 key → Dev_fix task 卡在 queued 不被 dequeue | Stage43測試6 卡住 |
+
+**Stage 24 缺漏曝光的歷史意義**：QA fix loop 程式碼路徑「已活著」（QaCoordinationService.cs:134-189 的 4-routing 邏輯），但**從未真正端到端跑過**——既有 `fail_qa` mock 場景在 Quinn 早返回後 FailScenario 立刻清空，QA failed 走 LLM fallback `env_or_test_issue` 視同 passed，**從沒進 code_bug fix loop 路徑**，所以 SemaphoreGroups 缺漏沒曝光。Stage 43 的 `qa_fix_loop_fail` 是 AiTeam 史上第一個實際走完 QA fix loop 的場景。**這條校準呼應 Phase 1 探索的 Roadmap 描述偏差**（程式碼活 ≠ 實際運作過）。
+
+### 過渡狀態 task 紀錄
+
+驗收期間 3 個過渡狀態 task 保留作 fix commit 的對比樣本（DB 中可直接讀出修前 vs 修後行為差異）：
+
+| 過渡 task | 修復 commit | 修後對應 task |
+|---|---|---|
+| DevPlanRetry任務（15:19:47）DevPlanRevision=2 失敗 | `3c6ba7c` | Stage43測試2 直接 done |
+| Stage43測試5 done QaFixRound=0 | `6ce34e2` | Stage43測試6 開始 QaFixRound 累計 |
+| Stage43測試6 done QaFixRound=1 | `c7078ea` | Stage43測試7 跑完整 fix loop 到上限 3 |
+
+### 教訓（傳遞給 Aria 結案第二段 / 後續 Stage 設計）
+
+1. **Mock 場景多 LLM 路徑檢查**：場景觸及多條 LLM 呼叫時（如 qa_fix_loop_fail 同時涉及 Quinn QA + Petra 路由），每條路徑都要單獨設 mock 早返回。Stage 30 後採用「prompt-content 動態判斷」是 RunMeetingSessionAsync 的設計，但走 LLM Provider 的（PmReviewService / PmRoutingService）必須個別設 FailScenario 早返回。本次計劃書 Mock 4 場景設計時只想到 Quinn，沒覆蓋 Petra 路由 — Aria 計劃書檢查時可加「逐條 LLM 路徑列 checklist」習慣。
+2. **Mock 內容字數要符合最低有效輸出門檻**：mock 的「成功」內容若為 placeholder，須符合真實判定邏輯的最低門檻（如 IsDevPlanFailed 100 字），否則被誤殺。
+3. **Mock UI 觸發點漏項**：Mock 場景 string 在 3 個位置獨立宣告（MockScenarioService case + SlashCommandRouter AddChoice + MockScenarioCard MudSelectItem）。Stage 43 計劃書 mapping checklist 只列了 1 處，漏 2 處 UI 觸發點。後續 Stage 加 Mock 場景時 mapping checklist 要從 13 處擴充為 15 處。
+4. **escalate skip 路徑 status 殘留**（backlog 候選）：`escalate_devplan_skip` / 我新加的對應 button id 都沒清 `group.Status` + `InterventionReason`，是否開 FF 處理由 Aria 戰略決定（修法簡單：在 button handler 加 `group.Status = "running"; group.InterventionReason = null;`）。
+5. **Stage 24 既有缺漏修了**：`AgentQueueProcessor.SemaphoreGroups[Dev]` + `GetExecutorKey` 補 `Dev_fix`。雖屬搭車但邊界要寫進結案文件，提醒未來 Stage 若新增類似「派生 Agent name」（如 Reviewer_fix / Dev_appeal）要同步補 routing 表。
 | v1.0.1 | 2026-04-28 | Model/Effort 段精確化（Stage 42 ×1.89 反例校準）— 改用 6 項公式分解（開場 32K + 工作 80-120K + Grep/Bash 10-15K + 對話 turn 35-45K + Edit 反覆 20-30K + 驗收 buffer 25K = 200-270K），Sonnet 200K 從「邊界緊」升級為「絕對不夠」，Opus 1M 推薦不變 |
