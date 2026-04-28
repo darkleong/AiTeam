@@ -11,10 +11,15 @@
 
 ## [Unreleased]
 
-- **下個 Stage（Stage 43）**：FF 三十二 Orchestrator 改動類（子項 A+B+E）— DevPlan Appeal accept 後 trigger 重新產出 / Dev fix 失敗中止 fix loop（不啟動 Reviewer）/ QA 失敗判定為 TaskGroup 失敗（不進 Doc）；可與 Stage 44（FF 三十三 Token CLI 涵蓋）並行
-- **後續排序**：Stage 44 = FF 三十三 / Stage 45 = FF 三十四（流程暫停，Trial_v5 前置條件）/ Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六
+- **下個 Stage（Stage 44）**：FF 三十三（Token 計費機制 CLI Agent 涵蓋）— token_logs 從 6% 涵蓋率擴充至全 CLI Agent；Trial_v5 前置條件之一
+- **後續排序**：Stage 45 = FF 三十四（TaskGroup 流程暫停，Trial_v5 鎖死前置條件）/ Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）
+- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）
 
 ---
+
+## [3.30.0] — 2026-04-29 — [Stage 43](docs/planning/Stage_43_Roadmap.md)
+
+FF 三十二 Orchestrator 改動類三子項（A+B+E）+ Sage F 搭車 — Self-implement 完整性閘門下半場：DevPlan 重產機制（上限 2，超限 escalate）+ Dev/Dev_fix failed 中止 fix loop + QA 失敗 needs_intervention（與 failed 語意分離）+ TaskGroup done 判定統一守門 + DocAgentService 認 Sage escalate JSON + PR URL hardcode 修。新增 `needs_intervention` Status / InterventionReason 欄位 / 4 個 BossInteraction type / 4 個 Mock 場景；驗收期搭車修 Stage 24 既有缺漏（Dev_fix 進 SemaphoreGroups + GetExecutorKey）— 揭露 QA fix loop 程式碼活 ≠ 從未端到端跑過
 
 ## [3.29.0] — 2026-04-28 — [Stage 42](docs/planning/Stage_42_Roadmap.md)
 

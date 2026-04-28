@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.51
+> 版本：v7.52
 > 建立日期：2026-04-01
-> 最後更新：2026-04-28
+> 最後更新：2026-04-29
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
 
 ---
@@ -1047,8 +1047,9 @@ CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_imp
 
 ## 三十二、Self-implement 完整性閘門（Trial_v4 揭露的流程斷裂合集）
 
-> 狀態：🔴 高 — Trial_v4 揭露 5 個 🔴 嚴重 bug + 1 個 🟡 中 bug，影響 self-implement 流程可信度
+> 狀態：✅ **七子項全完成**（Stage 42 = C+D+F+G prompt 補強 + Stage 43 = A+B+E Orchestrator 改動 + F 搭車）— 主體保留供 Trial_v5 對照觀察清單
 > 提出日期：2026-04-28（Trial_v4 結案揭露）
+> 完成日期：2026-04-29（Stage 43 結案）
 
 ### 背景
 
@@ -1167,10 +1168,11 @@ PR 提交前，**必須**在 PR description 列出：
 - ✅ 子項 F：CLAUDE_Sage.md 加品質下限判準 + escalate JSON 格式 + PR URL 來源規則（**註**：Sage 路由端 escalate 下游處理待 Stage 43 子項 E 完成）
 - ✅ 子項 G：CLAUDE_Cody.md 加 Dev 階段結束自我檢查（✅/❌ Issue 列表 + 80% 門檻 + `⚠️ ESCALATE_NEEDED` marker）+ Vera/Petra 配合判讀規則（三檔 marker 字面完全一致）
 
-**Orchestrator 改動類（3 子項，重，動核心流程 + DB schema）** — 留 Stage 43：
-- 子項 A：DevPlan Appeal accept 後 trigger 重新產出
-- 子項 B：Dev fix 失敗時中止 fix loop（不啟動 Reviewer）
-- 子項 E：QA 失敗判定為 TaskGroup 失敗（不進 Doc）
+**Orchestrator 改動類（3 子項，重，動核心流程 + DB schema）** — ✅ **Stage 43（v3.30.0，2026-04-29）完成**：
+- ✅ 子項 A：DevPlan 重產機制（PmAgentCommons.IsDevPlanFailed 多重 OR 判定 + Cody Appeal accept 後檢查 plan 仍失敗則 DevPlanRevision++ 觸發重產 / 上限 2 escalate `dev_plan_unable`；含 Petra LLM fallback approve 但 plan 仍失敗的二次防護）
+- ✅ 子項 B：Dev / Dev_fix failed 中止 fix loop（line 239 比對涵蓋 Dev_fix，呼應 AgentQueueProcessor 傳 WorkflowAgentKey）+ TaskGroup 標 `needs_intervention` + `dev_failed_intervention` BossInteraction
+- ✅ 子項 E：QA 3 處 escalate 路徑（no_applicable_tests reject / QaFixRound 超限 / escalate_boss）改 `needs_intervention`（與 failed 語意分離）+ `MarkGroupDoneOrInterventionAsync` 集中守門 method 取代 4 處分散 mark done + `qa_failed_intervention` BossInteraction
+- ✅ F 搭車：DocAgentService 認 Sage escalate JSON（`TryParseSageEscalate`）+ PR URL hardcode 修（讀 `group.DevPrUrl` fallback 既有拼湊）+ `sage_escalate` BossInteraction
 
 **Stage 排序建議（Christ 2026-04-28 拍板鎖死，Trial_v5 前置條件）**：
 
@@ -1669,6 +1671,47 @@ Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
 
 ---
 
+## 三十七、escalate skip 路徑 TaskGroup status 殘留
+
+> 狀態：🔵 低 — UI 顯示誤導但不影響流程
+> 提出日期：2026-04-29（Stage 43 結案教訓 4 立 FF）
+
+### 背景
+
+Stage 43 加 4 個新 BossInteraction type（`dev_plan_unable` / `dev_failed_intervention` / `qa_failed_intervention` / `sage_escalate`）讓 Christ 能在 escalate 場景做後續決策（跳過 / 重啟 / 放棄）。
+
+但**「跳過進下一階段」（skip）按鈕分支處理 status 不完整**：button handler 只觸發後續流程繼續走，**沒清除 `TaskGroup.Status = "needs_intervention"` + `InterventionReason`**。結果：流程繼續跑，但 Dashboard / Discord 仍顯示「需介入」狀態 — UI 顯示誤導 Christ「任務已 escalate 卡住」，實際後台已往下走。
+
+### 問題範圍
+
+4 個新 BossInteraction type 的 `*_skip` button handler 都有此問題：
+- `dev_intervention_skip`（Dev failed → 略過進下一階段）
+- `qa_intervention_skip`（QA 連續失敗 → 略過 QA 進下一階段）
+- `sage_skip`（Sage escalate → 略過歸檔，標完成）
+- `escalate_devplan_skip` / 對應 `dev_plan_unable` 的 skip 路徑
+
+### 修法方向
+
+button handler skip 分支加兩行：
+```csharp
+group.Status = "running";              // 或對應的繼續狀態
+group.InterventionReason = null;        // 清除介入原因
+```
+
+修法**極簡**（4 處各加 2-3 行）但要全部對齊一致。
+
+### 觸發條件 / 排序建議
+
+🔵 低優先級 — UI 顯示誤導但不影響流程正確性，**等下次動 BossInteraction Stage 搭車修**（如 FF 三十四 流程暫停 Stage 45 / 動 InteractionService 的 Stage）。
+
+獨立小 Stage 也可（30 分鐘工作量），但成本不划算。
+
+### 優先級
+
+🔵 低 — UI 顯示問題，不影響流程；搭車類 backlog
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1809,6 +1852,7 @@ Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
 | 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
+| 2026-04-29 | v7.52：**Stage 43 完成（v3.30.0）— FF 三十二 Orchestrator 改動類 A+B+E + Sage F 搭車 ✅**：`PmAgentCommons.IsDevPlanFailed` 多重 OR helper（< 100 字 / 失敗關鍵字 / 缺結構章節）+ `AppealOrchestrationService` DevPlan accept 後重產（DevPlanRevision 上限 2，超限建 `dev_plan_unable` BossInteraction）；`TaskGroupService` line 239 比對改 `Dev || Dev_fix`（呼應 AgentQueueProcessor 傳 WorkflowAgentKey）排除 Dev_plan + 中止 fix loop 標 `needs_intervention` + `dev_failed_intervention` BossInteraction；`QaCoordinationService` 3 處 escalate 路徑（no_applicable_tests reject / QaFixRound 超限 / escalate_boss）改 `needs_intervention`（與 failed 語意分離）+ `qa_failed_intervention` BossInteraction；`MarkGroupDoneOrInterventionAsync` 集中守門 method 取代 4 處分散 mark done（重抓 group 含 Tasks 避免 scope 並發資料問題）；`DocAgentService.TryParseSageEscalate` + PR URL hardcode 修（讀 `group.DevPrUrl` fallback 既有拼湊）+ `sage_escalate` BossInteraction；新增 `TaskGroup.Status = needs_intervention` 語意 + `InterventionReason` 欄位（Migration `Stage43NeedsInterventionStatus`）+ Dashboard 全鏈路 mapping 13 處（StatusBadge amber / PipelineView / PipelineList 篩選 / CSS / InteractionCenter 4 type / TaskGroupDto / DashboardTaskService）+ 4 個 Mock 場景（dev_plan_fail_retry / dev_plan_fail_escalate / dev_failed_intervention / qa_failed_fix_then_intervention）；驗收期搭車修 3 個歷史 bug（mock plan 字數門檻 `3c6ba7c` / PmRoutingService mock 早返回 `6ce34e2` / **Stage 24 既有缺漏 Dev_fix 進 SemaphoreGroups + GetExecutorKey** `c7078ea`）— **Stage 24 缺漏曝光的歷史意義**：QA fix loop 程式碼路徑「已活著」但「從未真正端到端跑過」，本 Stage `qa_fix_loop_fail` 是 AiTeam 史上第一個實際走完 QA fix loop 的場景；補修 commit `02bef31`（4 個 Mock 場景 UI 觸發點漏 SlashCommandRouter + MockScenarioCard 兩處）— **教訓**：未來新增 Mock 場景 mapping checklist 從 13 處擴充為 15 處；**FF 三十二 七子項全完成**（Stage 42 + Stage 43），主體保留供 Trial_v5 對照觀察清單；**新立 FF 三十七**（escalate skip 路徑 status 殘留，🔵 低 backlog 候選） |
 | 2026-04-28 | v7.51：**封存 4 個核心已完成的 FF**（FF 一 / 六 / 八 / 九）— Christ 觀察文件接近 2000 行後 Aria 掃出強候選封存 4 個：① FF 一（API 費用優化第一輪降級已完成 2026-04-07，剩餘優化方向轉 backlog）② FF 六（Stage 22 大幅吸收，剩餘客戶專案隔離併入 FF 七）③ FF 八（Phase 1 全部完成 + Phase 2 第三項 Stage 30 完成，剩 Phase 2「循環偵測 + 新鮮視角」兩保險絲機制轉 backlog）④ FF 九（Stage 27a/27b 核心佇列完成，剩 PM 佇列化 / Maya 部署 / Error 阻塞 / 優先級支援等擴充性需求轉 backlog）；4 個 FF 主體刪除（淨 -140 行），「已完成項目摘要」表格新增 4 列 entry，剩餘 backlog 設計脈絡保留在 git history；瘦身後 ~1810 行（從 1949 → 1810，約 -7%） |
 | 2026-04-28 | v7.50：**Stage 42 完成（v3.29.0）— FF 三十二 prompt 補強類 C+D+F+G ✅**：CLAUDE_Petra.md 第 4 節新增「PR 範圍嚴重不符計劃書」升級條目（首句明寫不論 Vera 原標 Info / Warning / Critical 皆適用）+ 獨立「特殊規則（直接 escalate）」段（`⚠️ ESCALATE_NEEDED` → escalate，不走 revise loop）；CLAUDE_Vera.md「Blazor 例外處理」段擴充三條件判準（涵蓋 `@onclick` / `@onchange` / MudBlazor `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）+ PR #122 onUndo 反面教材 + 不得降級規則（保守用詞「可能 / 或許」不豁免）+ 新增「PR description 判讀」段（`⚠️ ESCALATE_NEEDED` → 必標 critical 議題）；CLAUDE_Sage.md 新增「品質下限判準」段含 escalate JSON 格式 + 「PR URL 來源規則」段（從 prompt `PR 連結：` 欄位讀，不自行拼湊）+ 修訂第 60 行原「無實作說明」直接放行規則為 escalate；CLAUDE_Cody.md 新增「Dev 階段結束時的自我檢查（強制要求）」段（✅/❌ Issue + 完成度判定 + 80% 門檻 + 三條禁止）；**Marker 字面一致性驗證 ✅**（grep 三檔 `⚠️ ESCALATE_NEEDED` 完全相同）；探索揭露 Sage 路由端目前無 escalate 機制（DocAgentService 輸出 true/false），下游處理待 Stage 43 子項 E；FF 三十二 主體保留（A/B/E 子項待 Stage 43），子項分類段標四子項 ✅；本 Stage 純 prompt 補強，無 Bot Orchestrator / DB / UI 變動，真實生效驗證留 Trial_v5 |
 | 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
