@@ -508,6 +508,17 @@ Stage 42 探索揭露 Sage prompt 收 PR URL 是純文字 `PR 連結：{URL}` �
 
 無。本 Stage 嚴格按計劃書 A+B+E+F 四子項實作，未引入額外搭車修正。
 
+### 驗收期漏項補修（Christ 截圖揭露）
+
+Mock 場景 string 在 3 個位置獨立宣告，計劃書 mapping checklist 只列了 `MockScenarioService.cs`，漏了 UI 觸發點兩處：
+
+- `src/AiTeam.Bot/Discord/Routing/SlashCommandRouter.cs` `AddChoice`（Discord `/mock` 選單）
+- `src/AiTeam.Dashboard/Components/Pages/Home/MockScenarioCard.razor` `MudSelectItem`（Dashboard 下拉）
+
+字串純透傳到 Bot 端，後端可透過外部直送 string 觸發（如 `/internal/mock/scenario` API），但 UI 不顯示等於使用者沒法選。**驗收期 Christ 截圖 Discord 與 Dashboard 都看不到 4 個新場景**才被發現。補修 commit `02bef31`。
+
+**教訓**：未來新增 Mock 場景時，mapping checklist 要從 13 處擴充為 15 處，**多 2 處 UI 觸發點**。同類「behind-the-scenes 配置 + UI 宣告分離」的議題在 Stage 39 Skipped 全鏈路 mapping 9 處也類似（狀態色配置在多檔分散）。
+
 ### 後續驗收項目
 
 push 後等 CI/CD 自動部署完成（aiteam-bot 容器重啟 + Migration 自動套用），由 Christ 在 Dashboard 觸發 4 個新 Mock 場景驗收：
