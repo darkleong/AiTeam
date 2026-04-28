@@ -272,30 +272,64 @@ Trial_v4 總消耗：$4.99 USD
 
 ## 後續行動清單
 
-### 立即（Trial 結案）
+### 立即（Trial 結案 — 2026-04-28 完成）
 
 - [x] 寫 Trial_v4.md（本檔）
-- [ ] 更新 FF 二十七：v4 結果 + Top 1/2/3 標 🟡/🔴 + 戰略結論「Self-implement 適用邊界」
-- [ ] **新增 FF 三十二**：Self-implement 完整性閘門（六子項 A-F）
-- [ ] **新增 FF 三十三**：Token 計費機制 CLI Agent 涵蓋
+- [x] 更新 FF 二十七：v4 結果 + Top 1/2/3 標 🟡/🔴 + 戰略結論「Self-implement 適用邊界」
+- [x] **新增 FF 三十二**：Self-implement 完整性閘門（**七**子項 A-G，含 Christ + Aria 深度討論後新增子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」）
+- [x] **新增 FF 三十三**：Token 計費機制 CLI Agent 涵蓋
+- [x] **新增 FF 三十四**：TaskGroup 流程暫停機制（Trial_v4 觀察期間 Christ 提出真實 UX 痛點）
+- [x] **新增 FF 三十五**：自動拆任務機制 ⭐ 戰略級（解 self-implement 範圍縮水根因）
 
-### 處理 PR #122
+### 處理 PR #122（Christ 2026-04-28 拍板）
 
-待 Christ 決策：
-- (a) **Close PR** + 開獨立 Stage（Aria 規劃 + Forge 實作完整 12 個 Issue）
-- (b) **手動 merge Phase 1**（41 行 Service）+ 開後續 Stage 補完 Phase 2
-- (c) **保留 OPEN 暫不處理** + 排入未來 Stage 帶完
+**採 (a) Close PR + 12 Issues 一併 close** —— **但不開獨立 Stage 重做 FF 十六**。
 
-Aria 推薦 (a)：Trial_v4 已揭露「跨多檔架構重構」不適合 self-implement，正規 Stage 才是合適路徑。
+策略升級：**Trial_v5 重跑相同需求**作為「Trial_v4 對照組」，一次性同時驗證 FF 三十二 / 三十三 / 三十四 / 三十五 四項補強。詳見下方「Trial_v5 規劃」段。
 
-### 戰略建議
+### Trial_v5 規劃（Christ 2026-04-28 拍板，4 FF 完成後執行）
 
-**未來 Trial_v5 候選**：
-- 必須是「**小範圍純技術改動**」性質（驗證適用邊界）
-- 例：FF 三十（tech_improvement ghost Dev task）—— 動 Orchestrator 但範圍可控
-- **不要**選跨多檔案的需求（已知會踩 Bug #5/#9/#11）
+**任務需求**：**完全照搬 Trial_v4 prompt 原文**（見本檔「任務需求」段），保持「相同輸入」對照組成立。
 
-**FF 三十二 完成前不開 Trial_v5**：先補上「self-implement 完整性閘門」六子項，再做下次試驗才有意義。
+**前置條件**：以下 4 個 FF 全部完成（Stage 排序鎖死）：
+
+```
+Stage 42 → FF 三十二 prompt 補強類（C+D+F+G）
+Stage 43 → FF 三十二 Orchestrator 改動類（A+B+E）
+Stage 44 → FF 三十三（Token 計費 CLI 涵蓋，可與 42-43 並行）
+Stage 45 → FF 三十四（TaskGroup 流程暫停，鎖死 Trial_v5 前置條件）
+Stage 46 → FF 三十五（自動拆任務 ⭐ 戰略級）
+Trial_v5 → 重跑 FF 十六
+```
+
+**戰略價值**：同一需求 Trial_v4 vs Trial_v5 = **完美對照組**。PR #122 雖 close 但 Trial_v4 紀錄完整保留，Trial_v5 結束後可拿 v4 vs v5 PR 對比，改進視覺化最強說服力。
+
+**Trial_v5 預期觀察清單（10 項驗證點）**：
+
+| # | 對應 FF | 預期觀察 |
+|---|---|---|
+| 1 | FF 三十二 子項 A | DevPlan 若失敗 → Cody Appeal accept → 觸發**重新產出計畫書**（不再直接進 Dev）|
+| 2 | FF 三十二 子項 B | Dev fix 若 Token 擋失敗 → Reviewer **不啟動**（流程中止）|
+| 3 | FF 三十二 子項 C | Petra 看 Vera Info「N 元件未遷移」→ **升 blocking** |
+| 4 | FF 三十二 子項 D | Vera 抓 onUndo 類 Server Circuit 議題 → **標 Critical**（不再保守標 Warning）|
+| 5 | FF 三十二 子項 E | QA 若失敗 → TaskGroup status=**failed**（不 mark done / 不進 Doc）|
+| 6 | FF 三十二 子項 F | Sage 看到 DevPlan 為「失敗訊息」→ **不寫歸檔 + escalate** |
+| 7 | FF 三十二 子項 G | Cody PR description 列 ✅/❌ Issue + **`⚠️ ESCALATE_NEEDED`** 標記 |
+| 8 | FF 三十三 | token_logs 涵蓋 Vera/Quinn/Sage/Kickoff/Design/Dev_plan **全部 CLI Agent**（不再只有 6%）|
+| 9 | FF 三十四 | 任一階段 Christ 按暫停 → 流程停下 → 按恢復 → 繼續 |
+| 10 | FF 三十五 | Design 結束 → Petra 跳「拆 task 提案」卡 → Christ 採納 → **3 個依賴 sub-task** 建立 |
+
+**Trial_v5 結案時**：用 `/aria-trial-summary v5` 觸發整理，重點對照 v4 揭露的 13 個 bug 哪些被解、哪些殘留。
+
+### 戰略結論
+
+**Self-implement 適用邊界（Trial_v4 揭露 + Trial_v5 預期驗證）**：
+
+| 任務性質 | Trial_v4 結果 | Trial_v5 預期（4 FF 後）|
+|---|---|---|
+| 跨多檔案 / 架構級重構 | 🔴 範圍縮水到 1/12 | ✅ FF 三十五 自動拆 → 各 sub-task 可控範圍 |
+| 大需求 + 流程斷裂 | 🔴 多處流程斷裂 | ✅ FF 三十二 七子項閘門擋下 |
+| Cody 自欺 vs 客觀完成度 | 🔴 沒人擋 | ✅ FF 三十二 子項 G + Vera/Petra ESCALATE_NEEDED |
 
 ---
 

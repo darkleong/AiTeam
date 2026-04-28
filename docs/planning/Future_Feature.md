@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.47
+> 版本：v7.48
 > 建立日期：2026-04-01
 > 最後更新：2026-04-28
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1313,10 +1313,16 @@ PR 提交前，**必須**在 PR description 列出：
 - 子項 B：Dev fix 失敗時中止 fix loop（不啟動 Reviewer）
 - 子項 E：QA 失敗判定為 TaskGroup 失敗（不進 Doc）
 
-**Stage 排序建議**：
-- **Stage 42**：Prompt 補強類 4 子項（C+D+F+G，性質一致 + 風險低 + 立刻見效）
-- **Stage 43**：Orchestrator 改動類 3 子項（A+B+E，動核心流程 + 風險高，建議與 FF 三十四 排序時評估是否合併）
-- **兩 Stage 完成後才開 Trial_v5**
+**Stage 排序建議（Christ 2026-04-28 拍板鎖死，Trial_v5 前置條件）**：
+
+```
+Stage 42 → FF 三十二 prompt 補強類（C+D+F+G）
+Stage 43 → FF 三十二 Orchestrator 改動類（A+B+E）
+Stage 44 → FF 三十三（Token 計費 CLI 涵蓋，可與 42-43 並行）
+Stage 45 → FF 三十四（TaskGroup 流程暫停）
+Stage 46 → FF 三十五（自動拆任務 ⭐ 戰略級）
+Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
+```
 
 ### 替代方案：Petra 升級為 Claude Code CLI 審核 Vera report（暫不採納）
 
@@ -1393,7 +1399,7 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 
 ### 優先級
 
-🔴 高 — 影響 Token 守門精準度 + FF 一 資料基礎。建議與 FF 三十二 並行（兩者性質不同，可獨立 Stage 進行）。
+🔴 高 — 影響 Token 守門精準度 + FF 一 資料基礎。**Stage 44**（可與 FF 三十二 Stage 42-43 並行，兩者性質不同無依賴）；Trial_v5 前置條件之一。
 
 ---
 
@@ -1468,7 +1474,7 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 
 ### 優先級
 
-🟡 中 — Trial_v4 揭露的真實 UX 痛點（等 8h 期間想暫停無選項），但**非阻擋現有功能**。建議與 FF 三十二 / 三十三 排序時評估，三選二 / 三選三的決策由 Christ 拍板。
+🟡 中（**升級為 Trial_v5 前置條件，2026-04-28 鎖死**）— **Stage 45**（FF 三十二/三十三 完成後）。Trial_v5 將驗證 FF 三十四「任一階段按暫停 → 流程停 → 按恢復 → 繼續」場景，因此 FF 三十四 必須在 Trial_v5 前完成。
 
 ---
 
@@ -1631,10 +1637,18 @@ Victoria（CEO 視角看公司）智慧分類時判斷：
 
 ⭐ **戰略級 🔴 高** — 解 Trial_v4 self-implement 範圍縮水根因 + 對齊 real-world 團隊模式
 
-**前置條件鎖死**：
-- 必先 FF 三十二 完整七子項（**Stage 42 + 43**）
-- 必先 FF 三十三（**Stage 44 或與 32 並行**）
-- 然後才開 FF 三十五（**Stage 45+**）
+**Stage 排序鎖死（Christ 2026-04-28 拍板，Trial_v5 前置條件）**：
+
+```
+Stage 42 → FF 三十二 prompt 補強類（C+D+F+G）
+Stage 43 → FF 三十二 Orchestrator 改動類（A+B+E）
+Stage 44 → FF 三十三（Token 計費 CLI 涵蓋，可與 42-43 並行）
+Stage 45 → FF 三十四（TaskGroup 流程暫停）
+Stage 46 → FF 三十五（自動拆任務 ⭐ 戰略級，本 FF）
+Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
+```
+
+**Trial_v5 將驗證 FF 三十五**：Design 結束 → Petra 跳「拆 task 提案」卡 → Christ 採納 → 3 個依賴 sub-task 建立。詳見 [Trial_v4 紀錄末尾「Trial_v5 預期觀察清單」段](../experiments/Trial_v4_DashboardErrorUx.md)。
 
 ---
 
@@ -1773,3 +1787,4 @@ Victoria（CEO 視角看公司）智慧分類時判斷：
 | 2026-04-28 | v7.45：**Trial_v4 結案 + 新增 FF 三十二 / 三十三** — Trial_v4（Dashboard 錯誤處理 UX 打磨，PR #122 OPEN 未合併）首次完整三層迴圈閉環試驗、首次跨完整 pipeline 試驗、首次成本紀錄（$4.99 USD）；揭露 13 個 bug（5 個 🔴 嚴重）+ Self-implement 適用邊界（小範圍純技術改動 ✅ / 跨多檔架構級重構 🔴）；FF 二十七 補「v4 試驗結果」段（Top 1 🟡 / Top 2 🔴 / Top 3 🔴）；**新增 FF 三十二**（Self-implement 完整性閘門六子項：DevPlan 容錯 / fix loop 中止 / Petra 範圍縮水升級 / Vera Critical 邊界堅守 / QA 失敗判定 / Sage escalate）；**新增 FF 三十三**（Token 計費機制 CLI Agent 涵蓋，現 token_logs 只涵蓋 ~6% 成本）；戰略結論：三層迴圈在「程式碼層面瑕疵」生效，在「self-implement 範圍縮水」失效；未來架構級重構需求走正規 Stage（Aria 規劃 + Forge 實作），不交 Victoria self-implement；**FF 三十二完成前不開 Trial_v5** |
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
+| 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
