@@ -11,9 +11,14 @@
 
 ## [Unreleased]
 
-- **下個 Stage（待規劃）**：Trial_v4 任務（FF 二十七延伸，驗證 Vera + Petra + Quinn 三層完整閉環）— 強候選載體 FF 十六（Dashboard 錯誤處理 UX，a11y 議題密度高）/ FF 十一（Token 守門 Dashboard 化，中優先實用）；可能搭車 FF 三十
+- **下個 Stage（Stage 43）**：FF 三十二 Orchestrator 改動類（子項 A+B+E）— DevPlan Appeal accept 後 trigger 重新產出 / Dev fix 失敗中止 fix loop（不啟動 Reviewer）/ QA 失敗判定為 TaskGroup 失敗（不進 Doc）；可與 Stage 44（FF 三十三 Token CLI 涵蓋）並行
+- **後續排序**：Stage 44 = FF 三十三 / Stage 45 = FF 三十四（流程暫停，Trial_v5 前置條件）/ Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六
 
 ---
+
+## [3.29.0] — 2026-04-28 — [Stage 42](docs/planning/Stage_42_Roadmap.md)
+
+FF 三十二 prompt 補強類四子項（C+D+F+G）— Self-implement 完整性閘門上半場：Petra 範圍縮水升級規則 + Vera Server Circuit Critical 邊界（含 MudBlazor 事件鏈）+ Sage 無實作 escalate + Cody PR 自我檢查（80% 門檻，`⚠️ ESCALATE_NEEDED` marker 三檔字面一致）
 
 ## [3.28.0] — 2026-04-27 — [Stage 41](docs/planning/Stage_41_Roadmap.md)
 
