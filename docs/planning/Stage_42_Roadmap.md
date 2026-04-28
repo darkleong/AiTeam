@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 三十二（Self-implement 完整性閘門）— 子項 C / D / F / G
 > 對應版本：v3.29.0
 > 建立日期：2026-04-28
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-28）
+> 文件版本：v2.0
 
 ---
 
@@ -391,3 +391,4 @@ PR 提交前，**必須**在 PR description 列出：
 |------|------|------|
 | v1.0 | 2026-04-28 | 計劃書建立（Aria）— FF 三十二 prompt 補強類四子項（C / D / F / G）合一 Stage |
 | v1.1 | 2026-04-28 | 實作完成（Forge）— 四子項全寫入 CLAUDE_*.md，子項 C 採方案 A（特殊 escalate 段獨立），子項 F 揭露 Sage 路由端 escalate 待 Stage 43 |
+| v2.0 | 2026-04-28 | 驗收通過（Christ）— Bot 容器正常啟動、無 template parse 錯誤；靜態驗收全通過 |
