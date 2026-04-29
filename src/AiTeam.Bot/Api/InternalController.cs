@@ -298,6 +298,46 @@ public class InternalController(
         return Accepted(new { message = "已送出指令" });
     }
 
+    // ============================================================
+    //  Stage 45：TaskGroup 流程暫停 / 恢復（FF 三十四）
+    // ============================================================
+
+    /// <summary>Stage 45：暫停指定 TaskGroup 的下階段啟動（Dashboard 用）。同步寫 DB。</summary>
+    [HttpPost("taskgroup/{groupId:guid}/pause")]
+    public async Task<IActionResult> PauseTaskGroup(Guid groupId, [FromBody] PauseTaskGroupRequest? req, CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+        await tgs.PauseTaskGroupAsync(groupId, req?.By ?? "Dashboard", ct);
+        return Ok(new { message = "已暫停" });
+    }
+
+    /// <summary>
+    /// Stage 45：恢復暫停的 TaskGroup（Dashboard 用）。fire-and-forget（內部會跑 FireStepsAsync 觸發長時程 subprocess）。
+    /// </summary>
+    [HttpPost("taskgroup/{groupId:guid}/resume")]
+    public IActionResult ResumeTaskGroup(Guid groupId)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                await tgs.ResumeTaskGroupAsync(groupId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[Stage45-Resume] /internal/taskgroup/{Id}/resume 背景執行失敗", groupId);
+            }
+        });
+        return Accepted(new { message = "恢復指令已送出" });
+    }
+
     /// <summary>
     /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
     /// 後續進度透過 SignalR push 給 Dashboard 任務中心。
@@ -347,3 +387,6 @@ public record DeploymentRecordRequest(
     string? TriggeredBy);
 
 public record MockScenarioRequest(string Scenario, string? Title, string? Project);
+
+/// <summary>Stage 45：TaskGroup 暫停請求（By = "Dashboard" / 未來 "Discord"）。</summary>
+public record PauseTaskGroupRequest(string? By);

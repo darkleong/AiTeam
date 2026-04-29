@@ -37,4 +37,12 @@ public class TaskGroupDto
 
     /// <summary>Stage 43：needs_intervention 狀態下的原因摘要（Dashboard 任務詳情顯示用）。</summary>
     public string? InterventionReason  { get; set; }
+
+    // ── Stage 45：TaskGroup 流程暫停（FF 三十四） ──
+    /// <summary>Stage 45：是否暫停下階段啟動。Dashboard PipelineView 顯示暫停 chip / 恢復按鈕用。</summary>
+    public bool      IsPaused { get; set; }
+    /// <summary>Stage 45：暫停時間（UTC）。</summary>
+    public DateTime? PausedAt { get; set; }
+    /// <summary>Stage 45：暫停發起者識別（"Dashboard" / "MockAutoPause" / 未來 "Discord"）。</summary>
+    public string?   PausedBy { get; set; }
 }

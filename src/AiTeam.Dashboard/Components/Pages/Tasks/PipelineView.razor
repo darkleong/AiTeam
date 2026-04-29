@@ -35,6 +35,33 @@
     </div>
 </div>
 
+@* Stage 45：TaskGroup 流程暫停 / 恢復 *@
+@if (Group.IsPaused)
+{
+    <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Pause" Class="mb-2 mt-2">
+        ⏸️ 暫停中
+        @if (Group.PausedAt is not null)
+        {
+            <MudText Typo="Typo.caption" Class="ml-2">
+                @($"（{Group.PausedBy ?? "Dashboard"} / {Group.PausedAt.Value.ToLocalTime():HH:mm:ss}）")
+            </MudText>
+        }
+    </MudAlert>
+    <MudButton StartIcon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Variant="Variant.Filled"
+               Size="Size.Small" Class="mb-3"
+               OnClick="HandleResumeClickAsync" Disabled="@_pauseBusy">
+        ▶️ 恢復下階段
+    </MudButton>
+}
+else if (Group.Status is not "done" and not "failed" and not "cancelled")
+{
+    <MudButton StartIcon="@Icons.Material.Filled.Pause" Color="Color.Warning" Variant="Variant.Outlined"
+               Size="Size.Small" Class="mb-3 mt-2"
+               OnClick="HandlePauseClickAsync" Disabled="@_pauseBusy">
+        ⏸️ 暫停下階段啟動
+    </MudButton>
+}
+
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />

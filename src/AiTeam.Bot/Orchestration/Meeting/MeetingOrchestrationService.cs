@@ -429,9 +429,17 @@ public class MeetingOrchestrationService(
         await using var scope = serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        // Stage 45 硬規則：paused TaskGroup 不參與 crash recovery（暫停意圖保留）
         var stuckGroups = await db.TaskGroups
-            .Where(g => g.ActiveOrchestration != null)
+            .Where(g => g.ActiveOrchestration != null && !g.IsPaused)
             .ToListAsync(ct);
+
+        // Stage 45：log 跳過的 paused 數量（驗收期 docker logs 觀察用）
+        var pausedSkippedCount = await db.TaskGroups
+            .CountAsync(g => g.ActiveOrchestration != null && g.IsPaused, ct);
+        if (pausedSkippedCount > 0)
+            logger.LogInformation("[Stage45-CrashRecoveryPaused] Crash Recovery：跳過 {N} 個 paused TaskGroup（暫停意圖保留）",
+                pausedSkippedCount);
 
         if (stuckGroups.Count == 0) return;
 

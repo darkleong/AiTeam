@@ -24,6 +24,7 @@
     --color-status-cancelled: #6c757d;
     --color-status-skipped:   #20c997;
     --color-status-needs-intervention: #f59e0b;  /* Stage 43：amber，與 failed 紅色分離 */
+    --color-status-paused:    #6c757d;  /* Stage 45：muted grey，與 needs_intervention amber 視覺對比清楚（靜止 vs 警示）*/
 
     --shadow-card:             0 2px 8px rgba(0, 0, 0, 0.08);
     --radius-card:             8px;
@@ -156,6 +157,7 @@ body {
 .status-cancelled { background: var(--color-status-cancelled); }
 .status-skipped   { background: var(--color-status-skipped);   }
 .status-needs-intervention { background: var(--color-status-needs-intervention); }
+.status-paused    { background: var(--color-status-paused);    }
 
 /* ========================================
    工具類別

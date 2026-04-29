@@ -33,6 +33,13 @@ public class MockClaudeCodeService(
     public static string? FailScenario { get; set; }
 
     /// <summary>
+    /// Stage 45 Mock 場景：模擬「外部按下暫停」的觸發點。
+    /// FireStepsAsync 進入時若偵測到 (groupId, beforeStep) 匹配，會將 group 標為 IsPaused = true，
+    /// 由後續 IsPaused 閘門攔下（等同 Christ 從 Dashboard 按暫停的時序）。一次性，觸發後自動清為 null。
+    /// </summary>
+    public static (Guid groupId, string beforeStep)? PausePoint { get; set; }
+
+    /// <summary>
     /// 模擬 Dev Agent 完整開發（RunAsync）。
     /// Output 包含 /pull/999，讓 DevAgentService.ExtractPrNumberFromText 可解析 PR 編號。
     /// </summary>

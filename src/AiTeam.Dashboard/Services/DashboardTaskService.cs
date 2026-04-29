@@ -125,6 +125,10 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlanAppealLog   = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
                     InterventionReason  = g.InterventionReason,
+                    // Stage 45：TaskGroup 流程暫停
+                    IsPaused           = g.IsPaused,
+                    PausedAt           = g.PausedAt,
+                    PausedBy           = g.PausedBy,
                 })
                 .ToListAsync(cancellationToken);
         }
@@ -143,7 +147,10 @@ public class DashboardTaskService(AppDbContext db)
         {
             var query = db.TaskGroups
                 .AsNoTracking()
-                .Where(g => statusFilters == null || statusFilters.Count == 0 || statusFilters.Contains(g.Status))
+                // Stage 45：paused 是修飾狀態（IsPaused flag），不存進 Status；OR 篩 IsPaused
+                .Where(g => statusFilters == null || statusFilters.Count == 0
+                            || statusFilters.Contains(g.Status)
+                            || (statusFilters.Contains("paused") && g.IsPaused))
                 .OrderByDescending(g => g.CreatedAt);
 
             var total = await query.CountAsync(cancellationToken);
@@ -176,6 +183,10 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlanAppealLog    = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
                     InterventionReason  = g.InterventionReason,
+                    // Stage 45：TaskGroup 流程暫停
+                    IsPaused            = g.IsPaused,
+                    PausedAt            = g.PausedAt,
+                    PausedBy            = g.PausedBy,
                 })
                 .ToListAsync(cancellationToken);
 
@@ -221,6 +232,10 @@ public class DashboardTaskService(AppDbContext db)
                     DevPlanAppealLog    = g.DevPlanAppealLog,
                     DevPlanAppealRoundA = g.DevPlanAppealRoundA,
                     InterventionReason  = g.InterventionReason,
+                    // Stage 45：TaskGroup 流程暫停
+                    IsPaused            = g.IsPaused,
+                    PausedAt            = g.PausedAt,
+                    PausedBy            = g.PausedBy,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
         }

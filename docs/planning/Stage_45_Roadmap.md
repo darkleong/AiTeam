@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 三十四（TaskGroup 流程暫停機制）+ 搭車 FF 三十七（escalate skip 路徑 status 殘留）
 > 對應版本：v3.32.0
 > 建立日期：2026-04-29
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 第一段結案完成（Forge 實作 + commit + push；Aria 接手第二段 CHANGELOG / Future_Feature 同步 + 驗收追加）
+> 文件版本：v2.0（v1.0 規劃 → v2.0 實作完成）
 
 ---
 
@@ -489,8 +489,123 @@ case "dev_intervention_skip":
 
 ---
 
+## 實作紀錄（Forge 結案第一段，2026-04-29）
+
+### 範圍對齊
+- 全部子項 1-6 完成（DB schema / 暫停 / Crash Recovery / Dashboard UI / FF 三十七搭車 / Mock 場景）
+- ✅ 計劃書 v1.2（Aria 6 項審查清單 0 必修 + 路線 C race observation）作為實作基準
+- 計劃書中的 16 檔改動清單**全數落地**，無範圍變更
+
+### Aria 校準錨 #1 — Crash Recovery 真實位置
+
+| 項目 | Aria 預掃 | grep 實證 | 落地 |
+|---|---|---|---|
+| `RecoverStuckOrchestrationsAsync` body | TaskGroupService | **`MeetingOrchestrationService.cs:427-466`**（TaskGroupService.cs:582-583 是 façade） | 改在 `MeetingOrchestrationService.cs:432-434` |
+| 修改內容 | `WHERE !IsPaused` | 同上 | `.Where(g => g.ActiveOrchestration != null && !g.IsPaused)` + 加 paused-skipped count log |
+
+> Roadmap commit `c44bb88` 已將描述校準回實際位置。
+
+### Aria 校準錨 #2 — FF 三十七 真實搭車範圍
+
+| Skip handler | 位置 | 預掃聲稱 | grep 實證 | 落地 |
+|---|---|---|---|---|
+| `dev_intervention_skip` | TaskGroupService.cs:699-706 | 需修 | ✅ **已清** Status + InterventionReason | ✅×1 不需動 |
+| `qa_intervention_skip`  | TaskGroupService.cs:754-761 | 需修 | ✅ **已清** | ✅×1 不需動 |
+| `sage_skip`             | TaskGroupService.cs:799-805 | 需修 | ✅ 清 InterventionReason 後委派 `MarkGroupDoneOrInterventionAsync`（自動寫 done / needs_intervention） | ✅×1 不需動 |
+| `escalate_devplan_skip` | **`Discord/Routing/ButtonCallbackRouter.cs:241-258`** | 需修 | ❌ 沒清 Status / InterventionReason | ✅×1 **本 Stage 新修** |
+| `escalate_devplan_skip` 在 AppealOrchestrationService.cs:625 | — | 需修 | 那是**按鈕定義**（`.WithButton(...)`）**不是 handler** | 不存在 handler，無需動 |
+
+**Checklist 4 處 ✅×3 已先前修 + ✅×1 本 Stage 新修**。
+
+> Roadmap commit `c44bb88` 已將「4 處」校準為「ButtonCallbackRouter.cs:241 1 處」。
+
+### FireSteps 22 caller 統一閘門（不在 22 處逐一修）
+
+採計劃書設計：**統一閘門加在 `FireStepsAsync` body 入口**（TaskGroupService.cs FireStepsAsync），22 個 caller 自動受保護。Aria 表揚為「超越 Roadmap 預想的加分項 #1」。
+
+完整 caller checklist（grep 確認，全部受 FireStepsAsync 入口閘門保護）：
+
+| 模組 | 檔案 | 行號 |
+|---|---|---|
+| TaskGroupService（自身 self-call） | `Orchestration/TaskGroupService.cs` | 236, 287, 319, 705, 714, 751, 760, 796 |
+| ButtonCallbackRouter | `Discord/Routing/ButtonCallbackRouter.cs` | 253, 404, 651 |
+| WebhookController | `Discord/.../WebhookController.cs` | 279 |
+| AppealOrchestrationService | `Orchestration/Appeal/AppealOrchestrationService.cs` | 243, 337, 369, 376, 729 |
+| MeetingOrchestrationService | `Orchestration/Meeting/MeetingOrchestrationService.cs` | 325, 570, 696, 732 |
+| ProposalConfirmationService | `Orchestration/Proposal/ProposalConfirmationService.cs` | 119, 191 |
+| QaCoordinationService | `Orchestration/Qa/QaCoordinationService.cs` | 107, 133, 174, 181, 197 |
+| MockScenarioService（fire-and-forget 初始） | `Services/MockScenarioService.cs` | 107 |
+
+**共 22 caller，全部受統一閘門保護 ✅**。
+
+### 4 大欄位（含 Roadmap 沒明列的 PendingStepsJson）
+
+```csharp
+public bool      IsPaused         { get; set; } = false;
+public DateTime? PausedAt         { get; set; }
+public string?   PausedBy         { get; set; }
+public string?   PendingStepsJson { get; set; }   // ← Aria 表揚加分項 #2：避免 Resume 重做 8+ 種 routing
+```
+
+Migration `Stage45TaskGroupPause` (20260429043258) — 4 欄位 metadata-only ALTER（PG 11+ 不鎖表）。
+
+### Mock 3 場景（PausePoint 設計，Aria 表揚加分項 #3）
+
+`MockClaudeCodeService.PausePoint = (Guid groupId, string beforeStep)?` 靜態欄位，由 `MockScenarioService` 設定，由 `FireStepsAsync` 入口偵測。模擬「外部按下暫停」時序，等同 Christ 從 Dashboard 按暫停。一次性，觸發後自清。
+
+| Scenario | PausePoint | 預期行為 |
+|---|---|---|
+| `pause_at_kickoff_end` | (groupId, "Design") | Kickoff done → 即將 fire Design → 自動暫停 |
+| `pause_during_dev` | (groupId, "Reviewer") | Dev done → 即將 fire Reviewer → 自動暫停（被動延遲生效） |
+| `pause_resume_with_boss_interaction` | (groupId, "Reviewer") | dev_failed_intervention → 老闆按 skip → fire Reviewer → 自動暫停（議題 4 兩機制獨立） |
+
+### paused chip 配色（hex 證據）
+
+- `--color-status-paused: #6c757d`（muted grey，靜止／中立色）
+- `--color-status-needs-intervention: #f59e0b`（amber，警示色）
+- 色相距 ~190°，語意「警示 vs 靜止」清楚對比 ✅
+
+### 路線 C — Resume race condition 觀察 log
+
+`ResumeTaskGroupAsync` 加 `[Stage45-ResumeFire]` log：
+```
+logger.LogInformation("[Stage45-ResumeFire] Group {Id} resume → fire steps={Steps}", ...);
+```
+驗收期掃 `docker logs aiteam-bot-1 --tail 1000 | grep "Stage45-ResumeFire"`，觀察同 Group 短時間內是否 ≥ 2 行。
+
+**驗收期觀察結果**：（待 Christ 驗收後 Aria 結案第二段補）
+
+### 改動檔案清單（16 檔，全數落地）
+
+| 檔案 | 改動 |
+|---|---|
+| `src/AiTeam.Data/Entities.cs` | TaskGroup 加 4 欄位 |
+| `src/AiTeam.Data/Migrations/20260429043258_Stage45TaskGroupPause*` | 新 Migration（自動生成） |
+| `src/AiTeam.Bot/Orchestration/TaskGroupService.cs` | IsTaskGroupPausedAsync / PauseTaskGroupAsync / ResumeTaskGroupAsync + FireStepsAsync 統一閘門 + Mock PausePoint 偵測 |
+| `src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs` | Crash Recovery `&& !g.IsPaused` + paused-skipped count log |
+| `src/AiTeam.Bot/Agents/MockClaudeCodeService.cs` | 加 `PausePoint` 靜態欄位 |
+| `src/AiTeam.Bot/Services/MockScenarioService.cs` | 3 scenarios + workflow tuple + PausePoint 設定 |
+| `src/AiTeam.Bot/Api/InternalController.cs` | POST `/internal/taskgroup/{id}/pause` + `/resume` + PauseTaskGroupRequest record |
+| `src/AiTeam.Bot/Discord/Routing/ButtonCallbackRouter.cs` | escalate_devplan_skip 加 3 行清 status（FF 三十七 ✅） |
+| `src/AiTeam.Shared/Dtos/TaskGroupDto.cs` | 加 IsPaused / PausedAt / PausedBy |
+| `src/AiTeam.Dashboard/Services/DashboardTaskService.cs` | 3 個 Select mapping + paused 虛擬篩選 |
+| `src/AiTeam.Dashboard/Services/DashboardBotService.cs` | PauseTaskGroupAsync / ResumeTaskGroupAsync client |
+| `src/AiTeam.Dashboard/wwwroot/css/app.css` | `--color-status-paused: #6c757d` + `.status-paused` |
+| `src/AiTeam.Dashboard/Components/Shared/StatusBadge.razor` | switch 加 `"paused" => "暫停中"` |
+| `src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineList.razor` | 篩選下拉加 paused |
+| `src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineView.razor` + `.razor.cs` | 暫停 / 恢復 按鈕 + alert + handlers + ApplyGroupContent 補 paused 三欄 |
+| `src/AiTeam.Dashboard/Components/Pages/Home/MockScenarioCard.razor` | 3 新 scenario 選項 |
+| `src/Directory.Build.props` | v3.31.0 → v3.32.0 |
+
+### 編譯結果
+
+`dotnet build AiTeam.slnx` → **0 Errors / 75 Warnings（全部既有 NU1902 套件警告 + Playwright MSTEST 建議 + 1 個既有 MUD0002 PipelineView Color attribute 警告，無新增）**
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十四 TaskGroup 流程暫停機制（被動阻擋下階段，採方案 Ba + B 互動 + B Appeal flow）+ 搭車 FF 三十七（4 處 skip status 殘留修） |
+| v2.0 | 2026-04-29 | 第一段結案（Forge）— 全 6 子項落地 / 16 檔改動 / 2 條 Aria 校準錨 / 22 caller checklist / Mock 3 場景 / paused chip 配色 / 路線 C race log / 待驗收 |

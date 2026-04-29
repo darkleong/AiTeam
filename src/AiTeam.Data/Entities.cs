@@ -59,6 +59,17 @@ public class TaskGroup
     //   needs_intervention  = Christ 介入後可恢復（DevPlan 重產上限 / Dev fix failed / QA fix loop 上限 / Sage escalate）
     /// <summary>Stage 43：需介入時的原因摘要（如「Dev fix failed: Token 守門擋下」/「QA 修復連 3 輪失敗」）。null = 無介入。</summary>
     public string? InterventionReason { get; set; }
+
+    // ── Stage 45：TaskGroup 流程暫停（FF 三十四） ──
+    /// <summary>Stage 45：是否暫停下階段啟動（true = 當前階段跑完不轉下階段）。Default false。</summary>
+    public bool IsPaused { get; set; } = false;
+    /// <summary>Stage 45：暫停時間（UTC）。null = 無暫停紀錄。</summary>
+    public DateTime? PausedAt { get; set; }
+    /// <summary>Stage 45：暫停發起者識別（"Dashboard" / "MockAutoPause" / 未來 "Discord"）。null = 無暫停紀錄。</summary>
+    public string? PausedBy { get; set; }
+    /// <summary>Stage 45：暫停時被攔下的 next steps（JSON 序列化的 WorkflowStep[]）。Resume 時讀回再 FireStepsAsync，避免重做 routing。</summary>
+    public string? PendingStepsJson { get; set; }
+
     public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
     public string? IssueUrls { get; set; }   // JSONB string[]
     public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md（舊欄位，保留相容，新資料不再使用）

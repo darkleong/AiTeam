@@ -330,8 +330,126 @@ public class TaskGroupService(
     {
         if (steps.Count == 0) return;
 
+        // Stage 45 Mock：偵測 PausePoint，模擬「外部按下暫停」的時序（驗收場景 B/C/D 用）。
+        // 條件：PausePoint 已設且 groupId 匹配，且本次 fire 的 steps 含 beforeStep。
+        if (MockClaudeCodeService.PausePoint is { } pp
+            && pp.groupId == group.Id
+            && steps.Any(s => s.AgentName.Equals(pp.beforeStep, StringComparison.OrdinalIgnoreCase)))
+        {
+            logger.LogInformation("[Stage45-MockPause] PausePoint 觸發：Group {Id} 即將 fire {Step} → 自動暫停",
+                group.Id, pp.beforeStep);
+            await PauseTaskGroupAsync(group.Id, "MockAutoPause", cancellationToken);
+            MockClaudeCodeService.PausePoint = null; // 一次性
+            // fall through 到 IsPaused 閘門
+        }
+
+        // Stage 45：暫停閘門 — fresh read DB 避免 stale cache
+        if (await IsTaskGroupPausedAsync(group.Id, cancellationToken))
+        {
+            logger.LogInformation(
+                "[Stage45-PauseGate] TaskGroup {Id} 暫停中，攔下 FireStepsAsync（steps={Steps}），記錄 PendingStepsJson 等待 Resume",
+                group.Id, string.Join(",", steps.Select(s => s.AgentName)));
+
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var fresh = await db.TaskGroups.FirstAsync(g => g.Id == group.Id, cancellationToken);
+            fresh.PendingStepsJson = JsonSerializer.Serialize(steps);
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         foreach (var step in steps)
             await FireOneStepAsync(group, step, cancellationToken);
+    }
+
+    // ============================================================
+    //  Stage 45：TaskGroup 流程暫停（FF 三十四）
+    // ============================================================
+
+    /// <summary>
+    /// Stage 45：fresh read TaskGroup.IsPaused（避免 stale cache）。
+    /// 暫停可能在當前階段 subprocess 跑時被 Christ 從 Dashboard 按下（寫 DB），
+    /// cached entity 不會反映 → 必須獨立 scope + 新 DbContext 讀最新（呼應 Stage 44 TokenLogService 風格）。
+    /// </summary>
+    internal async Task<bool> IsTaskGroupPausedAsync(Guid groupId, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.TaskGroups
+            .Where(g => g.Id == groupId)
+            .Select(g => g.IsPaused)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Stage 45：標記 TaskGroup 為暫停。idempotent（已暫停則 no-op）。
+    /// Dashboard 暫停按鈕 / Mock PausePoint 自動觸發共用此 method。
+    /// </summary>
+    public async Task PauseTaskGroupAsync(Guid groupId, string pausedBy, CancellationToken ct = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null) return;
+        if (group.IsPaused) return;
+
+        group.IsPaused = true;
+        group.PausedAt = DateTime.UtcNow;
+        group.PausedBy = pausedBy;
+        await taskRepo.SaveAsync(ct);
+        logger.LogInformation("[Stage45-Pause] TaskGroup {Id} 已標記暫停（by={By}）", groupId, pausedBy);
+    }
+
+    /// <summary>
+    /// Stage 45：恢復暫停的 TaskGroup → 清 IsPaused/PausedAt/PausedBy/PendingStepsJson，
+    /// 讀回先前被攔下的 steps 重新 FireStepsAsync。
+    /// 若 PendingStepsJson 為 null（暫停期間沒有 next step 被攔），則只清旗標。
+    /// </summary>
+    public async Task ResumeTaskGroupAsync(Guid groupId, CancellationToken ct = default)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null)
+        {
+            logger.LogWarning("[Stage45-Resume] group {Id} not found", groupId);
+            return;
+        }
+        if (!group.IsPaused)
+        {
+            logger.LogInformation("[Stage45-Resume] group {Id} 並未暫停，no-op", groupId);
+            return;
+        }
+
+        var pendingJson = group.PendingStepsJson;
+        group.IsPaused = false;
+        group.PausedAt = null;
+        group.PausedBy = null;
+        group.PendingStepsJson = null;
+        await taskRepo.SaveAsync(ct);
+
+        if (string.IsNullOrEmpty(pendingJson))
+        {
+            logger.LogInformation("[Stage45-Resume] group {Id} 無 PendingSteps，僅清旗標", groupId);
+            return;
+        }
+
+        WorkflowStep[]? steps;
+        try
+        {
+            steps = JsonSerializer.Deserialize<WorkflowStep[]>(pendingJson);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[Stage45-Resume] PendingStepsJson 反序列化失敗（group={Id}），僅清旗標", groupId);
+            return;
+        }
+        if (steps is null || steps.Length == 0) return;
+
+        // 路線 C：Resume race condition 觀察 log（驗收期掃同 Group 短時間內是否兩次 fire）
+        logger.LogInformation("[Stage45-ResumeFire] Group {Id} resume → fire steps={Steps}",
+            groupId, string.Join(",", steps.Select(s => s.AgentName)));
+        await FireStepsAsync(group, steps, ct);
     }
 
     private async Task FireOneStepAsync(

@@ -250,6 +250,12 @@ public class ButtonCallbackRouter(
                     var groupRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
                     var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
                     if (group is null) return;
+
+                    // FF 三十七：清 status / interventionReason，避免 Dashboard UI 顯示「需介入」誤導
+                    groupRepo.UpdateGroupStatus(group, "running");
+                    group.InterventionReason = null;
+                    await groupRepo.SaveAsync();
+
                     await taskGroupService.FireStepsAsync(
                         group, [new WorkflowStep("Dev")], CancellationToken.None);
                 }

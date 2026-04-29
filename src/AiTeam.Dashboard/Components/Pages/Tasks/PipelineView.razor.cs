@@ -40,6 +40,7 @@ public partial class PipelineView : IAsyncDisposable
     private List<PipelineStepViewModel> _steps = [];
     private bool _loading;
     private int  _activeStepIndex;
+    private bool _pauseBusy;
 
     #endregion
 
@@ -176,6 +177,51 @@ public partial class PipelineView : IAsyncDisposable
         Group.ReviewAppealRoundA = freshGroup.ReviewAppealRoundA;
         Group.DevPlanAppealLog   = freshGroup.DevPlanAppealLog;
         Group.DevPlanAppealRoundA = freshGroup.DevPlanAppealRoundA;
+        // Stage 45：TaskGroup 流程暫停
+        Group.IsPaused           = freshGroup.IsPaused;
+        Group.PausedAt           = freshGroup.PausedAt;
+        Group.PausedBy           = freshGroup.PausedBy;
+    }
+
+    /// <summary>Stage 45：暫停 TaskGroup（Dashboard 操作）。</summary>
+    private async Task HandlePauseClickAsync()
+    {
+        if (Group is null || _pauseBusy) return;
+        _pauseBusy = true;
+        try
+        {
+            var ok = await BotService.PauseTaskGroupAsync(Group.Id);
+            Snackbar.Add(ok ? "已暫停下階段啟動，當前階段跑完不會轉下階段" : "暫停指令送出失敗",
+                ok ? Severity.Success : Severity.Error);
+            if (ok)
+            {
+                // 樂觀更新（fresh read 由 SignalR / 重新載入觸發）
+                Group.IsPaused = true;
+                Group.PausedAt = DateTime.UtcNow;
+                Group.PausedBy = "Dashboard";
+            }
+        }
+        finally { _pauseBusy = false; }
+    }
+
+    /// <summary>Stage 45：恢復暫停的 TaskGroup（Dashboard 操作）。</summary>
+    private async Task HandleResumeClickAsync()
+    {
+        if (Group is null || _pauseBusy) return;
+        _pauseBusy = true;
+        try
+        {
+            var ok = await BotService.ResumeTaskGroupAsync(Group.Id);
+            Snackbar.Add(ok ? "已送出恢復指令，下階段即將啟動" : "恢復指令送出失敗",
+                ok ? Severity.Success : Severity.Error);
+            if (ok)
+            {
+                Group.IsPaused = false;
+                Group.PausedAt = null;
+                Group.PausedBy = null;
+            }
+        }
+        finally { _pauseBusy = false; }
     }
 
     private async Task HandleRequeueAsync(Guid taskId)

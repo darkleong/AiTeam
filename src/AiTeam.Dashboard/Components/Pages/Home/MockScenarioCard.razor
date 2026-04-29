@@ -56,6 +56,10 @@
                 <MudSelectItem Value="@("dev_plan_fail_escalate")">⚠️ Stage43 — DevPlan 重產上限（連 2 次失敗 → escalate）</MudSelectItem>
                 <MudSelectItem Value="@("dev_failed_intervention")">⚠️ Stage43 — Dev 失敗中止（needs_intervention）</MudSelectItem>
                 <MudSelectItem Value="@("qa_failed_fix_then_intervention")">⚠️ Stage43 — QA fix loop 上限（needs_intervention）</MudSelectItem>
+                @* Stage 45：FF 三十四 TaskGroup 流程暫停 3 場景 *@
+                <MudSelectItem Value="@("pause_at_kickoff_end")">⏸️ Stage45 — Kickoff 結束自動暫停（驗 Design 不啟動）</MudSelectItem>
+                <MudSelectItem Value="@("pause_during_dev")">⏸️ Stage45 — Dev 進行中暫停（驗被動延遲生效）</MudSelectItem>
+                <MudSelectItem Value="@("pause_resume_with_boss_interaction")">⏸️ Stage45 — 跨 BossInteraction 暫停（驗議題 4 兩機制獨立）</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">

@@ -121,6 +121,49 @@ public class DashboardBotService(
         }
     }
 
+    /// <summary>Stage 45：暫停指定 TaskGroup 的下階段啟動（Dashboard 用）。</summary>
+    public async Task<bool> PauseTaskGroupAsync(Guid groupId, string by = "Dashboard", CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/pause");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            request.Content = JsonContent.Create(new { by });
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("TaskGroup {Id} 暫停指令已送出（by={By}）", groupId, by);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出 TaskGroup 暫停指令失敗（GroupId={Id}）", groupId);
+            return false;
+        }
+    }
+
+    /// <summary>Stage 45：恢復暫停的 TaskGroup（Dashboard 用）。fire-and-forget。</summary>
+    public async Task<bool> ResumeTaskGroupAsync(Guid groupId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/resume");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            logger.LogInformation("TaskGroup {Id} 恢復指令已送出", groupId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "送出 TaskGroup 恢復指令失敗（GroupId={Id}）", groupId);
+            return false;
+        }
+    }
+
     /// <summary>呼叫 /internal/restart，回傳是否成功。</summary>
     public async Task<bool> RestartBotAsync(CancellationToken cancellationToken = default)
     {

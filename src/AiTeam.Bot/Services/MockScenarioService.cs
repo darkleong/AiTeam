@@ -67,6 +67,10 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "dev_failed_after_review"; // Dev 成功 → Vera Critical → Dev_fix 失敗
         else if (scenario == "qa_failed_fix_then_intervention")
             MockClaudeCodeService.FailScenario = "qa_fix_loop_fail";        // QA 連 N 輪失敗 → escalate
+        // ── Stage 45 新增 3 個暫停場景 ──
+        else if (scenario == "pause_resume_with_boss_interaction")
+            MockClaudeCodeService.FailScenario = "dev_failed_after_review"; // 複用 dev_failed_intervention 邏輯製造 BossInteraction
+        // pause_at_kickoff_end / pause_during_dev 不需 FailScenario（PausePoint 已足夠）
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -82,6 +86,10 @@ public class MockScenarioService(
             "dev_plan_fail_escalate"        => (WorkflowType.NewFeature,      "失敗測試-DevPlanEscalate",  "Dev_plan"),
             "dev_failed_intervention"       => (WorkflowType.NewFeature,      "失敗測試-DevFailedIntervention", "Dev"),
             "qa_failed_fix_then_intervention" => (WorkflowType.NewFeature,    "失敗測試-QAFixIntervention",  "Dev"),
+            // Stage 45：3 個暫停場景
+            "pause_at_kickoff_end"               => (WorkflowType.NewFeature, "暫停測試-KickoffEnd",         "Kickoff"),
+            "pause_during_dev"                   => (WorkflowType.NewFeature, "暫停測試-Dev進行中",          "Dev"),
+            "pause_resume_with_boss_interaction" => (WorkflowType.NewFeature, "暫停測試-跨BossInteraction",  "Dev"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -103,6 +111,14 @@ public class MockScenarioService(
             issueUrlsJson: "[\"https://github.com/mock/repo/issues/1\"]",
             uiSpecContent: "[MOCK] 模擬 UI 規格，供 Mock Mode 測試使用。",
             cancellationToken: ct);
+
+        // Stage 45：依 scenario 設 PausePoint，FireStepsAsync 進入時偵測到 (groupId, beforeStep) 匹配自動暫停
+        if (scenario == "pause_at_kickoff_end")
+            MockClaudeCodeService.PausePoint = (group.Id, "Design");        // Kickoff done → 即將 fire Design 時暫停
+        else if (scenario == "pause_during_dev")
+            MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");      // Dev done → 即將 fire Reviewer 時暫停（被動延遲）
+        else if (scenario == "pause_resume_with_boss_interaction")
+            MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");      // 老闆按 dev_intervention_skip → fire Reviewer 時暫停
 
         _ = Task.Run(() => taskGroupService.FireStepsAsync(group, [new WorkflowStep(initialStep)]));
 
