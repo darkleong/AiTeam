@@ -11,6 +11,7 @@ public class PmReviewService(
     LlmProviderFactory providerFactory,
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
+    Services.TokenLogService tokenLogService,
     ILogger<PmReviewService> logger)
 {
     private const string AgentName = "PM";
@@ -92,6 +93,9 @@ public class PmReviewService(
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
             var result = await claudeCodeService.RunReadOnlyAsync(repoLocalPath, prompt, model, apiKey, ct);
+            // Stage 44：寫 token_logs（AgentName=Petra / Stage=Petra_review，service 無 task ref → null）
+            await tokenLogService.LogCliUsageAsync(
+                "Petra", model, "Petra_review", round: null, taskId: null, result.Usage, ct);
 
             if (!result.Success)
             {

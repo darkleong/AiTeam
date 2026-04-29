@@ -215,7 +215,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         var stdout   = stdoutBuilder.ToString();
         var stderr   = stderrBuilder.ToString();
         var exitCode = process.ExitCode;
-        var (success, output) = ParseJsonOutput(stdout, exitCode);
+        var (success, output, usage) = ParseJsonOutput(stdout, exitCode);
 
         if (!string.IsNullOrWhiteSpace(stderr))
         {
@@ -235,7 +235,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             "Claude Code subprocess 結束（含圖片，exitCode={Code}，success={Success}）",
             exitCode, success);
 
-        return new ClaudeCodeResult(success, output, exitCode, stdout);
+        return new ClaudeCodeResult(success, output, exitCode, stdout, usage);
     }
 
     private async Task<ClaudeCodeResult> RunCoreAsync(
@@ -311,7 +311,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         var stderr  = stderrBuilder.ToString();
 
         var exitCode = process.ExitCode;
-        var (success, output) = ParseJsonOutput(stdout, exitCode);
+        var (success, output, usage) = ParseJsonOutput(stdout, exitCode);
 
         if (!string.IsNullOrWhiteSpace(stderr))
         {
@@ -335,7 +335,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             "Claude Code subprocess 結束（exitCode={Code}，success={Success}）",
             exitCode, success);
 
-        return new ClaudeCodeResult(success, output, exitCode, stdout);
+        return new ClaudeCodeResult(success, output, exitCode, stdout, usage);
     }
 
     private async Task<ClaudeCodeResult> RunMeetingCoreAsync(
@@ -406,7 +406,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         var stdout  = stdoutBuilder.ToString();
         var stderr  = stderrBuilder.ToString();
         var exitCode = process.ExitCode;
-        var (success, output) = ParseJsonOutput(stdout, exitCode);
+        var (success, output, usage) = ParseJsonOutput(stdout, exitCode);
 
         if (!string.IsNullOrWhiteSpace(stderr))
         {
@@ -429,7 +429,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             "Claude Code 會議 session 結束（sessionId={Id}，exitCode={Code}，success={Success}）",
             sessionId, exitCode, success);
 
-        return new ClaudeCodeResult(success, output, exitCode, stdout);
+        return new ClaudeCodeResult(success, output, exitCode, stdout, usage);
     }
 
     /// <summary>
@@ -478,11 +478,12 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     /// <summary>
     /// 解析 Claude Code JSON 輸出，提取執行結果與摘要。
     /// --output-format json 的最終結果為最後一行 JSON，type="result"。
+    /// Stage 44：額外解析 usage 子物件 + 頂層 total_cost_usd 供 token_logs 寫入。
     /// </summary>
-    private (bool Success, string Output) ParseJsonOutput(string rawOutput, int exitCode)
+    private (bool Success, string Output, TokenUsage? Usage) ParseJsonOutput(string rawOutput, int exitCode)
     {
         if (string.IsNullOrWhiteSpace(rawOutput))
-            return (exitCode == 0, "（無輸出）");
+            return (exitCode == 0, "（無輸出）", null);
 
         // JSON 輸出為逐行 JSON，最後一行是 type="result" 的結果物件
         var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -503,8 +504,9 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
                 var result  = root.TryGetProperty("result", out var resProp)
                     ? resProp.GetString() ?? ""
                     : "";
+                var usage = TryParseUsage(root);
 
-                return (!isError && exitCode == 0, result);
+                return (!isError && exitCode == 0, result, usage);
             }
             catch (JsonException)
             {
@@ -513,7 +515,30 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         }
 
         // 找不到 result 物件：fallback 到 exit code 判斷
-        return (exitCode == 0, lines.LastOrDefault(l => l.Trim().Length > 0) ?? "（無摘要）");
+        return (exitCode == 0, lines.LastOrDefault(l => l.Trim().Length > 0) ?? "（無摘要）", null);
+    }
+
+    /// <summary>
+    /// Stage 44：從 type="result" 物件解析 usage + total_cost_usd。
+    /// schema 不符或欄位缺失 → 回傳 null（呼叫端 LogCliUsageAsync 會 early return，不阻塞主流程）。
+    /// </summary>
+    private static TokenUsage? TryParseUsage(JsonElement root)
+    {
+        try
+        {
+            if (!root.TryGetProperty("usage", out var u)) return null;
+            var input  = u.TryGetProperty("input_tokens",                out var v1) && v1.ValueKind == JsonValueKind.Number ? v1.GetInt32() : 0;
+            var output = u.TryGetProperty("output_tokens",               out var v2) && v2.ValueKind == JsonValueKind.Number ? v2.GetInt32() : 0;
+            var cc     = u.TryGetProperty("cache_creation_input_tokens", out var v3) && v3.ValueKind == JsonValueKind.Number ? v3.GetInt32() : 0;
+            var cr     = u.TryGetProperty("cache_read_input_tokens",     out var v4) && v4.ValueKind == JsonValueKind.Number ? v4.GetInt32() : 0;
+            decimal? cost = root.TryGetProperty("total_cost_usd", out var c) && c.ValueKind == JsonValueKind.Number
+                ? c.GetDecimal() : null;
+            return new TokenUsage(input, output, cc, cr, cost);
+        }
+        catch (Exception)
+        {
+            return null;   // 任何例外 → null，硬規則「不阻塞」
+        }
     }
 
     /// <summary>
@@ -565,8 +590,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
 /// <param name="Output">Claude Code 回報的執行摘要（從 JSON result 欄位解析）。</param>
 /// <param name="ExitCode">subprocess exit code。</param>
 /// <param name="RawJson">完整 stdout（含所有 JSON 行，供 debug 用）。</param>
+/// <param name="Usage">Stage 44：token usage（input / output / cache / cost）。CLI 解析失敗時為 null。</param>
 public record ClaudeCodeResult(
-    bool   Success,
-    string Output,
-    int    ExitCode,
-    string RawJson);
+    bool        Success,
+    string      Output,
+    int         ExitCode,
+    string      RawJson,
+    TokenUsage? Usage = null);

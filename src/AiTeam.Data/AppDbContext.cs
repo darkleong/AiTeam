@@ -93,6 +93,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).IsRequired(false);
+            // Stage 44：對齊 Anthropic 帳單精度（USD 第六位，如 $0.008487）
+            e.Property(x => x.TotalCostUsd).HasPrecision(18, 6);
         });
 
         modelBuilder.Entity<AppSetting>(e =>

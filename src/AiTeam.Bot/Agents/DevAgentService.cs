@@ -21,6 +21,7 @@ public class DevAgentService(
     DashboardPushService dashboardPush,
     AppSettingsService appSettings,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<DevAgentService> logger) : IAgentExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -273,6 +274,9 @@ public class DevAgentService(
         try
         {
             result = await claudeCodeService.RunAsync(localPath, prompt, model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Cody / Stage=Dev / Round=FixIteration）
+            await tokenLogService.LogCliUsageAsync(
+                "Cody", model, "Dev", task.Group?.FixIteration, task.Id, result.Usage, cancellationToken);
         }
         finally
         {
@@ -788,6 +792,9 @@ public class DevAgentService(
 
             var result = await claudeCodeService.RunReadOnlyAsync(
                 localPath, prompt, model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Cody / Stage=Dev_plan / Round=DevPlanRevision）
+            await tokenLogService.LogCliUsageAsync(
+                "Cody", model, "Dev_plan", task.Group?.DevPlanRevision, task.Id, result.Usage, cancellationToken);
 
             var planContent = result.Success && !string.IsNullOrWhiteSpace(result.Output)
                 ? result.Output

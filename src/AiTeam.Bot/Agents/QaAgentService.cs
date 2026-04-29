@@ -26,6 +26,7 @@ public class QaAgentService(
     IClaudeCodeService claudeCodeService,
     AppSettingsService appSettings,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<QaAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "QA";
@@ -238,8 +239,12 @@ public class QaAgentService(
                       ?? "claude-sonnet-4-6";
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
-            return await claudeCodeService.RunQaAsync(
+            var result = await claudeCodeService.RunQaAsync(
                 localPath, prompt, model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Quinn / Stage=QA / Round=QaFixRound）
+            await tokenLogService.LogCliUsageAsync(
+                "Quinn", model, "QA", task.Group?.QaFixRound, task.Id, result.Usage, cancellationToken);
+            return result;
         }
         catch (Exception ex)
         {

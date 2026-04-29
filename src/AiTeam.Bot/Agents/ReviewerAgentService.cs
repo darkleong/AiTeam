@@ -30,6 +30,7 @@ public class ReviewerAgentService(
     AppSettingsService appSettings,
     IConfiguration configuration,
     IOptions<WorkflowSettings> workflowSettings,
+    TokenLogService tokenLogService,
     ILogger<ReviewerAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Reviewer";
@@ -192,6 +193,7 @@ public class ReviewerAgentService(
 
     /// <summary>
     /// Clone repo、checkout PR branch、替換 CLAUDE.md、執行 RunReviewAsync、還原 CLAUDE.md。
+    /// Stage 44：執行後寫 token_logs（AgentName=Vera / Stage=Reviewer / Round=FixIteration）。
     /// </summary>
     private async Task<ClaudeCodeResult> RunClaudeCodeReviewAsync(
         string owner,
@@ -229,8 +231,11 @@ public class ReviewerAgentService(
                           ?? "claude-sonnet-4-6";
                 var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
-                return await claudeCodeService.RunReviewAsync(
+                var result = await claudeCodeService.RunReviewAsync(
                     localPath, prompt, model, apiKey, cancellationToken);
+                await tokenLogService.LogCliUsageAsync(
+                    "Vera", model, "Reviewer", task.Group?.FixIteration, task.Id, result.Usage, cancellationToken);
+                return result;
             }
             finally
             {

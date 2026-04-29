@@ -434,3 +434,140 @@ ORDER BY "CreatedAt";
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十三 Token CLI 涵蓋三大塊（CLI capture + schema 升級 + 守門邏輯升級）合一 Stage |
+| v1.1 | 2026-04-29 | 實作完成（Forge）— 補實作紀錄章節（4 必含章節：Roadmap 校準 / 16 caller checklist / MeetingCommons 17 處 checklist / Trial_v5 涵蓋率目標升級） |
+
+---
+
+## 實作紀錄（Forge，2026-04-29）
+
+### Phase 1 — JSON Schema 驗證 ✅
+
+執行 `echo "say hi" | claude --output-format json --print | tail -1 | python -m json.tool` 實證 schema 與 Roadmap 預期完全一致：
+
+```jsonc
+{
+  "type": "result",
+  "is_error": false,
+  "total_cost_usd": 0.008487600000000001,    // ✅ root level decimal
+  "usage": {
+    "input_tokens": 2,                        // ✅
+    "cache_creation_input_tokens": 0,         // ✅
+    "cache_read_input_tokens": 27272,         // ✅
+    "output_tokens": 20                       // ✅
+  }
+}
+```
+
+**結論**：無需更新計劃書 schema 假設。
+
+### 1. Roadmap 描述校準（必含章節 #1）
+
+> **Roadmap 預估 8 caller，Phase 2 grep 揭露實際 14 個必要 caller**（含申訴各分支的 Petra-Review / Petra-Arbitration / Petra-Reassess + Cody-ReviewAppeal / Vera-ReviewAppeal / Cody-DevPlanAppeal）**+ Aria 閘門一拍板搭車 Rosa/Demi 2 個 = 共 16 個 CLI Agent caller**。Roadmap 原描述粗估，計劃書 v1.1 校準後正式記錄差異。
+
+實際 MeetingCommons.RunAgentTurnAsync 的 call site 計畫書估 17 處（Kickoff ×6 + Design ×11），grep 揭露 **Kickoff ×7 + Design ×14 = 21 處**（再校準一次粗估），全部已補完 `meetingType` + `round` + `tokenLogService`。
+
+### 2. 16 處 CLI Agent caller LogCliUsageAsync ✅ checklist（必含章節 #2）
+
+| # | 邏輯 Agent | Caller (檔:行) | LogCli `agentName` | `stage` | `round` | 已補 ✅ |
+|---|---|---|---|---|---|---|
+| 1 | Vera | [ReviewerAgentService.cs:236](../../src/AiTeam.Bot/Agents/ReviewerAgentService.cs) | `Vera` | `Reviewer` | `task.Group?.FixIteration` | ✅ |
+| 2 | Quinn | [QaAgentService.cs:243](../../src/AiTeam.Bot/Agents/QaAgentService.cs) | `Quinn` | `QA` | `task.Group?.QaFixRound` | ✅ |
+| 3 | Sage | [DocAgentService.cs:223](../../src/AiTeam.Bot/Agents/DocAgentService.cs) | `Sage` | `Doc` | null | ✅ |
+| 4 | Cody-Dev | [DevAgentService.cs:277](../../src/AiTeam.Bot/Agents/DevAgentService.cs) | `Cody` | `Dev` | `task.Group?.FixIteration` | ✅ |
+| 5 | Cody-Dev_plan | [DevAgentService.cs:792](../../src/AiTeam.Bot/Agents/DevAgentService.cs) | `Cody` | `Dev_plan` | `task.Group?.DevPlanRevision` | ✅ |
+| 6 | Petra-Review | [PmReviewService.cs:96](../../src/AiTeam.Bot/Agents/Pm/PmReviewService.cs) | `Petra` | `Petra_review` | null | ✅ |
+| 7 | Petra-Arbitration | [Pm/ReviewAppealService.cs:163](../../src/AiTeam.Bot/Agents/Pm/ReviewAppealService.cs) | `Petra` | `ReviewAppeal_arbitration` | `group.ReviewAppealRoundA` | ✅ |
+| 8 | Petra-Reassess DevPlan | [Pm/DevPlanAppealService.cs:97](../../src/AiTeam.Bot/Agents/Pm/DevPlanAppealService.cs) | `Petra` | `DevPlanAppeal_petra` | `group.DevPlanAppealRoundA` | ✅ |
+| 9 | Cody-ReviewAppeal | [Pm/ReviewAppealService.cs:54](../../src/AiTeam.Bot/Agents/Pm/ReviewAppealService.cs) | `Cody` | `ReviewAppeal_cody` | `group.ReviewAppealRoundA` | ✅ |
+| 10 | Vera-ReviewAppeal | [Pm/ReviewAppealService.cs:113](../../src/AiTeam.Bot/Agents/Pm/ReviewAppealService.cs) | `Vera` | `ReviewAppeal_vera` | `group.ReviewAppealRoundA` | ✅ |
+| 11 | Cody-DevPlanAppeal | [Pm/DevPlanAppealService.cs:49](../../src/AiTeam.Bot/Agents/Pm/DevPlanAppealService.cs) | `Cody` | `DevPlanAppeal_cody` | `group.DevPlanAppealRoundA` | ✅ |
+| 12 | Victoria | [CeoAgentService.cs:196](../../src/AiTeam.Bot/Agents/CeoAgentService.cs) | `CEO` | `CEO` | null | ✅ |
+| 13 | Meeting-Kickoff | 透過 [MeetingCommons.RunAgentTurnAsync](../../src/AiTeam.Bot/Orchestration/Meeting/MeetingCommons.cs)（KickoffMeetingService ×7） | `Meeting-Kickoff` | `Kickoff` | `group.KickoffRound` / round | ✅ |
+| 14 | Meeting-Design | 透過 MeetingCommons.RunAgentTurnAsync（DesignMeetingService ×14） | `Meeting-Design` | `Design` | `group.DesignRound` / round | ✅ |
+| 15 | **Rosa**（Aria 閘門一拍板納入） | [RequirementsAgentService.cs:184](../../src/AiTeam.Bot/Agents/RequirementsAgentService.cs) | `Rosa` | `Requirements` | null | ✅ |
+| 16 | **Demi**（Aria 閘門一拍板納入） | [DesignerAgentService.cs:166](../../src/AiTeam.Bot/Agents/DesignerAgentService.cs) | `Demi` | `Designer` | null | ✅ |
+
+### 3. MeetingCommons 21 處 call site checklist（必含章節 #3，方案 A 防線）
+
+> Phase 2 estimat 17 處，實作期 grep 揭露 **Kickoff 7 + Design 14 = 21 處**。所有 call site 都帶 `meetingType` + `round` + `tokenLogService`（grep 第二道防線同步驗證 — 見「實作期 grep 驗證」段）。
+
+#### KickoffMeetingService 7 處
+
+| # | 行 | Agent | meetingType ✅ | round ✅ | tokenLogService ✅ |
+|---|---|---|---|---|---|
+| 1 | :98 | Rosa | ✅ | ✅ round | ✅ |
+| 2 | :102 | Demi | ✅ | ✅ round | ✅ |
+| 3 | :106 | Cody | ✅ | ✅ round | ✅ |
+| 4 | :110 | Quinn | ✅ | ✅ round | ✅ |
+| 5 | :138 | Petra (round summary) | ✅ | ✅ round | ✅ |
+| 6 | :177 | Petra (TaskPlan) | ✅ | ✅ totalRounds | ✅ |
+| 7 | :241 | Petra (ModifyTaskPlan) | ✅ | ✅ group.KickoffRound | ✅ |
+
+#### DesignMeetingService 14 處
+
+| # | 行 | Agent / Phase | meetingType ✅ | round ✅ | tokenLogService ✅ |
+|---|---|---|---|---|---|
+| 1 | :91 | Petra Judge | ✅ | ✅ group.DesignRound | ✅ |
+| 2 | :104 | Rosa PreWork | ✅ | ✅ group.DesignRound | ✅ |
+| 3 | :144 | Demi PreWork | ✅ | ✅ group.DesignRound | ✅ |
+| 4 | :180 | Rosa Meeting | ✅ | ✅ round | ✅ |
+| 5 | :187 | Demi Meeting | ✅ | ✅ round | ✅ |
+| 6 | :192 | Cody Meeting | ✅ | ✅ round | ✅ |
+| 7 | :196 | Quinn Meeting | ✅ | ✅ round | ✅ |
+| 8 | :228 | Petra Round Summary | ✅ | ✅ round | ✅ |
+| 9 | :367 | Petra ModifyDesignPlan | ✅ | ✅ group.DesignRound | ✅ |
+| 10 | :435 | Rosa Adjustment | ✅ | ✅ group.DesignRound | ✅ |
+| 11 | :477 | Demi Adjustment (create) | ✅ | ✅ group.DesignRound | ✅ |
+| 12 | :485 | Demi Adjustment (resume) | ✅ | ✅ group.DesignRound | ✅ |
+| 13 | :516 | Petra Eval | ✅ | ✅ group.DesignRound | ✅ |
+| 14 | :565 | GenerateDesignPlan helper | ✅ | ✅ round 參數 | ✅ |
+
+**實作期 grep 驗證（第二道防線）**：
+
+```
+grep -n "RunAgentTurnAsync" src/AiTeam.Bot/Orchestration/Meeting/{Kickoff,Design}MeetingService.cs
+```
+
+每處 call site 後續行皆含 `meetingType:` 字樣 → 全 ✅，無漏補。
+
+### 4. Trial_v5 涵蓋率目標升級（必含章節 #4）
+
+Roadmap 原訂 Trial_v5 對照 Anthropic Console 90%+；Aria 閘門一拍板將 **Rosa/Demi 納入正式範圍** → Trial_v5 涵蓋率目標進一步拉高（具體 % 由 Trial_v5 實測落地）。
+
+### 5. 改動檔案清單
+
+**新增**：
+- [src/AiTeam.Bot/Agents/TokenUsage.cs](../../src/AiTeam.Bot/Agents/TokenUsage.cs)
+- [src/AiTeam.Bot/Services/TokenLogService.cs](../../src/AiTeam.Bot/Services/TokenLogService.cs)
+- [src/AiTeam.Data/Migrations/20260429024106_Stage44TokenLogsSchemaUpgrade.cs](../../src/AiTeam.Data/Migrations/20260429024106_Stage44TokenLogsSchemaUpgrade.cs)（含 .Designer.cs + Snapshot）
+
+**修改**：
+- [src/AiTeam.Data/Entities.cs](../../src/AiTeam.Data/Entities.cs) — TokenLog 加 5 nullable 欄位 + `ComputeEffectiveTokens` static helper
+- [src/AiTeam.Data/AppDbContext.cs](../../src/AiTeam.Data/AppDbContext.cs) — TokenLog `TotalCostUsd HasPrecision(18, 6)`
+- [src/AiTeam.Data/Repositories/TokenRepository.cs](../../src/AiTeam.Data/Repositories/TokenRepository.cs) — 三個 SUM 改 long + cache 等效公式 inline
+- [src/AiTeam.Bot/Agents/ClaudeCodeService.cs](../../src/AiTeam.Bot/Agents/ClaudeCodeService.cs) — `ParseJsonOutput` 升 3-tuple + `TryParseUsage` + `ClaudeCodeResult.Usage`
+- [src/AiTeam.Bot/Agents/TokenTrackingProvider.cs](../../src/AiTeam.Bot/Agents/TokenTrackingProvider.cs) — long ripple + cache 寫入註解（API 層 cache 細節留 FF 一搭車）
+- 16 個 CLI caller service 全部加 `TokenLogService` 注入 + `LogCliUsageAsync` 一行寫入
+- [src/AiTeam.Bot/Orchestration/Meeting/MeetingCommons.cs](../../src/AiTeam.Bot/Orchestration/Meeting/MeetingCommons.cs) — RunAgentTurnAsync 加 3 個 optional 參數
+- [src/AiTeam.Bot/Orchestration/Meeting/KickoffMeetingService.cs](../../src/AiTeam.Bot/Orchestration/Meeting/KickoffMeetingService.cs) — 7 處 + DI
+- [src/AiTeam.Bot/Orchestration/Meeting/DesignMeetingService.cs](../../src/AiTeam.Bot/Orchestration/Meeting/DesignMeetingService.cs) — 14 處 + DI + GenerateDesignPlanAsync 加 round 參數
+- [src/AiTeam.Bot/Program.cs](../../src/AiTeam.Bot/Program.cs) — `AddSingleton<TokenLogService>()`
+- [src/Directory.Build.props](../../src/Directory.Build.props) — Version 3.30.0 → 3.31.0
+
+### 6. 驗收期注意事項
+
+1. **本地 Migration 未跑**：Forge 本地 Docker Postgres 未啟動（容器在 Christ 端跑），Migration 檔案已產出且 `Up()` 內容只是 5 個 `AddColumn` + TotalCostUsd `numeric(18,6)`，CI/CD push 後 self-hosted runner 重啟容器自動 `db.Database.Migrate()` 即可生效。
+2. **驗收期 SQL 查 token_logs**（呼應 Roadmap 點 9，Bash diagnostic toolkit 自助查證）：
+   ```bash
+   docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c "\d token_logs"
+   docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c \
+     "SELECT \"AgentName\", \"Stage\", \"Round\", \"InputTokens\", \"OutputTokens\", \"CacheReadTokens\", \"TotalCostUsd\" FROM token_logs ORDER BY \"CreatedAt\" DESC LIMIT 20;"
+   ```
+3. **真實 CLI 跑驗證**（roadmap 第二層）：Mock Mode 不會寫 token（`new ClaudeCodeResult(...)` 預設 Usage = null → LogCliUsageAsync early return），真實 CLI 跑既有任務（如 `new_feature_with_proposal`）後查 SQL 確認 16 種 AgentName / Stage 組合都有 entry。
+4. **守門公式驗證**（roadmap 第三層）：跑兩次相同任務觸發 prompt cache → 確認 `CacheReadTokens > 0`，且守門 SUM 已用等效公式（`× 5/4` / `÷ 10`）。
+
+### 7. 教訓 / 自省
+
+- **Phase 2 grep 數值優於 Roadmap 粗估的價值**：Roadmap 估 8 caller，實際 14 個必要 + 2 搭車；MeetingCommons 估 17 處，實際 21 處。Phase 2 機械化 grep 是計劃書品質的關鍵防線（呼應 Stage 43 校準錨教訓）。
+- **方案 A optional 設計 + checklist 紀律機制有效**：21 處 RunAgentTurnAsync 全部補完無漏，build 一次 pass。grep 第二道防線即時驗證，避免悄悄漏寫。
+- **ClaudeCodeResult.Usage 設 optional default null**：未動 MockClaudeCodeService 即可天然兼容（Mock 不寫 token），降低變更面。

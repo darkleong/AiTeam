@@ -21,6 +21,7 @@ public class RequirementsAgentService(
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<RequirementsAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Requirements";
@@ -180,6 +181,9 @@ public class RequirementsAgentService(
 
             var result = await claudeCodeService.RunReadOnlyAsync(
                 repoLocalPath, prompt, model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Rosa / Stage=Requirements，Aria 閘門一拍板納入正式範圍）
+            await tokenLogService.LogCliUsageAsync(
+                "Rosa", model, "Requirements", round: null, task.Id, result.Usage, cancellationToken);
 
             if (!result.Success)
             {

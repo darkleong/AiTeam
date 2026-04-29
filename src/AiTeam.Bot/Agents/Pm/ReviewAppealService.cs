@@ -11,6 +11,7 @@ namespace AiTeam.Bot.Agents.Pm;
 public class ReviewAppealService(
     IClaudeCodeService claudeCodeService,
     PmAgentCommons commons,
+    Services.TokenLogService tokenLogService,
     ILogger<ReviewAppealService> logger)
 {
     /// <summary>
@@ -52,6 +53,9 @@ public class ReviewAppealService(
                         workingDir, sessionId, combinedPrompt, model, apiKey,
                         isFirstMessage: true, maxTurns: 10,
                         allowedTools: ["Glob", "Grep", "Read"], ct);
+                    // Stage 44：寫 token_logs（AgentName=Cody / Stage=ReviewAppeal_cody / Round=ReviewAppealRoundA）
+                    await tokenLogService.LogCliUsageAsync(
+                        "Cody", model, "ReviewAppeal_cody", group.ReviewAppealRoundA, taskId: null, result.Usage, ct);
                     var appeal = TryParseCodyAppeal(result.Output);
                     if (appeal is not null)
                     {
@@ -111,6 +115,9 @@ public class ReviewAppealService(
                         workingDir, sessionId, combinedPrompt, model, apiKey,
                         isFirstMessage: true, maxTurns: 10,
                         allowedTools: ["Glob", "Grep", "Read"], ct);
+                    // Stage 44：寫 token_logs（AgentName=Vera / Stage=ReviewAppeal_vera / Round=ReviewAppealRoundA）
+                    await tokenLogService.LogCliUsageAsync(
+                        "Vera", model, "ReviewAppeal_vera", group.ReviewAppealRoundA, taskId: null, result.Usage, ct);
                     var veraResponse = TryParseVeraAppealResponse(result.Output);
                     if (veraResponse is not null)
                     {
@@ -161,6 +168,9 @@ public class ReviewAppealService(
                         workingDir, sessionId, combinedPrompt, model, apiKey,
                         isFirstMessage: true, maxTurns: 10,
                         allowedTools: ["Glob", "Grep", "Read"], ct);
+                    // Stage 44：寫 token_logs（AgentName=Petra / Stage=ReviewAppeal_arbitration / Round=ReviewAppealRoundA）
+                    await tokenLogService.LogCliUsageAsync(
+                        "Petra", model, "ReviewAppeal_arbitration", group.ReviewAppealRoundA, taskId: null, result.Usage, ct);
                     var arbitration = TryParseArbitration(result.Output);
                     if (arbitration is not null)
                     {

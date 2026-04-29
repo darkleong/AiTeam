@@ -4,6 +4,9 @@ namespace AiTeam.Data.Repositories;
 
 /// <summary>
 /// token_logs 資料存取，供 Bot 寫入 Token 用量、Dashboard 彙總費用監控。
+/// Stage 44：SUM 公式升級為等效 token（input + output + cache_creation × 1.25 + cache_read × 0.1，
+/// 對齊 Anthropic 計費），整數運算 × 5/4 與 ÷ 10 讓 EF Core 可 translate 到 SQL。
+/// 回傳型別 int → long 避免高用量月份 overflow。
 /// </summary>
 public class TokenRepository(AppDbContext db)
 {
@@ -21,8 +24,12 @@ public class TokenRepository(AppDbContext db)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
 
-    /// <summary>查詢指定 Agent 今日（UTC）已用總 token（input + output）。</summary>
-    public async Task<int> GetAgentDailyTotalAsync(
+    /// <summary>
+    /// 查詢指定 Agent 今日（UTC）已用等效 token。
+    /// Stage 44：等效 = input + output + cache_creation × 1.25 + cache_read × 0.1
+    /// （以整數運算 × 5/4 / ÷ 10 表達讓 EF Core 可 translate 到 SQL；舊資料 cache 欄位 null 視為 0）。
+    /// </summary>
+    public async Task<long> GetAgentDailyTotalAsync(
         string agentName,
         CancellationToken cancellationToken = default)
     {
@@ -31,11 +38,15 @@ public class TokenRepository(AppDbContext db)
         return await db.TokenLogs
             .AsNoTracking()
             .Where(t => t.AgentName == agentName && t.CreatedAt >= today && t.CreatedAt < tomorrow)
-            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+            .SumAsync(t =>
+                (long)t.InputTokens + t.OutputTokens
+                + ((long)(t.CacheCreationTokens ?? 0) * 5L) / 4L
+                + (long)(t.CacheReadTokens ?? 0) / 10L,
+                cancellationToken);
     }
 
-    /// <summary>查詢指定 Agent 本月（UTC）已用總 token（input + output）。</summary>
-    public async Task<int> GetAgentMonthlyTotalAsync(
+    /// <summary>查詢指定 Agent 本月（UTC）已用等效 token（公式同 daily）。</summary>
+    public async Task<long> GetAgentMonthlyTotalAsync(
         string agentName,
         CancellationToken cancellationToken = default)
     {
@@ -45,11 +56,15 @@ public class TokenRepository(AppDbContext db)
         return await db.TokenLogs
             .AsNoTracking()
             .Where(t => t.AgentName == agentName && t.CreatedAt >= monthStart && t.CreatedAt < monthEnd)
-            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+            .SumAsync(t =>
+                (long)t.InputTokens + t.OutputTokens
+                + ((long)(t.CacheCreationTokens ?? 0) * 5L) / 4L
+                + (long)(t.CacheReadTokens ?? 0) / 10L,
+                cancellationToken);
     }
 
-    /// <summary>查詢所有 Agent 本月（UTC）已用總 token（全域月限判斷用）。</summary>
-    public async Task<int> GetGlobalMonthlyTotalAsync(CancellationToken cancellationToken = default)
+    /// <summary>查詢所有 Agent 本月（UTC）已用等效 token（全域月限判斷用）。</summary>
+    public async Task<long> GetGlobalMonthlyTotalAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -57,7 +72,11 @@ public class TokenRepository(AppDbContext db)
         return await db.TokenLogs
             .AsNoTracking()
             .Where(t => t.CreatedAt >= monthStart && t.CreatedAt < monthEnd)
-            .SumAsync(t => t.InputTokens + t.OutputTokens, cancellationToken);
+            .SumAsync(t =>
+                (long)t.InputTokens + t.OutputTokens
+                + ((long)(t.CacheCreationTokens ?? 0) * 5L) / 4L
+                + (long)(t.CacheReadTokens ?? 0) / 10L,
+                cancellationToken);
     }
 
     public async Task SaveAsync(CancellationToken cancellationToken = default)

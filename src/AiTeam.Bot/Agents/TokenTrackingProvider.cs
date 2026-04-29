@@ -32,10 +32,12 @@ public class TokenTrackingProvider(
         IReadOnlyList<ImageAttachment>? images = null)
     {
         // ── Token 守門：呼叫 LLM 之前執行 ────────────────────────────
-        var estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4;
+        // Stage 44：守門用 long 比較，避免高用量月份 overflow（DailyTokenLimitK × 1000 仍是 int 範圍，
+        // 但累加 dailyUsed/monthlyUsed 後可能跨 int 邊界）。
+        long estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4;
 
         // Check 1：單次請求估算超過全域上限
-        var singleLimit = agentSettings.SingleRequestTokenLimitK * 1000;
+        long singleLimit = (long)agentSettings.SingleRequestTokenLimitK * 1000;
         if (estimatedTokens > singleLimit)
         {
             var msg = $"⚠️ **[Token 守門]** Agent `{agentName}` 單次請求估算 token 數 {estimatedTokens:N0} " +
@@ -47,7 +49,7 @@ public class TokenTrackingProvider(
         }
 
         // Check 2：Agent 日限
-        var dailyLimit = agentConfig.DailyTokenLimitK * 1000;
+        long dailyLimit = (long)agentConfig.DailyTokenLimitK * 1000;
         var dailyUsed = await tokenRepository.GetAgentDailyTotalAsync(agentName, cancellationToken);
         if (dailyUsed + estimatedTokens > dailyLimit)
         {
@@ -60,7 +62,7 @@ public class TokenTrackingProvider(
         }
 
         // Check 3：Agent 月限
-        var agentMonthlyLimit = agentConfig.MonthlyTokenLimitK * 1000;
+        long agentMonthlyLimit = (long)agentConfig.MonthlyTokenLimitK * 1000;
         var agentMonthlyUsed = await tokenRepository.GetAgentMonthlyTotalAsync(agentName, cancellationToken);
         if (agentMonthlyUsed + estimatedTokens > agentMonthlyLimit)
         {
@@ -73,7 +75,7 @@ public class TokenTrackingProvider(
         }
 
         // Check 4：全域月限
-        var globalMonthlyLimit = agentSettings.MonthlyTokenLimitK * 1000;
+        long globalMonthlyLimit = (long)agentSettings.MonthlyTokenLimitK * 1000;
         var globalMonthlyUsed = await tokenRepository.GetGlobalMonthlyTotalAsync(cancellationToken);
         if (globalMonthlyUsed + estimatedTokens > globalMonthlyLimit)
         {
@@ -90,6 +92,8 @@ public class TokenTrackingProvider(
         var response = await inner.CompleteAsync(systemPrompt, userMessage, cancellationToken, images);
 
         // ── 記錄實際用量 ──────────────────────────────────────────────
+        // Stage 44：API 層 cache 欄位由 LlmResponse 自身提供時可填（目前 AnthropicProvider/GeminiProvider 未回傳 cache 細節
+        // → 留 null，與舊行為相容。後續 FF 一搭車時可從 Anthropic SDK response 取 cache_creation_input_tokens 等欄位）。
         tokenRepository.Add(new TokenLog
         {
             AgentName    = agentName,

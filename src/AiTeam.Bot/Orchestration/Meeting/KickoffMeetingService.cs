@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public class KickoffMeetingService(
     IOptions<GitHubSettings> gitHubSettings,
     IConfiguration configuration,
     MeetingCommons meetingCommons,
+    TokenLogService tokenLogService,
     ILogger<KickoffMeetingService> logger)
 {
     private readonly GitHubSettings _gitHub = gitHubSettings.Value;
@@ -92,18 +94,23 @@ public class KickoffMeetingService(
                 logBuilder.AppendLine();
 
                 // ── 步驟 1：Rosa/Demi/Cody/Quinn 並行發言 ──
+                // Stage 44：4 處 RunAgentTurnAsync 都帶 meetingType="Kickoff" + round + tokenLogService
                 var rosaTask  = meetingCommons.RunAgentTurnAsync("Rosa",  rosaSessionId,
                     BuildRosaPrompt(proposalContent, round, lastPetraOutput),
-                    GetModel("Requirements"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    GetModel("Requirements"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Kickoff", round: round, tokenLogService: tokenLogService);
                 var demiTask  = meetingCommons.RunAgentTurnAsync("Demi",  demiSessionId,
                     BuildDemiPrompt(proposalContent, round, lastPetraOutput),
-                    GetModel("Designer"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    GetModel("Designer"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Kickoff", round: round, tokenLogService: tokenLogService);
                 var codyTask  = meetingCommons.RunAgentTurnAsync("Cody",  codySessionId,
                     BuildCodyPrompt(proposalContent, round, lastPetraOutput),
-                    GetModel("Dev"), apiKey, isFirstMessage, workingDir, allowedTools: null, ct);
+                    GetModel("Dev"), apiKey, isFirstMessage, workingDir, allowedTools: null, ct,
+                    meetingType: "Kickoff", round: round, tokenLogService: tokenLogService);
                 var quinnTask = meetingCommons.RunAgentTurnAsync("Quinn", quinnSessionId,
                     BuildQuinnPrompt(proposalContent, round, lastPetraOutput),
-                    GetModel("QA"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    GetModel("QA"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Kickoff", round: round, tokenLogService: tokenLogService);
 
                 await Task.WhenAll(rosaTask, demiTask, codyTask, quinnTask);
 
@@ -129,7 +136,8 @@ public class KickoffMeetingService(
                 // ── 步驟 2：Petra 整理並判斷 ──
                 var petraPrompt = BuildPetraRoundPrompt(rosaOutput, demiOutput, codyOutput, quinnOutput, round);
                 var petraOutput = await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
-                    petraPrompt, GetModel("PM"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    petraPrompt, GetModel("PM"), apiKey, isFirstMessage, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Kickoff", round: round, tokenLogService: tokenLogService);
                 lastPetraOutput = petraOutput;
 
                 logBuilder.AppendLine("### Petra（綜合整理）");
@@ -167,7 +175,8 @@ public class KickoffMeetingService(
             // ── 步驟 3：Petra 產出任務計劃書（Petra session 保留，供 Christ 修改流程使用）──
             var planPrompt = BuildPetraPlanPrompt();
             var taskPlan = await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
-                planPrompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                planPrompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                meetingType: "Kickoff", round: totalRounds, tokenLogService: tokenLogService);
 
             logBuilder.AppendLine("## 任務計劃書");
             logBuilder.AppendLine(taskPlan);
@@ -230,7 +239,8 @@ public class KickoffMeetingService(
                 $"{{\"impact\":\"small|large\",\"revised_plan\":\"（small 時輸出完整修改後計劃書，large 時留空）\"}}";
 
             var petraOutput = await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
-                prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                meetingType: "Kickoff", round: group.KickoffRound, tokenLogService: tokenLogService);
 
             logger.LogInformation("KickoffMeetingService：ModifyTaskPlan Petra 回應完成（groupId={Id}）", group.Id);
 

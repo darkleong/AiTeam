@@ -11,6 +11,7 @@ namespace AiTeam.Bot.Agents.Pm;
 public class DevPlanAppealService(
     IClaudeCodeService claudeCodeService,
     PmAgentCommons commons,
+    Services.TokenLogService tokenLogService,
     ILogger<DevPlanAppealService> logger)
 {
     /// <summary>
@@ -47,6 +48,9 @@ public class DevPlanAppealService(
                         workingDir, sessionId, combinedPrompt, model, apiKey,
                         isFirstMessage: true, maxTurns: 10,
                         allowedTools: ["Glob", "Grep", "Read"], ct);
+                    // Stage 44：寫 token_logs（AgentName=Cody / Stage=DevPlanAppeal_cody / Round=DevPlanAppealRoundA）
+                    await tokenLogService.LogCliUsageAsync(
+                        "Cody", model, "DevPlanAppeal_cody", group.DevPlanAppealRoundA, taskId: null, result.Usage, ct);
                     var appeal = TryParseCodyDevPlanAppeal(result.Output);
                     if (appeal is not null)
                     {
@@ -95,6 +99,9 @@ public class DevPlanAppealService(
                         workingDir, sessionId, combinedPrompt, model, apiKey,
                         isFirstMessage: true, maxTurns: 10,
                         allowedTools: ["Glob", "Grep", "Read"], ct);
+                    // Stage 44：寫 token_logs（AgentName=Petra / Stage=DevPlanAppeal_petra / Round=DevPlanAppealRoundA）
+                    await tokenLogService.LogCliUsageAsync(
+                        "Petra", model, "DevPlanAppeal_petra", group.DevPlanAppealRoundA, taskId: null, result.Usage, ct);
                     var review = PmAgentCommons.TryParseReview(result.Output);
                     if (review is not null)
                     {

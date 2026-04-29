@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ public class DesignMeetingService(
     IOptions<GitHubSettings> gitHubSettings,
     IConfiguration configuration,
     MeetingCommons meetingCommons,
+    TokenLogService tokenLogService,
     ILogger<DesignMeetingService> logger)
 {
     private readonly GitHubSettings _gitHub = gitHubSettings.Value;
@@ -85,9 +87,11 @@ public class DesignMeetingService(
             logBuilder.AppendLine();
 
             // Petra 判斷是否需要 Demi（isFirstMessage: true）
+            // Stage 44：所有 Design RunAgentTurnAsync 都帶 meetingType="Design" + round=group.DesignRound + tokenLogService
             var petraJudgeOutput = await meetingCommons.RunAgentTurnAsync("Petra", sessions.PetraSessionId,
                 BuildDesignPetraJudgePrompt(taskPlan),
-                GetModel("PM"), apiKey, isFirstMessage: true, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                GetModel("PM"), apiKey, isFirstMessage: true, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
             logBuilder.AppendLine("### Petra — 設計需求判斷");
             logBuilder.AppendLine(petraJudgeOutput);
@@ -100,7 +104,8 @@ public class DesignMeetingService(
             var rosaPreWorkOutput = await meetingCommons.RunAgentTurnAsync("Rosa", sessions.RosaSessionId,
                 BuildDesignRosaPreWorkPrompt(taskPlan),
                 GetModel("Requirements"), apiKey, isFirstMessage: true, workingDir, MeetingCommons.ReadOnlyTools, ct,
-                maxTurns: 25);
+                maxTurns: 25,
+                meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
             logBuilder.AppendLine("### Rosa — GitHub Issues");
             logBuilder.AppendLine(rosaPreWorkOutput);
@@ -139,7 +144,8 @@ public class DesignMeetingService(
                 var demiPreWorkOutput = await meetingCommons.RunAgentTurnAsync("Demi", sessions.DemiSessionId,
                     BuildDesignDemiPreWorkPrompt(taskPlan, issuesJson),
                     GetModel("Designer"), apiKey, isFirstMessage: true, workingDir, MeetingCommons.ReadOnlyTools, ct,
-                    maxTurns: 25);
+                    maxTurns: 25,
+                    meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
                 logBuilder.AppendLine("### Demi — UI/UX 規格");
                 logBuilder.AppendLine(demiPreWorkOutput);
@@ -173,20 +179,24 @@ public class DesignMeetingService(
 
                 var rosaMeetingTask = meetingCommons.RunAgentTurnAsync("Rosa", sessions.RosaSessionId,
                     BuildDesignRosaMeetingPrompt(issuesJson, round, lastPetraOutput),
-                    GetModel("Requirements"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    GetModel("Requirements"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Design", round: round, tokenLogService: tokenLogService);
 
                 Task<string>? demiMeetingTask = null;
                 if (sessions.DemiSessionId is not null)
                     demiMeetingTask = meetingCommons.RunAgentTurnAsync("Demi", sessions.DemiSessionId,
                         BuildDesignDemiMeetingPrompt(uiSpecContent ?? "", round, lastPetraOutput),
-                        GetModel("Designer"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                        GetModel("Designer"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                        meetingType: "Design", round: round, tokenLogService: tokenLogService);
 
                 var codyMeetingTask = meetingCommons.RunAgentTurnAsync("Cody", sessions.CodySessionId,
                     BuildDesignCodyPrompt(issuesJson, uiSpecContent, round, lastPetraOutput),
-                    GetModel("Dev"), apiKey, isFirstMessage: isFirstRound, workingDir, allowedTools: null, ct);
+                    GetModel("Dev"), apiKey, isFirstMessage: isFirstRound, workingDir, allowedTools: null, ct,
+                    meetingType: "Design", round: round, tokenLogService: tokenLogService);
                 var quinnMeetingTask = meetingCommons.RunAgentTurnAsync("Quinn", sessions.QuinnSessionId,
                     BuildDesignQuinnPrompt(issuesJson, uiSpecContent, round, lastPetraOutput),
-                    GetModel("QA"), apiKey, isFirstMessage: isFirstRound, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    GetModel("QA"), apiKey, isFirstMessage: isFirstRound, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Design", round: round, tokenLogService: tokenLogService);
 
                 var parallelTasks = new List<Task<string>> { rosaMeetingTask, codyMeetingTask, quinnMeetingTask };
                 if (demiMeetingTask is not null) parallelTasks.Add(demiMeetingTask);
@@ -216,7 +226,8 @@ public class DesignMeetingService(
                 // Petra 整理（resume session）
                 var petraRoundPrompt = BuildDesignPetraRoundPrompt(rosaOutput, demiOutput, codyOutput, quinnOutput, round, sessions.DemiSessionId is not null);
                 var petraOutput = await meetingCommons.RunAgentTurnAsync("Petra", sessions.PetraSessionId,
-                    petraRoundPrompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    petraRoundPrompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Design", round: round, tokenLogService: tokenLogService);
                 lastPetraOutput = petraOutput;
 
                 logBuilder.AppendLine("### Petra（綜合整理）");
@@ -230,7 +241,7 @@ public class DesignMeetingService(
                     // 無法解析 → 視同 consensus（MockMode fallback）
                     logger.LogWarning("DesignMeetingService：設計會議 Petra 第 {Round} 輪無法解析 decision，假設 consensus", round);
                     finalDesignPlan = await GenerateDesignPlanAsync(
-                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, ct);
+                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, round, ct);
                     logBuilder.AppendLine("## 設計規劃書");
                     logBuilder.AppendLine(finalDesignPlan);
                     break;
@@ -241,7 +252,7 @@ public class DesignMeetingService(
                 if (decision.Decision == "consensus")
                 {
                     finalDesignPlan = await GenerateDesignPlanAsync(
-                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, ct);
+                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, round, ct);
                     logBuilder.AppendLine("## 設計規劃書");
                     logBuilder.AppendLine(finalDesignPlan);
                     break;
@@ -294,7 +305,7 @@ public class DesignMeetingService(
                 {
                     logger.LogInformation("DesignMeetingService：設計會議已達最大輪次 {Max}，強制結束", designMaxRounds);
                     finalDesignPlan = await GenerateDesignPlanAsync(
-                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, ct);
+                        sessions.PetraSessionId, taskPlan, issuesJson, uiSpecContent, workingDir, apiKey, round, ct);
                     logBuilder.AppendLine("## 設計規劃書");
                     logBuilder.AppendLine(finalDesignPlan);
                 }
@@ -354,7 +365,8 @@ public class DesignMeetingService(
                 $"{{\"impact\":\"small|large\",\"revised_plan\":\"（small 時輸出完整修改後設計規劃書，large 時留空）\"}}";
 
             var petraOutput = await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
-                prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
             logger.LogInformation("DesignMeetingService：ModifyDesignPlan Petra 回應完成（groupId={Id}）", group.Id);
 
@@ -421,7 +433,8 @@ public class DesignMeetingService(
             var instruction = adjustmentInstructions.GetValueOrDefault("rosa", "請根據會議討論修改 Issues");
             var prompt = $"Petra 的修改指示：\n\n{instruction}\n\n請調整你的 GitHub Issues，在回應最後以 JSON Array 格式輸出更新後的完整 Issues 清單（格式同前置作業）。";
             updatedRosaOutput = await meetingCommons.RunAgentTurnAsync("Rosa", sessions.RosaSessionId,
-                prompt, GetModel("Requirements"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                prompt, GetModel("Requirements"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
             logBuilder.AppendLine("### Rosa 調整結果");
             logBuilder.AppendLine(updatedRosaOutput);
@@ -463,13 +476,15 @@ public class DesignMeetingService(
                     $"請探索相關 codebase 後，產出完整的 UI/UX 規格（Markdown 格式）。";
                 updatedDemiOutput = await meetingCommons.RunAgentTurnAsync("Demi", sessions.DemiSessionId,
                     createPrompt, GetModel("Designer"), apiKey, isFirstMessage: true, workingDir, MeetingCommons.ReadOnlyTools, ct,
-                    maxTurns: 25);
+                    maxTurns: 25,
+                    meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
             }
             else
             {
                 var adjustPrompt = $"Petra 的修改指示：\n\n{instruction}\n\n請調整你的 UI 規格，回應更新後的完整 UI/UX 規格（Markdown 格式）。";
                 updatedDemiOutput = await meetingCommons.RunAgentTurnAsync("Demi", sessions.DemiSessionId,
-                    adjustPrompt, GetModel("Designer"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+                    adjustPrompt, GetModel("Designer"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+                    meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
             }
 
             logBuilder.AppendLine("### Demi 調整結果");
@@ -499,7 +514,8 @@ public class DesignMeetingService(
         sb.AppendLine("- needs_meeting：修改幅度大，需重開設計會議");
 
         var petraEvalOutput = await meetingCommons.RunAgentTurnAsync("Petra", sessions.PetraSessionId,
-            sb.ToString(), GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+            sb.ToString(), GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+            meetingType: "Design", round: group.DesignRound, tokenLogService: tokenLogService);
 
         logBuilder.AppendLine("### Petra 評估");
         logBuilder.AppendLine(petraEvalOutput);
@@ -513,7 +529,7 @@ public class DesignMeetingService(
             var designPlan = evalDecision?.DesignPlan ?? "";
             if (string.IsNullOrWhiteSpace(designPlan))
                 designPlan = await GenerateDesignPlanAsync(
-                    sessions.PetraSessionId, taskPlan, updatedIssuesJson, updatedDemiOutput, workingDir, apiKey, ct);
+                    sessions.PetraSessionId, taskPlan, updatedIssuesJson, updatedDemiOutput, workingDir, apiKey, group.DesignRound, ct);
 
             return new DesignAdjustmentResult(
                 Approved:          true,
@@ -534,6 +550,7 @@ public class DesignMeetingService(
     }
 
     /// <summary>Petra 產出最終設計規劃書。</summary>
+    /// <param name="round">Stage 44：當前 Design 輪次（供 token_logs Round 欄位）。</param>
     private async Task<string> GenerateDesignPlanAsync(
         string petraSessionId,
         string taskPlan,
@@ -541,11 +558,13 @@ public class DesignMeetingService(
         string? uiSpecContent,
         string workingDir,
         string apiKey,
+        int round,
         CancellationToken ct)
     {
         var prompt = BuildDesignPetraPlanPrompt(taskPlan, issuesJson, uiSpecContent);
         return await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
-            prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct);
+            prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+            meetingType: "Design", round: round, tokenLogService: tokenLogService);
     }
 
     // ---- 設計會議 Prompt 建立 ----

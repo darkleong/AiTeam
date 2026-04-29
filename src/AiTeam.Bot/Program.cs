@@ -98,6 +98,8 @@ var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashb
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri(dashboardPushUrl));
 builder.Services.AddSingleton<DashboardPushService>();
+// Stage 44：CLI Agent token 寫入共用 helper（內建 try-catch 不阻塞主流程，獨立 scope DbContext）
+builder.Services.AddSingleton<TokenLogService>();
 // Stage 28a：BossInteraction 寫入與 Discord 回覆同步
 builder.Services.AddSingleton<InteractionService>();
 

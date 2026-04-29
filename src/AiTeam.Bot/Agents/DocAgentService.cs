@@ -25,6 +25,7 @@ public class DocAgentService(
     AppSettingsService appSettings,
     InteractionService interactionService,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<DocAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Doc";
@@ -219,6 +220,9 @@ public class DocAgentService(
 
             var result = await claudeCodeService.RunAsync(
                 repoLocalPath, sb.ToString(), model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Sage / Stage=Doc，無 round）
+            await tokenLogService.LogCliUsageAsync(
+                "Sage", model, "Doc", round: null, task.Id, result.Usage, cancellationToken);
 
             if (!result.Success)
             {

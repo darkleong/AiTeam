@@ -19,6 +19,7 @@ public class DesignerAgentService(
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<DesignerAgentService> logger) : IAgentExecutor
 {
     private const string AgentName = "Designer";
@@ -162,6 +163,9 @@ public class DesignerAgentService(
 
             var result = await claudeCodeService.RunReadOnlyAsync(
                 repoLocalPath, prompt, model, apiKey, cancellationToken);
+            // Stage 44：寫 token_logs（AgentName=Demi / Stage=Designer，Aria 閘門一拍板納入正式範圍）
+            await tokenLogService.LogCliUsageAsync(
+                "Demi", model, "Designer", round: null, taskId: null, result.Usage, cancellationToken);
 
             if (!result.Success)
             {

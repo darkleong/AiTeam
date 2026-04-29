@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +25,7 @@ public class CeoAgentService(
     CeoMemoryRepository memoryRepository,
     IOptions<GitHubSettings> gitHubSettings,
     IConfiguration configuration,
+    TokenLogService tokenLogService,
     ILogger<CeoAgentService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -193,6 +195,9 @@ public class CeoAgentService(
 
                 claudeResult = await claudeCodeService.RunVictoriaAsync(
                     repoPath, prompt, model, apiKey, images, cancellationToken);
+                // Stage 44：寫 token_logs（AgentName=CEO / Stage=CEO，無 task / round 語意）
+                await tokenLogService.LogCliUsageAsync(
+                    "CEO", model, "CEO", round: null, taskId: null, claudeResult.Usage, cancellationToken);
             }
             finally
             {

@@ -152,14 +152,41 @@ public class TaskLog
 public class TokenLog
 {
     public Guid Id { get; set; }
-    public string AgentName { get; set; } = ""; // e.g. "CEO", "Dev", "QA"
+    public string AgentName { get; set; } = ""; // e.g. "CEO", "Dev", "QA", "Meeting-Kickoff"
     public string Model { get; set; } = "";      // e.g. "claude-sonnet-4-6"
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
     public Guid? TaskId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Stage 44：工作階段（Kickoff / Design / Dev_plan / Dev / Reviewer / QA / Doc / 申訴各分支）。null = 既有資料或無階段語意。</summary>
+    public string? Stage { get; set; }
+    /// <summary>Stage 44：fix iteration / 會議輪次（如 Vera fix loop round 1, Kickoff round 2）。null = 無輪次語意。</summary>
+    public int? Round { get; set; }
+    /// <summary>Stage 44：Prompt cache 寫入 token 數（Anthropic 計 1.25× cost）。null = 既有資料或無 cache。</summary>
+    public int? CacheCreationTokens { get; set; }
+    /// <summary>Stage 44：Prompt cache 讀取 token 數（Anthropic 計 0.1× cost）。null = 既有資料或無 cache。</summary>
+    public int? CacheReadTokens { get; set; }
+    /// <summary>Stage 44：本次呼叫總成本（USD），由 Claude Code 直接提供。null = 既有資料。</summary>
+    public decimal? TotalCostUsd { get; set; }
+
     public TaskItem? Task { get; set; }
+
+    /// <summary>
+    /// Stage 44：計算 Anthropic 等效 token（守門用）。
+    /// 公式：input + output + cache_creation × 1.25 + cache_read × 0.1
+    /// 用整數運算避免 LINQ → SQL translate 浮點問題：
+    ///   cache_creation × 1.25 ≈ cache_creation × 5 / 4
+    ///   cache_read × 0.1      ≈ cache_read / 10
+    /// 舊資料 cache 欄位 null 視為 0（與舊行為相容）。
+    /// 注意：TokenRepository 的 SumAsync 仍需 inline 此公式（LINQ→SQL translate 不能跨 method invocation），
+    /// 此 helper 主要供文件 / 單元測試 / client-side 計算引用。
+    /// </summary>
+    public static long ComputeEffectiveTokens(TokenLog log)
+        => (long)log.InputTokens
+         + log.OutputTokens
+         + ((long)(log.CacheCreationTokens ?? 0) * 5L) / 4L
+         + (long)(log.CacheReadTokens ?? 0) / 10L;
 }
 
 /// <summary>動態系統設定（key/value），可從 Dashboard 即時修改，免重啟 Bot。</summary>
