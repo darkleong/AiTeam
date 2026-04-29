@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.53
+> 版本：v7.54
 > 建立日期：2026-04-01
 > 最後更新：2026-04-29
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1713,6 +1713,81 @@ group.InterventionReason = null;        // 清除介入原因
 
 ---
 
+## 三十八、跨專案能力研究（多 repo / scaffold / 環境建置 spike）
+
+> 狀態：⚪ **待深度討論** — 議題已立案，但 scope / 拆分 / 觸發條件待 Christ + Aria 深度討論後才決定
+> 提出日期：2026-04-29（Stage 44 進行中時 Christ 詢問「AiTeam 能否處理新增專案需求」引發）
+
+### 背景
+
+Christ 2026-04-29 詢問 AiTeam 能否處理「新增專案」需求，提出兩個情境：
+
+1. **完整自動化**：提需求 → AiTeam 從零建專案（建 repo / 環境 / 容器 / runner）
+2. **半自動**：Christ 手動建 repo + 環境 → 在 Dashboard 加 Project → 請 AiTeam 幫忙建 PostgreSQL schema / Dockerfile / GitHub Actions yml 等程式碼層內容
+
+### Aria grep 揭露的現況限制
+
+**情境 1（完整自動化）→ 完全做不到**：
+- 整個 AiTeam 架構假設「已存在 repo + 已存在環境」（team-on-existing-repo 模式）
+- `GitHubSettings.Owner` / `DefaultRepo` hardcode（appsettings.json）
+- Bot 端讀「TaskGroup.Project 字串」當 repo name，**`Project.RepoUrl` 欄位只在 Dashboard 顯示用，Bot 沒讀**（PmAgentCommons.cs:45/110 / CeoAgentService.cs:107/134/445 證實）
+- Bot 容器內無法執行 `docker compose`（CLAUDE.md 已規範）
+- GitHubService 沒包 CreateRepo API / 沒包 secret 設定 / 沒包 runner 設定
+
+**情境 2（半自動）→ 部分可行**：
+- ✅ 可寫：PostgreSQL EF Migration / Dockerfile / GitHub Actions yml / appsettings template（純檔案產出 Cody 強項）
+- ❌ 不可：跨 owner repo 操作 / 真實啟動容器 / 設 Actions runner / 建 Discord channel / 設 Tailscale
+
+### 兩個子議題候選
+
+#### 子議題 A：跨 Project repo 支援（基礎建設類）
+
+- **內容**：Bot 端改讀 `Project.RepoUrl` 而非 GitHubSettings hardcode；支援多 owner / 多 repo 混用
+- **規模**：M-L（動 PmAgentCommons / CeoAgentService / GitHubService 多處）
+- **戰略價值**：FF 七「客戶專案交付」前置條件 + 半自動情境的 1/3 解
+- **相對成熟**：純改機制，不涉新工作流 — 可獨立做，與 v4 架構研究脫勾
+
+#### 子議題 B：新專案 scaffold 流程（戰略級）
+
+- **內容**：CEO / Petra 接收「建新專案」需求 → 觸發 scaffold 工作流（建 repo / dotnet new / 寫 docker-compose / 寫 Migration / 設 secrets）→ 部分自動 + 部分 Christ 手動操作
+- **規模**：L+（新工作流類型 / GitHub API 擴充 / 跨環境協同）
+- **戰略**：⭐ 對齊 AutoGPT / SWE-Agent 級能力，可能是 v4 架構一部分
+- **跟 FF 三十六 耦合**：動態調度 + per-task session 是這類工作流的前提
+
+### 待深度討論的問題
+
+1. **拆 vs 合**：兩個子議題拆 2 個 FF 還是合 1 個？
+2. **A 獨立性**：子議題 A 是否該獨立先做（與 v4 架構研究脫勾）？
+3. **B 併入 FF 三十六**：子議題 B 是否該併入 FF 三十六 spike 範圍（v4 架構動態調度 + scaffold 是同類能力）？
+4. **FF 七 邊界**：FF 七（客戶專案交付）跟本 FF 的邊界？子議題 A 是 FF 七 前置條件還是分離？
+5. **觸發條件優先**：客戶專案實際需求 / Trial_v5 結果 / FF 三十六 spike 結論 — 哪個應該觸發本 FF 深度討論？
+
+### 跟既有 FF 的關係
+
+| FF | 關係 |
+|---|---|
+| **FF 七（客戶專案交付流程）** | 偏「已存在 repo 的部署 / 驗收」，**不涵蓋新建 repo / scaffold**。子議題 A 是 FF 七 前置條件 |
+| **FF 三十六（v4 架構雙支柱 spike）** | 動態調度 + per-task session 屬 PM 級別，**不涵蓋多專案 / scaffold**。但子議題 B 可能在 v4 架構下變得自然 |
+| **FF 一（API 費用優化）** | 無關 |
+| **Stage 44 = FF 三十三（Token CLI 涵蓋）** | 無關 |
+
+### 優先級
+
+⚪ **待深度討論** — 議題已立案但 scope / 拆分 / 觸發條件待 Christ + Aria 深度討論後才決定。**現在不該排 Stage**。
+
+**深度討論觸發時點候選**：
+- Trial_v5 結束評估時（檢視是否揭露多專案 / scaffold 議題）
+- FF 三十六 spike 啟動時（一併評估 v4 架構覆蓋範圍）
+- 客戶專案實際需求出現時（FF 七 觸發連帶評估）
+
+**為什麼不立刻立正式 spike**：
+- 三個候選觸發條件未到
+- 跟 FF 三十六 / 七 / 一 邊界未釐清
+- 拆 / 合的決策需要更多脈絡（如 Trial_v5 / v4 架構結論）
+- Christ 2026-04-29 拍板「**記錄下來，但需要再深度討論和確認**」— 保留 conditional decision 後門
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -1853,6 +1928,7 @@ group.InterventionReason = null;        // 清除介入原因
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
 | 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
+| 2026-04-29 | v7.54：**新立 FF 三十八**（跨專案能力研究 — 多 repo / scaffold / 環境建置 spike，⚪ 待深度討論）— Stage 44 進行中時 Christ 詢問「AiTeam 能否處理新增專案需求」引發；Aria grep 揭露 `Project.RepoUrl` 雖 entity 存在但 Bot 端沒讀（純 Dashboard 顯示用，PmAgentCommons.cs:45/110 / CeoAgentService.cs:107/134/445 證實）+ `GitHubSettings.Owner` / `DefaultRepo` hardcode + Bot 容器無 docker compose 權限 → 兩個情境（完整自動化 / 半自動）目前都不行；兩個子議題（**A 跨 Project repo 支援**：基礎建設類，可與 v4 脫勾 / **B 新專案 scaffold**：戰略級，跟 FF 三十六 v4 架構耦合）拆/合待深度討論；觸發條件候選：① Trial_v5 結束評估 ② FF 三十六 spike 啟動 ③ 客戶專案實際需求出現；保留 Christ「**記錄下來，但需要再深度討論和確認**」conditional decision 風格 |
 | 2026-04-29 | v7.53：**FF 十一 Stage 排序更新**（Christ 2026-04-29 拍板）— Stage 44 = FF 三十三 進行中時 Christ 詢問 Token 限制 Dashboard 化規劃，確認 FF 十一 已存在且 🟡 中（Stage 37-2 真實踩過全域月限觸發升級）；拍板**Trial_v5 之後評估**，不預設 Stage 編號（候選搭車 FF 十 Agent 設定頁 refactor / 候選順手吸收 Trial_v5 揭露的新 Token 議題如多 Agent 衝突 / 限額不夠）；保留 Christ 一貫 conditional decision 風格（呼應 user_christ 互動觀察「持續展現至少依目前架構/設計/狀態保留後門」） |
 | 2026-04-29 | v7.52：**Stage 43 完成（v3.30.0）— FF 三十二 Orchestrator 改動類 A+B+E + Sage F 搭車 ✅**：`PmAgentCommons.IsDevPlanFailed` 多重 OR helper（< 100 字 / 失敗關鍵字 / 缺結構章節）+ `AppealOrchestrationService` DevPlan accept 後重產（DevPlanRevision 上限 2，超限建 `dev_plan_unable` BossInteraction）；`TaskGroupService` line 239 比對改 `Dev || Dev_fix`（呼應 AgentQueueProcessor 傳 WorkflowAgentKey）排除 Dev_plan + 中止 fix loop 標 `needs_intervention` + `dev_failed_intervention` BossInteraction；`QaCoordinationService` 3 處 escalate 路徑（no_applicable_tests reject / QaFixRound 超限 / escalate_boss）改 `needs_intervention`（與 failed 語意分離）+ `qa_failed_intervention` BossInteraction；`MarkGroupDoneOrInterventionAsync` 集中守門 method 取代 4 處分散 mark done（重抓 group 含 Tasks 避免 scope 並發資料問題）；`DocAgentService.TryParseSageEscalate` + PR URL hardcode 修（讀 `group.DevPrUrl` fallback 既有拼湊）+ `sage_escalate` BossInteraction；新增 `TaskGroup.Status = needs_intervention` 語意 + `InterventionReason` 欄位（Migration `Stage43NeedsInterventionStatus`）+ Dashboard 全鏈路 mapping 13 處（StatusBadge amber / PipelineView / PipelineList 篩選 / CSS / InteractionCenter 4 type / TaskGroupDto / DashboardTaskService）+ 4 個 Mock 場景（dev_plan_fail_retry / dev_plan_fail_escalate / dev_failed_intervention / qa_failed_fix_then_intervention）；驗收期搭車修 3 個歷史 bug（mock plan 字數門檻 `3c6ba7c` / PmRoutingService mock 早返回 `6ce34e2` / **Stage 24 既有缺漏 Dev_fix 進 SemaphoreGroups + GetExecutorKey** `c7078ea`）— **Stage 24 缺漏曝光的歷史意義**：QA fix loop 程式碼路徑「已活著」但「從未真正端到端跑過」，本 Stage `qa_fix_loop_fail` 是 AiTeam 史上第一個實際走完 QA fix loop 的場景；補修 commit `02bef31`（4 個 Mock 場景 UI 觸發點漏 SlashCommandRouter + MockScenarioCard 兩處）— **教訓**：未來新增 Mock 場景 mapping checklist 從 13 處擴充為 15 處；**FF 三十二 七子項全完成**（Stage 42 + Stage 43），主體保留供 Trial_v5 對照觀察清單；**新立 FF 三十七**（escalate skip 路徑 status 殘留，🔵 低 backlog 候選） |
 | 2026-04-28 | v7.51：**封存 4 個核心已完成的 FF**（FF 一 / 六 / 八 / 九）— Christ 觀察文件接近 2000 行後 Aria 掃出強候選封存 4 個：① FF 一（API 費用優化第一輪降級已完成 2026-04-07，剩餘優化方向轉 backlog）② FF 六（Stage 22 大幅吸收，剩餘客戶專案隔離併入 FF 七）③ FF 八（Phase 1 全部完成 + Phase 2 第三項 Stage 30 完成，剩 Phase 2「循環偵測 + 新鮮視角」兩保險絲機制轉 backlog）④ FF 九（Stage 27a/27b 核心佇列完成，剩 PM 佇列化 / Maya 部署 / Error 阻塞 / 優先級支援等擴充性需求轉 backlog）；4 個 FF 主體刪除（淨 -140 行），「已完成項目摘要」表格新增 4 列 entry，剩餘 backlog 設計脈絡保留在 git history；瘦身後 ~1810 行（從 1949 → 1810，約 -7%） |
