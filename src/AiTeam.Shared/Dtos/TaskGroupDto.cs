@@ -45,4 +45,18 @@ public class TaskGroupDto
     public DateTime? PausedAt { get; set; }
     /// <summary>Stage 45：暫停發起者識別（"Dashboard" / "MockAutoPause" / 未來 "Discord"）。</summary>
     public string?   PausedBy { get; set; }
+
+    // ── Stage 46-FF 三十五：自動拆任務 epic / sub-task ──
+    /// <summary>Stage 46：epic 關係 — 指向 parent TaskGroup。null = 普通 group or epic 主 group。</summary>
+    public Guid?     ParentGroupId    { get; set; }
+    /// <summary>Stage 46：epic 級暫停（議題 5：只 epic 級）。null = 不是 epic 主 group。</summary>
+    public bool?     EpicPaused       { get; set; }
+    /// <summary>Stage 46：sub-task Phase 編號。null = 不是 sub-task。</summary>
+    public int?      PhaseNumber      { get; set; }
+    /// <summary>Stage 46：Petra 提供的 Phase 描述。</summary>
+    public string?   PhaseDescription { get; set; }
+    /// <summary>Stage 46：epic 主 group 的 sub-task 列表（PipelineList 折疊顯示用，非 epic 為 null）。</summary>
+    public List<TaskGroupDto>? SubTasks { get; set; }
+    /// <summary>Stage 46 計算欄位：是 epic 主 group 嗎？（無 ParentGroupId + 有 SubTasks 子記錄）</summary>
+    public bool IsEpic => ParentGroupId is null && SubTasks is { Count: > 0 };
 }

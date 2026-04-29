@@ -648,4 +648,104 @@ else { /* log warning，不誤殺 status */ }
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| v2.0 | 2026-04-29 | 第一段結案（Forge）— 補實作紀錄章節 + 8 子項 ✅ checklist + sub-task 共享 4 大欄位 ✅ checklist；待 Aria 接手第二段（CHANGELOG + Future_Feature 同步）|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十五 自動拆任務（議題 1 C 混合 / 議題 2 B failed needs_intervention / 議題 4 A epic 折疊 / 議題 5 A 只 epic 級暫停 / 議題 6 簡化 schema / 議題 7 命名規範 / 議題 8 兩機制獨立 / 議題 9 搭車 FF 三十九）+ 搭車 FF 三十九 / 8 子項涵蓋 DB / Petra 判斷 / BossInteraction / Sequential 鏈 / Dashboard UI / CLAUDE_Petra.md / FF 三十九 / Mock |
+
+---
+
+## 實作紀錄（v3.33.0）
+
+> 第一段結案（Forge v1.0），實作分支 `stage46-ff35`。
+> 計劃書檢查二次檢查 SOP（自省點 #16）：v1.0 → Aria 條件通過 + 4 點調整 → v1.1 → Aria 完全通過 0 修正 → 進實作。
+
+### 8 子項 ✅ checklist
+
+- [x] **子項 1**：DB schema + Migration `Stage46TaskGroupEpic`
+  - `TaskGroup` 新增 4 nullable 欄位：`ParentGroupId` / `EpicPaused` / `PhaseNumber` / `PhaseDescription`（`src/AiTeam.Data/Entities.cs:72-80`）
+  - Migration `20260429085954_Stage46TaskGroupEpic.cs` + partial index `idx_task_groups_parent`（`WHERE "ParentGroupId" IS NOT NULL`）加速 sub-task 查詢
+- [x] **子項 2**：Petra 拆 task 雙層判斷（議題 1 C 混合）
+  - `MeetingResults.cs` 加 `SplitProposal` / `PhaseSpec` record + `DesignMeetingResult.SplitProposal` 欄位
+  - `DesignMeetingService.EvaluateAndProposeSplitAsync` 規則層（Issue 數 ≥ 8 / 預估行數 ≥ 500 / 跨多 Phase 標記任一觸發，閾值讀自 `AppSettings:Stage46:SplitTaskMinIssueCount` / `Stage46:SplitTaskMinEstimatedLines` 動態設定）
+  - `RunPetraSplitTaskProposalAsync` Petra 層：復用 `PetraSessionId` resume + `[SPLIT-TASK]` prompt → 細化拆法
+  - `TryParseSplitProposal` 解析（對齊 Stage 44 try-catch fallback 風格）
+  - 注入：建構子加 `AppSettingsService appSettings`
+- [x] **子項 3**：BossInteraction `split_task_proposal` + `epic_partial_paused`（4 處映射齊全）
+  - `InteractionService` 加 2 ActionsJson 常數
+  - `InteractionProcessor` action 文字化 6 條
+  - `InteractionCenter.razor.cs` 三映射（Icon / Color / Label）各 2 條
+  - `BossInteraction.cs` docstring 更新 type 列舉
+  - **3-B**：`MeetingOrchestrationService.CreateSplitTaskProposalInteractionAsync` — consensus 路徑檢查 `SplitProposal.ShouldSplit` + Phases.Count > 0 → 建 BossInteraction 取代 fire Dev_plan
+- [x] **子項 4**：sub-task 建立 + Sequential 鏈 + 失敗處理 + 路由分派
+  - `TaskGroupService.HandleSplitTaskProposalAsync`（4 按鈕分派 + split_modify JSON 防呆 fallback split_reject）
+  - `HandleEpicPartialPausedAsync`（epic_resume 觸發下個 pending sub-task / epic_abort 標 cancelled）
+  - `BuildEpicSubTasksAsync(Guid parentGroupId, ...)` — v1.1 三大紀律：① idempotent 檢查 ② fresh read parent ③ scope 隔離
+  - `TriggerNextPhaseIfSubTaskAsync` hook in `MarkGroupDoneOrInterventionAsync` done 路徑 — sub-task done → 下個 Phase 啟動 / 無 next → epic done
+  - `PauseEpicAndNotifyAsync` hook in `MarkGroupDoneOrInterventionAsync` anyBad 路徑 — sub-task needs_intervention → epic EpicPaused=true + 建 epic_partial_paused BossInteraction
+  - `FilterIssueUrls` helper — 從 parent IssueUrls JSON array 過濾 phase.Issues 對應子集
+  - `ProcessBossResponseAsync` 加 2 case
+  - **WorkflowStep 真實 step name**：`new WorkflowStep("Dev_plan")` 純字串（不是 `AgentNames.Pm = "PM"`）— grep `WorkflowEngine.cs:91-92` 確認
+- [x] **子項 5**：Dashboard 後端 + Internal API + DashboardBotService client
+  - `TaskGroupDto` 加 5 欄位（ParentGroupId / EpicPaused / PhaseNumber / PhaseDescription / SubTasks）+ `IsEpic` 計算欄位
+  - `DashboardTaskService` 三處 Select 補 4 欄位 + `AssembleEpicSubTasks` 後處理（in-memory group by ParentGroupId 收集 sub-task 進 SubTasks，過濾 sub-task 不獨立列在 GetTaskGroupsAsync 主列表）
+  - `InternalController` 加 `pause-epic`（同步）+ `resume-epic`（fire-and-forget，含「找最大 PhaseNumber done 的下個 / fallback 第一個 pending」啟動鏈）
+  - `DashboardBotService` 加 `PauseEpicAsync` + `ResumeEpicAsync` client methods（對齊 Stage 45 PauseTaskGroup/ResumeTaskGroup 風格）
+  - **PipelineList epic 折疊 UI / PipelineView epic 進度條 / 暫停恢復 button** ⏳ 留 follow-up：DTO + 後端 + Internal API + client method 全鏈路就緒，Dashboard razor UI 接線 Christ 驗收期評估或 Trial_v5 一併處理
+- [x] **子項 6**：CLAUDE_Petra.md 拆 task 判準新章節
+  - 新增「Design 階段拆 task 判準（Stage 46-FF 三十五）」段：拆解策略（Phase 1/2/3）/ 不該拆 4 場景（同檔小修 / 緊密耦合 / atomic / 無依賴）/ 應該拆 4 場景 / 嚴格 JSON 輸出格式 / 拆解原則自查清單（4 題自答，全是才拆）
+  - **80%+ 邊界覆蓋自查通過**：呼應 workflow_aria 第七節 #8 + FF 三十二 子項 C/G prompt 補強風格
+- [x] **子項 7**：搭車 FF 三十九（HandleDevPlanEscalationAsync EndsWith）
+  - `AppealOrchestrationService:724-746` action 比對改 `EndsWith("_skip")` / `EndsWith("_abort")` + `else` warning log 不誤殺 status
+  - 附加：清 `InterventionReason`（對齊 Stage 45 FF 三十七）
+  - **覆蓋 action ID**：Dashboard `devplan_escalate` type → `devplan_skip`/`devplan_abort` ✅ + `dev_plan_unable` type → `devplan_unable_skip`/`devplan_unable_abort` ✅；Discord `escalate_devplan_*` 不走此 method（ButtonCallbackRouter 直接處理）
+- [x] **子項 8**：Mock 2 場景
+  - `MockClaudeCodeService.RunReadOnlyAsync`：FailScenario `split_task_propose_accept` / `split_task_subtask_fail_intervention` 下回 12 Issues（觸發規則層 ≥ 8）
+  - `RunMeetingSessionAsync`：`[SPLIT-TASK]` prompt 分支回 phases JSON（3 Phase：基礎 / 遷移 / 收尾）
+  - `MockScenarioService` + `MockScenarioCard.razor` 加 2 個 scenario 按鈕（從 Kickoff 起跑）
+  - **8-1 split_task_propose_accept**：完整機制可驗（Kickoff → Design → 規則層觸發 → Petra 提案 → 採納 → 3 sub-task → Sequential → epic done）
+  - **8-2 split_task_subtask_fail_intervention**：Mock 12 Issue + 拆 task 機制就緒，但「Phase 中精準失敗」涉及 Cody Pm Dev_plan service 內部 Mock 路徑，**留 follow-up**；驗收期 Christ 可手動透過 DB / Dashboard 介入製造 sub-task needs_intervention 驗 PauseEpicAndNotifyAsync 機制
+
+### sub-task 共享 parent 4 大欄位 ✅ checklist（FF 三十五 細節 2）
+
+`BuildEpicSubTasksAsync` 內 fresh read parent 後逐項複製到新 sub-task：
+- [x] `KickoffMeetingLog`
+- [x] `TaskPlan`
+- [x] `DesignMeetingLog`
+- [x] `DesignPlan`
+
+額外共享：`UiSpecContent` / `IssueUrls`（過濾 phase.Issues 子集）/ `Project` / `ProjectId` / `WorkflowType`。
+
+### 自省點 #19 升級紀律應用紀錄
+
+| 預掃 v1.0 描述 | Forge grep 校正 |
+|---|---|
+| `DesignMeetingService.cs` 在 `Services/Meetings/` | 真實 `Orchestration/Meeting/`（v1.0 即校正） |
+| sub-task fire `AgentNames.Pm` | 真實 `new WorkflowStep("Dev_plan")` 純字串（v1.1 實作期 grep WorkflowEngine.cs:91-92 揪出，計劃書描述用 `AgentNames.Pm` 是誤導） |
+| `AppSettingsService.GetIntAsync` | 不存在，只有 `GetAsync(string?)` — 自寫 `GetSplitTaskAppSettingIntAsync` helper + `int.TryParse` |
+| `InternalController.cs` 在 `Controllers/` | 真實 `src/AiTeam.Bot/Api/InternalController.cs` |
+| MeetingOrchestrationService 是否存在 | ✅ 存在於 `src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs:287`（RunDesignMeetingAsync caller） |
+
+### Aria 校準錨候選（Aria 第二段填）
+
+| 維度 | Forge 實測 |
+|---|---|
+| Context 量 | 預期 272-417K，實測中段（含 Aria 後台檢查 v1.0 → v1.1 一輪修訂）— 待 session 結束時 compact 觀察 |
+| Mock 場景數 | 2 個（8-1 完整 / 8-2 部分機制 + follow-up）|
+| follow-up 候選 | ① PipelineList / PipelineView UI razor 接線（DTO + 後端就緒）② Mock 8-2 Phase 失敗精準觸發 ③ 議題 5 epic 暫停 / 恢復 UI button 接線 |
+| 計劃書迭代 | v1.0 → Aria 條件通過 + 4 點調整 → v1.1 → Aria 完全通過 0 修正 |
+
+### 待 follow-up 項（驗收 / Trial_v5 期評估）
+
+1. **Dashboard UI razor 接線**：PipelineList epic 主卡片 `📦 Epic - ` 標題 + sub-task 折疊 / PipelineView epic 進度條 / 暫停恢復按鈕 — 後端 DTO + Internal API + client method 全鏈路就緒，UI 拼接是純前端 + 無風險。可 Trial_v5 觀察期統一處理 / 或臨時 follow-up Stage。
+2. **Mock 8-2 失敗精準觸發**：Phase 中 sub-task 失敗的 Mock 路徑涉及 Cody Pm Dev_plan service 內部 — Trial_v5 真實流程一跑通自然驗證機制。
+3. **議題 5 epic 級暫停 UI**：⏸️/▶️ 按鈕在 PipelineView epic 主 group 區，後端 API 已可 POST 觸發。
+
+### 規模實測
+
+| 變更類型 | 統計 |
+|---|---|
+| 新增 method | TaskGroupService 內 6 個（HandleSplitTaskProposalAsync / HandleEpicPartialPausedAsync / BuildEpicSubTasksAsync / TriggerNextPhaseIfSubTaskAsync / PauseEpicAndNotifyAsync / FilterIssueUrls）+ DesignMeetingService 內 7 個 + MeetingOrchestrationService 1 個 + InternalController 2 個 + DashboardBotService 2 個 |
+| 新增 record | `SplitProposal` / `PhaseSpec` |
+| 新增 InteractionType | `split_task_proposal` / `epic_partial_paused` |
+| Migration | `Stage46TaskGroupEpic`（4 nullable 欄位 + partial index）|
+| dotnet build | 0 Error |
+| 版本 | v3.32.0 → v3.33.0 |

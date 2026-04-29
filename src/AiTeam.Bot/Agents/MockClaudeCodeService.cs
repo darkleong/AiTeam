@@ -63,6 +63,29 @@ public class MockClaudeCodeService(
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
+
+        // Stage 46-FF 三十五：split task 場景需 ≥ 8 個 Issue 觸發規則層
+        if (FailScenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention")
+        {
+            const string splitOutput =
+                "[MOCK] 探索完成（拆 task 場景：12 Issues）\n" +
+                "[" +
+                "{\"title\":\"[MOCK] Issue 1 schema migration\",\"body\":\"基礎 schema\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 2 base service\",\"body\":\"共用基礎\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 3 component A\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 4 component B\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 5 component C\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 6 component D\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 7 component E\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 8 component F\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 9 component G\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"[MOCK] Issue 10 docs\",\"body\":\"收尾文件\",\"labels\":[\"docs\"]}," +
+                "{\"title\":\"[MOCK] Issue 11 tests\",\"body\":\"收尾測試\",\"labels\":[\"test\"]}," +
+                "{\"title\":\"[MOCK] Issue 12 a11y polish\",\"body\":\"收尾 a11y\",\"labels\":[\"polish\"]}" +
+                "]";
+            return new ClaudeCodeResult(true, splitOutput, 0, "");
+        }
+
         const string output =
             "[MOCK] 探索完成\n" +
             "[{\"title\":\"[MOCK] 模擬需求功能\",\"body\":\"這是 Mock Mode 產生的模擬需求，用於測試流程。\",\"labels\":[\"enhancement\"]}]";
@@ -168,6 +191,19 @@ public class MockClaudeCodeService(
                     "{\"decision\":\"revise\",\"summary\":\"[MOCK] 維持修改意見，請 Cody 再次評估\",\"issues\":[{\"severity\":\"blocking\",\"description\":\"[MOCK] 計劃仍需補充\"}],\"revision_instructions\":\"[MOCK] 請再想想\"}", 0, "");
             return new ClaudeCodeResult(true,
                 "{\"decision\":\"approve\",\"summary\":\"[MOCK] 接受 Cody 反駁，核准 Dev_plan\",\"issues\":[],\"revision_instructions\":null}", 0, "");
+        }
+
+        // Stage 46-FF 三十五：[SPLIT-TASK] prompt 分支（Petra 拆 task 提案）
+        if (prompt.Contains("[SPLIT-TASK]"))
+        {
+            // 兩個 split task 場景都回相同 phases JSON（差別在後續 sub-task 是否失敗）
+            const string phasesJson =
+                "{\"should_split\":true,\"rationale\":\"[MOCK] 12 Issue 跨基礎/遷移/收尾三階段，建議拆 3 個 sub-task\",\"phases\":[" +
+                "{\"phase\":1,\"description\":\"基礎結構\",\"issues\":[1,2],\"estimated_minutes\":30}," +
+                "{\"phase\":2,\"description\":\"元件遷移\",\"issues\":[3,4,5,6,7,8,9],\"estimated_minutes\":120}," +
+                "{\"phase\":3,\"description\":\"收尾驗收\",\"issues\":[10,11,12],\"estimated_minutes\":60}" +
+                "]}";
+            return new ClaudeCodeResult(true, "[MOCK] Petra 拆 task 提案\n" + phasesJson, 0, "");
         }
 
         // Stage 26：改用 prompt 內容判斷角色（各 prompt builder 均以「你是 {Name}，」開頭）

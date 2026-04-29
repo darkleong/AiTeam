@@ -141,3 +141,64 @@ Vera 審核時無 codebase 存取（只看 review 報告文字）。
 - 每個審核點**最多打回 2 次**，超過自動 escalate 給老闆
 - 審核要快速果斷，不要過度糾結 minor issues
 - 使用繁體中文，程式碼與專有名詞保留英文
+
+## Design 階段拆 task 判準（Stage 46-FF 三十五）
+
+當你在 Design 階段綜合整理產出 DesignPlan 後，若 Orchestrator 規則層判定值得拆 task（Issue 數 ≥ 8 / 預估改動行數 ≥ 500 / 跨多 Phase 標記任一觸發），會額外丟一個 `[SPLIT-TASK]` prompt 給你，要求回傳 phases JSON。
+
+### 拆解策略（依 Issue 性質拆 2-3 個 Phase）
+
+- **Phase 1（基礎）**：建 schema / 新 service / 共用基礎建設 → 後續 Phase 依賴此產出
+- **Phase 2（遷移 / 主菜）**：核心業務邏輯 → 多數 Issue 集中
+- **Phase 3（收尾）**：邊際補強 / 文件 / 測試 / Dashboard 對應 → 可獨立完成
+
+每個 sub-task 各自獨立 PR（Phase 1 PR merged → Phase 2 從 main rebase 出新 branch），Vera review 範圍清楚 / GitHub Issues link 乾淨。
+
+### 不該拆的場景（必須 should_split=false）
+
+規則層觸發只是過濾「值得評估」，實質拆不拆由你決定。以下情況你**必須**回 `should_split=false`，避免 over-propose：
+
+- **Issue 數 ≥ 8 但都是同檔案的相關小修**（如 8 個 a11y 補強同一個 Razor / 8 個 Warning 修在同一個 Service）→ 一個 task 完成更乾淨，硬拆 phases 反而切碎 review
+- **預估行數 ≥ 500 但邏輯緊密耦合不可分階段**（如重構單一 Service 內部結構 / 單一複雜演算法）→ 中間斷點會讓 Phase 2 拿不到完整可用的 Phase 1 產出
+- **DesignPlan 已標記「不可拆」/「atomic」**（如 schema migration + 對應 code 改動必須一起 deploy）→ 拆了會讓中間 PR 處於 broken state
+- **Phase 之間無真實依賴**（純並排小修，沒有「Phase 1 產出 → Phase 2 消費」的關係）→ 一個 task 完成，sub-task 鏈反而拖長排程
+
+### 應該拆的場景（should_split=true）
+
+- 跨多檔（schema / service / UI）+ Issue 之間有依賴鏈（後 Phase 用前 Phase 的 method / type / endpoint）
+- 跨多階段（基礎建設 → 業務邏輯 → 收尾）邊界清楚，每個 Phase 各自交付可 review 的 PR
+- DesignPlan 內已自然以 Phase 1 / Phase 2 / Phase 3 標記分段
+- 任務規模大到單一 PR review 失準（10+ Issue / 1000+ 行）— 拆開能讓 Vera / 老闆 review 品質提升
+
+### 輸出格式（嚴格 JSON，不加 code block）
+
+`should_split=true`：
+```
+{
+  "should_split": true,
+  "rationale": "12 Issue 跨基礎/遷移/收尾三階段，建議拆 3 個 sub-task",
+  "phases": [
+    { "phase": 1, "description": "基礎結構", "issues": [2], "estimated_minutes": 30 },
+    { "phase": 2, "description": "元件遷移", "issues": [3,4,5,6,7,8,9], "estimated_minutes": 120 },
+    { "phase": 3, "description": "收尾驗收", "issues": [10,11,12], "estimated_minutes": 60 }
+  ]
+}
+```
+
+`should_split=false`（規則層觸發但你認定不該拆）：
+```
+{
+  "should_split": false,
+  "rationale": "Issue 數雖達 9 個但都是同 Razor 的 a11y 補強，邏輯耦合不應分 Phase"
+}
+```
+
+### 拆解原則自查清單
+
+落筆前自查：
+1. Phase 之間有真實依賴嗎？（沒有 → 不拆）
+2. 每個 Phase 各自能交付獨立 PR 嗎？（不能 → 不拆）
+3. 中間 PR 合進 main 後系統處於可用狀態嗎？（broken → 不拆，標 atomic）
+4. 老闆 / Vera 看單一大 PR 真的 review 不下嗎？（看得下 → 不拆）
+
+若四題都答「是」才回 `should_split=true`，否則 `should_split=false`。

@@ -21,6 +21,7 @@ public class DesignMeetingService(
     IConfiguration configuration,
     MeetingCommons meetingCommons,
     TokenLogService tokenLogService,
+    AppSettingsService appSettings,
     ILogger<DesignMeetingService> logger)
 {
     private readonly GitHubSettings _gitHub = gitHubSettings.Value;
@@ -311,6 +312,22 @@ public class DesignMeetingService(
                 }
             }
 
+            // ── Stage 46-FF 三十五：consensus 路徑下評估是否提案拆 task ──
+            // 規則層（Issue 數 ≥ 8 / 預估行數 ≥ 500 / 跨多 Phase 標記任一）→ Petra 細化拆法
+            // escalate 路徑不觸發（任務本身需老闆裁決，不適合再丟拆 task 提案）
+            SplitProposal? splitProposal = null;
+            if (finalDecision == "consensus" && !string.IsNullOrWhiteSpace(finalDesignPlan))
+            {
+                splitProposal = await EvaluateAndProposeSplitAsync(
+                    sessions.PetraSessionId, finalDesignPlan!, issuesJson,
+                    workingDir, apiKey, totalRounds, ct);
+                if (splitProposal is not null)
+                {
+                    logBuilder.AppendLine("## 拆 task 提案（Stage 46-FF 三十五）");
+                    logBuilder.AppendLine($"should_split={splitProposal.ShouldSplit}，phases={splitProposal.Phases.Count}，rationale={splitProposal.Rationale}");
+                }
+            }
+
             return new DesignMeetingResult(
                 Success:        true,
                 MeetingLog:     logBuilder.ToString(),
@@ -320,7 +337,8 @@ public class DesignMeetingService(
                 TotalRounds:    totalRounds,
                 FinalDecision:  finalDecision,
                 PetraSessionId: sessions.PetraSessionId,
-                EscalateReason: escalateReason);
+                EscalateReason: escalateReason,
+                SplitProposal:  splitProposal);
         }
         finally
         {
@@ -565,6 +583,188 @@ public class DesignMeetingService(
         return await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
             prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
             meetingType: "Design", round: round, tokenLogService: tokenLogService);
+    }
+
+    // ---- Stage 46-FF 三十五：拆 task 雙層判斷（規則層 + Petra 層） ----
+
+    /// <summary>
+    /// Stage 46-FF 三十五：規則層 + Petra 層混合（議題 1 C）。
+    /// 規則層：判「要不要觸發拆 task 提案」（Issue 數 / 預估行數 / Phase 標記任一觸發）。
+    /// Petra 層：判「怎麼拆」（resume PetraSessionId 問細化拆法）。
+    /// 不觸發 → 回 null；觸發但 Petra 認定不該拆 → 回 ShouldSplit=false 的 SplitProposal。
+    /// </summary>
+    private async Task<SplitProposal?> EvaluateAndProposeSplitAsync(
+        string petraSessionId,
+        string designPlan,
+        string issuesJson,
+        string workingDir,
+        string apiKey,
+        int round,
+        CancellationToken ct)
+    {
+        var minIssues = await GetSplitTaskAppSettingIntAsync("Stage46:SplitTaskMinIssueCount", 8, ct);
+        var minLines  = await GetSplitTaskAppSettingIntAsync("Stage46:SplitTaskMinEstimatedLines", 500, ct);
+
+        var issueCount        = TryCountIssues(issuesJson);
+        var estimatedLines    = EstimateDesignPlanLines(designPlan);
+        var hasPhaseMarkers   = ContainsPhaseMarkers(designPlan);
+
+        var triggered = issueCount >= minIssues
+                     || estimatedLines >= minLines
+                     || hasPhaseMarkers;
+
+        if (!triggered)
+        {
+            logger.LogInformation(
+                "DesignMeetingService：拆 task 規則層未觸發（issueCount={IC}<{Min1}, estLines={EL}<{Min2}, phaseMarkers={PM}）",
+                issueCount, minIssues, estimatedLines, minLines, hasPhaseMarkers);
+            return null;
+        }
+
+        logger.LogInformation(
+            "DesignMeetingService：拆 task 規則層觸發（issueCount={IC}, estLines={EL}, phaseMarkers={PM}），呼叫 Petra 細化拆法",
+            issueCount, estimatedLines, hasPhaseMarkers);
+
+        return await RunPetraSplitTaskProposalAsync(
+            petraSessionId, designPlan, issuesJson, workingDir, apiKey, round, ct);
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：Petra 細化拆法 — resume Design Petra session 問拆 phases。
+    /// 復用 GenerateDesignPlanAsync 的 sessionId（session 內已有 DesignPlan + 五人發言 context）。
+    /// </summary>
+    private async Task<SplitProposal?> RunPetraSplitTaskProposalAsync(
+        string petraSessionId,
+        string designPlan,
+        string issuesJson,
+        string workingDir,
+        string apiKey,
+        int round,
+        CancellationToken ct)
+    {
+        var prompt = BuildSplitTaskPetraPrompt(designPlan, issuesJson);
+        var output = await meetingCommons.RunAgentTurnAsync("Petra", petraSessionId,
+            prompt, GetModel("PM"), apiKey, isFirstMessage: false, workingDir, MeetingCommons.ReadOnlyTools, ct,
+            meetingType: "Design", round: round, tokenLogService: tokenLogService);
+
+        var parsed = TryParseSplitProposal(output);
+        if (parsed is null)
+        {
+            logger.LogWarning("DesignMeetingService：Petra 拆 task 提案 JSON 解析失敗，視為不拆（output 前 200 字={Output})",
+                output.Length > 200 ? output[..200] : output);
+            return null;
+        }
+        return parsed;
+    }
+
+    /// <summary>Stage 46-FF 三十五：AppSettingsService 只有 GetAsync(string?)，自己 int.TryParse。</summary>
+    private async Task<int> GetSplitTaskAppSettingIntAsync(string key, int defaultValue, CancellationToken ct)
+    {
+        var raw = await appSettings.GetAsync(key, ct);
+        if (string.IsNullOrWhiteSpace(raw)) return defaultValue;
+        return int.TryParse(raw, out var value) ? value : defaultValue;
+    }
+
+    private static int TryCountIssues(string issuesJson)
+    {
+        if (string.IsNullOrWhiteSpace(issuesJson)) return 0;
+        try
+        {
+            using var doc = JsonDocument.Parse(issuesJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Array
+                ? doc.RootElement.GetArrayLength()
+                : 0;
+        }
+        catch { return 0; }
+    }
+
+    private static int EstimateDesignPlanLines(string designPlan)
+    {
+        if (string.IsNullOrWhiteSpace(designPlan)) return 0;
+        // 抓「預估 N 行」/「預計 N 行」/「~ N 行」等字樣，取最大值
+        var matches = System.Text.RegularExpressions.Regex.Matches(
+            designPlan, @"(?:預估|預計|約|~)\s*(\d+)\s*行");
+        var max = 0;
+        foreach (System.Text.RegularExpressions.Match m in matches)
+        {
+            if (int.TryParse(m.Groups[1].Value, out var n) && n > max) max = n;
+        }
+        return max;
+    }
+
+    private static bool ContainsPhaseMarkers(string designPlan)
+    {
+        if (string.IsNullOrWhiteSpace(designPlan)) return false;
+        // Phase 1/2/3 標記（含中英）
+        return System.Text.RegularExpressions.Regex.IsMatch(
+            designPlan, @"Phase\s*[1-9]", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            || designPlan.Contains("第一階段") || designPlan.Contains("第二階段");
+    }
+
+    private static string BuildSplitTaskPetraPrompt(string designPlan, string issuesJson)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("[SPLIT-TASK] 你是 Petra，剛產出 DesignPlan。Orchestrator 規則層判定此任務值得評估拆 task。");
+        sb.AppendLine();
+        sb.AppendLine("## 你剛產出的 DesignPlan");
+        sb.AppendLine(designPlan);
+        sb.AppendLine();
+        sb.AppendLine("## Rosa 拆出的 Issues（JSON）");
+        sb.AppendLine(issuesJson);
+        sb.AppendLine();
+        sb.AppendLine("## 你的職責");
+        sb.AppendLine("依 DesignPlan 與 Issues 評估是否拆成 2-3 個 Phase（依賴鏈 Sequential 執行，各自獨立 PR）。");
+        sb.AppendLine("判準與不該拆 case 詳見 CLAUDE_Petra.md「Design 階段拆 task 判準（Stage 46-FF 三十五）」段。");
+        sb.AppendLine();
+        sb.AppendLine("## 輸出格式（嚴格 JSON，不加 code block）");
+        sb.AppendLine();
+        sb.AppendLine("若該拆：");
+        sb.AppendLine("{\"should_split\":true,\"rationale\":\"...\",\"phases\":[{\"phase\":1,\"description\":\"基礎結構\",\"issues\":[2],\"estimated_minutes\":30},{\"phase\":2,\"description\":\"元件遷移\",\"issues\":[3,4,5,6,7,8,9],\"estimated_minutes\":120}]}");
+        sb.AppendLine();
+        sb.AppendLine("若不該拆（規則層觸發但 Issue 緊密耦合等）：");
+        sb.AppendLine("{\"should_split\":false,\"rationale\":\"...\"}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：解析 Petra 的拆 task JSON，失敗回 null。
+    /// 對齊 Stage 44 TryParseSageEscalate try-catch fallback 風格。
+    /// </summary>
+    public static SplitProposal? TryParseSplitProposal(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        try
+        {
+            // 找最後一個 JSON 物件（output 可能含 [MOCK] 前綴或解說文字）
+            var startIdx = output.LastIndexOf('{');
+            var endIdx   = output.LastIndexOf('}');
+            if (startIdx < 0 || endIdx <= startIdx) return null;
+            var jsonStr  = output[startIdx..(endIdx + 1)];
+
+            using var doc = JsonDocument.Parse(jsonStr);
+            var root      = doc.RootElement;
+            var shouldSplit = root.TryGetProperty("should_split", out var ss) && ss.GetBoolean();
+            var rationale   = root.TryGetProperty("rationale", out var r) ? (r.GetString() ?? "") : "";
+
+            var phases = new List<PhaseSpec>();
+            if (shouldSplit && root.TryGetProperty("phases", out var phasesEl) && phasesEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var p in phasesEl.EnumerateArray())
+                {
+                    var phaseNum   = p.TryGetProperty("phase", out var pn) ? pn.GetInt32() : 0;
+                    var phaseDesc  = p.TryGetProperty("description", out var pd) ? (pd.GetString() ?? "") : "";
+                    var issueIds   = new List<int>();
+                    if (p.TryGetProperty("issues", out var iss) && iss.ValueKind == JsonValueKind.Array)
+                        foreach (var id in iss.EnumerateArray())
+                            if (id.TryGetInt32(out var n)) issueIds.Add(n);
+                    var minutes    = p.TryGetProperty("estimated_minutes", out var em) ? em.GetInt32() : 0;
+                    phases.Add(new PhaseSpec(phaseNum, phaseDesc, issueIds, minutes));
+                }
+            }
+
+            return new SplitProposal(shouldSplit, rationale, phases);
+        }
+        catch { return null; }
     }
 
     // ---- 設計會議 Prompt 建立 ----

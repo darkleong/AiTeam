@@ -55,6 +55,14 @@ public class InteractionService(
     public const string SageEscalateActionsJson =
         """[{"id":"sage_retry","label":"重跑歸檔","color":"warning"},{"id":"sage_skip","label":"略過歸檔，標完成","color":"info"},{"id":"sage_abort","label":"標需介入","color":"error"}]""";
 
+    /// <summary>Stage 46-FF 三十五：Petra 拆 task 提案卡（4 按鈕：採納 / 修改 / 不拆 / 停止）。</summary>
+    public const string SplitTaskProposalActionsJson =
+        """[{"id":"split_accept","label":"採納 Petra 方案","color":"success","requiresInput":false},{"id":"split_modify","label":"修改方案 ✏️","color":"info","requiresInput":true},{"id":"split_reject","label":"不拆繼續原樣","color":"warning","requiresInput":false},{"id":"split_abort","label":"停止任務","color":"error","requiresInput":false}]""";
+
+    /// <summary>Stage 46-FF 三十五：epic 部分暫停通知（sub-task failed/needs_intervention → 後續 Phase 不啟動）。</summary>
+    public const string EpicPartialPausedActionsJson =
+        """[{"id":"epic_resume","label":"恢復 epic","color":"success"},{"id":"epic_abort","label":"放棄整個 epic","color":"error"}]""";
+
     public const string EmptyActionsJson = "[]";
 
     /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>

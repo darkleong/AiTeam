@@ -721,17 +721,28 @@ public class AppealOrchestrationService(
             return;
         }
 
-        if (action == "devplan_skip")
+        // Stage 46-FF 三十九：action 比對改 EndsWith 寬鬆比對，涵蓋 Discord + Dashboard 各種命名變體
+        // - Dashboard 路徑：devplan_escalate type → "devplan_skip" / "devplan_abort"（既有 covered）
+        // - Dashboard 路徑：dev_plan_unable type → "devplan_unable_skip" / "devplan_unable_abort"（FF 三十九 fix 涵蓋）
+        // - Discord 路徑（escalate_devplan_*）不走此 method，由 ButtonCallbackRouter 直接處理
+        if (action.EndsWith("_skip"))
         {
             taskRepo.UpdateGroupStatus(group, "running");
+            group.InterventionReason = null;  // 對齊 Stage 45 FF 三十七 — 清介入原因避免 Dashboard UI 顯示「需介入」誤導
             await taskRepo.SaveAsync(ct);
             var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
             await tgs.FireStepsAsync(group, [new WorkflowStep("Dev")], ct);
         }
-        else // devplan_abort
+        else if (action.EndsWith("_abort"))
         {
             taskRepo.UpdateGroupStatus(group, "failed");
             await taskRepo.SaveAsync(ct);
+        }
+        else
+        {
+            logger.LogWarning(
+                "HandleDevPlanEscalationAsync：未識別 action={Action}（GroupId={Id}），略過不誤殺 status",
+                action, group.Id);
         }
     }
 

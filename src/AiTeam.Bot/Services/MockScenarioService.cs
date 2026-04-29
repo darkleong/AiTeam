@@ -71,6 +71,11 @@ public class MockScenarioService(
         else if (scenario == "pause_resume_with_boss_interaction")
             MockClaudeCodeService.FailScenario = "dev_failed_after_review"; // 複用 dev_failed_intervention 邏輯製造 BossInteraction
         // pause_at_kickoff_end / pause_during_dev 不需 FailScenario（PausePoint 已足夠）
+        // ── Stage 46-FF 三十五：拆 task 2 個場景 ──
+        // RunReadOnlyAsync 回 12 Issue + RunMeetingSessionAsync [SPLIT-TASK] 回 phases JSON 觸發拆 task 提案
+        // 失敗版本另在 sub-task 啟動後製造 Cody Dev_plan failed → epic_partial_paused
+        else if (scenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention")
+            MockClaudeCodeService.FailScenario = scenario;
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -90,6 +95,9 @@ public class MockScenarioService(
             "pause_at_kickoff_end"               => (WorkflowType.NewFeature, "暫停測試-KickoffEnd",         "Kickoff"),
             "pause_during_dev"                   => (WorkflowType.NewFeature, "暫停測試-Dev進行中",          "Dev"),
             "pause_resume_with_boss_interaction" => (WorkflowType.NewFeature, "暫停測試-跨BossInteraction",  "Dev"),
+            // Stage 46-FF 三十五：拆 task 2 個場景，從 Kickoff 起跑（必須完整跑會議才到 Design 拆 task 階段）
+            "split_task_propose_accept"            => (WorkflowType.NewFeature, "拆task-採納成功",             "Kickoff"),
+            "split_task_subtask_fail_intervention" => (WorkflowType.NewFeature, "拆task-Phase2失敗",          "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

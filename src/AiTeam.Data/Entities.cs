@@ -70,6 +70,17 @@ public class TaskGroup
     /// <summary>Stage 45：暫停時被攔下的 next steps（JSON 序列化的 WorkflowStep[]）。Resume 時讀回再 FireStepsAsync，避免重做 routing。</summary>
     public string? PendingStepsJson { get; set; }
 
+    // ── Stage 46：FF 三十五 自動拆任務（Petra Design 階段 propose 拆 sub-task） ──
+    /// <summary>Stage 46：epic 關係 — sub-task 指向 parent TaskGroup。null = 普通 TaskGroup or epic 主 group。</summary>
+    public Guid? ParentGroupId { get; set; }
+    /// <summary>Stage 46：epic 級暫停（議題 5：只 epic 級，sub-task 級暫停留 Phase 2）。
+    /// true = epic paused（後續 sub-task Sequential 鏈不啟動）；null = 不是 epic 主 group。</summary>
+    public bool? EpicPaused { get; set; }
+    /// <summary>Stage 46：sub-task 在 epic 內的 Phase 編號（1, 2, 3...）。null = 不是 sub-task。</summary>
+    public int? PhaseNumber { get; set; }
+    /// <summary>Stage 46：Petra 提供的 Phase 描述（如 "基礎結構" / "遷移" / "收尾"）。null = 不是 sub-task。</summary>
+    public string? PhaseDescription { get; set; }
+
     public string WorkflowType { get; set; } = "new_feature"; // new_feature / bug_fix
     public string? IssueUrls { get; set; }   // JSONB string[]
     public string? UiSpecPath { get; set; }  // docs/ui-specs/xxx.md（舊欄位，保留相容，新資料不再使用）

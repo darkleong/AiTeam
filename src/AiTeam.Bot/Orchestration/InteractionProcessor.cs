@@ -141,6 +141,13 @@ public class InteractionProcessor(
         ("merge_notify",     "ack")              => "已知道了 ✅",
         ("intervention",     "ack")              => "已知道了 ✅",
         ("ceo_reply",        "ack")              => "已知道了 ✅",
+        // Stage 46-FF 三十五：拆 task 提案 + epic 部分暫停
+        ("split_task_proposal", "split_accept")  => "採納 Petra 方案 ✅",
+        ("split_task_proposal", "split_modify")  => "修改 Petra 方案 ✏️",
+        ("split_task_proposal", "split_reject")  => "不拆繼續原樣 ⏭️",
+        ("split_task_proposal", "split_abort")   => "停止任務 ❌",
+        ("epic_partial_paused", "epic_resume")   => "恢復 epic ▶️",
+        ("epic_partial_paused", "epic_abort")    => "放棄整個 epic ❌",
         _                                        => $"{type} → {action}"
     };
 }

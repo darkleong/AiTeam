@@ -95,7 +95,7 @@ public class DashboardTaskService(AppDbContext db)
         await _lock.WaitAsync(cancellationToken);
         try
         {
-            return await db.TaskGroups
+            var all = await db.TaskGroups
                 .AsNoTracking()
                 .OrderByDescending(g => g.CreatedAt)
                 .Take(limit)
@@ -129,10 +129,38 @@ public class DashboardTaskService(AppDbContext db)
                     IsPaused           = g.IsPaused,
                     PausedAt           = g.PausedAt,
                     PausedBy           = g.PausedBy,
+                    // Stage 46-FF 三十五：自動拆任務 epic / sub-task
+                    ParentGroupId      = g.ParentGroupId,
+                    EpicPaused         = g.EpicPaused,
+                    PhaseNumber        = g.PhaseNumber,
+                    PhaseDescription   = g.PhaseDescription,
                 })
                 .ToListAsync(cancellationToken);
+
+            // Stage 46-FF 三十五：把 sub-task 收進 parent epic 的 SubTasks，回傳列表只含 epic 主 group + 普通 group
+            return AssembleEpicSubTasks(all);
         }
         finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：將 sub-task（ParentGroupId != null）收進 parent epic 的 SubTasks 子集合，
+    /// 回傳列表只含「普通 group + epic 主 group」。
+    /// </summary>
+    private static List<TaskGroupDto> AssembleEpicSubTasks(List<TaskGroupDto> all)
+    {
+        var subTasksByParent = all
+            .Where(g => g.ParentGroupId is not null)
+            .GroupBy(g => g.ParentGroupId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(s => s.PhaseNumber).ToList());
+
+        var topLevel = all.Where(g => g.ParentGroupId is null).ToList();
+        foreach (var top in topLevel)
+        {
+            if (subTasksByParent.TryGetValue(top.Id, out var subs))
+                top.SubTasks = subs;
+        }
+        return topLevel;
     }
 
     /// <summary>取得 TaskGroup 分頁列表（流程追蹤 Tab 用）。</summary>
@@ -187,6 +215,11 @@ public class DashboardTaskService(AppDbContext db)
                     IsPaused            = g.IsPaused,
                     PausedAt            = g.PausedAt,
                     PausedBy            = g.PausedBy,
+                    // Stage 46-FF 三十五：自動拆任務 epic / sub-task
+                    ParentGroupId       = g.ParentGroupId,
+                    EpicPaused          = g.EpicPaused,
+                    PhaseNumber         = g.PhaseNumber,
+                    PhaseDescription    = g.PhaseDescription,
                 })
                 .ToListAsync(cancellationToken);
 
@@ -236,6 +269,11 @@ public class DashboardTaskService(AppDbContext db)
                     IsPaused            = g.IsPaused,
                     PausedAt            = g.PausedAt,
                     PausedBy            = g.PausedBy,
+                    // Stage 46-FF 三十五：自動拆任務 epic / sub-task
+                    ParentGroupId       = g.ParentGroupId,
+                    EpicPaused          = g.EpicPaused,
+                    PhaseNumber         = g.PhaseNumber,
+                    PhaseDescription    = g.PhaseDescription,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
         }

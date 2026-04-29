@@ -338,6 +338,80 @@ public class InternalController(
         return Accepted(new { message = "恢復指令已送出" });
     }
 
+    // ============================================================
+    //  Stage 46-FF 三十五：epic 暫停 / 恢復（議題 5：只 epic 級）
+    // ============================================================
+
+    /// <summary>Stage 46：暫停 epic — 不影響當前正在跑的 sub-task，跑完不轉下個 Phase。同步寫 DB。</summary>
+    [HttpPost("taskgroup/{groupId:guid}/pause-epic")]
+    public async Task<IActionResult> PauseEpic(Guid groupId, CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var parent = await db.TaskGroups.FirstOrDefaultAsync(g => g.Id == groupId, ct);
+        if (parent is null) return NotFound(new { message = "TaskGroup 不存在" });
+
+        parent.EpicPaused = true;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("[Stage46-PauseEpic] Epic {Id} EpicPaused=true", groupId);
+        return Ok(new { message = "已暫停 epic" });
+    }
+
+    /// <summary>
+    /// Stage 46：恢復 epic — 設 EpicPaused=false + 觸發下個 pending sub-task fire Dev_plan。
+    /// fire-and-forget（FireStepsAsync 觸發長時程 subprocess）。
+    /// </summary>
+    [HttpPost("taskgroup/{groupId:guid}/resume-epic")]
+    public IActionResult ResumeEpic(Guid groupId)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+
+                var parent = await db.TaskGroups.FirstOrDefaultAsync(g => g.Id == groupId);
+                if (parent is null) return;
+
+                parent.EpicPaused = false;
+                await db.SaveChangesAsync();
+
+                // 找下個 pending sub-task：① 最大 PhaseNumber 已 done 的下一個、或 ② 第一個 pending（無 done 時）
+                var lastDone = await db.TaskGroups
+                    .Where(g => g.ParentGroupId == groupId && g.Status == "done")
+                    .OrderByDescending(g => g.PhaseNumber)
+                    .FirstOrDefaultAsync();
+
+                var nextPhase = lastDone is null
+                    ? await db.TaskGroups
+                        .Where(g => g.ParentGroupId == groupId && g.Status == "pending")
+                        .OrderBy(g => g.PhaseNumber)
+                        .FirstOrDefaultAsync()
+                    : await db.TaskGroups
+                        .FirstOrDefaultAsync(g => g.ParentGroupId == groupId
+                            && g.PhaseNumber == (lastDone.PhaseNumber ?? 0) + 1);
+
+                if (nextPhase is not null && nextPhase.Status == "pending")
+                {
+                    await tgs.FireStepsAsync(nextPhase, [new WorkflowStep("Dev_plan")]);
+                    logger.LogInformation("[Stage46-ResumeEpic] Epic {Id} 觸發 Phase {Phase} 啟動",
+                        groupId, nextPhase.PhaseNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[Stage46-ResumeEpic] /internal/taskgroup/{Id}/resume-epic 背景執行失敗", groupId);
+            }
+        });
+        return Accepted(new { message = "恢復 epic 指令已送出" });
+    }
+
     /// <summary>
     /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
     /// 後續進度透過 SignalR push 給 Dashboard 任務中心。

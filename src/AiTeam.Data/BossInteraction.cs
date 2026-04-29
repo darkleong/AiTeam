@@ -10,7 +10,9 @@ public class BossInteraction
     public Guid?    TaskGroupId          { get; set; }
     public Guid?    TaskItemId           { get; set; }
 
-    /// <summary>互動類型：ceo_confirm / exec_confirm / proposal / kickoff / design / devplan_escalate / merge_notify / intervention</summary>
+    /// <summary>互動類型：ceo_confirm / exec_confirm / proposal / kickoff / design / devplan_escalate / merge_notify / intervention
+    /// Stage 43：dev_plan_unable / dev_failed_intervention / qa_failed_intervention / sage_escalate
+    /// Stage 46-FF 三十五：split_task_proposal / epic_partial_paused</summary>
     public string   InteractionType      { get; set; } = "";
 
     /// <summary>狀態：pending / responded / expired</summary>

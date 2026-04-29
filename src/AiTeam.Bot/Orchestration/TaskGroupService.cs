@@ -621,12 +621,20 @@ public class TaskGroupService(
             group.InterventionReason ??= "存在未處理的 failed / needs_intervention task";
             logger.LogWarning("MarkGroupDoneOrIntervention：group {Id} 有 failed/needs_intervention task → needs_intervention",
                 group.Id);
+            await taskRepo.SaveAsync(ct);
+
+            // Stage 46-FF 三十五：sub-task needs_intervention → epic 標 EpicPaused + 建 BossInteraction
+            if (group.ParentGroupId is not null)
+                await PauseEpicAndNotifyAsync(group, ct);
         }
         else
         {
             taskRepo.UpdateGroupStatus(group, TaskStatus.Done);
+            await taskRepo.SaveAsync(ct);
+
+            // Stage 46-FF 三十五：sub-task done → 啟動下個 Phase or 標 epic 主 group done
+            await TriggerNextPhaseIfSubTaskAsync(group, ct);
         }
-        await taskRepo.SaveAsync(ct);
     }
 
     /// <summary>
@@ -787,6 +795,17 @@ public class TaskGroupService(
             case "sage_escalate":
                 if (contextJson is not null)
                     await HandleSageEscalateAsync(contextJson, action, ct);
+                break;
+
+            // Stage 46-FF 三十五：拆 task 提案 + epic 部分暫停
+            case "split_task_proposal":
+                if (contextJson is not null)
+                    await HandleSplitTaskProposalAsync(contextJson, action, responseContent, ct);
+                break;
+
+            case "epic_partial_paused":
+                if (contextJson is not null)
+                    await HandleEpicPartialPausedAsync(contextJson, action, ct);
                 break;
 
             default:
@@ -1045,5 +1064,338 @@ public class TaskGroupService(
         if (!ulong.TryParse(_discord.GuildId, out var guildId)) return null;
         return discordClient.GetGuild(guildId)
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
+    }
+
+    // ============================================================
+    //  Stage 46-FF 三十五：自動拆任務（epic / sub-task / Sequential 鏈）
+    // ============================================================
+
+    /// <summary>
+    /// Stage 46-FF 三十五：split_task_proposal BossInteraction 4 按鈕分派。
+    /// - split_accept → BuildEpicSubTasksAsync
+    /// - split_modify → 解析 responseContent 改寫的 phases JSON，失敗 fallback 到 split_reject
+    /// - split_reject → 不拆，照舊 fire Dev_plan
+    /// - split_abort  → mark cancelled
+    /// </summary>
+    private async Task HandleSplitTaskProposalAsync(
+        string contextJson, string action, string? responseContent, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(contextJson);
+        if (!doc.RootElement.TryGetProperty("groupId", out var g)
+            || !Guid.TryParse(g.GetString(), out var groupId))
+            return;
+        var splitProposalJson = doc.RootElement.TryGetProperty("splitProposalJson", out var sp)
+            ? sp.GetString() ?? ""
+            : "";
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group    = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group is null)
+        {
+            logger.LogWarning("HandleSplitTaskProposal：找不到 TaskGroup ({Id})", groupId);
+            return;
+        }
+
+        switch (action)
+        {
+            case "split_accept":
+            {
+                var proposal = DesignMeetingService.TryParseSplitProposal(splitProposalJson);
+                if (proposal is null || !proposal.ShouldSplit || proposal.Phases is { Count: 0 })
+                {
+                    logger.LogWarning("split_accept：原始 splitProposalJson 解析失敗，fallback 到 split_reject");
+                    await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                    return;
+                }
+                await BuildEpicSubTasksAsync(groupId, proposal, ct);
+                break;
+            }
+            case "split_modify":
+            {
+                // v1.1 Aria 回饋 #2：Christ 從 TextInputDialog 改的 phases JSON 不一定合 schema，需防呆
+                SplitProposal? modified = null;
+                try { modified = DesignMeetingService.TryParseSplitProposal(responseContent ?? ""); }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "split_modify：Christ 改寫的 phases JSON 解析失敗，fallback 到 split_reject");
+                }
+
+                if (modified is null || !modified.ShouldSplit || modified.Phases is { Count: 0 })
+                {
+                    logger.LogInformation("split_modify fallback to split_reject（解析失敗或內容無效）");
+                    await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                    return;
+                }
+
+                await BuildEpicSubTasksAsync(groupId, modified, ct);
+                break;
+            }
+            case "split_reject":
+                logger.LogInformation("split_reject：老闆選擇不拆，照舊 fire Dev_plan（Group={Id}）", groupId);
+                await FireStepsAsync(group, [new WorkflowStep("Dev_plan")], ct);
+                break;
+
+            case "split_abort":
+                logger.LogInformation("split_abort：老闆取消任務（Group={Id}）", groupId);
+                taskRepo.UpdateGroupStatus(group, "cancelled");
+                await taskRepo.SaveAsync(ct);
+                break;
+
+            default:
+                logger.LogWarning("HandleSplitTaskProposal：未識別 action={Action}", action);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：epic_partial_paused 卡片分派（恢復 epic / 放棄整個 epic）。
+    /// </summary>
+    private async Task HandleEpicPartialPausedAsync(
+        string contextJson, string action, CancellationToken ct)
+    {
+        using var doc = JsonDocument.Parse(contextJson);
+        if (!doc.RootElement.TryGetProperty("epicGroupId", out var g)
+            || !Guid.TryParse(g.GetString(), out var epicId))
+            return;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var db       = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
+        if (epic is null)
+        {
+            logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
+            return;
+        }
+
+        switch (action)
+        {
+            case "epic_resume":
+            {
+                epic.EpicPaused = false;
+                await taskRepo.SaveAsync(ct);
+
+                // 找下個 pending sub-task fire Dev_plan
+                var nextPending = await db.TaskGroups
+                    .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
+                    .OrderBy(t => t.PhaseNumber)
+                    .FirstOrDefaultAsync(ct);
+                if (nextPending is not null)
+                    await FireStepsAsync(nextPending, [new WorkflowStep("Dev_plan")], ct);
+                break;
+            }
+            case "epic_abort":
+            {
+                // 標 epic + 所有 pending sub-task cancelled
+                taskRepo.UpdateGroupStatus(epic, "cancelled");
+                var subPending = await db.TaskGroups
+                    .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
+                    .ToListAsync(ct);
+                foreach (var s in subPending)
+                    taskRepo.UpdateGroupStatus(s, "cancelled");
+                await taskRepo.SaveAsync(ct);
+                logger.LogInformation("epic_abort：epic + {Count} 個 pending sub-task 全標 cancelled（Epic={Id}）",
+                    subPending.Count, epicId);
+                break;
+            }
+            default:
+                logger.LogWarning("HandleEpicPartialPaused：未識別 action={Action}", action);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：依 SplitProposal phases 建 N 個 sub-task TaskGroup（共享 parent 4 大欄位）+ 啟動 Phase 1。
+    /// v1.1 Aria 回饋 #1：idempotent 檢查防 double-click。
+    /// v1.1 Aria 回饋 #3：簽名 Guid parentGroupId + 內部 fresh read parent，避免 stale 4 大欄位。
+    /// </summary>
+    public async Task BuildEpicSubTasksAsync(
+        Guid parentGroupId, SplitProposal proposal, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // ── v1.1 Aria 回饋 #1：idempotent 檢查（防雙 tab double-click 建重複 sub-task） ──
+        if (await db.TaskGroups.AnyAsync(t => t.ParentGroupId == parentGroupId, ct))
+        {
+            logger.LogInformation(
+                "BuildEpicSubTasksAsync：parent {Id} 已有 sub-task，視為重複呼叫，略過",
+                parentGroupId);
+            return;
+        }
+
+        // ── v1.1 Aria 回饋 #3：fresh read parent，避免 4 大欄位複製 stale 資料 ──
+        var parent = await db.TaskGroups
+            .FirstOrDefaultAsync(g => g.Id == parentGroupId, ct);
+        if (parent is null)
+        {
+            logger.LogWarning("BuildEpicSubTasksAsync：找不到 parent {Id}", parentGroupId);
+            return;
+        }
+
+        // 1. parent 標 epic 主 group：EpicPaused = false（議題 5）
+        parent.EpicPaused = false;
+
+        // 2. 依 phases 建 sub-task TaskGroup（共享 parent Kickoff/Design 4 大欄位）
+        foreach (var phase in proposal.Phases)
+        {
+            var subGroup = new TaskGroup
+            {
+                Id               = Guid.NewGuid(),
+                Title            = $"{parent.Title} - Phase {phase.Phase}: {phase.Description}", // 議題 7 命名
+                Project          = parent.Project,
+                ProjectId        = parent.ProjectId,
+                Status           = "pending",
+                WorkflowType     = parent.WorkflowType,
+                ParentGroupId    = parent.Id,
+                PhaseNumber      = phase.Phase,
+                PhaseDescription = phase.Description,
+
+                // sub-task 共享 parent Kickoff/Design 4 大欄位（FF 三十五 細節 2，fresh read 後複製）
+                KickoffMeetingLog = parent.KickoffMeetingLog,
+                TaskPlan          = parent.TaskPlan,
+                DesignMeetingLog  = parent.DesignMeetingLog,
+                DesignPlan        = parent.DesignPlan,
+
+                // 共享 Issue 子集 + UI 規格（粗略策略：sub-task 都共享同一份，Cody Dev_plan 階段依 phase.Issues 自行對焦）
+                IssueUrls     = FilterIssueUrls(parent.IssueUrls, phase.Issues),
+                UiSpecContent = parent.UiSpecContent,
+            };
+            db.TaskGroups.Add(subGroup);
+        }
+        await db.SaveChangesAsync(ct);
+
+        // 3. 啟動 Phase 1 sub-task（fire Dev_plan，跳過 Kickoff/Design）
+        var phase1 = await db.TaskGroups
+            .FirstOrDefaultAsync(g => g.ParentGroupId == parentGroupId && g.PhaseNumber == 1, ct);
+        if (phase1 is not null)
+        {
+            logger.LogInformation(
+                "BuildEpicSubTasksAsync：epic {Parent} 拆 {Count} 個 sub-task，啟動 Phase 1（{Phase1Id}）",
+                parentGroupId, proposal.Phases.Count, phase1.Id);
+            await FireStepsAsync(phase1, [new WorkflowStep("Dev_plan")], ct);
+        }
+        else
+        {
+            logger.LogWarning(
+                "BuildEpicSubTasksAsync：找不到 Phase 1 sub-task（Parent={Id}）",
+                parentGroupId);
+        }
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：sub-task done 後 → 啟動下個 Phase or 標 epic 主 group done。
+    /// 在 MarkGroupDoneOrInterventionAsync done 路徑被呼叫；epic.EpicPaused=true 時攔下不啟動下個 Phase。
+    /// </summary>
+    private async Task TriggerNextPhaseIfSubTaskAsync(TaskGroup group, CancellationToken ct)
+    {
+        if (group.ParentGroupId is null) return; // 不是 sub-task
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var db       = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var parent = await taskRepo.GetGroupByIdAsync(group.ParentGroupId.Value, ct);
+        if (parent is null) return;
+
+        // epic 暫停中 → 不啟動下個 Phase（議題 8 兩機制獨立 + Stage 45 IsPaused 對齊）
+        if (parent.EpicPaused == true)
+        {
+            logger.LogInformation(
+                "TriggerNextPhaseIfSubTask：epic {Parent} 暫停中，不啟動下個 Phase（current={Phase}）",
+                parent.Id, group.PhaseNumber);
+            return;
+        }
+
+        // 找下個 PhaseNumber + 1
+        var nextPhaseNum = (group.PhaseNumber ?? 0) + 1;
+        var nextPhase = await db.TaskGroups
+            .FirstOrDefaultAsync(g => g.ParentGroupId == parent.Id && g.PhaseNumber == nextPhaseNum, ct);
+
+        if (nextPhase is not null)
+        {
+            logger.LogInformation(
+                "TriggerNextPhaseIfSubTask：Phase {Done} done → 啟動 Phase {Next}（Epic={Parent}）",
+                group.PhaseNumber, nextPhaseNum, parent.Id);
+            await FireStepsAsync(nextPhase, [new WorkflowStep("Dev_plan")], ct);
+        }
+        else
+        {
+            // 最後一個 Phase done → epic 主 group 標 done
+            taskRepo.UpdateGroupStatus(parent, TaskStatus.Done);
+            await taskRepo.SaveAsync(ct);
+            logger.LogInformation(
+                "TriggerNextPhaseIfSubTask：最後 Phase {Done} done → epic {Parent} 標 done",
+                group.PhaseNumber, parent.Id);
+        }
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：sub-task failed/needs_intervention → epic 標 EpicPaused + 建 BossInteraction。
+    /// </summary>
+    private async Task PauseEpicAndNotifyAsync(TaskGroup subTask, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var parent   = await taskRepo.GetGroupByIdAsync(subTask.ParentGroupId!.Value, ct);
+        if (parent is null) return;
+
+        parent.EpicPaused = true;
+        await taskRepo.SaveAsync(ct);
+
+        logger.LogWarning(
+            "PauseEpicAndNotify：sub-task Phase {Phase} needs_intervention → epic {Parent} EpicPaused=true",
+            subTask.PhaseNumber, parent.Id);
+
+        _ = interactionService.CreateInteractionAsync(
+            "epic_partial_paused",
+            title:                $"Epic 部分暫停：{parent.Title}",
+            description:          $"Phase {subTask.PhaseNumber}（{subTask.PhaseDescription}）失敗，後續 Phase 已暫停。" +
+                                  $"原因：{subTask.InterventionReason ?? "（無）"}",
+            project:              parent.Project,
+            agentName:            null,
+            availableActionsJson: InteractionService.EpicPartialPausedActionsJson,
+            contextJson: JsonSerializer.Serialize(new
+            {
+                epicGroupId       = parent.Id.ToString(),
+                failedPhaseId     = subTask.Id.ToString(),
+                failedPhaseNumber = subTask.PhaseNumber
+            }),
+            taskGroupId: parent.Id);
+    }
+
+    /// <summary>
+    /// Stage 46-FF 三十五：從 parent IssueUrls JSON array 過濾 phase.Issues 對應的 URL 子集。
+    /// 失敗（解析錯 / index 越界）→ 回 parent 整份（後續 Cody 階段依 DesignPlan 自行對焦）。
+    /// </summary>
+    private static string? FilterIssueUrls(string? parentIssueUrls, List<int> phaseIssueIds)
+    {
+        if (string.IsNullOrWhiteSpace(parentIssueUrls) || phaseIssueIds is { Count: 0 })
+            return parentIssueUrls;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(parentIssueUrls);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return parentIssueUrls;
+
+            var allUrls = doc.RootElement.EnumerateArray()
+                .Select(e => e.GetString() ?? "")
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+
+            // phaseIssueIds 為 1-based（對應 Rosa 拆解的 Issue 編號）
+            var filtered = phaseIssueIds
+                .Where(id => id >= 1 && id <= allUrls.Count)
+                .Select(id => allUrls[id - 1])
+                .ToList();
+
+            return filtered.Count > 0
+                ? JsonSerializer.Serialize(filtered)
+                : parentIssueUrls;
+        }
+        catch { return parentIssueUrls; }
     }
 }

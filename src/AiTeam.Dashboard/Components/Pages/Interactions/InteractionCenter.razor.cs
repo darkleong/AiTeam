@@ -178,6 +178,9 @@ public partial class InteractionCenter : IAsyncDisposable
         "dev_failed_intervention" => Icons.Material.Filled.BuildCircle,
         "qa_failed_intervention"  => Icons.Material.Filled.BugReport,
         "sage_escalate"           => Icons.Material.Filled.NoteAlt,
+        // Stage 46-FF 三十五
+        "split_task_proposal"     => Icons.Material.Filled.AccountTree,
+        "epic_partial_paused"     => Icons.Material.Filled.PauseCircle,
         _                         => Icons.Material.Filled.Notifications
     };
 
@@ -194,6 +197,9 @@ public partial class InteractionCenter : IAsyncDisposable
         "dev_failed_intervention" => Color.Warning,
         "qa_failed_intervention"  => Color.Warning,
         "sage_escalate"           => Color.Warning,
+        // Stage 46-FF 三十五
+        "split_task_proposal"     => Color.Info,
+        "epic_partial_paused"     => Color.Warning,
         _                         => Color.Default
     };
 
@@ -212,6 +218,9 @@ public partial class InteractionCenter : IAsyncDisposable
         "dev_failed_intervention" => "Dev 失敗介入",
         "qa_failed_intervention"  => "QA 失敗介入",
         "sage_escalate"           => "Sage 歸檔升級",
+        // Stage 46-FF 三十五
+        "split_task_proposal"     => "拆任務提案",
+        "epic_partial_paused"     => "Epic 部分暫停",
         _                         => type
     };
 

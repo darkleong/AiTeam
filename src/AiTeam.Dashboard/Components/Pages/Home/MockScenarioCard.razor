@@ -60,6 +60,9 @@
                 <MudSelectItem Value="@("pause_at_kickoff_end")">⏸️ Stage45 — Kickoff 結束自動暫停（驗 Design 不啟動）</MudSelectItem>
                 <MudSelectItem Value="@("pause_during_dev")">⏸️ Stage45 — Dev 進行中暫停（驗被動延遲生效）</MudSelectItem>
                 <MudSelectItem Value="@("pause_resume_with_boss_interaction")">⏸️ Stage45 — 跨 BossInteraction 暫停（驗議題 4 兩機制獨立）</MudSelectItem>
+                @* Stage 46：FF 三十五 自動拆任務 2 場景 *@
+                <MudSelectItem Value="@("split_task_propose_accept")">🪓 Stage46 — 拆 task 採納成功（拆 3 sub-task → Sequential 全跑通）</MudSelectItem>
+                <MudSelectItem Value="@("split_task_subtask_fail_intervention")">🛑 Stage46 — 拆 task Phase 2 失敗（epic 部分暫停）</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">

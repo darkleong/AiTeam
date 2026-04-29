@@ -320,9 +320,22 @@ public class MeetingOrchestrationService(
 
             if (designResult.FinalDecision == "consensus")
             {
-                logger.LogInformation("MeetingOrchestration：設計規劃 consensus，直接進入 Dev_plan（Group={Id}）", group.Id);
-                var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-                await tgs.FireStepsAsync(freshGroup, [new WorkflowStep("Dev_plan")], ct);
+                // ── Stage 46-FF 三十五：consensus 路徑下檢查拆 task 提案 ──
+                // 規則層 + Petra 都同意拆 + 有 phases → 建 split_task_proposal BossInteraction（不 fire Dev_plan）
+                // 規則層觸發但 Petra 回 should_split=false / 無 phases → fall through 到既有 fire Dev_plan
+                if (designResult.SplitProposal is { ShouldSplit: true } sp && sp.Phases is { Count: > 0 })
+                {
+                    logger.LogInformation(
+                        "MeetingOrchestration：拆 task 提案觸發（Group={Id}，phases={Count}）",
+                        group.Id, sp.Phases.Count);
+                    await CreateSplitTaskProposalInteractionAsync(freshGroup, sp, ct);
+                }
+                else
+                {
+                    logger.LogInformation("MeetingOrchestration：設計規劃 consensus，直接進入 Dev_plan（Group={Id}）", group.Id);
+                    var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
+                    await tgs.FireStepsAsync(freshGroup, [new WorkflowStep("Dev_plan")], ct);
+                }
             }
             else
             {
@@ -869,5 +882,80 @@ public class MeetingOrchestrationService(
         if (!ulong.TryParse(_discord.GuildId, out var guildId)) return null;
         return discordClient.GetGuild(guildId)
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
+    }
+
+    // ============================================================
+    //  Stage 46-FF 三十五：拆 task 提案卡建立
+    // ============================================================
+
+    /// <summary>
+    /// Stage 46-FF 三十五：建 split_task_proposal BossInteraction（卡片 2，DesignPlan 卡片 1 後的拆 task 提案）。
+    /// Discord embed 顯示 phases 預覽 + 4 按鈕（採納 / 修改 / 不拆 / 停止）；Dashboard 操作中心對應顯示。
+    /// 老闆按鈕路由由 TaskGroupService.ProcessBossResponseAsync case "split_task_proposal" 處理。
+    /// </summary>
+    private async Task CreateSplitTaskProposalInteractionAsync(
+        TaskGroup group, SplitProposal proposal, CancellationToken ct)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+
+        // Phase 預覽
+        var phasePreviewSb = new System.Text.StringBuilder();
+        foreach (var p in proposal.Phases)
+        {
+            var issueList = p.Issues.Count > 0 ? string.Join(", ", p.Issues) : "（待 Cody Dev_plan 階段定）";
+            phasePreviewSb.AppendLine(
+                $"**Phase {p.Phase} — {p.Description}**：Issue {issueList}，預估 {p.EstimatedMinutes} 分鐘");
+        }
+        var phasePreview = phasePreviewSb.ToString();
+        var description  =
+            $"Petra 建議拆成 {proposal.Phases.Count} 個依賴 sub-task，Sequential 依序執行（Phase 1 PR merged → Phase 2 啟動 ...）。\n\n" +
+            $"**理由**：{proposal.Rationale}\n\n{phasePreview}";
+
+        if (ceoChannel is not null)
+        {
+            var embed = new EmbedBuilder()
+                .WithTitle("🪓 Petra 拆 task 提案")
+                .WithColor(Color.Blue)
+                .AddField("任務", group.Title)
+                .AddField("拆解理由", proposal.Rationale.Length > 600 ? proposal.Rationale[..600] + "..." : proposal.Rationale)
+                .AddField("Phase 預覽", phasePreview.Length > 800 ? phasePreview[..800] + "..." : phasePreview)
+                .WithFooter("✅ 採納 = 自動建依賴 sub-task；✏️ 修改 = 改 phases JSON；⏭️ 不拆 = 走單一 task；❌ 停止 = 取消任務")
+                .WithTimestamp(DateTimeOffset.UtcNow)
+                .Build();
+
+            await ceoChannel.SendMessageAsync(embed: embed);
+        }
+
+        // 序列化完整 SplitProposal JSON（Phases 含 issues 子集）
+        var splitProposalJson = JsonSerializer.Serialize(new
+        {
+            should_split = proposal.ShouldSplit,
+            rationale    = proposal.Rationale,
+            phases       = proposal.Phases.Select(p => new
+            {
+                phase             = p.Phase,
+                description       = p.Description,
+                issues            = p.Issues,
+                estimated_minutes = p.EstimatedMinutes
+            }).ToArray()
+        });
+
+        _ = interactionService.CreateInteractionAsync(
+            "split_task_proposal",
+            title:                $"拆任務提案：{group.Title}（{proposal.Phases.Count} Phases）",
+            description:          description,
+            project:              group.Project,
+            agentName:            AgentNames.Pm,
+            availableActionsJson: InteractionService.SplitTaskProposalActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                groupId           = group.Id.ToString(),
+                splitProposalJson = splitProposalJson
+            }),
+            taskGroupId: group.Id);
+
+        logger.LogInformation(
+            "MeetingOrchestration：split_task_proposal BossInteraction 已建立（Group={Id}，phases={Count}）",
+            group.Id, proposal.Phases.Count);
     }
 }
