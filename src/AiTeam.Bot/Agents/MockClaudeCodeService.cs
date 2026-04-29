@@ -64,30 +64,6 @@ public class MockClaudeCodeService(
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
 
-        // Stage 46-FF 三十五：split task 場景需 ≥ 8 個 Issue 觸發規則層
-        // 注意：output 不能用 [MOCK] 前綴開頭，因為 TryParseDesignIssues 用 IndexOf('[') 抓 array 起點，
-        //       會把 [MOCK] 的 [ 當成 array 開始 → 擷取整段含前綴 → 解析失敗 → issuesJson=[] → 規則層 IssueCount=0 不觸發拆 task
-        if (FailScenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention")
-        {
-            const string splitOutput =
-                "MOCK: 探索完成（拆 task 場景：12 Issues）\n" +
-                "[" +
-                "{\"title\":\"[MOCK] Issue 1 schema migration\",\"body\":\"基礎 schema\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 2 base service\",\"body\":\"共用基礎\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 3 component A\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 4 component B\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 5 component C\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 6 component D\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 7 component E\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 8 component F\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 9 component G\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
-                "{\"title\":\"[MOCK] Issue 10 docs\",\"body\":\"收尾文件\",\"labels\":[\"docs\"]}," +
-                "{\"title\":\"[MOCK] Issue 11 tests\",\"body\":\"收尾測試\",\"labels\":[\"test\"]}," +
-                "{\"title\":\"[MOCK] Issue 12 a11y polish\",\"body\":\"收尾 a11y\",\"labels\":[\"polish\"]}" +
-                "]";
-            return new ClaudeCodeResult(true, splitOutput, 0, "");
-        }
-
         const string output =
             "[MOCK] 探索完成\n" +
             "[{\"title\":\"[MOCK] 模擬需求功能\",\"body\":\"這是 Mock Mode 產生的模擬需求，用於測試流程。\",\"labels\":[\"enhancement\"]}]";
@@ -193,6 +169,32 @@ public class MockClaudeCodeService(
                     "{\"decision\":\"revise\",\"summary\":\"[MOCK] 維持修改意見，請 Cody 再次評估\",\"issues\":[{\"severity\":\"blocking\",\"description\":\"[MOCK] 計劃仍需補充\"}],\"revision_instructions\":\"[MOCK] 請再想想\"}", 0, "");
             return new ClaudeCodeResult(true,
                 "{\"decision\":\"approve\",\"summary\":\"[MOCK] 接受 Cody 反駁，核准 Dev_plan\",\"issues\":[],\"revision_instructions\":null}", 0, "");
+        }
+
+        // Stage 46-FF 三十五：Rosa Design 階段拆 12 Issues（觸發規則層 IssueCount ≥ 8）
+        // 必須在 RunMeetingSessionAsync 內偵測，因為 Rosa 走 meetingCommons.RunAgentTurnAsync 不是 RunReadOnlyAsync。
+        // 用 prompt 特徵（"你是 Rosa" + "設計前置作業"）+ FailScenario split_task_* 雙條件判斷。
+        // output 不能 [MOCK] 前綴開頭，TryParseDesignIssues 用 IndexOf('[') 會被 [MOCK] 絆倒（Stage 24 級歷史包袱觀察）。
+        if (FailScenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention"
+            && prompt.Contains("你是 Rosa") && prompt.Contains("設計前置作業"))
+        {
+            const string rosaSplitOutput =
+                "MOCK 探索完成（拆 task 場景：12 Issues）\n" +
+                "[" +
+                "{\"title\":\"MOCK Issue 1 schema migration\",\"body\":\"基礎 schema\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 2 base service\",\"body\":\"共用基礎\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 3 component A\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 4 component B\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 5 component C\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 6 component D\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 7 component E\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 8 component F\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 9 component G\",\"body\":\"元件遷移\",\"labels\":[\"feature\"]}," +
+                "{\"title\":\"MOCK Issue 10 docs\",\"body\":\"收尾文件\",\"labels\":[\"docs\"]}," +
+                "{\"title\":\"MOCK Issue 11 tests\",\"body\":\"收尾測試\",\"labels\":[\"test\"]}," +
+                "{\"title\":\"MOCK Issue 12 a11y polish\",\"body\":\"收尾 a11y\",\"labels\":[\"polish\"]}" +
+                "]";
+            return new ClaudeCodeResult(true, rosaSplitOutput, 0, "");
         }
 
         // Stage 46-FF 三十五：[SPLIT-TASK] prompt 分支（Petra 拆 task 提案）
