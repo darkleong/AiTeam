@@ -735,8 +735,9 @@ public class DesignMeetingService(
         if (string.IsNullOrWhiteSpace(output)) return null;
         try
         {
-            // 找最後一個 JSON 物件（output 可能含 [MOCK] 前綴或解說文字）
-            var startIdx = output.LastIndexOf('{');
+            // 找 root JSON 物件邊界：第一個 { 是 root start（output 可能含解說文字）；
+            // 不能用 LastIndexOf('{')，會抓到 phases 內最後一個 PhaseSpec 的 { 而非 root（驗收期實證 bug）
+            var startIdx = output.IndexOf('{');
             var endIdx   = output.LastIndexOf('}');
             if (startIdx < 0 || endIdx <= startIdx) return null;
             var jsonStr  = output[startIdx..(endIdx + 1)];
