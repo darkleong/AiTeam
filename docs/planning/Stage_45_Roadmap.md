@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 三十四（TaskGroup 流程暫停機制）+ 搭車 FF 三十七（escalate skip 路徑 status 殘留）
 > 對應版本：v3.32.0
 > 建立日期：2026-04-29
-> 狀態：✅ 第一段結案完成（Forge 實作 + commit + push；Aria 接手第二段 CHANGELOG / Future_Feature 同步 + 驗收追加）
-> 文件版本：v2.0（v1.0 規劃 → v2.0 實作完成）
+> 狀態：✅ 第一段結案 + 驗收完成（Forge 實作 + commit + push + Christ 6 場景全 PASS + 0 follow-up；Aria 接手第二段 CHANGELOG / Future_Feature 同步）
+> 文件版本：v2.1（v1.0 規劃 → v2.0 實作完成 → v2.1 驗收後紀錄）
 
 ---
 
@@ -573,7 +573,15 @@ logger.LogInformation("[Stage45-ResumeFire] Group {Id} resume → fire steps={St
 ```
 驗收期掃 `docker logs aiteam-bot-1 --tail 1000 | grep "Stage45-ResumeFire"`，觀察同 Group 短時間內是否 ≥ 2 行。
 
-**驗收期觀察結果**：（待 Christ 驗收後 Aria 結案第二段補）
+**驗收期觀察結果（2026-04-29 Christ 驗收完）**：3 個不同 Group ID（場景 B/C/D 各 1 個）每個 Group **僅 1 行 `[Stage45-ResumeFire]` log**，**無 race condition 觀察到 ✅**
+
+```
+[Stage45-ResumeFire] Group 608fc113... resume → fire steps=Reviewer  (場景 C)
+[Stage45-ResumeFire] Group 77dd38db... resume → fire steps=Design    (場景 B)
+[Stage45-ResumeFire] Group befb102a... resume → fire steps=Reviewer  (場景 D)
+```
+
+→ Aria 6 項審查 🟡 race condition 風險未實際發生，**路線 C「接受並觀察」結論為穩態**。SemaphoreSlim(1,1) 兜底機制 + 一次性 PendingStepsJson 設計足以避免 double fire。
 
 ### 改動檔案清單（16 檔，全數落地）
 
@@ -603,9 +611,92 @@ logger.LogInformation("[Stage45-ResumeFire] Group {Id} resume → fire steps={St
 
 ---
 
+## 驗收紀錄（2026-04-29 Christ 全程跑完，0 follow-up 修正）
+
+### 6 場景全部 PASS
+
+| 場景 | 結果 | 核心證據 |
+|---|---|---|
+| **A 靜態驗收** | ✅ | CI/CD `c702c99` build success（7m30s）/ Migration `Stage45TaskGroupPause` applied / 4 欄位（IsPaused NOT NULL DEFAULT false / PausedAt / PausedBy / PendingStepsJson）齊全 |
+| **B `pause_at_kickoff_end`** | ✅ | 兩種暫停路徑都通：① 手動 Dashboard 暫停（PausedBy=Dashboard）+ Resume fall-through（無 PendingStepsJson 僅清旗標）② Mock PausePoint 自動暫停（PausedBy=MockAutoPause + PendingStepsJson=Design）+ Resume fire Design |
+| **C `pause_during_dev`** | ✅ | **被動延遲生效鐵證** — Dev task 從 05:44:02 跑到 05:44:05（3 秒，不被中斷），完成後 Reviewer 才被攔下；對應 Roadmap 議題 2-a |
+| **D `pause_resume_with_boss_interaction`** | ✅ | **議題 4 兩機制獨立鐵證** — 5 行黃金 log 鏈：手動暫停 → BossInteraction 處理 → skip handler 試 fire Reviewer → PausePoint 也匹配（idempotent，PausedBy 守住=Dashboard）→ IsPaused 閘門攔下 |
+| **E Crash Recovery 對齊** | ✅ | **硬規則鐵證** — 手動注入 ActiveOrchestration → `docker restart aiteam-aiteam-bot-1` → log 出現 `[Stage45-CrashRecoveryPaused] Crash Recovery：跳過 1 個 paused TaskGroup（暫停意圖保留）` + 狀態 100% 不變 |
+| **F FF 三十七** | ✅（static）| ButtonCallbackRouter.cs:241 git diff 3 行清 Status + InterventionReason 邏輯極簡，code review 即驗收。Mock 物理上走 Dashboard 路徑無法觸及 Discord button handler，但 dev_intervention_skip 路徑驗收期意外順帶證實了「3/4 已先前修」校準錨 |
+
+### Log 4 大新增 marker 全亮
+
+| Marker | 用途 | 出現次數 |
+|---|---|---|
+| `[Stage45-Pause]` | TaskGroup 標記暫停 | 多次（手動 + Mock）|
+| `[Stage45-PauseGate]` | FireStepsAsync 入口閘門攔下 | 多次（含 PendingStepsJson 寫入）|
+| `[Stage45-MockPause]` | Mock PausePoint 偵測觸發 | 3 次（場景 B/C/D 各一）|
+| `[Stage45-CrashRecoveryPaused]` | Crash Recovery 跳過 paused 群組 | 1 次（E 場景動態驗證）|
+| `[Stage45-Resume]` | TaskGroup 恢復 | 多次（含 fall-through 與 fire 雙分支）|
+| `[Stage45-ResumeFire]` | Resume race condition 觀察 | 3 次（每 Group 1 次，無 double fire）|
+
+### 驗收期意外發現（Stage 45 範圍外，已 spawn FF 三十九候選）
+
+**Stage 43 既有 bug — Dashboard `HandleDevPlanEscalationAsync` action 字串對齊**：
+
+`AppealOrchestrationService.cs:709-736` `HandleDevPlanEscalationAsync` 只認 `action == "devplan_skip"`，但實際 Dashboard 送進來的 action 字串是：
+- `devplan_unable_skip`（Stage 43 dev_plan_unable BossInteraction）
+- `devplan_escalate_skip`（Stage 23/30 devplan_escalate BossInteraction）
+
+兩者皆**不匹配** `"devplan_skip"` → 全部走 else 分支 `UpdateGroupStatus(group, "failed")` → **Dashboard 點「跳過審核」靜默變成「放棄任務」**。
+
+驗收期實證：Stage45測試4 點 `devplan_unable_skip` 後 DB 結果 `Status=failed` + `InterventionReason='DevPlan 重產 2 次仍失敗'` 沒清。
+
+→ 已透過 spawn task 立 FF 三十九候選，與 Stage 45 / FF 三十七 無關但同精神（escalate skip 應清 status / reason）。Aria 結案第二段決定 FF 編號 / 排程。
+
+### 0 follow-up 修正
+
+**驗收期間沒有任何 code 變更**（與 Stage 43 ×1.94 倍率對比顯著） — 計劃書 v1.2（Aria 6 項審查清單通過）品質直接落地，無需驗收期補修。
+
+### Mock 場景設計品質回顧
+
+| Mock 場景 | 預設 PausePoint | 實際時序 | 結論 |
+|---|---|---|---|
+| pause_at_kickoff_end | (groupId, "Design") | Kickoff 確認後 fire Design ✅ | grep 預驗 (`MeetingOrchestrationService.cs:578`) 對齊精確 |
+| pause_during_dev | (groupId, "Reviewer") | Dev done 後 fire Reviewer ✅ | 自然時序，無需特殊設計 |
+| pause_resume_with_boss_interaction | (groupId, "Reviewer") | dev_intervention_skip 後 fire Reviewer ✅ | 與既有 dev_failed_intervention Mock 流程無縫整合 |
+
+**3/3 PausePoint 設計時序對齊精確**，無「Mock 場景與真實 LLM 路徑不對齊」踩坑。
+
+### Aria 校準錨完整實證（呼應 Stage 43/44 慣例）
+
+#### 校準錨 #1 — Crash Recovery 真實位置 ✅
+- 預掃寫錯：method body 在 TaskGroupService
+- 實證：在 `MeetingOrchestrationService.cs:427-466`（TaskGroupService:582-583 是 façade）
+- 落地：`MeetingOrchestrationService.cs:432-434` `WHERE !IsPaused` 篩選 + paused-skipped count log
+- **動態驗證**：場景 E `[Stage45-CrashRecoveryPaused] 跳過 1 個 paused` log 鐵證
+
+#### 校準錨 #2 — FF 三十七 真實搭車範圍 ✅
+- 預掃寫錯：4 處 skip handler 全需修
+- 實證：3 處（dev_intervention_skip / qa_intervention_skip / sage_skip）已 ✅ 清 status，1 處（escalate_devplan_skip）真正需修
+- 4 處 ✅ checklist：✅×3 已先前修 + ✅×1 本 Stage 新修
+- **動態旁證**：場景 D 點 dev_intervention_skip 後 DB Status=running + InterventionReason=null（確認 TaskGroupService.cs:699-706 既有清理邏輯運作）
+
+### Context 校準（Stage 43/44 公式驗證）
+
+- 預估：272-417K（中位 ~345K）
+- 實際：**~約 350-400K**（含驗收 6 場景 + bash/psql 自助診斷 + FF 三十九 spawn task）
+- 對比：Stage 43（4 Mock + 5 follow-up）= 455K（×1.94）/ Stage 44（0 Mock + 0 follow-up）= 328K（×1.0）
+- **Stage 45 介於兩者**，0 follow-up 但 6 場景 + 1 順手挖出 bug → 預估範圍精確命中
+
+### 結案第一段執行時間軸
+
+- 06:35 commit `c702c99` push 完成 → CI/CD success（7m30s）
+- 06:43+ 驗收 6 場景順序執行（A→B→C→D→F→E）
+- 全程 0 code 修正、0 重 build、0 重 commit
+- spawn FF 三十九 task chip（Stage 45 結案範圍外）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十四 TaskGroup 流程暫停機制（被動阻擋下階段，採方案 Ba + B 互動 + B Appeal flow）+ 搭車 FF 三十七（4 處 skip status 殘留修） |
 | v2.0 | 2026-04-29 | 第一段結案（Forge）— 全 6 子項落地 / 16 檔改動 / 2 條 Aria 校準錨 / 22 caller checklist / Mock 3 場景 / paused chip 配色 / 路線 C race log / 待驗收 |
+| v2.1 | 2026-04-29 | 第一段結案（Forge）驗收後紀錄 — 6 場景全 PASS / 0 follow-up 修正 / 路線 C race observation 0 race / 校準錨 #1 動態實證 + 校準錨 #2 動態旁證 / 順手挖出 FF 三十九候選（Stage 43 既有 bug，Dashboard `HandleDevPlanEscalationAsync` action 字串不對齊）— 待 Aria 接手第二段 CHANGELOG + Future_Feature 同步 |
