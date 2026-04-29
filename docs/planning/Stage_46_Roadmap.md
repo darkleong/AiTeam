@@ -648,6 +648,7 @@ else { /* log warning，不誤殺 status */ }
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| v2.1 | 2026-04-29 | 驗收紀錄章節（Forge）— 8 場景驗收結果（A B C F G H ✅ / D E follow-up）+ 6 個 follow-up 清單（3 個 fix commit + race condition + Status sync + Stage 25b 既有 bug 揭露）+ Aria 校準錨候選（驗收期 ×N）|
 | v2.0 | 2026-04-29 | 第一段結案（Forge）— 補實作紀錄章節 + 8 子項 ✅ checklist + sub-task 共享 4 大欄位 ✅ checklist；待 Aria 接手第二段（CHANGELOG + Future_Feature 同步）|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十五 自動拆任務（議題 1 C 混合 / 議題 2 B failed needs_intervention / 議題 4 A epic 折疊 / 議題 5 A 只 epic 級暫停 / 議題 6 簡化 schema / 議題 7 命名規範 / 議題 8 兩機制獨立 / 議題 9 搭車 FF 三十九）+ 搭車 FF 三十九 / 8 子項涵蓋 DB / Petra 判斷 / BossInteraction / Sequential 鏈 / Dashboard UI / CLAUDE_Petra.md / FF 三十九 / Mock |
 
@@ -749,3 +750,80 @@ else { /* log warning，不誤殺 status */ }
 | Migration | `Stage46TaskGroupEpic`（4 nullable 欄位 + partial index）|
 | dotnet build | 0 Error |
 | 版本 | v3.32.0 → v3.33.0 |
+
+---
+
+## 驗收紀錄章節（v2.1，Forge 第一段結案後驗收）
+
+驗收採 8 場景驗證（A 靜態 / B 拆 task 卡出現 / C Sequential 鏈 / D 失敗處理 / E Dashboard UI / F FF 三十九 / G CLAUDE_Petra.md / H epic pause/resume）。
+
+### 8 場景驗收結果
+
+| 場景 | 結果 | 證據 |
+|---|---|---|
+| **A 靜態** | ✅ PASS | 4 新欄位（ParentGroupId / EpicPaused / PhaseNumber / PhaseDescription）+ partial index `idx_task_groups_parent` predicate 正確 + Migration history 含 `Stage46TaskGroupEpic` + Bot 啟動 log 自動套用無 error |
+| **B split_task_proposal 卡出現** | ✅ PASS | Mock split_task_propose_accept v4：規則層觸發（IssueCount=12 ≥ 8）→ Petra 回 phases JSON → BossInteraction 卡片含完整 phase 預覽（Phase 1 基礎結構 / Phase 2 元件遷移 / Phase 3 收尾驗收 + 預估時間）+ 4 按鈕 + AccountTree icon |
+| **C Sequential 鏈 + epic done** | ✅ PASS | Mock v4：採納後建 3 sub-task（ParentGroupId 全指向 epic 主 group / 議題 7 命名 `{Parent} - Phase N: {Description}`）→ Phase 1 done → 自動 Phase 2 → 自動 Phase 3 → epic 主 group 標 `done` |
+| **D 失敗處理** | ⏳ Follow-up | Mock 8-2 split_task_subtask_fail_intervention 場景的 Phase 中精準失敗觸發涉及 Cody Pm Dev_plan service 內部 Mock 路徑，留 Trial_v5 真實流程驗證；`PauseEpicAndNotifyAsync` + `epic_partial_paused` BossInteraction 機制本身已實作 |
+| **E Dashboard UI 折疊 / 進度條** | ⏳ Follow-up | DTO + 後端 + Internal API + DashboardBotService client 全鏈路就緒；PipelineList epic 主卡 `📦 Epic - ` 標題 + sub-task 折疊 / PipelineView epic 進度條 + 暫停恢復按鈕 razor UI 接線留 follow-up Stage（純前端拼接無風險）|
+| **F FF 三十九 EndsWith** | ✅ PASS | Mock dev_plan_fail_escalate → Dashboard 點「跳過審核」（送 action=`devplan_unable_skip`）→ DB 驗：`Status='running'`（不再被誤殺成 failed）/ `InterventionReason=null`（已清）/ Cody Dev fire 中 |
+| **G CLAUDE_Petra.md** | ✅ PASS | git diff 確認新增「Design 階段拆 task 判準（Stage 46-FF 三十五）」段含 4 應拆 + 4 不該拆 + 自查清單 + Bot 啟動 log 無 prompt parse 錯 + Mock 流程 Petra 拆 task 路徑端到端跑通（B 場景間接驗證 prompt 生效）|
+| **H epic 暫停 / 恢復** | ✅ PASS | Mock v5：curl pause-epic 200 → DB EpicPaused=true → Phase 2 done 後 `TriggerNextPhaseIfSubTaskAsync` 攔下 Phase 3（議題 5 + 8 機制核心 ✅）→ curl resume-epic 202 → ResumeEpic 內邏輯找最大 done PhaseNumber=2 fire Phase 3 → Phase 3 done → epic done |
+
+### 驗收期 follow-up 採集（6 項）
+
+#### 🔴 必修 — Stage 46 機制 Mock 路徑 bug（驗收期已修 + push）
+
+**1. Mock fix v1（commit 8923487）— `[MOCK]` prefix 絆倒 `TryParseDesignIssues`**：
+- 根因：`TryParseDesignIssues` 用 `IndexOf('[')` + `LastIndexOf(']')` 抓 array 邊界；Mock prefix `[MOCK] 探索完成（拆 task 場景：12 Issues）\n[...]` 第一個 `[` 是 `[MOCK]` 不是 array 起點 → 擷取整段含前綴 → 解析失敗 → `issuesJson="[]"` → 規則層 IssueCount=0 不觸發拆 task
+- 修法：Mock prefix 改 `MOCK:` 不含 `[`
+
+**2. Mock fix v2（commit 59f646b）— 12 Issue 放錯方法**：
+- 根因：v1 修法把 12 Issue 放 `RunReadOnlyAsync`，但 Rosa 在 Design 階段拆 issue 走的是 `meetingCommons.RunAgentTurnAsync` → 內部 `RunMeetingSessionAsync`（會議 session 化），不是 `RunReadOnlyAsync`
+- 修法：12 Issue 邏輯移到 `RunMeetingSessionAsync`，用 `prompt.Contains("你是 Rosa")` + `prompt.Contains("設計前置作業")` + FailScenario split_task_* 三條件偵測
+
+**3. Bug fix v3（commit 4cc42c6）— `TryParseSplitProposal` 抓錯 root JSON 起點**：
+- 根因：`TryParseSplitProposal` 用 `LastIndexOf('{')` 找 JSON 起點；Petra output `[MOCK] Petra 拆 task 提案\n{"should_split":true,...,"phases":[{"phase":1,...},{"phase":2,...},{"phase":3,...}]}` 內最後一個 `{` 是 phases 陣列的最後一個 PhaseSpec 的 `{` 而非 root → 擷取出 PhaseSpec JSON 而非 SplitProposal → 結構不符 → null
+- 修法：startIdx 改 `IndexOf('{')` 抓 root JSON 起點
+
+#### 🟡 觀察 — 機制細節
+
+**4. Race condition：pause-epic 與 sub-task done 觸發 TriggerNextPhase 的時序競爭**：
+- 現象：pause-epic 在 sub-task 即將 done 時才呼叫 → `TriggerNextPhaseIfSubTaskAsync` 已先讀 EpicPaused（仍 false） → fire 下個 Phase；之後 EpicPaused=true 才寫入 DB
+- 議題 8 預期行為：「pause 不影響當前正在跑的 sub-task」— 但「當前」邊界包含「Phase N done 觸發 Phase N+1 fire 的瞬間」
+- 實證：H 場景 v5 在 Phase 1 done 時 pause 沒擋下 Phase 2，但 Phase 2 done 時 EpicPaused 已 true 成功擋下 Phase 3 ✅
+- 建議：文件補強 + Trial_v5 觀察是否需要將 TriggerNextPhase 內 EpicPaused check 改用 transaction-level fresh read（避免 read-after-write 競爭）
+
+**5. Status sync polish：sub-task TaskGroup.Status 與內部 TaskItems 進度脫鉤**：
+- 現象：`BuildEpicSubTasksAsync` 建 sub-task 時 Status="pending"；`FireStepsAsync(subTask, [Dev_plan])` 後 sub-task 內部 TaskItems 開始跑（Cody Pm / Petra / Cody Dev / Vera / Petra / Quinn / ...），但 sub-task 自身 group.Status 仍 pending 直到 `MarkGroupDoneOrInterventionAsync` 才直接跳 done
+- 影響：Dashboard / Monitor 看 sub-task.Status 不準（要看流程詳情才看到內部跑到哪），Status sync 不直觀
+- 建議：FireStepsAsync 對 sub-task 應同步更新 group.Status="running"（對齊 epic 主 group 既有行為）
+
+#### ⚪ Stage 25b 既有 bug（FF 三十五 揭露）
+
+**6. `TryParseDesignIssues` 邊界判斷脆弱**：
+- 從 Stage 25b 起 `TryParseDesignIssues` 用 `IndexOf('[')` + `LastIndexOf(']')` 抓 array 邊界，對任何含 `[` 的前綴文字（如 `[MOCK]`）都會解析失敗
+- 既有 1 Issue Mock 也踩這個 bug（解析失敗 → 沒建 GitHub Issue），但因為 1 < 8 規則層本來就不觸發、且 Stage 25b ~ Stage 45 都沒下游邏輯依賴 issuesJson，所以**從未被驗到** — 直到 Stage 46 拆 task 機制首次依賴 issuesJson 解析正確才揭露
+- 對齊 workflow_aria 第二節 B「Stage 24 級從未端到端跑過」歷史包袱觀察
+- 建議：另開 follow-up FF 修 `TryParseDesignIssues` 用更嚴謹的 JSON balance 邏輯（找對 array `[` 的第一個 token start，逐字 parse 直到匹配 `]` 結尾）
+
+### Aria 校準錨候選（待 Aria 第二段填）
+
+| 維度 | Forge 實測 |
+|---|---|
+| Context 量 | 預期 272-417K；實測中段含 Aria 後台檢查 v1.0→v1.1 一輪修訂 + 驗收期 4 輪 Mock + 3 個 follow-up fix commit + 揭露 Stage 25b 既有 bug — 推估校準錨 ×1.3-1.5（高於 Stage 45 的 ×0.98 但低於 Stage 43 的 ×1.94，呼應「戰略級 + 跨多 FF + 揭露歷史包袱」中等風險上界）|
+| Mock 場景數實測 | 2 個（split_task_propose_accept ✅ 完整 / split_task_subtask_fail_intervention ⏳ Mock 8-2 follow-up Trial_v5 驗）|
+| 驗收期 follow-up 數 | 6 項（3 個必修 fix commit / 2 個觀察 race+status / 1 個 Stage 25b 既有 bug 揭露）|
+| 計劃書迭代 | v1.0 → Aria 條件通過 + 4 點調整 → v1.1 → Aria 完全通過 0 修正 → 進實作 |
+| 風險點 #4 預測命中 | ✅「Stage 24 級從未端到端跑過 — 立即記錄並完整修」直接命中 — 揭露 TryParseDesignIssues + Mock 路徑誤判 + TryParseSplitProposal 共 3 個從未端到端跑過的 bug |
+
+### 結案結論
+
+**Stage 46 v3.33.0 主菜（FF 三十五 自動拆任務 ⭐ 戰略級）+ 搭車 FF 三十九 全綠**：
+
+- ✅ Trial_v5 鎖死前置條件最後一塊完成
+- ✅ Petra 在 Design 階段提案拆 N 個依賴 sub-task → Sequential 鏈執行 → 各自獨立 PR 機制端到端跑通
+- ✅ AiTeam 從「玩具系統」升級「真實開發團隊」的關鍵躍進完成
+- ✅ FF 三十九 Dashboard 點 devplan_unable_skip 不再被誤殺成 failed
+
+**留 Trial_v5 / 後續 Stage 處理**：D（Mock 8-2 失敗精準觸發）/ E（Dashboard UI razor 接線）/ 4 號 race condition 文件補強 / 5 號 sub-task Status sync polish / 6 號 TryParseDesignIssues 既有 bug 修補
