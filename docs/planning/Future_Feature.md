@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.56
+> 版本：v7.57
 > 建立日期：2026-04-01
 > 最後更新：2026-04-29
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。已完成項目移至底部「已完成項目摘要」。
@@ -1344,9 +1344,11 @@ Claude Code subprocess 結束時應輸出 token usage（input/output/cache）。
 
 ## 三十五、自動拆任務機制（Petra 在 Design 階段 propose 拆 sub-task）
 
-> 狀態：⭐ **戰略級 FF** — 解 Trial_v4 揭露的「self-implement 範圍縮水」根因
+> 狀態：✅ **完成**（Stage 46，v3.33.0，2026-04-29）— 主體保留供 Trial_v5 對照觀察清單
 > 提出日期：2026-04-28（Trial_v4 結案後 Christ + Aria 深度討論）
-> 前置條件：**FF 三十二（完整七子項）+ FF 三十三 必先完成**
+> 前置條件：**FF 三十二（完整七子項）+ FF 三十三 必先完成** ✅
+> 完成日期：2026-04-29（Stage 46 結案，Petra 拆 task 機制端到端跑通；驗收期 3 個 fix commits + 揭露 Stage 25b TryParseDesignIssues 既有 bug）
+> Trial_v5 啟動：FF 三十二 ✅ + 三十三 ✅ + 三十四 ✅ + **三十五 ✅** = 鎖死前置條件全 ✅，可開跑
 
 ### 背景
 
@@ -1793,8 +1795,9 @@ Christ 2026-04-29 詢問 AiTeam 能否處理「新增專案」需求，提出兩
 
 ## 三十九、Dashboard escalate skip action ID 不匹配 bug（Stage 43 既有衍生）
 
-> 狀態：🟠 **中-高** — Dashboard 真實 UX bug，用戶意圖跟結果完全反；已 spawn task chip 待立 Stage 處理
+> 狀態：✅ **完成**（Stage 46 搭車修，v3.33.0，2026-04-29）— EndsWith 寬鬆比對涵蓋 Discord + Dashboard 命名變體 + 清 InterventionReason
 > 提出日期：2026-04-29（Stage 45 驗收期 Forge spawn task 意外發現）
+> 完成日期：2026-04-29（Stage 46 搭車）
 
 ### 背景
 
@@ -1851,6 +1854,115 @@ Stage 45 驗收 FF 三十七 場景 F 時，Forge 發現 Stage 43 留下的衍�
 ### 修正前的 Workaround
 
 驗收期間 Christ 發現後，**Discord 路徑點「跳過審核」可正常運作**（action ID 匹配），Dashboard 路徑暫時改用 Discord 操作迴避。
+
+---
+
+## 四十、Stage 46 Dashboard razor UI 接線（epic 折疊 + 進度條 + 暫停按鈕）
+
+> 狀態：🟠 **中-高** — 後端全鏈路就緒，純前端 razor 拼接；影響 Trial_v5 觀察期 UX
+> 提出日期：2026-04-29（Stage 46 驗收期 follow-up E）
+
+### 背景
+
+Stage 46 FF 三十五 完成後端全鏈路（DTO + DashboardTaskService + Internal API + DashboardBotService client）但 razor UI 接線未做：
+- PipelineList epic 主卡片 `📦 Epic - ` 標題 + sub-task 折疊
+- PipelineView epic 進度條（MudTimeline N 個 Phase connector）
+- 議題 5 epic 暫停 / 恢復按鈕（Stage 45 PipelineView paused alert + 按鈕風格延續）
+
+### 為何 follow-up
+
+- 純前端 razor 拼接無風險（後端就緒）
+- Stage 46 戰略級規模 + 8 子項已飽和，UI 拼接留下個 Stage 統一處理時序最佳
+- 但 **Trial_v5 觀察期 Christ 看不到 epic 折疊 UI**（DB / log 仍可驗）— UX 影響中-高
+
+### 修法方向
+
+對齊 Stage 45 PipelineView paused alert + 暫停 / 恢復按鈕風格，razor 拼接：
+- PipelineList：MudExpansionPanels 折疊 sub-task / 標題前加 `📦 Epic - ` / 過濾掉 ParentGroupId is not null 的 row
+- PipelineView：MudTimeline 顯示 N 個 Phase status connector / 點 Phase 跳 sub-task PipelineView
+- epic 暫停 / 恢復 button：呼叫 DashboardBotService.PauseEpicAsync / ResumeEpicAsync
+
+### 規模 / 風險
+
+**規模**：S-M（純 razor，無後端動）  
+**風險**：低（後端就緒 + 純拼接 + Stage 45 風格範本可參考）
+
+### 優先級
+
+🟠 **中-高** — Trial_v5 開跑前評估：
+- 選項 A：Stage 47 = FF 四十（Trial_v5 開跑前修，影響觀察期 UX）
+- 選項 B：直接開 Trial_v5（Trial_v5 期間用 DB / log 驗收 + Aria/Forge spawn task 補 UI）
+- 選項 C：合併立 Stage 47 = FF 四十 + 四十一 + 四十二（一氣呵成）
+
+由 Christ 拍板。
+
+---
+
+## 四十一、Stage 46 Sequential 鏈精修（race condition + Status sync）
+
+> 狀態：🟡 中 — 機制細節打磨，不影響功能正確性
+> 提出日期：2026-04-29（Stage 46 驗收期 follow-up 4 + 5）
+
+### 背景
+
+Stage 46 驗收期觀察 2 個機制細節（不阻塞 Stage 46 結案）：
+
+#### 子項 A：Race condition — pause-epic 與 sub-task done 觸發 TriggerNextPhase 時序競爭
+
+- **現象**：pause-epic 在 sub-task 即將 done 時呼叫 → `TriggerNextPhaseIfSubTaskAsync` 已先讀 EpicPaused（仍 false） → fire 下個 Phase；之後 EpicPaused = true 才寫入 DB
+- **議題 8 預期**：「pause 不影響當前正在跑的 sub-task」— 但「當前」邊界是否包含「Phase N done 觸發 Phase N+1 fire 的瞬間」？
+- **驗收實證**：Stage 46 H 場景 v5 在 Phase 1 done 時 pause 沒擋下 Phase 2，但 Phase 2 done 時 EpicPaused 已 true 成功擋下 Phase 3 ✅
+- **修法方向**：① 文件補強「當前」邊界定義 ② TriggerNextPhase 內 EpicPaused check 改用 transaction-level fresh read（避免 read-after-write 競爭）
+
+#### 子項 B：sub-task TaskGroup.Status 與內部 TaskItems 進度脫鉤
+
+- **現象**：`BuildEpicSubTasksAsync` 建 sub-task 時 Status="pending"；`FireStepsAsync` 後內部 TaskItems 開始跑但 sub-task 自身 group.Status 仍 pending 直到 `MarkGroupDoneOrInterventionAsync` 才直接跳 done
+- **影響**：Dashboard / Monitor 看 sub-task.Status 不準（要看流程詳情才看到內部跑到哪）
+- **修法方向**：FireStepsAsync 對 sub-task 應同步更新 group.Status="running"（對齊 epic 主 group 既有行為）
+
+### 規模 / 風險
+
+**規模**：S（兩處 method 改動）  
+**風險**：中（動 Sequential 鏈核心邏輯，需 race condition 場景 Mock 驗）
+
+### 優先級
+
+🟡 中 — Trial_v5 觀察期評估，可搭車 FF 四十一 / 獨立小 Stage / 留 Trial_v5 後
+
+---
+
+## 四十二、TryParseDesignIssues 邊界判斷重構（Stage 25b 既有 bug，FF 三十五 揭露）
+
+> 狀態：🔵 低 — 純 robustness 提升，已有 workaround（Mock prefix 改 `MOCK:` 不含 `[`）
+> 提出日期：2026-04-29（Stage 46 驗收期揭露 Stage 25b 起既有 bug）
+
+### 背景
+
+從 Stage 25b 起 `TryParseDesignIssues` 用 `IndexOf('[')` + `LastIndexOf(']')` 抓 array 邊界 — 對任何含 `[` 的前綴文字（如 `[MOCK]`）都會解析失敗。
+
+**為何從未被驗到**：Stage 25b ~ Stage 45 期間既有 1 Issue Mock 也踩這個 bug（解析失敗 → 沒建 GitHub Issue），但因為 1 < 8 規則層本來就不觸發、且**沒下游邏輯依賴 issuesJson** → bug silently 存在。
+
+**直到 Stage 46 拆 task 機制首次依賴 issuesJson 解析正確才揭露**：
+- Stage 46 規則層 `EvaluateAndProposeSplitAsync` 用 `TryCountIssues(issuesJson)` 判斷 ≥ 8 觸發
+- Mock prefix `[MOCK]` 解析失敗 → IssueCount=0 → 不觸發拆 task → Stage 46 機制看似失靈
+
+**呼應 workflow_aria 第二節 B「Stage 24 級從未端到端跑過」歷史包袱觀察 — 這次完整命中**。
+
+### 修法方向
+
+`TryParseDesignIssues` 改用更嚴謹的 JSON balance 邏輯：
+- 找對 array `[` 的第一個 token start（不是任何 `[`）
+- 逐字 parse 直到匹配 `]` 結尾（counter-based balance）
+- 對 `[` 出現在 string literal 內時忽略（quote-aware）
+
+### 規模 / 風險
+
+**規模**：S（單一 method 重構）  
+**風險**：低（純 robustness，既有 Mock fix 已 workaround）
+
+### 優先級
+
+🔵 低 — 觀察類 backlog，可搭車或留 Trial_v5 後
 
 ---
 
@@ -1994,6 +2106,7 @@ Stage 45 驗收 FF 三十七 場景 F 時，Forge 發現 Stage 43 留下的衍�
 | 2026-04-28 | v7.46：**新增 FF 三十四**（TaskGroup 流程暫停機制）— Trial_v4 觀察期間 Christ 提出真實 UX 痛點（Kickoff 結束後等 8h 期間想暫停無選項 / 流程走偏無法即時干預 / 等外部條件無暫停選項）；記錄 Aria 設計層面三個考慮點：① 暫停粒度（TaskGroup vs Stage 階段 vs Task 三選一，初判選 Stage 階段級）② 暫停動作（被動阻擋下階段 vs 主動 kill subprocess vs 兩者皆可，初判選被動）③ 恢復機制（被動暫停簡單 vs 主動 kill 需 rewind checkpoint 複雜度高）；與既有 Stage 27b Agent pause / Stage 33 全域停止 / Stage 31/37 Crash Recovery 邊界釐清；規模 M-L、🟡 中優先；待 FF 三十二 / 三十三 排序時評估三選二/三選三 |
 | 2026-04-28 | v7.47：**FF 三十二 補子項 G + 立 FF 三十五**（戰略級）— **FF 三十二補強**：① 子項 G「Cody 自我檢查 PR 範圍 vs DesignPlan」（Trial_v4 第二維度盲點，Cody 自欺 vs 客觀完成度，純 prompt 補強含 ESCALATE_NEEDED 機制）② 七子項分兩 Stage 排序建議（Stage 42 = C+D+F+G prompt 補強 / Stage 43 = A+B+E Orchestrator 改動）③ 替代方案「Petra 升級 Claude CLI 審 Vera」記錄 Christ conditional decision（暫不採納，未來架構/設計/狀態變化時重評估，獨立開 FF 三十六）。**新增 FF 三十五**（自動拆任務機制 ⭐ 戰略級）：解 Trial_v4 self-implement 範圍縮水根因 / 對齊 real-world 團隊模式；採 B 階段攔截（Petra 在 Design 綜合整理時 propose 拆 sub-task，CEO/PM 權責分工乾淨）；6 個設計細節已拍板（兩段確認卡 / sub-task 共享 Kickoff+Design / Sequential 依賴鏈 / 各自獨立 PR / DB 內表達 epic / 鎖前置條件 FF 三十二+三十三）；多專案 A 階段攔截留 Phase 2 未來擴充；規模 L、⭐ 戰略級 🔴 高；Stage 排序鎖死（42-43 = FF 三十二 / 44 = FF 三十三 或並行 / 45+ = FF 三十五）|
 | 2026-04-28 | v7.48：**Trial_v5 戰略鎖死 + Stage 排序最終化** — Christ 2026-04-28 拍板：① PR #122 採 (a) close + 12 Issues 一併 close（但不開獨立 Stage 重做 FF 十六）② **Trial_v5 重跑相同 FF 十六 prompt** 作為 Trial_v4 對照組，一次性驗證 FF 三十二/三十三/三十四/三十五 四項補強 ③ Stage 排序最終鎖死：Stage 42-43 = FF 三十二 / Stage 44 = FF 三十三（並行）/ Stage 45 = FF 三十四（升級為 Trial_v5 前置條件）/ Stage 46 = FF 三十五 / Trial_v5 = 重跑 FF 十六；④ Trial_v4 紀錄補完「Trial_v5 預期觀察清單」10 項驗證點 + 戰略結論升級表；⑤ FF 三十二/三十三/三十四/三十五 優先級段全部更新 Stage 排序與 Trial_v5 前置條件描述 |
+| 2026-04-29 | v7.57：**Stage 46 完成（v3.33.0）— FF 三十五 自動拆任務 ⭐ 戰略級 ✅ + 搭車 FF 三十九 ✅ + 立 FF 四十/四十一/四十二**：Petra 在 Design 階段 propose 拆 N 個依賴 sub-task → Christ 採納 → Sequential 鏈執行（Phase 1→2→3 → epic done）→ 各自獨立 PR 機制端到端跑通；解 Trial_v4「Cody 對大需求縮水」根因（12 Issue → 1 Issue）；TaskGroup 加 4 欄位（ParentGroupId / EpicPaused / PhaseNumber / PhaseDescription）+ partial index `idx_task_groups_parent`；Migration `Stage46TaskGroupEpic`；BuildEpicSubTasksAsync v1.1 三層防護（idempotent + fresh read + scope 隔離 — Aria 閘門一回饋全到位）；Petra 雙層判斷（規則層 EvaluateAndProposeSplitAsync 含 Issue 數 ≥ 8 / 預估行數 ≥ 500 / 跨多 Phase 標記三條件 OR + Petra 層 RunPetraSplitTaskProposalAsync 復用 PetraSessionId + [SPLIT-TASK] prompt + SplitProposal/PhaseSpec record + TryParseSplitProposal try-catch fallback）；2 個新 BossInteraction type（split_task_proposal 4 按鈕 / epic_partial_paused 2 按鈕）；4 處映射齊全（ActionsJson 常數 / InteractionProcessor / InteractionCenter Icon-Color-Label / BossInteraction docstring）+ MeetingOrchestrationService consensus 路徑檢查 SplitProposal 建卡片；TriggerNextPhaseIfSubTaskAsync hook in MarkGroupDoneOrInterventionAsync done 路徑 + PauseEpicAndNotifyAsync hook anyBad 路徑 + FilterIssueUrls + HandleSplitTaskProposalAsync split_modify JSON 防呆 fallback split_reject + HandleEpicPartialPausedAsync；Internal API + DashboardBotService client（pause-epic / resume-epic 含「找最大 done 的下個 / fallback 第一個 pending」啟動鏈）；CLAUDE_Petra.md 拆 task 判準新章節（80%+ 邊界覆蓋 — 4 不該拆 + 4 應拆 + JSON 格式 + 4 題自查清單）；FF 三十九 EndsWith 寬鬆比對涵蓋 Discord + Dashboard 命名變體 + 清 InterventionReason（對齊 Stage 45 FF 三十七）；Mock 8-1 split_task_propose_accept 完整可驗（Kickoff → Design → 規則層 → Petra 提案 → 採納 → 3 sub-task → Sequential → epic done）；**驗收期 6 follow-up 採集**：① Mock fix v1（[MOCK] prefix 改 MOCK:）② Mock fix v2（12 Issue 從 RunReadOnly 移到 RunMeetingSession）③ Bug fix v3（TryParseSplitProposal LastIndexOf bug）— 3 個 fix commit 已 push；④ Race condition pause-epic 觀察 ⑤ Status sync polish 觀察 ⑥ **Stage 25b TryParseDesignIssues 既有 bug 揭露**（從未端到端跑過 — 風險點 #4 預測精準命中）；**Aria 校準錨**：① 預掃路徑誤差 Services/Meetings → Orchestration/Meeting（v1.0 即校正）② sub-task fire step name AgentNames.Pm → 純字串 "Dev_plan"（v1.1 實作期 grep WorkflowEngine.cs:91-92 揪出）③ AppSettingsService.GetIntAsync 不存在自寫 helper ④ InternalController 真實在 Api/ 不是 Controllers/ — **自省點 #19 升級紀律 4 處實證**；**Forge context 校準**：Plan Mode v1 ~140K → 計劃書 v1.1 156K → 實作完 336K → 驗收完 466K → 結案 480K = **×1.39**（精準命中 Forge 自評 ×1.3-1.5 上界，呼應「戰略級 + 跨多 FF + 揭露歷史包袱」中等風險）；**新立 FF 四十**（Dashboard razor UI 接線，🟠 中-高 影響 Trial_v5 UX）+ **FF 四十一**（Sequential 鏈精修 race condition + Status sync，🟡 中）+ **FF 四十二**（TryParseDesignIssues 邊界判斷重構，🔵 低）；**🎉 Trial_v5 鎖死前置條件全 ✅**（FF 三十二/三十三/三十四/三十五 全完成）即可開跑（Trial_v5 任務 = 重跑 FF 十六需求對照 Trial_v4 13 bugs）|
 | 2026-04-29 | v7.56：**Stage 45 完成（v3.32.0）— FF 三十四 TaskGroup 流程暫停 ✅ + 搭車 FF 三十七 ✅ + 新立 FF 三十九**：採方案 Ba（被動阻擋下階段）+ 議題 4/5 B（暫停與 BossInteraction / Appeal flow 兩機制獨立）；TaskGroup 加 4 欄位（IsPaused / PausedAt / PausedBy / **PendingStepsJson SoT 解** Forge 主動加超越 Roadmap 預想避免 Resume 重做 8+ 種 routing）；`TaskGroupService.IsTaskGroupPausedAsync`（fresh read 獨立 scope）+ `PauseTaskGroupAsync`（idempotent）+ `ResumeTaskGroupAsync`（讀回 PendingStepsJson + JsonSerializer.Deserialize try-catch 防呆）；**FireStepsAsync 統一閘門**（Forge 加分項，22 caller 自動受保護不需逐一改）；Mock 3 場景（PausePoint 靜態欄位 + 一次性自動清 null，對齊 FailScenario 風格）；Crash Recovery 對齊 IsPaused 篩選（**Aria 校準錨 #1**：真實落點 `MeetingOrchestrationService.cs:432` — TaskGroupService:582 是 façade，**自省點 #19 升級教訓「只看 caller 位置 ≠ 真實 method body 位置」**）；FF 三十七 真實搭車範圍 1 處（**Aria 校準錨 #2**：4 處 → 1 處 ButtonCallbackRouter.cs:241，3 處先前已修 + 1 處本 Stage 新修，自省點 #19「FF backlog 描述 ≠ ground truth」）；統一 `[Stage45-*]` log prefix 6 種（Mock/Pause/PauseGate/Resume/ResumeFire/CrashRecoveryPaused）；Internal API POST `/internal/taskgroup/{id}/pause + /resume`（Resume Task.Run + try-catch 呼應 Aria 閘門低度提醒主動修）；Dashboard UI（PipelineView 暫停 alert + 暫停/恢復 按鈕 + paused chip muted grey #6c757d 與 needs_intervention amber #f59e0b 視覺對比清楚）；**驗收 6 場景全 PASS + 0 follow-up**（Stage 44 ×1.0 級順利）；**路線 C race condition 0 實際觀察**（3 群組各 1 行 [Stage45-ResumeFire] log，SemaphoreSlim 兜底 + 一次性 PendingStepsJson 設計足夠，Aria 閘門低度提醒風險未實際發生）；**Forge context 校準**：Plan Mode 127K → 計劃書 v1.1 150K → 實作完 230K → 結案 338K，最終 ×0.98 對齊 Aria 預估 272-417K 中位 — 精準命中「介於 Stage 43 (×1.94) vs Stage 44 (×1.0) 之間」預測；**驗收期意外發現 FF 三十九**（Dashboard escalate skip action ID 不匹配 bug，Stage 43 既有衍生：HandleDevPlanEscalationAsync 只認 devplan_skip 但 Dashboard 送 devplan_unable_skip / devplan_escalate_skip → Dashboard 點「跳過審核」靜默變「放棄任務」🟠 中-高優先）；FF 三十四 主體保留供 Trial_v5 對照觀察清單；FF 三十七 主體保留標 ✅ 完成 |
 | 2026-04-29 | v7.55：**Stage 44 完成（v3.31.0）— FF 三十三 Token CLI Agent 涵蓋 ✅**：`ClaudeCodeService.ParseJsonOutput` 升 3-tuple + `TryParseUsage` helper 解 `usage` 子物件 + 頂層 `total_cost_usd` → `ClaudeCodeResult.Usage` record；token_logs schema 加 5 nullable 欄位（`Stage` / `Round` / `CacheCreationTokens` / `CacheReadTokens` / `TotalCostUsd HasPrecision(18,6)` 對齊 Anthropic 帳單第六位）+ `ComputeEffectiveTokens` static helper（公式 input + output + cache_creation × 1.25 + cache_read × 0.1，整數運算 × 5/4 / ÷ 10 讓 EF translate）；新增 `TokenLogService` 共用 helper（內建 try-catch + 獨立 scope DbContext 保證硬規則「token 寫入失敗不阻塞主流程」+ DashboardPushService 也包 try-catch 二層防線）；Migration `Stage44TokenLogsSchemaUpgrade`（純加 nullable 非鎖表）；**Roadmap 描述校準**：原估 8 caller / 17 處 MeetingCommons → grep 揭露實際 16 caller（含申訴各分支 Petra-Review / Petra-Arbitration / Petra-Reassess + Cody-ReviewAppeal / Vera-ReviewAppeal / Cody-DevPlanAppeal + Aria 閘門一拍板搭車 Rosa/Demi）+ 21 處 MeetingCommons call site（Kickoff 7 + Design 14）全對齊 0 漏；**Aria 閘門一拍板四點全落實**：① Decimal precision 一次到位 (18,6) ② Rosa/Demi 升級正式範圍 ③ MeetingCommons 採方案 A optional + 強制 21 處 checklist + grep 第二道防線 ④ Roadmap 校準寫進實作紀錄；**驗收**：Christ Discord 對 Victoria 一句話對話實證 token_logs 寫入完整 11 欄位（CEO / claude-sonnet-4-6 / Input 7 / Output 2,258 / **CacheCreation 29,674 / CacheRead 110,934 / TotalCostUsd $0.179531**）+ HasPrecision(18,6) 第六位完整保留 + 等效 50,450 vs 純 input+output 2,265（cache 占比 95.5%，**守門公式升級價值一次驗證**）+ Helper 內 try-catch 0 warning 主流程 success=True；其他 15/16 caller 完整覆蓋率驗證留 Trial_v5；**Forge context 校準**：Plan Mode 161K → 二次檢查 171K → 實作完 310K → 驗收完 319K（+9K 極少）→ 結案 328K（+9K），最終 ×1.0 倍率對齊 Aria 預估 257-397K 中位 — Stage 43 ×1.94 反例不是「跨層+Mock+LLM 路徑」類別固定倍率，是「Mock 場景多 + follow-up 多」特例；FF 三十三 主體保留供 Trial_v5 對照觀察清單 |
 | 2026-04-29 | v7.54：**新立 FF 三十八**（跨專案能力研究 — 多 repo / scaffold / 環境建置 spike，⚪ 待深度討論）— Stage 44 進行中時 Christ 詢問「AiTeam 能否處理新增專案需求」引發；Aria grep 揭露 `Project.RepoUrl` 雖 entity 存在但 Bot 端沒讀（純 Dashboard 顯示用，PmAgentCommons.cs:45/110 / CeoAgentService.cs:107/134/445 證實）+ `GitHubSettings.Owner` / `DefaultRepo` hardcode + Bot 容器無 docker compose 權限 → 兩個情境（完整自動化 / 半自動）目前都不行；兩個子議題（**A 跨 Project repo 支援**：基礎建設類，可與 v4 脫勾 / **B 新專案 scaffold**：戰略級，跟 FF 三十六 v4 架構耦合）拆/合待深度討論；觸發條件候選：① Trial_v5 結束評估 ② FF 三十六 spike 啟動 ③ 客戶專案實際需求出現；保留 Christ「**記錄下來，但需要再深度討論和確認**」conditional decision 風格 |

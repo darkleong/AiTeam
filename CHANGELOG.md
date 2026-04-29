@@ -11,11 +11,17 @@
 
 ## [Unreleased]
 
-- **下個 Stage（Stage 46）**：FF 三十五（自動拆任務 ⭐ 戰略級）— Trial_v4 範圍縮水根因的真正解，Trial_v5 鎖死前置條件最後一塊
-- **後續排序**：Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）/ Trial_v5 之後評估 FF 十一（Token 守門 Dashboard 化）+ FF 三十六（v4 架構雙支柱 spike）+ FF 三十八（跨專案能力 spike）
-- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）/ **FF 三十三 ✅ 完成**（Stage 44）/ **FF 三十四 ✅ 完成 + FF 三十七 ✅ 搭車完成**（Stage 45）/ **新立 FF 三十九**（Dashboard escalate skip action ID 不匹配 bug，驗收期意外發現）
+- **🎉 Trial_v5 鎖死前置條件全 ✅ — 即可開跑！** 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4 13 bugs）
+- **下個動作（Trial_v5 開跑前選一）**：① 直接開 Trial_v5 / ② 先做 FF 四十（Stage 46 Dashboard razor UI 接線，影響 Trial_v5 觀察期 UX）/ ③ 一併處理 FF 四十/四十一/四十二
+- **Trial_v5 之後評估 backlog**：FF 十一（Token 守門 Dashboard 化）/ FF 三十六（v4 架構雙支柱 spike）/ FF 三十八（跨專案能力 spike）
+- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅**
+- **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 
 ---
+
+## [3.33.0] — 2026-04-29 — [Stage 46](docs/planning/Stage_46_Roadmap.md)
+
+FF 三十五 自動拆任務 ⭐ 戰略級 + 搭車 FF 三十九 — Petra 在 Design 階段 propose 拆 N 個依賴 sub-task → Christ 採納 → Sequential 鏈執行（Phase 1 done → Phase 2 → Phase 3 → epic done） → 各自獨立 PR；解 Trial_v4「Cody 對大需求縮水」根因（12 Issue → 1 Issue）；TaskGroup 加 4 欄位（ParentGroupId / EpicPaused / PhaseNumber / PhaseDescription）+ partial index；BuildEpicSubTasksAsync v1.1 三層防護（idempotent + fresh read + scope 隔離）；Petra 雙層判斷（規則層 EvaluateAndProposeSplitAsync + Petra 層 RunPetraSplitTaskProposalAsync 復用 PetraSessionId）；2 個新 BossInteraction type（split_task_proposal / epic_partial_paused）；Internal API + DashboardBotService client（pause-epic / resume-epic 含找最大 done 啟動鏈）；CLAUDE_Petra.md 拆 task 判準新章節（80%+ 邊界覆蓋）；FF 三十九 EndsWith 寬鬆比對 + 清 InterventionReason；Mock 8-1 split_task_propose_accept 完整可驗（8-2 follow-up Trial_v5）；驗收期 3 個 fix commits（[MOCK] prefix / 12 Issue 路徑 / TryParseSplitProposal LastIndexOf bug）+ 揭露 **Stage 25b TryParseDesignIssues 既有 bug**（從未端到端跑過 — 風險點 #4 預測命中）；**Trial_v5 鎖死前置條件最後一塊完成 🎉**
 
 ## [3.32.0] — 2026-04-29 — [Stage 45](docs/planning/Stage_45_Roadmap.md)
 
