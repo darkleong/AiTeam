@@ -11,11 +11,15 @@
 
 ## [Unreleased]
 
-- **下個 Stage（Stage 44）**：FF 三十三（Token 計費機制 CLI Agent 涵蓋）— token_logs 從 6% 涵蓋率擴充至全 CLI Agent；Trial_v5 前置條件之一
-- **後續排序**：Stage 45 = FF 三十四（TaskGroup 流程暫停，Trial_v5 鎖死前置條件）/ Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）
-- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）
+- **下個 Stage（Stage 45）**：FF 三十四（TaskGroup 流程暫停機制）— Trial_v5 鎖死前置條件
+- **後續排序**：Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）/ Trial_v5 之後評估 FF 十一（Token 守門 Dashboard 化，不預設 Stage 編號）+ FF 三十六（v4 架構雙支柱 spike）+ FF 三十八（跨專案能力 spike）
+- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）/ **FF 三十三 ✅ 完成**（Stage 44）
 
 ---
+
+## [3.31.0] — 2026-04-29 — [Stage 44](docs/planning/Stage_44_Roadmap.md)
+
+FF 三十三 Token 計費機制 CLI Agent 涵蓋 — Trial_v4 揭露 token_logs 6% 涵蓋率盲點補完：`ClaudeCodeService.ParseJsonOutput` 解 `usage` + `total_cost_usd` → `ClaudeCodeResult.Usage`；token_logs 加 5 nullable 欄位（`Stage` / `Round` / `CacheCreationTokens` / `CacheReadTokens` / `TotalCostUsd HasPrecision(18,6)`）；`TokenLogService` 共用 helper 內建 try-catch + 獨立 scope（保證硬規則「不阻塞主流程」）；16 個 CLI caller（含搭車 Rosa/Demi）+ 21 處 MeetingCommons call site 全對齊；Stage 22 守門公式升級為等效 token（`input + output + cache_creation × 1.25 + cache_read × 0.1`，整數運算 EF translate）；Victoria 真實 CLI 對話實證 cache 占比 95.5% 等效 50,450 vs 純 input+output 2,265
 
 ## [3.30.0] — 2026-04-29 — [Stage 43](docs/planning/Stage_43_Roadmap.md)
 
