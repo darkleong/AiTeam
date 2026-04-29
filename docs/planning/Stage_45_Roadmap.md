@@ -162,9 +162,11 @@ Stage 31/37 `RecoverStuckOrchestrationsAsync` 掃 `ActiveOrchestration` 非 null
 
 ### 實作項目
 
-**位置**：`RecoverStuckOrchestrationsAsync` method 本體在 `TaskGroupService`（被 `AgentQueueProcessor.cs:73` 在 ExecuteAsync 啟動時呼叫）— Aria 預掃確認
+**位置**：`RecoverStuckOrchestrationsAsync` method **本體在 `MeetingOrchestrationService.cs:427-466`**（不是 TaskGroupService — TaskGroupService.cs:582-583 是 façade `=> meetingOrchestration.RecoverStuckOrchestrationsAsync(ct)`）。被 `AgentQueueProcessor.cs:73` 透過 façade 呼叫。
 
-**改動**：掃描查詢加 `WHERE IsPaused = false` 篩選
+**改動**：掃描查詢加 `WHERE IsPaused = false` 篩選 — 真實落點是 `MeetingOrchestrationService.cs:432-434`
+
+> ⚠️ **Aria 預掃校準錨**（2026-04-29 Forge 計劃書 v1.0 揭露）：Aria 修正 commit `1ff7176` 寫「TaskGroup Service」是錯的（只看 AgentQueueProcessor.cs:73 caller 推論，沒看 method body 是 façade）。Forge grep 揭露真實位置在 MeetingOrchestrationService。**自省點 #19 升級版教訓：只看 caller 位置 ≠ 真實 method body 位置，要看 method body 確認是不是 façade**。
 
 **範例**（具體位置由 Forge 確認）：
 ```csharp
@@ -238,13 +240,20 @@ var stuck = await db.TaskGroups
 
 ### 背景
 
-Stage 43 留下 [FF 三十七](Future_Feature.md) — 4 個 BossInteraction skip button handler 沒清 `Status` + `InterventionReason`：
-- `dev_intervention_skip`（Dev failed → 略過進下一階段）
-- `qa_intervention_skip`（QA 連續失敗 → 略過 QA）
-- `sage_skip`（Sage escalate → 略過歸檔）
-- `escalate_devplan_skip`（dev_plan_unable 對應 skip）
+Stage 43 留下 [FF 三十七](Future_Feature.md) backlog 描述「4 處 skip handler 沒清 Status + InterventionReason」，但 **2026-04-29 Forge Plan Mode v1.0 grep 揭露實際只缺 1 處**：
 
-UI 顯示誤導：流程繼續跑但 Dashboard 仍顯示「需介入」。
+| Skip handler | 位置 | 實際狀態 | 需動作 |
+|---|---|---|---|
+| `dev_intervention_skip` | TaskGroupService.cs:699-706 | ✅ **已清** `UpdateGroupStatus("running")` + `InterventionReason = null` | **不需動** |
+| `qa_intervention_skip` | TaskGroupService.cs:754-761 | ✅ **已清** | **不需動** |
+| `sage_skip` | TaskGroupService.cs:799-805 | ✅ 委派 `MarkGroupDoneOrInterventionAsync` 自動寫 status | **不需動** |
+| **`escalate_devplan_skip`** | **ButtonCallbackRouter.cs:241-258** | ❌ **沒清 Status / InterventionReason 就 FireStepsAsync(Dev)** | **真正需修（唯一需修）** |
+
+→ **真實搭車範圍 = 1 處**（不是 4 處）
+
+> ⚠️ **Aria 預掃校準錨**（2026-04-29 Forge 計劃書 v1.0 揭露）：Aria FF 三十七 立 FF 時的 backlog 描述假設 4 處都缺，**沒實際 grep handler 內容驗證**。Forge 逐一 grep 揭露 3 處先前已清 + 1 處真正需修。**自省點 #19 升級版教訓：FF backlog 描述不是 ground truth，計劃書必須 grep 真實 handler 內容驗證**。
+
+UI 顯示誤導：流程繼續跑但 Dashboard 仍顯示「需介入」（**僅限 escalate_devplan_skip 場景**）。
 
 ### 實作項目
 
