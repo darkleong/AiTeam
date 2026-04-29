@@ -11,11 +11,15 @@
 
 ## [Unreleased]
 
-- **下個 Stage（Stage 45）**：FF 三十四（TaskGroup 流程暫停機制）— Trial_v5 鎖死前置條件
-- **後續排序**：Stage 46 = FF 三十五（自動拆任務 ⭐ 戰略級）/ Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）/ Trial_v5 之後評估 FF 十一（Token 守門 Dashboard 化，不預設 Stage 編號）+ FF 三十六（v4 架構雙支柱 spike）+ FF 三十八（跨專案能力 spike）
-- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）/ **FF 三十三 ✅ 完成**（Stage 44）
+- **下個 Stage（Stage 46）**：FF 三十五（自動拆任務 ⭐ 戰略級）— Trial_v4 範圍縮水根因的真正解，Trial_v5 鎖死前置條件最後一塊
+- **後續排序**：Trial_v5 = 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4）/ Trial_v5 之後評估 FF 十一（Token 守門 Dashboard 化）+ FF 三十六（v4 架構雙支柱 spike）+ FF 三十八（跨專案能力 spike）
+- **FF 三十二 ✅ 全七子項完成**（Stage 42 + Stage 43）/ **FF 三十三 ✅ 完成**（Stage 44）/ **FF 三十四 ✅ 完成 + FF 三十七 ✅ 搭車完成**（Stage 45）/ **新立 FF 三十九**（Dashboard escalate skip action ID 不匹配 bug，驗收期意外發現）
 
 ---
+
+## [3.32.0] — 2026-04-29 — [Stage 45](docs/planning/Stage_45_Roadmap.md)
+
+FF 三十四 TaskGroup 流程暫停機制 + 搭車 FF 三十七 escalate skip status 殘留 — AiTeam 第三層暫停機制（與 Agent pause Stage 27b + 全域緊急停止 Stage 33 並列）：採方案 Ba（被動阻擋下階段）+ 議題 4/5 B（暫停與 BossInteraction / Appeal flow 兩機制獨立）；TaskGroup 加 4 欄位（IsPaused / PausedAt / PausedBy / PendingStepsJson SoT 解避免 Resume 重做 routing）；FireStepsAsync 統一閘門（22 caller 自動受保護，超越 Roadmap 預想）；Crash Recovery 對齊 IsPaused 篩選（落點 MeetingOrchestrationService.cs:432，**Aria 校準錨 #1：façade 不是 method body**）；FF 三十七 真實搭車範圍 1 處 ButtonCallbackRouter:241（**Aria 校準錨 #2：4 處 → 1 處**）；6 驗收場景全 PASS + 0 follow-up + 路線 C race condition 0 實際觀察；驗收期意外發現 FF 三十九（Dashboard 點「跳過審核」靜默變「放棄任務」）
 
 ## [3.31.0] — 2026-04-29 — [Stage 44](docs/planning/Stage_44_Roadmap.md)
 
