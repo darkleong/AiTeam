@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 三十三（Token 計費機制 CLI Agent 涵蓋）
 > 對應版本：v3.31.0
 > 建立日期：2026-04-29
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-04-29）
+> 文件版本：v2.0
 
 ---
 
@@ -435,6 +435,7 @@ ORDER BY "CreatedAt";
 |------|------|------|
 | v1.0 | 2026-04-29 | 計劃書建立（Aria）— FF 三十三 Token CLI 涵蓋三大塊（CLI capture + schema 升級 + 守門邏輯升級）合一 Stage |
 | v1.1 | 2026-04-29 | 實作完成（Forge）— 補實作紀錄章節（4 必含章節：Roadmap 校準 / 16 caller checklist / MeetingCommons 17 處 checklist / Trial_v5 涵蓋率目標升級） |
+| v2.0 | 2026-04-29 | 驗收通過（Forge）— 真實 CLI 寫入實證 11 欄位 + Anthropic 帳單精度 6 位小數 + cache 占比 95.5% 揭露守門公式升級價值；header 標記 ✅ 已完成 |
 
 ---
 
@@ -571,3 +572,74 @@ Roadmap 原訂 Trial_v5 對照 Anthropic Console 90%+；Aria 閘門一拍板將 
 - **Phase 2 grep 數值優於 Roadmap 粗估的價值**：Roadmap 估 8 caller，實際 14 個必要 + 2 搭車；MeetingCommons 估 17 處，實際 21 處。Phase 2 機械化 grep 是計劃書品質的關鍵防線（呼應 Stage 43 校準錨教訓）。
 - **方案 A optional 設計 + checklist 紀律機制有效**：21 處 RunAgentTurnAsync 全部補完無漏，build 一次 pass。grep 第二道防線即時驗證，避免悄悄漏寫。
 - **ClaudeCodeResult.Usage 設 optional default null**：未動 MockClaudeCodeService 即可天然兼容（Mock 不寫 token），降低變更面。
+
+---
+
+## 驗收紀錄（Forge，2026-04-29 11:09 — Victoria 真實 CLI 對話）
+
+### 第一層：靜態驗收 ✅
+
+- `gh run list`：commit `55f9e0c` Build and Deploy **success（5m38s）**
+- bot logs 顯示 Migration 跑進 DB：
+  ```
+  Applying migration '20260429024106_Stage44TokenLogsSchemaUpgrade'.
+  ALTER TABLE token_logs ADD "CacheCreationTokens" integer;
+  ALTER TABLE token_logs ADD "CacheReadTokens" integer;
+  ALTER TABLE token_logs ADD "Round" integer;
+  ALTER TABLE token_logs ADD "Stage" text;
+  ALTER TABLE token_logs ADD "TotalCostUsd" numeric(18,6);
+  ```
+- `\d token_logs` 確認 5 個新欄位 + `TotalCostUsd numeric(18,6)` 對齊 Anthropic 帳單精度
+
+### 第二層：真實 CLI 寫入驗證 ✅
+
+Christ 在 Discord `#victoria-ceo` 對 Victoria 說「目前任務狀況」一句話，token_logs 寫入結果：
+
+| AgentName | Stage | Round | Model | Input | Output | CacheCreation | CacheRead | TotalCostUsd |
+|-----------|-------|-------|-------|------:|-------:|--------------:|----------:|-------------:|
+| CEO | CEO | (null) | claude-sonnet-4-6 | 7 | 2,258 | 29,674 | 110,934 | **$0.179531** |
+
+**全 11 欄位 INSERT 成功**：bot logs 顯示完整 `INSERT INTO token_logs ("AgentName", "CacheCreationTokens", "CacheReadTokens", "CreatedAt", "InputTokens", "Model", "OutputTokens", "Round", "Stage", "TaskId", "TotalCostUsd")` ✅
+
+**精度驗證**：`$0.179531` 到第六位完整保留，`HasPrecision(18, 6)` 拍板正確 ✅
+
+**Dashboard push 通知成功**：`POST http://aiteam-dashboard:8080/internal/agent-status/token` ✅
+
+### 第三層：守門等效公式驗算 ✅
+
+代入 `ComputeEffectiveTokens`：
+```
+等效 token = 7 + 2,258 + 29,674 × 5/4 + 110,934 / 10
+         = 7 + 2,258 + 37,092 + 11,093
+         = 50,450
+```
+
+**vs 升級前公式**（純 input + output）= 2,265
+
+**cache 占比 95.5%** 的成本以前完全沒進守門統計 — 這個數字一次驗證了 Stage 44 三大塊（特別是守門公式升級）的核心價值。
+
+### 第四層：容錯（不阻塞主流程）✅
+
+- bot logs grep `CLI token 寫入失敗`：**0 筆**（無 warning）
+- Victoria 主流程：`Claude Code subprocess 結束（exitCode=0，success=True）` ✅
+- Helper 內 try-catch 全綠通過
+
+### 觀察點（記錄供後續參考，**非本 Stage bug**）
+
+**估值守門 vs actual 寫入的精度落差**：
+- `TokenTrackingProvider.estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4`（Stage 22 既有設計）僅看 prompt 長度估算，不含實際 cache 用量
+- 本次 Victoria 對話：估值很小（一句話 prompt）→ 守門通過；actual 等效 50,450 token（含 cache）寫入
+- **本 Stage 沒動估值邏輯**（Roadmap 不在範圍）。後續若要補強守門精度，可考慮搭車 FF 一（API 費用優化）時一併重新評估「pre-call estimated 守門 vs post-call actual 用量」設計。
+
+### 涵蓋率現況
+
+本次驗收實證 **1/16 caller**（Victoria CEO）核心鏈路全綠。其他 15 caller 機制完全相同（同 ClaudeCodeResult → 同 LogCliUsageAsync helper），完整覆蓋率驗證留 **Trial_v5**（Roadmap 已寫明）。
+
+### 本 Stage 沒踩到的坑（事後紀錄）
+
+- 預期可能踩 8 caller 對齊缺漏（Stage 43 校準錨）→ Phase 2 grep 揭露 16 caller + 21 處 MeetingCommons 後機械化補完，**0 漏補**
+- 預期可能踩 JSON schema 版本不符 → Plan Mode 第一步 sample CLI 驗證後 schema 確認與計劃書一致，**0 假設誤判**
+- 預期可能踩 cache 計法邊界 → 整數運算 × 5/4 / ÷ 10 + EF Core inline SumAsync，**0 LINQ translate 失敗**
+- 預期可能踩 Migration 鎖表 → PostgreSQL `ALTER TABLE ADD COLUMN nullable` 非鎖表 + bot log 顯示 5 個 ADD COLUMN 瞬間完成，**0 卡頓**
+
+**結論**：跨層 + 動共用機制 + 多 caller 對齊類 Stage 估 follow-up 修正 80–150K context（Plan Mode Model/Effort 段預測），**實際 0 follow-up 修正即驗收通過**。Phase 2 grep 證據鏈 + 計劃書 v1.1 二次檢查 SOP（Aria 閘門一）+ 方案 A 紀律 checklist 三道防線一起發揮作用。
