@@ -82,8 +82,10 @@ dotnet ef migrations add Stage45TaskGroupPause \
 **Forge Plan Mode 第一步**（呼應 Stage 43/44 校準錨「caller 對齊缺漏是 follow-up 修正主因」）：
 
 ```bash
-grep -rn "FireStepsAsync\|FireOneStepAsync\|FireAgents" src/AiTeam.Bot/Orchestration/ --include="*.cs"
+grep -rn "FireStepsAsync\|FireOneStepAsync" src/AiTeam.Bot/ --include="*.cs"
 ```
+
+> Aria 預掃揭露：`FireStepsAsync` 在 ButtonCallbackRouter / WebhookController / AppealOrchestrationService 多處 caller（method 本體在 TaskGroupService）；`FireOneStepAsync` 在 AgentQueueProcessor（`RecoverStuckOrchestrationsAsync` 也在 TaskGroupService，被 AgentQueueProcessor 呼叫）。
 
 列完整 checklist（預估 5-10 處），**每處逐一加 IsPaused 檢查**。實作紀錄附完整 ✅ checklist 證明全對齊。
 
@@ -160,7 +162,7 @@ Stage 31/37 `RecoverStuckOrchestrationsAsync` 掃 `ActiveOrchestration` 非 null
 
 ### 實作項目
 
-**位置**：Forge Plan Mode 第三步 grep `RecoverStuckOrchestrationsAsync` / `ActiveOrchestration` 找掃描邏輯（從 memory 知在 `MeetingOrchestrationService` 或對應 service）
+**位置**：`RecoverStuckOrchestrationsAsync` method 本體在 `TaskGroupService`（被 `AgentQueueProcessor.cs:73` 在 ExecuteAsync 啟動時呼叫）— Aria 預掃確認
 
 **改動**：掃描查詢加 `WHERE IsPaused = false` 篩選
 
