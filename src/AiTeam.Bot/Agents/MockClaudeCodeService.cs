@@ -65,10 +65,12 @@ public class MockClaudeCodeService(
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
 
         // Stage 46-FF 三十五：split task 場景需 ≥ 8 個 Issue 觸發規則層
+        // 注意：output 不能用 [MOCK] 前綴開頭，因為 TryParseDesignIssues 用 IndexOf('[') 抓 array 起點，
+        //       會把 [MOCK] 的 [ 當成 array 開始 → 擷取整段含前綴 → 解析失敗 → issuesJson=[] → 規則層 IssueCount=0 不觸發拆 task
         if (FailScenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention")
         {
             const string splitOutput =
-                "[MOCK] 探索完成（拆 task 場景：12 Issues）\n" +
+                "MOCK: 探索完成（拆 task 場景：12 Issues）\n" +
                 "[" +
                 "{\"title\":\"[MOCK] Issue 1 schema migration\",\"body\":\"基礎 schema\",\"labels\":[\"feature\"]}," +
                 "{\"title\":\"[MOCK] Issue 2 base service\",\"body\":\"共用基礎\",\"labels\":[\"feature\"]}," +
