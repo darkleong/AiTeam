@@ -1578,6 +1578,155 @@ Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
 
 → **必須先做 FF 四十九**。Phase A 通過 → Phase B 才有 framework 基礎可動態調度；Phase A 不通過 → Phase B 自動失效。
 
+### 設計拍板（2026-05-01 Christ + Aria brainstorm 後）
+
+Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟發）：每個 Agent 是「打包好的角色/權責」，PM 動態調度。Aria 對應行業術語：**Anthropic Orchestrator-Workers Pattern + MS Agent Framework Magentic Orchestration + Agent-as-Tool**（業界 v4 共識方向）。
+
+→ Spike Phase B 從原本「**探索動態流程要不要做**」演進為「**驗證可行性 + 細節打磨**」（架構雛形已 80% 成熟）。
+
+#### 4 層 Hierarchy 架構
+
+```
+┌──────────────────────────────┐
+│ Layer 1: Christ（老闆）       │
+└─────────────┬────────────────┘
+              ↓ Discord 對話        ↓ Dashboard 操作
+┌──────────────────────┐    ┌──────────────────┐
+│ Layer 2: Victoria     │    │ Operation Center │
+│ (Discord 秘書/Router) │    │ (BossInteraction)│
+└─────────┬────────────┘    └────────┬─────────┘
+          ↓ 派工                       ↑ Petra escalate
+          ↓                            ↑
+┌─────────────────────────────────────┴──┐
+│ Layer 3: Petra (Orchestrator)           │
+│ - 全程動態調度（不照固定 pipeline）       │
+│ - per-task session 持久記憶              │
+│ - LLM 自主決策（CLAUDE_Petra.md 控制）    │
+└──┬──────┬──────┬──────┬──────┬─────────┘
+   ↓      ↓      ↓      ↓      ↓
+┌────┐ ┌────┐ ┌─────┐ ┌────┐ ┌─────────┐
+│Cody│ │Vera│ │Quinn│ │Sage│ │Rosa/Demi│  ← Layer 4: Workers
+└────┘ └────┘ └─────┘ └────┘ └─────────┘  (Petra 動態組合，不互相直接呼叫)
+```
+
+#### Victoria 角色重新定位（Discord 秘書 / Anthropic Router Pattern）
+
+**新定位**：純 Discord facade + Router + reasoning，**不做業務邏輯**。
+
+| 行為 | Victoria 做嗎？ |
+|---|---|
+| 跟 Christ 對話、識別問題類型 → 派給對的人 | ✅ |
+| Format 答案回 Christ | ✅ |
+| 推 Discord 通知（Petra escalate 時）| ✅ |
+| 過濾過期 / 誤判 BossInteraction（reasoning）| ✅ |
+| codebase 探索 | ❌（Petra 派 Rosa 做）|
+| 需求理解 / 提煉 | ❌（Petra 自己做）|
+| 業務邏輯判斷 | ❌（Petra orchestrate）|
+
+**Victoria Tool Set**：
+
+```csharp
+AIAgent victoria = ... .AsAIAgent(
+    instructions: File.ReadAllText("CLAUDE_Victoria.md"),
+    tools: [
+        // Query tools（包裝 AiTeam 既有 service，Stage 1-46 投資 100% 復用）
+        AIFunctionFactory.Create(QueryActiveTasks),
+        AIFunctionFactory.Create(QueryRecentPRs),
+        AIFunctionFactory.Create(QueryPendingInteractions),
+        AIFunctionFactory.Create(QueryAgentStatus),
+        AIFunctionFactory.Create(QueryCompletedTasks),
+        AIFunctionFactory.Create(QueryTokenUsage),
+        AIFunctionFactory.Create(QueryDashboardStats),
+
+        // Action tools
+        petraAgent.AsAIFunction(),                      // 派工給 Petra（唯一 Agent 接觸點）
+        AIFunctionFactory.Create(NotifyChrist),         // 推 Discord
+    ]);
+```
+
+⭐ Victoria **只接觸 Petra**（不直接呼叫 Cody/Vera/Quinn/Sage/Rosa/Demi），Workers 是 Petra 的 pool。
+
+#### Petra 角色升級（Partial → Full Orchestrator）
+
+**從 partial Orchestrator 升級為全程 Orchestrator**：
+
+```csharp
+AIAgent petra = ... .AsAIAgent(
+    instructions: File.ReadAllText("CLAUDE_Petra.md"),
+    tools: [
+        codyAgent.AsAIFunction(),    // Dev
+        veraAgent.AsAIFunction(),    // Reviewer
+        quinnAgent.AsAIFunction(),   // QA
+        sageAgent.AsAIFunction(),    // Doc
+        rosaAgent.AsAIFunction(),    // Requirements
+        demiAgent.AsAIFunction(),    // Designer
+    ]);
+```
+
+或用 **Magentic Orchestration pattern**（MS Agent Framework 內建）：
+
+```csharp
+var pipeline = new MagenticOrchestrationBuilder()
+    .WithManager(petraManager)
+    .WithWorkers(codyAgent, veraAgent, quinnAgent, sageAgent, rosaAgent, demiAgent)
+    .Build();
+```
+
+兩種寫法 spike 階段都驗一次，看哪個對 AiTeam 更合適。
+
+#### 5 個關鍵挑戰拍板（2026-05-01）
+
+| 挑戰 | Christ 拍板 |
+|---|---|
+| **挑戰 1** Victoria 角色 | **Discord 秘書 / Router**（純 facade，不做業務邏輯）|
+| **挑戰 2** 開會頻率 / Petra 決策邊界 | **初期 Petra 自主決策**，觀察後用 prompt iteration 修正（沿用 AiTeam 既有 CLAUDE_*.md 補強流程，hot-reload）|
+| **挑戰 3** 老闆介入機制 | **Dashboard 為主介面**（PM 留 BossInteraction） + **Victoria 同步推 Discord 通知**（dual-channel 對齊 Stage 28a/28b）|
+| **挑戰 4** Mock 模式 | **個別 Worker hardcoded mock + Petra 用 Gemini Flash**（既有 GeminiProvider + AgentConfig DB 動態切換，免費 + 真 LLM 行為）|
+| **挑戰 5** Crash Recovery | **重啟重跑**（不做 Checkpointing）+ 已 responded BossInteraction 算 task input 避免雙重 ask 老闆 |
+
+#### 挑戰 5 重要設計細節：避免重跑時雙重 ask
+
+```csharp
+// Petra 重跑時的 prompt 自動帶入：
+"""
+任務需求：[原始 prompt]
+
+已有老闆回應紀錄：
+- 2026-05-01 14:30 [需要老闆決策 X] → Christ approve
+- 2026-05-01 14:35 [需要老闆決策 Y] → Christ "改用 B 方案"
+"""
+```
+
+→ Petra 看到 context 直接走「已 approve 的路徑」，不會再 ask。**比 Checkpoint 簡單 + 比真完全重跑精準**。
+
+繞過 Trial_v5 議題 A（MarkGroupDoneOrIntervention 看歷史 failed task 誤判）整個類別。
+
+#### 對 Trial_v5 揭露議題的解構
+
+| 議題 | 動態架構下的處理 |
+|---|---|
+| **A**（MarkGroupDoneOrIntervention 誤判）| ✅ **消失** — 重啟重跑模式不依賴 task status 聚合判斷 |
+| **B**（ImplementationNote 寫入路徑斷裂）| ✅ **消失** — Petra orchestrate 時直接看 PR Body / Sage 結果，不依賴特定 DB 欄位 |
+| **C/D**（Token / CI/CD ops 議題）| ❌ 與架構無關（FF 四十七 補丁解）|
+| **E**（Cody Dev_plan maxTurns）| ⚠️ Petra 看到 maxTurns 失敗 → 動態調整（拆小段重派 / 換 model）vs hardcode 兜底 |
+| **F**（Stage 42 補強單向性）| ⚠️ 部分緩解（CLAUDE_*.md 仍要對齊，但 Petra orchestrate 時可動態檢查）|
+
+→ 動態架構下 **議題 A/B 自動消失** + 議題 E 有更彈性處理。**這是 Phase B 額外的戰略價值**（除了動態調度本身）。
+
+#### Phase B Spike 任務（2026-05-01 更新）
+
+**從原本「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」**：
+
+1. 驗證 **Victoria Router 模式**對 Christ 互動的回應品質（vs 現況 Discord bot）
+2. 驗證 **Petra 自主調度**的行為（會不會亂跳？開會頻率是否合理？）
+3. 驗證 **per-task session** 跨階段記憶力（Stage 15 Victoria session 機制套到 Petra）
+4. 驗證 **Crash Recovery 重跑機制**（重啟時 Petra 看 BossInteraction 紀錄走「已 approve 路徑」）
+5. 驗證 **Mock Mode 用 Gemini Flash** 跑 Petra 的對齊度（行為差異量化）
+6. 評估**遷移成本**（把 Stage 1-46 的 Cody/Vera/Quinn/Sage 包成 Worker 的工作量）
+7. **待 brainstorm**：Kickoff / Design 5 人會議是否保留？（B 待議）
+
+
+
 ### 背景
 
 Trial_v4 揭露多數 bug 根因**不是「補丁不夠」，是「pipeline 硬編碼」**：
@@ -2605,3 +2754,4 @@ Trial_v5 結束後 Christ 提出戰略級議題：「AiTeam 固定流程式架�
 | 2026-04-29 | v7.58：**Trial_v5 開跑前 Token 監控盤點 + 新立 FF 四十三 / 四十四 + 臨時拉高 Token 限額**（commit `f7e476b`）— 為確保 Trial_v5 對照組成立，Aria 進 docker exec psql 盤點 token_logs 揭露兩條件警訊：① 全域月限 1M 已用 1.35M（135%）+ Reviewer 已用 411K 超 300K（137%）→ 守門會擋下 Trial_v5 第一個 LLM call；② token_logs.TotalCostUsd 欄位 331 row 中只 1 row 有填（Stage 44 驗收 CEO 那條），其他 99.7% NULL；**新增 FF 四十三**（token_logs.TotalCostUsd 欄位寫入覆蓋率不全，FF 三十三 疑似漏 cost 寫入路徑，待 Forge 探索 API layer / CLI caller 覆蓋率根因，🟡 中）；**新增 FF 四十四**（TokenTrackingProvider 守門 estimatedTokens 用 input/4 但累計 monthlyUsed 含 output，導致 Reviewer 411K 才被擋而非預設 300K，設計小缺陷，🔵 低）；**臨時調整 appsettings.json**（Bot + Dashboard）：全域月限 1000K → 20000K / Single Request 50K → 200K / 各 Agent daily 1000K monthly 5000K；Trial_v5 結束後評估回調並依 FF 四十三/四十四 盤點修法 |
 | 2026-04-30 | v7.59：**Trial_v5 結案 — 4 FF 全鏈路擋牆驗證 + 揭露 6 個流程設計議題 + 立 4 新 FF**（commits `f7e476b` token 限額拉高 + `df3bfb7` docker-compose env 對齊）— Trial_v5 為 self-implement 試驗系列首次「對照組重做」，照搬 Trial_v4 prompt + 末尾引導句確保 `proposal` 完整 pipeline；任務 Dashboard 錯誤處理 UX 補齊（PR #170 OPEN 不合併，Trial 性質）；累計 cost ~$8.78（vs Trial_v4 $4.99，多 76%）；**詳細紀錄**：[docs/experiments/Trial_v5_DashboardErrorUx_Retest.md](../experiments/Trial_v5_DashboardErrorUx_Retest.md)；**Trial_v4 vs v5 戰略對照**：Cody 1/12→**11/12 Issue 完成 + 41 行→916 行**、Quinn 失敗→**30 xUnit + 6 visual 全 passed**、Vera 保守誤判→**精準抓 9 處裸 catch + 區分縮水 vs 分批**、Sage 13:30 異常→**14 秒 escalate**、TaskGroup mark done→**needs_intervention 多重擋牆觸發**；**4 FF 補強驗證**：FF 三十二子項 A（DevPlan 重產+escalate）✅、子項 F（Sage escalate）✅、子項 G（Cody ESCALATE_NEEDED）🔴 沒觸發、FF 三十三 cost 大部分填、FF 三十四 UI 確認可見、FF 三十五 規則層門檻條件未滿足；**揭露 6 個議題**：A 🔴（MarkGroupDoneOrIntervention 看歷史 failed task 誤判）/ B 🔴（ImplementationNote 寫入路徑斷裂 PR Body vs DB）/ C 🔴（Token limit SoT 分歧 appsettings vs docker-compose env）/ D 🟠（CI/CD 部署不重啟容器）/ E 🟠（Cody Dev_plan maxTurns=10 不足）/ F 🟡（Stage 42 補強單向性）；**新立 4 FF**：FF 四十五（議題 A，🔴 高）/ FF 四十六（議題 B+F，🔴 高）/ FF 四十七（議題 C+D 合一，🔴 高）/ FF 四十八（議題 E，🟠 中-高）；**戰略結論**：4 FF 補強讓 AiTeam 從「擋不住」躍進到「擋得住 + 擋過頭」，Cody/Vera/Quinn/Sage 全達 production-ready，下一階段戰略重點從「Agent 能力強化」轉向「**流程整合精準度打磨**」（議題 A/B 是 Stage 49 主菜）；self-implement 適用範圍**大幅擴展**（跨 11 元件任務不再縮水 = 真實開發團隊水準達成）|
 | 2026-05-01 | v7.60：**新立 FF 四十九 + FF 三十六 拆分**（Trial_v5 結束戰略討論 + WebSearch research 後）— Christ 提出「AiTeam 固定流程式架構是否該停損」戰略級議題；Aria 透過 WebSearch 揭露重大發現：① **AutoGen 已 maintenance mode**（Microsoft 推 Agent Framework 取代）② **Microsoft Agent Framework 1.0 GA（2026-04-03）剛發布** + .NET first-class support + 把 AiTeam 想做的事全部標準化（Workflow API / Checkpointing / Pause-Resume / HITL / Group Chat / Magentic / Sub-Workflow / Writer-Critic sample）③ Anthropic Multi-Agent Patterns hard data 驗證 AiTeam 設計選擇（supervisor pattern explicit routing 勝 31% / 85% improvement in first 2 iterations / 3 輪上限合理）；**戰略解構**：工具決定（手刻 framework vs MS Agent Framework）vs 架構決定（固定 pipeline vs 動態流程）兩個正交，可分開做；**新立 FF 四十九**（Phase A 工具評估，🟠 中-高，spike 2-3 週，Hybrid 整合策略：CLI Agent 用 Custom Agent Executor 包 ClaudeCodeService / API Agent 用原生 MS Agent Framework Agent / Workflow 層用 Workflow Builder）；**FF 三十六 拆分**（Title 縮窄為「v4 動態流程架構 — Phase B（FF 四十九 後續）」+ 啟動條件改為依賴 FF 四十九 Phase A 結論）；戰略路線圖：Stage 49（補丁 FF 四十五+四十六）→ Stage 50 FF 四十九 spike（工具評估）→ 結論驅動 Stage 51+ 漸進遷移 / 維持補丁 / Phase B spike；比喻「換引擎，車身保留」：保留 CLAUDE_*.md prompt + DB schema + Discord 整合 + Dashboard + ClaudeCodeService，只換 WorkflowEngine + Crash Recovery + BossInteraction + RunMeetingSession + 流程編排 |
+| 2026-05-01 | v7.61：**FF 三十六 Phase B 設計拍板**（Christ + Aria brainstorm 後架構雛形 80% 成熟）— Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟發：每個 Agent 是「打包好的角色/權責」，PM 動態調度），Aria 對應行業術語（Anthropic Orchestrator-Workers Pattern + MS Agent Framework Magentic Orchestration + Agent-as-Tool）；**4 層 Hierarchy**：Christ → Victoria (Discord 秘書/Router) → Petra (全程 Orchestrator) → Workers (Cody/Vera/Quinn/Sage/Rosa/Demi 動態組合)；**Victoria 角色重定位**：純 Discord facade + Router + reasoning（不做業務邏輯，只 query / route / format / notify），對應 Anthropic Router Pattern；**Petra 角色升級**：partial Orchestrator → 全程動態調度 + per-task session；**5 挑戰拍板**：(1) Victoria=Discord 秘書（不做業務邏輯）(2) 開會頻率 Petra 自主+prompt iteration 修正 (3) 老闆介入 Dashboard 主介面 + Victoria 同步推 Discord (4) Mock=個別 Worker hardcoded + Petra 用 Gemini Flash (5) **Crash Recovery 重啟重跑**（不做 Checkpointing，已 responded BossInteraction 算 task input 避免雙重 ask）；**對 Trial_v5 議題解構**：議題 A/B 在動態架構下自動消失（重啟重跑繞過 MarkGroupDoneOrIntervention 整類 / Petra 動態看 PR Body 不依賴 DB ImplementationNote 欄位），議題 E 更彈性處理；**Phase B Spike 任務**從「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」7 項清單；待 brainstorm：Kickoff/Design 5 人會議是否保留（B 議題待議） |
