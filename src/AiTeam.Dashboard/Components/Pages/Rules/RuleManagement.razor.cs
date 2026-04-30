@@ -13,7 +13,7 @@ public partial class RuleManagement
     private DashboardBotService BotService { get; set; } = null!;
 
     [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
+    private IDashboardNotificationService NotificationService { get; set; } = null!;
 
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
@@ -76,8 +76,10 @@ public partial class RuleManagement
         _isReloading = true;
         var ok = await BotService.ReloadCacheAsync("rules");
         _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則快取已更新）" : "套用失敗，請確認 Bot 服務正常",
-            ok ? Severity.Success : Severity.Error);
+        if (ok)
+            await NotificationService.ShowSuccessAsync("已套用變更（規則快取已更新）");
+        else
+            await NotificationService.ShowErrorAsync("套用失敗，請確認 Bot 服務正常");
     }
 
     private List<(string Label, string Value)> GetDialogAgentOptions()
@@ -100,6 +102,7 @@ public partial class RuleManagement
         {
             _rules.Add(created);
             _rules = [.. _rules.OrderBy(r => r.SortOrder).ThenBy(r => r.CreatedAt)];
+            await NotificationService.ShowSuccessAsync("已新增規則");
         }
     }
 
@@ -115,19 +118,38 @@ public partial class RuleManagement
         var result = await dialog.Result;
 
         if (result is { Canceled: false })
+        {
             _rules = [.. _rules.OrderBy(r => r.SortOrder).ThenBy(r => r.CreatedAt)];
+            await NotificationService.ShowSuccessAsync("規則已更新");
+        }
     }
 
     private async Task ToggleActiveAsync(Rule rule, bool isActive)
     {
-        await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
-        rule.IsActive = isActive;
+        try
+        {
+            await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
+            rule.IsActive = isActive;
+            await NotificationService.ShowSuccessAsync($"規則已{(isActive ? "啟用" : "停用")}");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("切換狀態失敗，請稍後重試");
+        }
     }
 
     private async Task DeleteRuleAsync(Guid id)
     {
-        await RuleService.DeleteRuleAsync(id);
-        _rules.RemoveAll(r => r.Id == id);
+        try
+        {
+            await RuleService.DeleteRuleAsync(id);
+            _rules.RemoveAll(r => r.Id == id);
+            await NotificationService.ShowSuccessAsync("規則已刪除");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("刪除失敗，請稍後重試");
+        }
     }
 
     #endregion

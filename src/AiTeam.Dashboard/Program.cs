@@ -65,6 +65,7 @@ builder.Services.AddScoped<DashboardAppSettingsService>();
 builder.Services.AddScoped<DashboardTokenService>();
 builder.Services.AddScoped<InteractionRespondService>();
 builder.Services.AddScoped<DashboardCeoCommandService>();
+builder.Services.AddScoped<IDashboardNotificationService, DashboardNotificationService>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();

@@ -1,5 +1,3 @@
-using MudBlazor;
-
 namespace AiTeam.Dashboard.Components.Pages.Settings;
 
 public partial class SystemSettings
@@ -13,7 +11,7 @@ public partial class SystemSettings
     private DashboardBotService BotService { get; set; } = null!;
 
     [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
+    private IDashboardNotificationService NotificationService { get; set; } = null!;
 
     #endregion
 
@@ -35,7 +33,6 @@ public partial class SystemSettings
     private bool    _isSavingUserId;
     private bool    _isSavingMockDelay;
     private bool    _isSavingWorkflow;
-    private string? _saveMessage;
 
     #endregion
 
@@ -83,15 +80,29 @@ public partial class SystemSettings
     private async Task OnSkipCeoConfirmChanged(bool newValue)
     {
         _skipCeoConfirm = newValue;
-        await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
-        _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
+            await NotificationService.ShowSuccessAsync($"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
     }
 
     private async Task OnMockModeChanged(bool newValue)
     {
         _mockMode = newValue;
-        await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
-        _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
+            await NotificationService.ShowSuccessAsync($"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
     }
 
     private async Task SaveCeoChannelIdAsync()
@@ -99,14 +110,25 @@ public partial class SystemSettings
         var trimmed = _ceoChannelId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveMessage = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
+            await NotificationService.ShowErrorAsync("格式錯誤：Discord 頻道 ID 應為 17-20 位純數字");
             return;
         }
 
         _isSavingChannel = true;
-        await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
-        _isSavingChannel = false;
-        _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+        try
+        {
+            await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
+            await NotificationService.ShowSuccessAsync(
+                $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
+        finally
+        {
+            _isSavingChannel = false;
+        }
     }
 
     private async Task SaveChristUserIdAsync()
@@ -114,14 +136,25 @@ public partial class SystemSettings
         var trimmed = _christUserId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveMessage = "格式錯誤：Discord User ID 應為 17-20 位純數字";
+            await NotificationService.ShowErrorAsync("格式錯誤：Discord User ID 應為 17-20 位純數字");
             return;
         }
 
         _isSavingUserId = true;
-        await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
-        _isSavingUserId = false;
-        _saveMessage = $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+        try
+        {
+            await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
+            await NotificationService.ShowSuccessAsync(
+                $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
+        finally
+        {
+            _isSavingUserId = false;
+        }
     }
 
     /// <summary>Discord Snowflake ID 格式驗證：空字串（代表清除）或 17-20 位純數字。</summary>
@@ -135,27 +168,49 @@ public partial class SystemSettings
     {
         if (!IsMockDelayValid())
         {
-            _saveMessage = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
+            await NotificationService.ShowErrorAsync("格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000");
             return;
         }
 
         _isSavingMockDelay = true;
-        await AppSettingsService.UpsertAsync("Mock:DelayMinMs", _mockDelayMin.ToString());
-        await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
-        _isSavingMockDelay = false;
-        _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Mock:DelayMinMs", _mockDelayMin.ToString());
+            await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
+            await NotificationService.ShowSuccessAsync(
+                $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
+        finally
+        {
+            _isSavingMockDelay = false;
+        }
     }
 
     private async Task SaveWorkflowRoundsAsync()
     {
         _isSavingWorkflow = true;
-        await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
-        _isSavingWorkflow = false;
-        _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
+            await NotificationService.ShowSuccessAsync(
+                $"流程輪次已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}）");
+        }
+        catch
+        {
+            await NotificationService.ShowErrorAsync("儲存失敗，請稍後重試");
+        }
+        finally
+        {
+            _isSavingWorkflow = false;
+        }
     }
 
     private async Task ReloadCacheAsync()
@@ -163,8 +218,10 @@ public partial class SystemSettings
         _isReloading = true;
         var ok = await BotService.ReloadCacheAsync("all");
         _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則與系統設定快取已更新）" : "套用失敗，請確認 Bot 服務正常",
-            ok ? Severity.Success : Severity.Error);
+        if (ok)
+            await NotificationService.ShowSuccessAsync("已套用變更（規則與系統設定快取已更新）");
+        else
+            await NotificationService.ShowErrorAsync("套用失敗，請確認 Bot 服務正常");
     }
 
     #endregion
