@@ -1564,10 +1564,19 @@ Trial_v5 → 重跑 FF 十六（驗 4 FF 對照 Trial_v4）
 
 ---
 
-## 三十六、AiTeam v4 架構雙支柱研究（spike）
+## 三十六、AiTeam v4 動態流程架構 — Phase B（FF 四十九 後續）
 
-> 狀態：⚪ 待觀察 — 架構級躍進，需 spike 先驗證；等 Trial_v5 結果後啟動
-> 提出日期：2026-04-28（Trial_v4 結案後 Christ + Aria 戰略討論）
+> 狀態：⚪ 待觀察 — 依賴 **FF 四十九（工具評估 Phase A）** 通過 + 結果支持動態流程
+> 提出日期：2026-04-28（Trial_v4 結案戰略討論）；2026-05-01 拆分為 Phase B（架構評估獨立於工具評估）
+
+### 拆分說明（2026-05-01）
+
+原 FF 三十六 範圍包含「行業先例研究 + 工具選型 + 動態調度 + per-task session」雙支柱。2026-05-01 Christ + Aria research 後拆為兩個獨立 FF：
+
+- **FF 四十九（Phase A 工具評估）**：是否替換手刻 framework → Microsoft Agent Framework（保留架構）
+- **本 FF（Phase B 架構評估）**：是否從固定 pipeline 升級到動態流程（Magentic Orchestration / per-task session）
+
+→ **必須先做 FF 四十九**。Phase A 通過 → Phase B 才有 framework 基礎可動態調度；Phase A 不通過 → Phase B 自動失效。
 
 ### 背景
 
@@ -1670,14 +1679,19 @@ CLI Session Resume 機制（`--resume`）+ Prompt Caching 大幅緩解成本：
 2. **小 prototype**（建議：先做「Petra per-task session 在簡單流程」單點實驗）
 3. **遷移計劃**（若推薦走 Phase 3，估算 Stage 數 + 工作量）
 
-### 啟動觸發條件（待 Trial_v5 後評估）
+### 啟動觸發條件（2026-05-01 重寫）
 
 ```
-Trial_v5 結果若顯示 FF 三十二 補丁夠 → FF 三十六 維持 ⚪ 待觀察（不啟動）
-Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
+階段順序：
+1. Stage 49（FF 四十五 + 四十六 補丁，1-2 週）
+2. FF 四十九 Phase A spike（MS Agent Framework 工具評估，2-3 週）
+3. Phase A 結論：
+   - 正向 + 動態流程仍有獨立價值 → 啟動本 FF Phase B spike
+   - 正向 + Phase A 已解大部分議題 → 本 FF 永久 ⚪ 待觀察
+   - 負向 → 本 FF 自動失效（沒框架基礎做動態）
 ```
 
-**FF 三十六 不該倉促啟動**——先做 FF 三十二/三十三/三十四/三十五 + Trial_v5 驗證，資料夠了再決定是否走 Phase 3。
+**Phase B 不該倉促啟動** — 先讓 Phase A spike 跑完，用實證資料判斷動態流程是否值得做。Trial_v5 已驗證 4 FF 補強有效（議題 A/B 是流程整合議題），動態流程的「邊際效益」要在 Phase A 完成後重新評估。
 
 ### 對既有 FF 的影響（Phase 3 啟動後重評估）
 
@@ -1707,12 +1721,13 @@ Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage（Stage 47+）
 
 ### 優先級
 
-⚪ 待觀察 — **不要倉促啟動**。
+⚪ 待觀察 — **依賴 FF 四十九 Phase A 結論**。
 
-啟動條件：
-- 先 Stage 42-46（FF 三十二/三十三/三十四/三十五）+ Trial_v5 完成
-- Trial_v5 結果若補丁仍踩根因 → 啟動 spike Stage 47+
-- Trial_v5 結果若補丁夠用 → FF 三十六 永久 ⚪ 待觀察
+啟動條件（2026-05-01 重寫）：
+- 必須先 Stage 49（FF 四十五 + 四十六）完成
+- 必須先 FF 四十九 Phase A spike 完成且結論正向
+- Phase A 結論若已解大部分議題 → 本 FF 永久 ⚪ 待觀察
+- Phase A 結論支持動態流程獨立價值 → 啟動 Phase B spike
 
 戰略意義保留紀錄價值：即使不啟動，也是 AiTeam 未來架構演進的關鍵候選方向。
 
@@ -2276,6 +2291,168 @@ Stage 16 紀錄寫過 `RunAsync maxTurns 40`（Petra 用），但 **Cody Dev_pla
 
 ---
 
+## 四十九、Microsoft Agent Framework 工具評估（替換手刻 Orchestration framework）
+
+> 狀態：🟠 **中-高** — Trial_v5 6 議題大部分為「手刻 framework 的痛點」，2026-04-03 GA 的 MS Agent Framework 1.0 是時機完美的標準化選項
+> 提出日期：2026-05-01（Trial_v5 結束戰略討論 + WebSearch research）
+
+### 背景
+
+Trial_v5 結束後 Christ 提出戰略級議題：「AiTeam 固定流程式架構是否該停損 + 換架構？」Aria research（WebSearch + WebFetch 官方文件）後揭露兩件事：
+
+1. **AiTeam 多年累積的 Orchestration 層是「手刻 framework」** — WorkflowEngine + Crash Recovery + BossInteraction + RunMeetingSession + ClaudeCodeService 流程編排，全部 C# 從零實作
+2. **Microsoft Agent Framework 1.0 GA（2026-04-03）剛發布** — Microsoft 把 Semantic Kernel + AutoGen 合併成 single SDK，**.NET first-class support**，把 AiTeam 想做的事情全部標準化
+
+### 工具決定 vs 架構決定（關鍵解構）
+
+兩個獨立決定：
+- **(1) 工具選型**：手刻 framework vs MS Agent Framework
+- **(2) 架構選型**：固定 pipeline vs 動態流程（FF 三十六 範圍）
+
+→ **本 FF 只處理 (1) 工具選型**，保留 AiTeam 現有架構（固定 pipeline + 部分 conditional），只換底層 framework。**(2) 架構選型留給 FF 三十六**（先做本 FF 再評估）。
+
+比喻：**換引擎，車身保留**。AiTeam 的「車身」（Agent / DB / Discord / Dashboard）不變，只換底層引擎（手刻 framework → MS Agent Framework）。
+
+### 行業先例 research（2026-05-01 WebSearch 結論）
+
+| 框架 | 狀態 | .NET 支援 | 推薦度 |
+|---|---|---|---|
+| **Microsoft Agent Framework 1.0** | **2026-04-03 GA** | ✅ first-class | ⭐⭐⭐ 首選 |
+| LangGraph | 已成熟（Klarna/Replit/Elastic 用）| Python only | ⭐ 次選 backup |
+| CrewAI | 持續活躍 | Python only | 🟡 PoC 工具 |
+| AutoGen | **maintenance mode**（被 MS Agent Framework 取代）| .NET 有 | ❌ 戰略排除 |
+| Anthropic Multi-Agent Patterns | 設計指南 | — | 設計參考（非 framework）|
+
+**Anthropic 研究 hard data**（驗證 AiTeam 設計選擇）：
+- Supervisor pattern with explicit routing **outperform implicit by 31%**（驗證 FF 三十二設計方向）
+- **85% of quality improvement in first 2 iterations**（驗證 ReviewAppealMaxRounds=3 上限）
+- 3 iterations 後 lateral changes 不再 improvement（驗證各 maxRounds=3 是合理數字）
+
+### Microsoft Agent Framework 對應 AiTeam 議題
+
+| Trial_v5 議題 | MS Agent Framework 內建解 |
+|---|---|
+| **議題 A**（MarkGroupDoneOrIntervention 看歷史 failed task）| ✅ Conditional Edge + Type-safe State 自動處理 |
+| **議題 B**（ImplementationNote 寫入路徑斷裂）| ✅ State schema 強制 |
+| 議題 C/D（Token limit SoT / CI/CD）| ❌ 與架構無關（FF 四十七 補丁解）|
+| 議題 E（Cody Dev_plan maxTurns）| ❌ 與 framework 無關（Claude Code subprocess 內限制）|
+| 議題 F（Stage 42 補強單向性）| ⚠️ 部分緩解（Workflow type-safe 強制 schema）|
+
+→ 6 議題中 **A/B 自動消失**（最痛 2 個流程設計議題）。
+
+### 內建功能對應 AiTeam 已做 / 規劃中
+
+| MS Agent Framework | 對應 AiTeam |
+|---|---|
+| Workflow API（Workflow Builder + Executors + Edges）| 取代 WorkflowEngine.cs hardcoded pipeline |
+| Checkpointing（superstep-boundary）| 取代手刻 Crash Recovery（Stage 31/37/39）|
+| Pause/Resume | 取代 FF 三十四 |
+| Human-in-the-loop（RequestInfoExecutor）| 取代 BossInteraction 機制 |
+| Group Chat orchestration | 取代 RunMeetingSessionAsync 多 Agent 會議 |
+| Handoff Orchestration | 取代 Petra 路由判斷 |
+| Magentic Orchestration | **對應 FF 三十六 動態調度**（內建 pattern）|
+| Sub-Workflow | 取代 FF 三十五自動拆任務（內建）|
+| Loop with max iteration safety | 取代 ReviewAppeal/QaFix loop |
+| Writer-Critic Workflow（內建 sample）| **== AiTeam Cody-Vera-Petra Appeal loop** |
+
+⭐ **AiTeam Stage 1-46 累積的「pipeline + appeal loop + crash recovery + boss interaction + group chat」全部是 MS Agent Framework 內建 sample**。AiTeam 是手刻自己的 Workflow framework，MS Agent Framework 把同樣的事標準化。
+
+### Hybrid 整合策略（保留 Claude Code CLI 能力）
+
+**問題**：Anthropic provider 在 .NET 上沒內建 file system / shell / web search tools。  
+**解法**：用 Custom Agent Executor 包 Claude Code subprocess。
+
+| AiTeam Agent | 整合方式 | 理由 |
+|---|---|---|
+| Cody / Vera / Quinn / Sage（CLI 路徑）| **Custom Agent Executor + 既有 ClaudeCodeService** | 保留 Claude Code 全套能力 + 既有 C# 投資 |
+| Victoria / Petra / Rosa / Demi（API 路徑）| **原生 MS Agent Framework Agent + Anthropic/Gemini provider** | 不需檔案探索，享受 Agent Framework telemetry / middleware |
+| Kickoff / Design 多 Agent 會議 | **Group Chat orchestration**（內建）| 取代手刻 RunMeetingSessionAsync |
+| Workflow 編排層 | **MS Agent Framework Workflow Builder** | 取代 WorkflowEngine.cs hardcoded pipeline |
+
+### 替換 vs 保留清單
+
+**換掉（底層 framework）**：
+- WorkflowEngine.cs（hardcoded if-else pipeline）
+- 手刻 Crash Recovery（ActiveOrchestration 欄位 + RecoverStuckMeetings 機制）
+- 手刻 BossInteraction 處理流程（InteractionProcessor / InteractionService）
+- 手刻 RunMeetingSessionAsync（多 Agent meeting）
+- 手刻 ClaudeCodeService 流程編排部分
+
+**保留（功能 / 資產）**：
+- Cody/Vera/Quinn/Sage 全部 CLAUDE_*.md prompt
+- DB schema（task_groups / tasks / boss_interactions / token_logs）
+- Discord 整合（victoria-ceo channel / 各 Agent channel）
+- Dashboard UI（流程追蹤 / 操作中心 / Token 監控）
+- ClaudeCodeService 本身（subprocess 包裝層）
+- Token 計費邏輯（cost 計算 + 記錄）
+- Migration 機制 + Bot internal API
+- 既有 Stage 1-46 的 production behavior
+
+### Spike Phase A 範圍（本 FF）
+
+**POC**：用 MS Agent Framework 重寫 1 個 AiTeam workflow（建議：CEO 分類 → Kickoff），對照組 vs 現有 C# 實作。
+
+**評估維度**：
+1. **開發速度**：手刻 vs framework API 的 LoC 對比
+2. **議題自動解**：6 議題裡哪些直接被 framework 解掉（預期 A/B）
+3. **學習曲線**：團隊熟悉度（.NET 友好 + Microsoft 文件完整）
+4. **整合複雜度**：Custom Agent Executor 包 ClaudeCodeService 的可行性
+5. **production 穩定性**：跑 Mock 場景看 Workflow 行為對齊現有 pipeline
+6. **遷移成本**：每個 Agent 改寫工時 + 整體 Stage 數估算
+
+**關鍵 sample 參考（POC 階段優先讀）**：
+- `dotnet/samples/03-workflows/_StartHere/07_WriterCriticWorkflow`（== AiTeam Appeal loop）
+- `dotnet/samples/03-workflows/Agents/GroupChatToolApproval`（== Kickoff/Design 會議）
+- `dotnet/samples/03-workflows/HumanInTheLoop`（== BossInteraction）
+- `dotnet/samples/03-workflows/Checkpoint`（== Crash Recovery）
+- `dotnet/samples/02-agents/AgentWithAnthropic`（Anthropic provider 整合）
+- `dotnet/samples/02-agents/ModelContextProtocol`（Claude Code as MCP server 路線）
+
+**預期產出**：
+1. spike 報告（推薦：採用 / 不採用 + 理由 + 風險）
+2. POC code（1 個小 workflow + Custom Agent Executor 範例）
+3. 漸進遷移計劃（若採用，估 Stage 數 + 順序）
+
+### 規模 / 風險 / 時間
+
+**規模**：M（spike Phase A POC）；後續遷移 L-XL（漸進 2-4 月）  
+**風險**：中（4/3 GA 但 Microsoft 大力推 + 行業驗證 + 漸進可退）  
+**時間**：spike Phase A **2-3 週**
+
+### 啟動條件 / 優先級
+
+🟠 **中-高** — 建議排在 Stage 49（FF 四十五 + 四十六）完成後
+
+啟動順序：
+1. Stage 49 完成（補丁 FF 四十五 + 四十六，1-2 週）
+2. **Stage 50: spike Phase A**（本 FF，2-3 週）
+3. spike 結論驅動：
+   - **正向** → Stage 51+ 漸進遷移（保留 Agent prompt + 重寫 Orchestration 層）
+   - **負向** → 維持手刻 + 補丁路線（Stage 49 是停損點）
+4. spike 正向 → 評估是否啟動 FF 三十六（Phase B 動態流程）
+
+### 與 FF 三十六 的關係
+
+**本 FF 是 FF 三十六 的前置條件**：
+- FF 四十九（本 FF）= 工具評估（換 framework，保留架構）
+- FF 三十六 = 架構評估（動態流程 + per-task session）
+
+→ **必須先做 FF 四十九**：
+- Phase A 通過 → Phase B（FF 三十六）才有 framework 基礎可動態
+- Phase A 不通過 → Phase B 自動失效（手刻 framework 上做動態調度成本太高）
+
+兩個 FF 串成完整 v4 升級路線圖。
+
+### 參考來源
+
+- [Microsoft Agent Framework Overview | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/overview/)
+- [Microsoft Agent Framework Workflows | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/workflows/)
+- [Tools Overview | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/agents/tools/)
+- [GitHub - microsoft/agent-framework](https://github.com/microsoft/agent-framework)
+- [Building Effective AI Agents | Anthropic](https://resources.anthropic.com/building-effective-ai-agents)
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -2427,3 +2604,4 @@ Stage 16 紀錄寫過 `RunAsync maxTurns 40`（Petra 用），但 **Cody Dev_pla
 | 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
 | 2026-04-29 | v7.58：**Trial_v5 開跑前 Token 監控盤點 + 新立 FF 四十三 / 四十四 + 臨時拉高 Token 限額**（commit `f7e476b`）— 為確保 Trial_v5 對照組成立，Aria 進 docker exec psql 盤點 token_logs 揭露兩條件警訊：① 全域月限 1M 已用 1.35M（135%）+ Reviewer 已用 411K 超 300K（137%）→ 守門會擋下 Trial_v5 第一個 LLM call；② token_logs.TotalCostUsd 欄位 331 row 中只 1 row 有填（Stage 44 驗收 CEO 那條），其他 99.7% NULL；**新增 FF 四十三**（token_logs.TotalCostUsd 欄位寫入覆蓋率不全，FF 三十三 疑似漏 cost 寫入路徑，待 Forge 探索 API layer / CLI caller 覆蓋率根因，🟡 中）；**新增 FF 四十四**（TokenTrackingProvider 守門 estimatedTokens 用 input/4 但累計 monthlyUsed 含 output，導致 Reviewer 411K 才被擋而非預設 300K，設計小缺陷，🔵 低）；**臨時調整 appsettings.json**（Bot + Dashboard）：全域月限 1000K → 20000K / Single Request 50K → 200K / 各 Agent daily 1000K monthly 5000K；Trial_v5 結束後評估回調並依 FF 四十三/四十四 盤點修法 |
 | 2026-04-30 | v7.59：**Trial_v5 結案 — 4 FF 全鏈路擋牆驗證 + 揭露 6 個流程設計議題 + 立 4 新 FF**（commits `f7e476b` token 限額拉高 + `df3bfb7` docker-compose env 對齊）— Trial_v5 為 self-implement 試驗系列首次「對照組重做」，照搬 Trial_v4 prompt + 末尾引導句確保 `proposal` 完整 pipeline；任務 Dashboard 錯誤處理 UX 補齊（PR #170 OPEN 不合併，Trial 性質）；累計 cost ~$8.78（vs Trial_v4 $4.99，多 76%）；**詳細紀錄**：[docs/experiments/Trial_v5_DashboardErrorUx_Retest.md](../experiments/Trial_v5_DashboardErrorUx_Retest.md)；**Trial_v4 vs v5 戰略對照**：Cody 1/12→**11/12 Issue 完成 + 41 行→916 行**、Quinn 失敗→**30 xUnit + 6 visual 全 passed**、Vera 保守誤判→**精準抓 9 處裸 catch + 區分縮水 vs 分批**、Sage 13:30 異常→**14 秒 escalate**、TaskGroup mark done→**needs_intervention 多重擋牆觸發**；**4 FF 補強驗證**：FF 三十二子項 A（DevPlan 重產+escalate）✅、子項 F（Sage escalate）✅、子項 G（Cody ESCALATE_NEEDED）🔴 沒觸發、FF 三十三 cost 大部分填、FF 三十四 UI 確認可見、FF 三十五 規則層門檻條件未滿足；**揭露 6 個議題**：A 🔴（MarkGroupDoneOrIntervention 看歷史 failed task 誤判）/ B 🔴（ImplementationNote 寫入路徑斷裂 PR Body vs DB）/ C 🔴（Token limit SoT 分歧 appsettings vs docker-compose env）/ D 🟠（CI/CD 部署不重啟容器）/ E 🟠（Cody Dev_plan maxTurns=10 不足）/ F 🟡（Stage 42 補強單向性）；**新立 4 FF**：FF 四十五（議題 A，🔴 高）/ FF 四十六（議題 B+F，🔴 高）/ FF 四十七（議題 C+D 合一，🔴 高）/ FF 四十八（議題 E，🟠 中-高）；**戰略結論**：4 FF 補強讓 AiTeam 從「擋不住」躍進到「擋得住 + 擋過頭」，Cody/Vera/Quinn/Sage 全達 production-ready，下一階段戰略重點從「Agent 能力強化」轉向「**流程整合精準度打磨**」（議題 A/B 是 Stage 49 主菜）；self-implement 適用範圍**大幅擴展**（跨 11 元件任務不再縮水 = 真實開發團隊水準達成）|
+| 2026-05-01 | v7.60：**新立 FF 四十九 + FF 三十六 拆分**（Trial_v5 結束戰略討論 + WebSearch research 後）— Christ 提出「AiTeam 固定流程式架構是否該停損」戰略級議題；Aria 透過 WebSearch 揭露重大發現：① **AutoGen 已 maintenance mode**（Microsoft 推 Agent Framework 取代）② **Microsoft Agent Framework 1.0 GA（2026-04-03）剛發布** + .NET first-class support + 把 AiTeam 想做的事全部標準化（Workflow API / Checkpointing / Pause-Resume / HITL / Group Chat / Magentic / Sub-Workflow / Writer-Critic sample）③ Anthropic Multi-Agent Patterns hard data 驗證 AiTeam 設計選擇（supervisor pattern explicit routing 勝 31% / 85% improvement in first 2 iterations / 3 輪上限合理）；**戰略解構**：工具決定（手刻 framework vs MS Agent Framework）vs 架構決定（固定 pipeline vs 動態流程）兩個正交，可分開做；**新立 FF 四十九**（Phase A 工具評估，🟠 中-高，spike 2-3 週，Hybrid 整合策略：CLI Agent 用 Custom Agent Executor 包 ClaudeCodeService / API Agent 用原生 MS Agent Framework Agent / Workflow 層用 Workflow Builder）；**FF 三十六 拆分**（Title 縮窄為「v4 動態流程架構 — Phase B（FF 四十九 後續）」+ 啟動條件改為依賴 FF 四十九 Phase A 結論）；戰略路線圖：Stage 49（補丁 FF 四十五+四十六）→ Stage 50 FF 四十九 spike（工具評估）→ 結論驅動 Stage 51+ 漸進遷移 / 維持補丁 / Phase B spike；比喻「換引擎，車身保留」：保留 CLAUDE_*.md prompt + DB schema + Discord 整合 + Dashboard + ClaudeCodeService，只換 WorkflowEngine + Crash Recovery + BossInteraction + RunMeetingSession + 流程編排 |
