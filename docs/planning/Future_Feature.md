@@ -1713,6 +1713,54 @@ var pipeline = new MagenticOrchestrationBuilder()
 
 → 動態架構下 **議題 A/B 自動消失** + 議題 E 有更彈性處理。**這是 Phase B 額外的戰略價值**（除了動態調度本身）。
 
+#### Kickoff / Design 會議模式拍板（Hybrid，2026-05-01）
+
+**Christ 拍板 Hybrid**（會議默認保留，小需求動態跳過）。核心理由：**省去二次返工**（前期投資高品質會議 cost vs 後期重做整段 pipeline cost）—— 對應 Anthropic「85% of quality improvement occurs in first 2 iterations」+ Trial_v4 vs Trial_v5 直接驗證。
+
+**Hybrid 哲學**：
+- **default 偏向會議**（保 Trial_v5 證實的多角度互動品質）
+- **小需求動態跳過**（避 overkill cost）
+- **trigger 條件是 prompt hint**（rule + LLM hybrid，保留 Petra 自主判斷空間）
+
+**實作對應 MS Agent Framework**：
+- 會議 = **Group Chat orchestration**（內建，Petra 為 chair）
+- 1-on-1 = **Agent-as-Tool 直接呼叫**（純 MCP-style）
+- Petra 看需求動態切換
+
+**Trigger 條件初版（寫進未來的 CLAUDE_Petra.md）**：
+
+```markdown
+## 開會 Trigger 判準（hint，最終由你判斷）
+
+### 召開 Kickoff 5 人會議（任一滿足）：
+- 跨 ≥ 3 元件改動（影響範圍廣）
+- 預估工期 ≥ 3 天（中大型任務值得投資會議成本）
+- 涉及架構決策（影響未來擴展）
+- 跨多個職務領域（需 Cody+Quinn+Demi 等共同評估）
+
+### 召開 Design 5 人會議（任一滿足）：
+- Kickoff 已開（標準後續）
+- 預估 Issue 數 ≥ 5（需要拆解結構）
+- 跨 Phase 結構（對應 FF 三十五自動拆任務）
+
+### 不開會直接 1-on-1（任一滿足）：
+- 純技術改動（< 50 行 / 單檔修改）
+- 修 bug 補丁（明確 reproduce 步驟）
+- 文件 / 配置調整（無業務邏輯）
+- Christ 明確標註「快速處理」
+
+### 重要原則：
+- **寧可多開會**（Trial_v5 證實品質 > Trial_v4 直派 = 省二次返工）
+- 但小需求別 overkill（cost / 時間考量）
+- 不確定時 → 你 Petra 自主判斷，事後 Christ 觀察頻率調整 prompt
+```
+
+**MCP-style 哲學張力解構**：
+- 會議短暫破壞封裝（Worker 互相暴露）vs MCP 嚴格封裝
+- MS Agent Framework Group Chat 提供「臨時電話會議」模型 — 會議內 Worker 互相暴露，會議結束恢復封裝
+- 對應 real-world 真實 PM 行為（不是常態互相寫信，需要時開會）
+- → Hybrid 不違反 MCP-style 精神，是「default 嚴格封裝 + 必要時臨時會議」
+
 #### Phase B Spike 任務（2026-05-01 更新）
 
 **從原本「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」**：
@@ -1723,7 +1771,12 @@ var pipeline = new MagenticOrchestrationBuilder()
 4. 驗證 **Crash Recovery 重跑機制**（重啟時 Petra 看 BossInteraction 紀錄走「已 approve 路徑」）
 5. 驗證 **Mock Mode 用 Gemini Flash** 跑 Petra 的對齊度（行為差異量化）
 6. 評估**遷移成本**（把 Stage 1-46 的 Cody/Vera/Quinn/Sage 包成 Worker 的工作量）
-7. **待 brainstorm**：Kickoff / Design 5 人會議是否保留？（B 待議）
+7. **驗證 Hybrid 會議 trigger 條件**：
+   - 小需求 case（如 Trial_v3 PR 欄位優化）→ Petra 跳過會議直接 1-on-1
+   - 大需求 case（如 Trial_v5 Dashboard UX）→ Petra 召開 Kickoff + Design
+   - 邊界 case（跨 2 元件 / 2 天工期）→ Petra 判斷對齊 prompt hint 否
+   - 頻率分析：跑 N 個 Trial 看 Petra 開會比例（預期 30-50%，real-world PM 行為）
+   - 品質 vs cost 對比：Hybrid 平均 vs Trial_v5 全會議，預期省 30-50% cost
 
 
 
@@ -2755,3 +2808,4 @@ Trial_v5 結束後 Christ 提出戰略級議題：「AiTeam 固定流程式架�
 | 2026-04-30 | v7.59：**Trial_v5 結案 — 4 FF 全鏈路擋牆驗證 + 揭露 6 個流程設計議題 + 立 4 新 FF**（commits `f7e476b` token 限額拉高 + `df3bfb7` docker-compose env 對齊）— Trial_v5 為 self-implement 試驗系列首次「對照組重做」，照搬 Trial_v4 prompt + 末尾引導句確保 `proposal` 完整 pipeline；任務 Dashboard 錯誤處理 UX 補齊（PR #170 OPEN 不合併，Trial 性質）；累計 cost ~$8.78（vs Trial_v4 $4.99，多 76%）；**詳細紀錄**：[docs/experiments/Trial_v5_DashboardErrorUx_Retest.md](../experiments/Trial_v5_DashboardErrorUx_Retest.md)；**Trial_v4 vs v5 戰略對照**：Cody 1/12→**11/12 Issue 完成 + 41 行→916 行**、Quinn 失敗→**30 xUnit + 6 visual 全 passed**、Vera 保守誤判→**精準抓 9 處裸 catch + 區分縮水 vs 分批**、Sage 13:30 異常→**14 秒 escalate**、TaskGroup mark done→**needs_intervention 多重擋牆觸發**；**4 FF 補強驗證**：FF 三十二子項 A（DevPlan 重產+escalate）✅、子項 F（Sage escalate）✅、子項 G（Cody ESCALATE_NEEDED）🔴 沒觸發、FF 三十三 cost 大部分填、FF 三十四 UI 確認可見、FF 三十五 規則層門檻條件未滿足；**揭露 6 個議題**：A 🔴（MarkGroupDoneOrIntervention 看歷史 failed task 誤判）/ B 🔴（ImplementationNote 寫入路徑斷裂 PR Body vs DB）/ C 🔴（Token limit SoT 分歧 appsettings vs docker-compose env）/ D 🟠（CI/CD 部署不重啟容器）/ E 🟠（Cody Dev_plan maxTurns=10 不足）/ F 🟡（Stage 42 補強單向性）；**新立 4 FF**：FF 四十五（議題 A，🔴 高）/ FF 四十六（議題 B+F，🔴 高）/ FF 四十七（議題 C+D 合一，🔴 高）/ FF 四十八（議題 E，🟠 中-高）；**戰略結論**：4 FF 補強讓 AiTeam 從「擋不住」躍進到「擋得住 + 擋過頭」，Cody/Vera/Quinn/Sage 全達 production-ready，下一階段戰略重點從「Agent 能力強化」轉向「**流程整合精準度打磨**」（議題 A/B 是 Stage 49 主菜）；self-implement 適用範圍**大幅擴展**（跨 11 元件任務不再縮水 = 真實開發團隊水準達成）|
 | 2026-05-01 | v7.60：**新立 FF 四十九 + FF 三十六 拆分**（Trial_v5 結束戰略討論 + WebSearch research 後）— Christ 提出「AiTeam 固定流程式架構是否該停損」戰略級議題；Aria 透過 WebSearch 揭露重大發現：① **AutoGen 已 maintenance mode**（Microsoft 推 Agent Framework 取代）② **Microsoft Agent Framework 1.0 GA（2026-04-03）剛發布** + .NET first-class support + 把 AiTeam 想做的事全部標準化（Workflow API / Checkpointing / Pause-Resume / HITL / Group Chat / Magentic / Sub-Workflow / Writer-Critic sample）③ Anthropic Multi-Agent Patterns hard data 驗證 AiTeam 設計選擇（supervisor pattern explicit routing 勝 31% / 85% improvement in first 2 iterations / 3 輪上限合理）；**戰略解構**：工具決定（手刻 framework vs MS Agent Framework）vs 架構決定（固定 pipeline vs 動態流程）兩個正交，可分開做；**新立 FF 四十九**（Phase A 工具評估，🟠 中-高，spike 2-3 週，Hybrid 整合策略：CLI Agent 用 Custom Agent Executor 包 ClaudeCodeService / API Agent 用原生 MS Agent Framework Agent / Workflow 層用 Workflow Builder）；**FF 三十六 拆分**（Title 縮窄為「v4 動態流程架構 — Phase B（FF 四十九 後續）」+ 啟動條件改為依賴 FF 四十九 Phase A 結論）；戰略路線圖：Stage 49（補丁 FF 四十五+四十六）→ Stage 50 FF 四十九 spike（工具評估）→ 結論驅動 Stage 51+ 漸進遷移 / 維持補丁 / Phase B spike；比喻「換引擎，車身保留」：保留 CLAUDE_*.md prompt + DB schema + Discord 整合 + Dashboard + ClaudeCodeService，只換 WorkflowEngine + Crash Recovery + BossInteraction + RunMeetingSession + 流程編排 |
 | 2026-05-01 | v7.61：**FF 三十六 Phase B 設計拍板**（Christ + Aria brainstorm 後架構雛形 80% 成熟）— Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟發：每個 Agent 是「打包好的角色/權責」，PM 動態調度），Aria 對應行業術語（Anthropic Orchestrator-Workers Pattern + MS Agent Framework Magentic Orchestration + Agent-as-Tool）；**4 層 Hierarchy**：Christ → Victoria (Discord 秘書/Router) → Petra (全程 Orchestrator) → Workers (Cody/Vera/Quinn/Sage/Rosa/Demi 動態組合)；**Victoria 角色重定位**：純 Discord facade + Router + reasoning（不做業務邏輯，只 query / route / format / notify），對應 Anthropic Router Pattern；**Petra 角色升級**：partial Orchestrator → 全程動態調度 + per-task session；**5 挑戰拍板**：(1) Victoria=Discord 秘書（不做業務邏輯）(2) 開會頻率 Petra 自主+prompt iteration 修正 (3) 老闆介入 Dashboard 主介面 + Victoria 同步推 Discord (4) Mock=個別 Worker hardcoded + Petra 用 Gemini Flash (5) **Crash Recovery 重啟重跑**（不做 Checkpointing，已 responded BossInteraction 算 task input 避免雙重 ask）；**對 Trial_v5 議題解構**：議題 A/B 在動態架構下自動消失（重啟重跑繞過 MarkGroupDoneOrIntervention 整類 / Petra 動態看 PR Body 不依賴 DB ImplementationNote 欄位），議題 E 更彈性處理；**Phase B Spike 任務**從「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」7 項清單；待 brainstorm：Kickoff/Design 5 人會議是否保留（B 議題待議） |
+| 2026-05-01 | v7.62：**FF 三十六 Phase B B 議題拍板 — Hybrid 會議模式**（Christ 「省去二次返工」拍板）— Christ 從 Trial_v4 vs Trial_v5 對比驗證「前期投資高品質會議 cost vs 後期重做整段 pipeline cost」（對應 Anthropic「85% of quality improvement in first 2 iterations」），拍板 **Hybrid 會議模式**：default 偏向會議保留（Trial_v5 證實多角度互動品質）+ 小需求動態跳過（避 overkill cost）；**實作對應**：會議 = MS Agent Framework Group Chat orchestration（內建，Petra 為 chair）/ 1-on-1 = Agent-as-Tool 直接呼叫（純 MCP-style），Petra 看需求動態切換；**Trigger 條件初版**（寫進未來 CLAUDE_Petra.md）：Kickoff 觸發（跨 ≥ 3 元件 / 工期 ≥ 3 天 / 架構決策 / 跨多領域）/ Design 觸發（Kickoff 已開 / Issue ≥ 5 / 跨 Phase）/ 1-on-1 觸發（純技術改動 < 50 行 / bug 補丁 / 文件配置）；**MCP-style 哲學張力解構**：Group Chat = 「臨時電話會議」模型（會議內 Worker 互相暴露，結束恢復封裝），對應 real-world 真實 PM 行為，不違反 MCP-style 嚴格封裝精神；**Phase B Spike 任務第 7 項**從「待 brainstorm」改為「驗證 Hybrid trigger 條件」（小需求/大需求/邊界 case + 頻率分析 + 品質 vs cost 對比，預期省 30-50% cost vs 全會議模式）|
