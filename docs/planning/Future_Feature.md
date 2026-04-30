@@ -1966,6 +1966,102 @@ Stage 46 驗收期觀察 2 個機制細節（不阻塞 Stage 46 結案）：
 
 ---
 
+## 四十三、token_logs.TotalCostUsd 欄位寫入覆蓋率不全（FF 三十三 漏 cost 路徑）
+
+> 狀態：🟡 中 — Token 計費觀察缺真實成本資料（已有 effective tokens 涵蓋大部分需求，但成本對照失真）
+> 提出日期：2026-04-29（Trial_v5 開跑前 Token 監控盤點時揭露）
+
+### 背景
+
+Stage 44 FF 三十三完成「Token 計費機制 CLI Agent 涵蓋」並升級 token_logs schema 5 個 nullable 欄位（含 `TotalCostUsd HasPrecision(18,6)`），驗收期 Christ 對 Victoria 一句話對話實證 CEO 那 1 row 寫入完整含 `TotalCostUsd $0.179531`。
+
+但 Trial_v5 開跑前 Token 監控盤點查 token_logs 揭露：
+
+```
+SELECT COUNT("TotalCostUsd") AS filled, COUNT(*) AS total
+  FROM token_logs WHERE "CreatedAt" >= date_trunc('month', now())
+→ filled = 1 / total = 331 → 99.7% NULL
+```
+
+該 1 row 即為 Stage 44 驗收 CEO 對話那條，**其他 330 row（Stage 42-46 期間 Reviewer/Dev/PM/QA/Doc/Designer/Requirements 大量 LLM call）皆 NULL**。
+
+### 假設根因（待 Forge 探索確認）
+
+1. **API layer Provider（Anthropic/Gemini）未回傳 cost 細節** — Stage 44 只在 ClaudeCodeService（CLI 路徑）解 `total_cost_usd`，API 層 LlmResponse 可能沒這欄位
+2. **CLI 路徑 helper 套用範圍未覆蓋全 16 caller** — Stage 44 校準寫了「16 caller 完整覆蓋率驗證留 Trial_v5」，可能某些路徑沒走 TokenLogService 共用 helper
+
+### 影響
+
+- token_logs 99.7% row 缺 cost → Dashboard `/tokens` 頁顯示成本不準（但 token 量準）
+- Trial 對照組（Trial_v4 $4.99 vs Trial_v5 ?）需手算估算，無法直接 SUM
+- 不影響 token 守門邏輯（守門讀 input + output，非 cost）
+
+### 修法方向
+
+需 Forge 探索後確認：
+- 若是 API layer 漏：檢查 Anthropic / Gemini Provider 是否 return cost 欄位 + 是否寫進 TokenLog
+- 若是 CLI 路徑覆蓋率不全：grep 全 ClaudeCodeService caller 確認 ParseJsonOutput 3-tuple 第 3 元素 Usage 是否被丟棄
+
+### 規模 / 風險
+
+**規模**：S-M（探索後可能單檔 fix 或多 caller 串接補洞）  
+**風險**：低（純資料完整性，不影響功能）
+
+### 優先級
+
+🟡 中 — Trial_v5 結束後盤點，可獨立 Stage 或搭車 FF 十一（Token 守門 Dashboard 化）
+
+---
+
+## 四十四、TokenTrackingProvider 守門 estimatedTokens 設計缺陷（input-only vs 累計含 output）
+
+> 狀態：🔵 低 — 設計小缺陷，實務影響有限（守門最終仍會擋，只是延後一兩次 call 才擋）
+> 提出日期：2026-04-29（Trial_v5 開跑前 Token 監控盤點時揭露）
+
+### 背景
+
+`TokenTrackingProvider.cs:37` 的守門邏輯：
+
+```csharp
+long estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4;  // 只算 input
+
+// Check 2 / 3 / 4 都用：
+if (monthlyUsed + estimatedTokens > monthlyLimit) → throw
+```
+
+但 `monthlyUsed` 從 `tokenRepository.GetAgentMonthlyTotalAsync` 來，**累計值含 input + output**（SUM(InputTokens + OutputTokens)）。
+
+這導致 Reviewer 月限 300K 配置下，本月實際累計到 411K（137% 超標）才被擋——`estimatedTokens`（只算 input/4）在每次比對時偏低，讓 monthlyUsed 累加過去之後才在某次跨界 throw。
+
+### 影響量化（Trial_v5 開跑前發現）
+
+本月 Reviewer：input 303K + output 109K = 411K（守門設定 300K，超 37%）
+- 若 estimatedTokens 改成更精確估算（含預期 output / 用前一次平均 ratio），守門會更早擋下
+- 實務上守門最終仍會擋（411K 已 > 300K，下一次 call 必擋），但已超出預期容忍範圍
+
+### 修法方向
+
+兩種選項（Forge 評估時拍板）：
+
+**A. 維持 input-only 估算 + 上限改 input-only 累計**：
+- 守門 Check 比對改用 `GetAgentMonthlyInputTotalAsync`（只 SUM input）
+- 概念清晰：守門比對的「已用」與「估算」單位一致
+
+**B. 估算改含 output 預估**：
+- estimatedTokens 加 output buffer（例如 input × 2 / 用前一次該 agent 平均 output ratio）
+- 概念：守門比對的「估算」逼近完整 call 後的累計增量
+
+### 規模 / 風險
+
+**規模**：S（單檔 method 邏輯改動 + 可能加新 Repo method）  
+**風險**：低（守門延後擋的瑕疵，非 false negative 漏擋）
+
+### 優先級
+
+🔵 低 — 不影響 Trial_v5，Trial_v5 結束後評估，可搭車 FF 十一 / FF 四十三
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -2115,3 +2211,4 @@ Stage 46 驗收期觀察 2 個機制細節（不阻塞 Stage 46 結案）：
 | 2026-04-28 | v7.51：**封存 4 個核心已完成的 FF**（FF 一 / 六 / 八 / 九）— Christ 觀察文件接近 2000 行後 Aria 掃出強候選封存 4 個：① FF 一（API 費用優化第一輪降級已完成 2026-04-07，剩餘優化方向轉 backlog）② FF 六（Stage 22 大幅吸收，剩餘客戶專案隔離併入 FF 七）③ FF 八（Phase 1 全部完成 + Phase 2 第三項 Stage 30 完成，剩 Phase 2「循環偵測 + 新鮮視角」兩保險絲機制轉 backlog）④ FF 九（Stage 27a/27b 核心佇列完成，剩 PM 佇列化 / Maya 部署 / Error 阻塞 / 優先級支援等擴充性需求轉 backlog）；4 個 FF 主體刪除（淨 -140 行），「已完成項目摘要」表格新增 4 列 entry，剩餘 backlog 設計脈絡保留在 git history；瘦身後 ~1810 行（從 1949 → 1810，約 -7%） |
 | 2026-04-28 | v7.50：**Stage 42 完成（v3.29.0）— FF 三十二 prompt 補強類 C+D+F+G ✅**：CLAUDE_Petra.md 第 4 節新增「PR 範圍嚴重不符計劃書」升級條目（首句明寫不論 Vera 原標 Info / Warning / Critical 皆適用）+ 獨立「特殊規則（直接 escalate）」段（`⚠️ ESCALATE_NEEDED` → escalate，不走 revise loop）；CLAUDE_Vera.md「Blazor 例外處理」段擴充三條件判準（涵蓋 `@onclick` / `@onchange` / MudBlazor `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）+ PR #122 onUndo 反面教材 + 不得降級規則（保守用詞「可能 / 或許」不豁免）+ 新增「PR description 判讀」段（`⚠️ ESCALATE_NEEDED` → 必標 critical 議題）；CLAUDE_Sage.md 新增「品質下限判準」段含 escalate JSON 格式 + 「PR URL 來源規則」段（從 prompt `PR 連結：` 欄位讀，不自行拼湊）+ 修訂第 60 行原「無實作說明」直接放行規則為 escalate；CLAUDE_Cody.md 新增「Dev 階段結束時的自我檢查（強制要求）」段（✅/❌ Issue + 完成度判定 + 80% 門檻 + 三條禁止）；**Marker 字面一致性驗證 ✅**（grep 三檔 `⚠️ ESCALATE_NEEDED` 完全相同）；探索揭露 Sage 路由端目前無 escalate 機制（DocAgentService 輸出 true/false），下游處理待 Stage 43 子項 E；FF 三十二 主體保留（A/B/E 子項待 Stage 43），子項分類段標四子項 ✅；本 Stage 純 prompt 補強，無 Bot Orchestrator / DB / UI 變動，真實生效驗證留 Trial_v5 |
 | 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
+| 2026-04-29 | v7.58：**Trial_v5 開跑前 Token 監控盤點 + 新立 FF 四十三 / 四十四 + 臨時拉高 Token 限額**（commit `f7e476b`）— 為確保 Trial_v5 對照組成立，Aria 進 docker exec psql 盤點 token_logs 揭露兩條件警訊：① 全域月限 1M 已用 1.35M（135%）+ Reviewer 已用 411K 超 300K（137%）→ 守門會擋下 Trial_v5 第一個 LLM call；② token_logs.TotalCostUsd 欄位 331 row 中只 1 row 有填（Stage 44 驗收 CEO 那條），其他 99.7% NULL；**新增 FF 四十三**（token_logs.TotalCostUsd 欄位寫入覆蓋率不全，FF 三十三 疑似漏 cost 寫入路徑，待 Forge 探索 API layer / CLI caller 覆蓋率根因，🟡 中）；**新增 FF 四十四**（TokenTrackingProvider 守門 estimatedTokens 用 input/4 但累計 monthlyUsed 含 output，導致 Reviewer 411K 才被擋而非預設 300K，設計小缺陷，🔵 低）；**臨時調整 appsettings.json**（Bot + Dashboard）：全域月限 1000K → 20000K / Single Request 50K → 200K / 各 Agent daily 1000K monthly 5000K；Trial_v5 結束後評估回調並依 FF 四十三/四十四 盤點修法 |
