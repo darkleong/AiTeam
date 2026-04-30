@@ -1007,6 +1007,52 @@ Stage 37 期間 Christ 關閉 Mock Mode 跑真實 AiTeam（PR #107 self-implemen
 **戰略結論**：三層迴圈在「程式碼層面瑕疵」生效；在「self-implement 範圍縮水」失效。未來架構級重構需求應**開獨立 Stage 由 Aria 規劃 + Forge 實作**，不交 Victoria self-implement。FF 三十二 完成前不開 Trial_v5。
 
 
+### v5 試驗結果（2026-04-30 執行完成）
+
+✅ **試驗已執行**，任務：Dashboard 錯誤處理 UX 補齊（**Trial_v4 對照組重做**，PR #170 OPEN，Trial 性質不合併）。**詳細紀錄**：[docs/experiments/Trial_v5_DashboardErrorUx_Retest.md](../experiments/Trial_v5_DashboardErrorUx_Retest.md)
+
+**Trial 系列首次：**
+- 對照組重做（同 Trial_v4 prompt + 末尾引導句「請走完整流程」）
+- 4 FF 補強全鏈路擋牆驗證（FF 三十二/三十三/三十四/三十五）
+- 揭露「**擋過頭**」現象（議題 B：Sage 過嚴 escalate 實際完成的 PR）
+- 完整壓力測試 ops 配置流程（議題 C+D）
+
+**結論摘要**：
+- ✅ **Top 1（FF 二十九 a11y）部分驗到**：Vera 抓 9 處裸 catch + OperationCanceledException Warning 等級（邊界判斷正確）
+- ✅ **Top 2（Petra 寬鬆設計）持續預期**：Petra approve 1 Warning + 1 Info 合理 PR
+- ✅ **Top 3（Quinn 品質）巨大進步**：30 xUnit + 6 visual 全 passed（Stage 41 FF 三十一補強完整生效）
+- ⭐⭐⭐ **Cody 巨大進步**：無 DevPlan 仍寫出 11/12 Issue（vs Trial_v4 1/12）+ 916 行（vs 41 行）
+
+**4 FF 補強驗證結果**：
+- ✅ FF 三十二子項 A（DevPlan 容錯重產+escalate）：完美命中（觀察點 #1）
+- ✅ FF 三十二子項 F（Sage escalate）：完美命中（觀察點 #6）
+- 🔴 FF 三十二子項 G（Cody ESCALATE_NEEDED）：沒觸發 — **Stage 42 補強單向性**（議題 F）
+- ✅ FF 三十三（Token 計費 CLI 涵蓋）：Meeting/Cody/Quinn/Vera/Sage cost 全填（PM/Dev row NULL → FF 四十三）
+- ⚠️ FF 三十四（流程暫停）：UI 確認可見但沒實際使用
+- ⚠️ FF 三十五（自動拆任務）：規則層門檻條件未滿足（單個 epic 12 Issue 但跨 Phase 結構不夠觸發）
+
+**揭露 6 個流程設計層級新議題**：
+- A 🔴：MarkGroupDoneOrIntervention 看歷史 failed task 誤判
+- B 🔴：ImplementationNote 寫入路徑斷裂（PR Body 與 DB 欄位不一致）
+- C 🔴：Token limit SoT 分歧（appsettings vs docker-compose env）
+- D 🟠：CI/CD 部署不重啟容器（image+file 變但 in-memory 沒換）
+- E 🟠：Cody Dev_plan maxTurns=10 對複雜任務不足
+- F 🟡：Stage 42 補強單向性（Vera 判準 vs Cody 實作範本對齊）
+
+**新發現觸發新 FF**：
+1. **FF 四十五**：MarkGroupDoneOrIntervention 看歷史 failed task 誤判（議題 A，🔴 高）
+2. **FF 四十六**：ImplementationNote 寫入路徑與 PR Body 對齊（議題 B + F，🔴 高）
+3. **FF 四十七**：Token limit SoT 統一 + CI/CD 部署可靠性（議題 C+D 合一，🔴 高）
+4. **FF 四十八**：Cody Dev_plan maxTurns 配置不足（議題 E，🟠 中-高）
+
+**戰略結論**：
+1. Trial_v5 證明 4 FF 補強讓 AiTeam 從「擋不住」躍進到「擋得住 + 擋過頭」
+2. Cody/Vera/Quinn/Sage 4 個 Agent 全面達到 production-ready 水準
+3. **下一階段戰略重點**從「Agent 能力強化」轉向「**流程整合精準度打磨**」（議題 A/B 是核心）
+4. **self-implement 適用範圍大幅擴展**：跨 11 元件任務不再「縮水」（vs Trial_v4 1/12，Trial_v5 11/12）— **真實開發團隊水準達成**
+
+**Cost**：~$8.78 USD（vs Trial_v4 $4.99，多 76% 主因：3 次 Victoria 分類 + Cody Dev_plan 兩輪 + 重啟 Bot 補課）
+
 ---
 
 ## 三十、tech_improvement 工作流的 ghost Dev task
@@ -2062,6 +2108,174 @@ if (monthlyUsed + estimatedTokens > monthlyLimit) → throw
 
 ---
 
+## 四十五、Dashboard 重試/跳過後舊 failed task 沒清理 — MarkGroupDoneOrIntervention 誤判
+
+> 狀態：🔴 高 — 影響所有「重試/跳過」action 後的 group status 判斷
+> 提出日期：2026-04-30（Trial_v5 揭露議題 A）
+
+### 背景
+
+Trial_v5 觀察：Christ 按「跳過審核」/「重啟 Dev」action 後，前置 failed task 沒被自動清除：
+- 21:30:29 PM (Petra Dev_plan escalate) → failed → Christ 21:52 跳過審核 → row 仍 failed
+- 21:52:34 Dev (Token 守門擋) → failed → Christ 22:11 重啟 Dev → row 仍 failed
+- 22:11:03 Dev (重啟後) → done ✅
+
+22:33 流程末端 `MarkGroupDoneOrIntervention` helper：「group 有 failed/needs_intervention task → needs_intervention」 → 看到歷史 failed task 仍掛在 group → 標 needs_intervention + 建 intervention BossInteraction「Vera 在 0 次修復後仍發現問題」（**訊息嚴重誤導：實際 Vera approve**）
+
+### 影響
+
+- 所有走過 DevPlan/Dev failed → 重試成功的 task 都會誤判 needs_intervention
+- intervention 訊息誤導（指向 Vera 但其實 Vera approve）
+- 流程末端設計缺陷（不只是訊息問題）
+
+### 修法方向
+
+「重試/跳過」action handler 應同步把前置 failed task 標記為已解：
+
+- **選項 A**：handler 把舊 failed task.Status 改 `resolved_by_retry`（新 status enum 值）
+- **選項 B**：MarkGroupDoneOrIntervention 邏輯加 filter — 只看「未被後續 task 取代」的 failed task（按 AssignedAgent + CreatedAt 排序，舊 failed 被新 done 取代 → 不算）
+
+### 規模 / 風險
+
+**規模**：M（動 Orchestration / Dashboard action handler / MarkGroupDoneOrIntervention helper 邏輯）  
+**風險**：中（動流程末端核心邏輯，需多場景 Mock 驗證）
+
+### 優先級
+
+🔴 高 — 影響流程信任度，建議排 Stage 49 主菜
+
+---
+
+## 四十六、ImplementationNote 寫入路徑與 PR Body 對齊（Sage 過嚴 escalate 修法 + Cody 實作範本補強）
+
+> 狀態：🔴 高 — Trial_v5 揭露「擋過頭」現象的核心議題
+> 提出日期：2026-04-30（Trial_v5 揭露議題 B + F 合一）
+
+### 背景（兩個相關議題合一）
+
+#### 子項 A：ImplementationNote 寫入路徑斷裂（議題 B）
+
+Trial_v5 PR #170：
+- Cody **PR Body 寫了完整實作說明**（變更摘要 + Closes #159-#169 列表 + 詳盡 commit messages）
+- 但 **DB `task_groups.ImplementationNote` = 0 字**
+- Sage 看 ImplementationNote 為空 → escalate（FF 三十二子項 F 觸發） → **誤判 Cody 沒寫實作**
+
+兩個位置不一致：PR Body（GitHub remote）vs DB 欄位（task_groups）。
+
+#### 子項 B：Stage 42 補強單向性（議題 F）
+
+CLAUDE_Vera.md（Stage 42 子項 D）強化「裸 catch + OperationCanceledException」識別 ✅，但 CLAUDE_Cody.md 沒同步補「catch 必加 ex 參數 + logger + OperationCanceledException 特判」 → Cody 寫 9 處裸 catch，Vera 100% 抓到。Reviewer 判準有了，但 Dev 實作端範本沒對齊。
+
+### 修法方向
+
+**(A) Cody 端**：CLAUDE_Cody.md 子項 G「Dev 階段結束時的自我檢查」段補強：
+- 明確要求 Dev 結束時**填寫 DB ImplementationNote 欄位**（不只 PR Body）
+- 提供 ImplementationNote 結構模板（含「## implementation_note」section）
+- ⚠️ ESCALATE_NEEDED 標記要求**同時寫進 ImplementationNote 欄位 + PR Body**
+- 補「catch 寫法檢查清單」（對齊 Vera 判準）
+
+**(B) Sage 端**：FF 三十二子項 F escalate 邏輯加 fallback：
+- 第一層判斷：ImplementationNote DB 欄位為空/失敗訊息
+- **第二層 fallback**：抓 PR Body / commit messages 看是否有實作說明
+- 兩層都失敗才 escalate（避免誤判 Cody 寫了 PR Body 但漏填 DB 欄位的場景）
+
+### 規模 / 風險
+
+**規模**：M（CLAUDE_Cody.md prompt 補強 + Sage AppealOrchestrationService 加 fallback 邏輯）  
+**風險**：低（純 prompt + 輔助判斷，不動核心 Orchestrator 流程）
+
+### 優先級
+
+🔴 高 — 影響 Sage escalate 精準度 + Cody 自我檢查完整性，建議排 Stage 49 主菜（與 FF 四十五合併）
+
+---
+
+## 四十七、Token limit SoT 統一 + CI/CD 部署可靠性
+
+> 狀態：🔴 高 — Trial_v5 揭露 ops 重大設計坑
+> 提出日期：2026-04-30（Trial_v5 揭露議題 C+D 合一）
+
+### 背景
+
+#### 子項 A：Token limit SoT 分歧（議題 C）
+
+Trial_v5 排查：commit `f7e476b` 改 appsettings.json (1000→20000) 完全沒生效 — **docker-compose.prod.yml env 寫死 `MonthlyTokenLimitK: 2000` 完全 override**。.NET Configuration 順序 env > appsettings → 改 appsettings 但 env 沒對齊 = 靜默無效。
+
+#### 子項 B：CI/CD 部署不重啟容器（議題 D）
+
+Trial_v5 第一次重啟 Bot 容器（`docker restart`）後 in-memory 仍是舊 env 值 — env 是 startup inject，docker restart 不重新 fetch。需要 docker compose env 改動才會 trigger recreate container（commit `df3bfb7` 驗證 env 改動 → recreate 成功）。
+
+### 影響
+
+- 任何「改 token limit」action 需懷疑是否真的生效
+- Aria 排查時間 ~10 分鐘（Trial_v5 中段）
+- ops 高風險陷阱：改檔不對齊 env → 靜默失敗
+
+### 修法方向
+
+**子項 A（Token SoT 統一）**：兩種選項拍板：
+- (a) **統一 SoT 到 appsettings.json**：移除 docker-compose env 中所有 `AgentSettings__*Token*` 條目（讓 image 內 appsettings 為唯一 source）
+- (b) **Token limit 移到 DB AppSettings 動態化**（FF 十一升級 spike）：可 Dashboard UI 改 + 不需重 deploy
+
+**子項 B（CI/CD 部署可靠性）**：
+- 文件補強：CLAUDE.md 加「ops 配置改動 SoP」段（先確認 SoT + 部署觸發路徑 + verify env 真的更新）
+- CI/CD workflow 改用 `docker compose up --force-recreate` 強制 recreate（即使 image hash 沒變）
+
+### 規模 / 風險
+
+**規模**：S-M（子項 A 改 docker-compose.prod.yml + 子項 B 改 .github/workflows）  
+**風險**：低（純 ops 配置，不動代碼）
+
+### 優先級
+
+🔴 高 — 影響所有未來 token limit / 其他 settings 改動的可靠性
+
+---
+
+## 四十八、Cody Dev_plan 階段 maxTurns 配置不足（複雜任務踩 100%）
+
+> 狀態：🟠 中-高 — Trial_v5 揭露對複雜任務的硬限制
+> 提出日期：2026-04-30（Trial_v5 揭露議題 E）
+
+### 背景
+
+Trial_v5 Cody Dev_plan **第二輪重產時踩到 maxTurns=10**：
+
+```
+"subtype": "error_max_turns"
+"num_turns": 11
+"errors": ["Reached maximum number of turns (10)"]
+"terminal_reason": "max_turns"
+"duration_ms": 171895  (2 分 52 秒)
+```
+
+對「DesignPlan 10K 字 + 11 元件 + 30+ 操作點」這種複雜任務，10 turns 不夠 Cody 完整 grep + read + write 拆解。
+
+Stage 16 紀錄寫過 `RunAsync maxTurns 40`（Petra 用），但 **Cody Dev_plan 用 10**。
+
+### 影響
+
+- 跨 N 元件（N ≥ 10）任務 Cody Dev_plan 100% 踩 maxTurns
+- DevPlan 內容變失敗訊息覆蓋第一輪結果（FF 三十二子項 A 重產設計小缺陷）
+- 雖然 FF 三十二子項 A 兜底機制 escalate 給 Christ，但 Cody 第一輪寫的 17K 字內容**永遠丟失**
+
+### 修法方向
+
+- **選項 A**：Cody Dev_plan maxTurns 從 10 提到 40（對齊 Petra）
+- **選項 B**：Cody Dev_plan maxTurns 動態調整（依 DesignPlan 字數 / Issue 數調整）
+- **選項 C**：FF 三十二子項 A 重產時保留前一版 DevPlan 到 DevPlanAppealLog（避免覆蓋丟失）
+
+### 規模 / 風險
+
+**規模**：S（單檔 ClaudeCodeService 配置改 / DevAgentService Dev_plan path）  
+**風險**：低（提高上限不影響其他 Agent）
+
+### 優先級
+
+🟠 中-高 — 直接影響 Trial_v5+ 複雜任務的 Dev_plan 階段成功率，建議搭車 Stage 49
+
+---
+
 ## 已完成項目摘要
 
 以下項目已在對應 Stage 完成或因架構演進而不再需要，從本清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
@@ -2212,3 +2426,4 @@ if (monthlyUsed + estimatedTokens > monthlyLimit) → throw
 | 2026-04-28 | v7.50：**Stage 42 完成（v3.29.0）— FF 三十二 prompt 補強類 C+D+F+G ✅**：CLAUDE_Petra.md 第 4 節新增「PR 範圍嚴重不符計劃書」升級條目（首句明寫不論 Vera 原標 Info / Warning / Critical 皆適用）+ 獨立「特殊規則（直接 escalate）」段（`⚠️ ESCALATE_NEEDED` → escalate，不走 revise loop）；CLAUDE_Vera.md「Blazor 例外處理」段擴充三條件判準（涵蓋 `@onclick` / `@onchange` / MudBlazor `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）+ PR #122 onUndo 反面教材 + 不得降級規則（保守用詞「可能 / 或許」不豁免）+ 新增「PR description 判讀」段（`⚠️ ESCALATE_NEEDED` → 必標 critical 議題）；CLAUDE_Sage.md 新增「品質下限判準」段含 escalate JSON 格式 + 「PR URL 來源規則」段（從 prompt `PR 連結：` 欄位讀，不自行拼湊）+ 修訂第 60 行原「無實作說明」直接放行規則為 escalate；CLAUDE_Cody.md 新增「Dev 階段結束時的自我檢查（強制要求）」段（✅/❌ Issue + 完成度判定 + 80% 門檻 + 三條禁止）；**Marker 字面一致性驗證 ✅**（grep 三檔 `⚠️ ESCALATE_NEEDED` 完全相同）；探索揭露 Sage 路由端目前無 escalate 機制（DocAgentService 輸出 true/false），下游處理待 Stage 43 子項 E；FF 三十二 主體保留（A/B/E 子項待 Stage 43），子項分類段標四子項 ✅；本 Stage 純 prompt 補強，無 Bot Orchestrator / DB / UI 變動，真實生效驗證留 Trial_v5 |
 | 2026-04-28 | v7.49：**新增 FF 三十六**（AiTeam v4 架構雙支柱研究 spike） — Christ 2026-04-28 戰略討論揭露 Trial_v4 多數 bug 根因不是「補丁不夠」是「pipeline 硬編碼」；提出兩大 paired 支柱：① 流程動態化（PM 跳脫固定 pipeline，職務即函式 / 人員即函式集合 / PM 動態調度）② PM per-task session 持久化記憶（Petra 跨階段累積記憶，Stage 15 Victoria 已驗證可行）；行業先例（AutoGen / LangGraph / CrewAI / Anthropic Multi-Agent Patterns）支持 Phase 3 方向；推薦 Hybrid 模型（不是 pure dynamic — 真實 PM 也走 SOP）；成本精確分析（per-task session 1.5-5x stateless，**修正 Aria 初期「5-50x 爆炸」誇張描述**）；研究範圍（行業先例 / Stage 15 適用性 / 成本策略 / Hybrid vs Pure Dynamic 對比 / 遷移成本）；對既有 FF 影響（部分子項可能被吸收）；**規模 XL / 風險高 / ⚪ 待觀察 — 不倉促啟動**；啟動條件：Trial_v5 結果若仍踩硬編碼根因 → 啟動 spike Stage 47+ |
 | 2026-04-29 | v7.58：**Trial_v5 開跑前 Token 監控盤點 + 新立 FF 四十三 / 四十四 + 臨時拉高 Token 限額**（commit `f7e476b`）— 為確保 Trial_v5 對照組成立，Aria 進 docker exec psql 盤點 token_logs 揭露兩條件警訊：① 全域月限 1M 已用 1.35M（135%）+ Reviewer 已用 411K 超 300K（137%）→ 守門會擋下 Trial_v5 第一個 LLM call；② token_logs.TotalCostUsd 欄位 331 row 中只 1 row 有填（Stage 44 驗收 CEO 那條），其他 99.7% NULL；**新增 FF 四十三**（token_logs.TotalCostUsd 欄位寫入覆蓋率不全，FF 三十三 疑似漏 cost 寫入路徑，待 Forge 探索 API layer / CLI caller 覆蓋率根因，🟡 中）；**新增 FF 四十四**（TokenTrackingProvider 守門 estimatedTokens 用 input/4 但累計 monthlyUsed 含 output，導致 Reviewer 411K 才被擋而非預設 300K，設計小缺陷，🔵 低）；**臨時調整 appsettings.json**（Bot + Dashboard）：全域月限 1000K → 20000K / Single Request 50K → 200K / 各 Agent daily 1000K monthly 5000K；Trial_v5 結束後評估回調並依 FF 四十三/四十四 盤點修法 |
+| 2026-04-30 | v7.59：**Trial_v5 結案 — 4 FF 全鏈路擋牆驗證 + 揭露 6 個流程設計議題 + 立 4 新 FF**（commits `f7e476b` token 限額拉高 + `df3bfb7` docker-compose env 對齊）— Trial_v5 為 self-implement 試驗系列首次「對照組重做」，照搬 Trial_v4 prompt + 末尾引導句確保 `proposal` 完整 pipeline；任務 Dashboard 錯誤處理 UX 補齊（PR #170 OPEN 不合併，Trial 性質）；累計 cost ~$8.78（vs Trial_v4 $4.99，多 76%）；**詳細紀錄**：[docs/experiments/Trial_v5_DashboardErrorUx_Retest.md](../experiments/Trial_v5_DashboardErrorUx_Retest.md)；**Trial_v4 vs v5 戰略對照**：Cody 1/12→**11/12 Issue 完成 + 41 行→916 行**、Quinn 失敗→**30 xUnit + 6 visual 全 passed**、Vera 保守誤判→**精準抓 9 處裸 catch + 區分縮水 vs 分批**、Sage 13:30 異常→**14 秒 escalate**、TaskGroup mark done→**needs_intervention 多重擋牆觸發**；**4 FF 補強驗證**：FF 三十二子項 A（DevPlan 重產+escalate）✅、子項 F（Sage escalate）✅、子項 G（Cody ESCALATE_NEEDED）🔴 沒觸發、FF 三十三 cost 大部分填、FF 三十四 UI 確認可見、FF 三十五 規則層門檻條件未滿足；**揭露 6 個議題**：A 🔴（MarkGroupDoneOrIntervention 看歷史 failed task 誤判）/ B 🔴（ImplementationNote 寫入路徑斷裂 PR Body vs DB）/ C 🔴（Token limit SoT 分歧 appsettings vs docker-compose env）/ D 🟠（CI/CD 部署不重啟容器）/ E 🟠（Cody Dev_plan maxTurns=10 不足）/ F 🟡（Stage 42 補強單向性）；**新立 4 FF**：FF 四十五（議題 A，🔴 高）/ FF 四十六（議題 B+F，🔴 高）/ FF 四十七（議題 C+D 合一，🔴 高）/ FF 四十八（議題 E，🟠 中-高）；**戰略結論**：4 FF 補強讓 AiTeam 從「擋不住」躍進到「擋得住 + 擋過頭」，Cody/Vera/Quinn/Sage 全達 production-ready，下一階段戰略重點從「Agent 能力強化」轉向「**流程整合精準度打磨**」（議題 A/B 是 Stage 49 主菜）；self-implement 適用範圍**大幅擴展**（跨 11 元件任務不再縮水 = 真實開發團隊水準達成）|
