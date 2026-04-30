@@ -1,0 +1,67 @@
+# Future Feature — 已完成項目摘要
+
+> 從 `Future_Feature.md` 拆出（2026-05-01）
+> 作用：歷史索引 — 對應已完成的 FF 與 Stage，詳細實作內容請參閱各 Stage Roadmap
+
+---
+
+以下項目已在對應 Stage 完成或因架構演進而不再需要，從主清單移除。詳細內容請參閱各 Stage 的 Roadmap 文件。
+
+| 原編號 | 項目 | 完成方式 |
+|--------|------|---------|
+| 一 | Dev Agent 使用 Claude Code 寫程式 | ✅ Stage 11（2026-04-05） |
+| ~~十~~ | 提案草稿 UI 規格孤立檔案自動清理 | 已不需要 — Stage 12 UI 規格改存 DB 後不再孤立 |
+| 十一 | Dashboard 任務詳情顯示修正 | ✅ Stage 13（2026-04-06） |
+| ~~十二~~ | Dev Agent 框架幻覺防護 | 已不需要 — Stage 11 Claude Code + Stage 12 唯讀探索後不再發生 |
+| 十三 | Stage 10 技術債清償（6 項） | ✅ Stage 13（2026-04-06） |
+| 十四 | Orchestrator 流程重構（5 個問題） | ✅ Stage 12 解決問題二三四 + Stage 13 解決問題一五 |
+| 十五 | CEO 分類與流程完整性補強 | ✅ Stage 14（2026-04-06） |
+| 十六 | CEO Discord 文件記錄能力 | ⇒ Stage 15 吸收 — Victoria 接上 Claude Code 後自行解決 |
+| 十七 | UI 規格改存 DB | ✅ Stage 12（2026-04-06） |
+| 十八 | Agent 唯讀探索能力 | ✅ Stage 12（2026-04-06） |
+| 十九 | 提案流程重新設計 | ✅ Stage 12（2026-04-06） |
+| 二十 | Victoria 升級為技術顧問 | ✅ Stage 15（2026-04-07） |
+| 二十一 | Dashboard Agent 狀態卡即時更新 | ✅ Stage 18（2026-04-09） |
+| 二十二 | 任務流程可視化（Pipeline View） | ✅ Stage 18（2026-04-09） |
+| ~~MCP 整合~~ | MCP 標準化工具協議 | 移除 — Agent 透過 Claude Code CLI 操作，已有成熟直接串接，MCP 多一層抽象無實際好處 |
+| ~~顧問 Agent 設計~~ | Victoria 顧問能力強化 | 移除 — Stage 15 Victoria 已具備顧問能力，Aria 負責深度架構討論，剩餘強化項目不值得獨立 Feature |
+| ~~Doc Agent 品質控管~~ | Documentation Agent 審查機制 | 移除 — 被八（開發流程重構）+ Stage 16 Petra 審核閘門吸收 |
+| ~~API 餘額恢復~~ | API 餘額耗盡後的流程恢復 | 移除 — 被十（Agent 任務序列）Error 狀態 + Dashboard 手動重試機制完全吸收 |
+| 四 | Discord #指令中心 頻道移除 | ✅ Stage 22（2026-04-12）— 程式碼已清除，Christ 需手動刪除 Discord 頻道 |
+| 七 | Token 異常消耗保護機制 | ✅ Stage 22（2026-04-12）— TokenTrackingProvider 四道關卡（單次/日/月/全域） |
+| 九 | Dashboard 存取分層（localhost 免登入） | ✅ Stage 22（2026-04-12）— LocalhostBypassMiddleware + Docker port 收緊 |
+| 十五 | 版本號集中管理（Directory.Build.props） | ✅ Stage 26（2026-04-14）— src/Directory.Build.props 集中四項版本屬性，Bot/Dashboard csproj 移除個別 Version 標籤，CI/CD + CLAUDE.md 同步更新 |
+| 十（核心） | Agent 任務序列（Per-Agent Queue + 狀態管理 + Dashboard 視覺化） | ✅ Stage 27a（v3.12.0）+ Stage 27b（v3.13.0）— DB-as-Queue、AgentQueueProcessor、Agent 狀態管理（Active/Paused/Stopped）、Discord 五指令、Dashboard 佇列視覺化 |
+| 九 | Dashboard 雙向操作中心（Discord + Dashboard 雙通道） | ✅ Stage 28a（v3.14.0）+ Stage 28b（v3.15.0）— BossInteraction Entity、8 個確認點 pure additive 寫入、樂觀鎖先到先贏、InteractionProcessor 輪詢、操作中心 /interactions、文字輸入互動（修改意見）、歷史紀錄篩選 |
+| 零 | Dashboard 歸檔報告折疊面板 | ✅ Stage 29-1（v3.16.0）— `TaskGroup.ArchiveContent` 欄位 + EF Migration、DocAgentService 完成後寫入 DB、PipelineView 第七折疊面板、MockMode 也補寫供 Dashboard 驗收 |
+| 零-A | 任務列表右側 Log 顯示統一化 | ✅ Stage 29-2（v3.16.0）— Kickoff/Design/Petra 補 running + done/failed、Dev/QA/Reviewer/Doc MockMode 統一由 Processor 寫 final done、消除過時 running 殘影 |
+| 零-C | 通知類互動卡在待處理區無法消化（Bug） | ✅ Stage 29-5 搭車修（v3.16.0）— `InteractionService.NotifyActionsJson`「我知道了」按鈕；`merge_notify` / `intervention` / `ceo_reply` 三處統一套用；`ProcessBossResponseAsync` default 分支無動作（純 UI 確認） |
+| 零-B | MockMode 新提案流程產生重複 TaskGroup（Bug） | ✅ v3.16.1 hotfix（2026-04-19）— Stage 28b 驗收修正只做了一半：`ExecuteProposalApprovedAsync`（Discord 路徑）有 GroupId 防護，但 `ProcessProposalApprovedAsync`（Dashboard 路徑）無條件 `CreateGroupAsync`。兩處對齊後 MockMode 從 Discord 或 Dashboard 核准提案都只產生 1 個 TaskGroup |
+| 十七 | 可靠性補強：失敗重試 + 會議 Crash Recovery | ✅ Stage 31（v3.18.0，2026-04-20）— A. Dashboard「🔁 重試」按鈕（failed/cancelled TaskItem → AgentQueueService.RequeueTaskAsync → Bot internal API）；B. 會議 Crash Recovery（TaskGroup.ActiveMeetingType 欄位 + EF Migration + RunKickoffMeetingAndWaitAsync/RunDesignPhaseAsync set/finally clear + RecoverStuckMeetingsAsync 啟動掃描，採方案 2 不動執行模型） |
+| 十八 | Appeal 對抗紀錄 UI 呈現 | ✅ Stage 31（v3.18.0，2026-04-20）— TaskGroupDto 擴充 4 欄位（ReviewAppealLog/ReviewAppealRoundA/DevPlanAppealLog/DevPlanAppealRoundA）；DashboardTaskService 三個 Select 補 mapping；PipelineView 新增兩個「🗣️ Appeal 對抗紀錄」折疊面板（有資料才顯示） |
+| 十五 | Dashboard 與 Discord 功能平等（Feature Parity）| ✅ Stage 32（v3.19.0，`/mock` Dashboard 化 — `MockScenarioService` 抽出共用）+ Stage 33（v3.20.0，佇列控制 Dashboard 化 — `AgentQueueControlService` + Agent 狀態卡 pause/resume 按鈕 + `GlobalQueueControlCard` 全域緊急停止 + 確認 Dialog）— Discord 原指令透過薄 wrapper 共用同一 shared service |
+| 二十一 | Agent 狀態卡 expand 展開看待辦清單 | ✅ Stage 33（v3.20.0，2026-04-22）— 採解讀 B（running + queued TaskItem）；實作優化為擴充既有 `AgentQueueDto`（`CurrentTaskId` / `CurrentTaskGroupId` / `CurrentTaskQueuedAt` + `QueuedTaskItemDto.GroupId`）取代原規劃 `AgentTodoDto`，重用既有 `PushQueueUpdateAsync` 鏈路；點 item 深層連結 `?groupId=` 自動 Drawer 預選 |
+| 二十四 | `CLAUDE_*.md` template 補齊（CLI Agent 自我描述檔） | ✅ 2026-04-25 — 根因修正：`CLAUDE_Vera.md` / `CLAUDE_QA.md` 兩檔其實已在 repo source 存在（2026-04-12/13），但 `AiTeam.Bot.csproj` 只顯式 Include `CLAUDE_CODY.md` + `CLAUDE_Victoria.md`，其他 6 個 template 未 COPY 到 output；修法採 glob pattern `Resources\CLAUDE_*.md` 一次涵蓋全 8 檔（未來新增 template 自動涵蓋）；Rosa/Demi/Sage/Petra 沒 warn 只因走 API layer 或該 CLI path 沒被觸發，但 agent code 都有讀 template 的邏輯——一次全修 |
+| 二十 | 大檔案拆解技術債（合集）— 四個怪物級檔案清零 | ✅ Stage 34（v3.21.0，MeetingService 1415→4 檔）+ Stage 35（v3.22.0，PmAgentService 1388→6 檔 + Agents/Pm/ 子資料夾）+ Stage 36（v3.23.0，TaskGroupService 2623→716、CommandHandler 2172→556 + 5 個子資料夾）— 累積六項拆解 SOP 已整理至 [docs/conventions/refactor-sop.md](../conventions/refactor-sop.md)；Stage 36 結案 changelog 寫了「主體刪除移入已完成摘要」但漏實際搬遷，Stage 38 結案後 Aria 補完 |
+| 二十八 | Vera 審查範圍擴及 .razor / .css（對齊 Quinn `hasUiChanges`）+ Reviewer 略過狀態正名為 `skipped` | ✅ Stage 39（v3.26.0，2026-04-25）— `ReviewerAgentService` 三類檔案分類 + `BuildClaudeCodeReviewPrompt` 三段共用 `AppendFileDiff` helper + 標題改名「PR 變更 diff」；CLAUDE_Vera.md 擴充 a11y / Blazor / CSS / MudBlazor 判準（全 Warning，維持「偏好放行」哲學）；新增 `AgentResultType.Skipped` 結果型別 + `AgentExecutionResult.Skipped(reason)` 工廠（QA 共用）+ Dashboard 全鏈路 mapping `skipped` teal `#20c997`；TaskGroupService Reviewer Skipped 走「跳過 Petra 放行」路徑；搭車順手解決 Trial_v2 觀察四項（BossInteraction.Description 補 Task.Description / RuleManagement.razor MudSwitch aria-label / QA Skipped 共用 API / Mock review_skipped 情境） |
+| 二十九 | CLAUDE_Vera.md 判準補強（a11y `<a>` link + `target="_blank"` 安全 + 業務邏輯 pattern match）| ✅ Stage 40（v3.27.0，2026-04-26）— CLAUDE_Vera.md 三段判準擴充：**安全 Critical**（`<a target="_blank">` / `<MudLink Target="_blank">` 缺 `rel="noopener"` 列為 Critical，OWASP 真實安全；與 `@onclick` 未捕例外並列「唯二 Critical razor 議題」）+ **a11y Warning**（`<a>` / `<MudLink>` 缺 `aria-label` 補入既有 a11y 子段）+ **業務邏輯 pattern match Warning**（`Title.Contains("[XXX]")` 等 fragile 設計，建議改 DTO 欄位 / service / 列舉）；搭車修 4 處同源 tabnabbing（PipelineList:65 + PipelineView:32 + Home:62 + ProjectManagement:81）作為 FF 二十九判準的真實演習場；Home.razor PR 連結同步顯示 `#編號`（原寫死「PR」）；ExtractPrNumber 抽 `Helpers/PrNumberHelper.cs` 共用 helper（消 PipelineList vs PipelineView 重複）；MudLink rel/aria-label 採 inline 寫法成功 forward 至底層 `<a>` |
+| 三十一 | tests/Generated/ 編譯與執行修復（測試品質保證迴圈第三層）| ✅ Stage 41（v3.28.0，2026-04-27）— 建 `tests/AiTeam.Tests.Generated/` xUnit csproj（與 `tests/Generated/` 隔離保持純 LLM 產出區，採 `<Compile Include="..\Generated\**\*.cs" />` 跨資料夾納入）+ AiTeam.slnx 新增 `/tests/` folder；清檔案層 3 類破損：3 檔 markdown fence（GitHubServiceTests / TaskCenter）+ 1 檔幻覺類別整檔刪（AgentSettings.razorTests.cs）+ 1 檔 LLM 截斷修復（GitHubServiceTests 半截 method）；連帶清除 repo 根目錄 stray `AiTeam/` 資料夾（同源 LLM 污染歷史殘留 PR `1979f46`）；MainLayout broken test 兩個依嚴格版「不為綠燈寫假斷言」原則刪除（Quinn 假設 Assembly.GetExecutingAssembly() 取錯 + 忽略 +commitHash 剝離邏輯）；CLAUDE_Quinn.md 三段補強（valid C# 規則 + 測試標的存在性驗證嚴格版要求 grep 證據 comment + JSON schema 新增 `unverifiable_targets` 欄位語意分離 failed_tests=可修 vs unverifiable=需 escalate）；最終 dotnet test 127 Passed / 0 Failed |
+| 一 | API 費用優化（第一輪降級）| ✅ 第一輪降級完成（2026-04-07）— Rosa / Demi / Sage 從 Sonnet 降為 Haiku，預估省 25-30% 整體 API 費用。剩餘優化方向（Prompt Caching / Batch API / 模型評估 / Victoria turns 優化）為觸發條件式 backlog（視 Token Dashboard 數據累積評估），不獨立列為 FF |
+| 六 | 測試環境隔離（Docker Compose Test Stack）| ⇒ Stage 22（v3.6.0，2026-04-12）大幅吸收 — Dashboard 存取分層 + Docker port 收緊後 Playwright CI 直接打 localhost 免登入，本項急迫性大幅降低；剩餘客戶專案完整隔離需求併入 FF 七（客戶專案交付流程與驗收閘門） |
+| 八 | 開發流程重構（多人會議制 + 糾錯機制）| ✅ Phase 1 全部完成 + Phase 2 第三項完成 — Stage 23/24（v3.7.0/v3.8.0，Review Appeal + QA 流程 Petra 判斷層）+ Stage 25a（v3.9.0，Kick-off 會議）+ Stage 25b（v3.10.0，設計會議）+ Stage 30（v3.17.0，5 個申訴環節 LLM API → Claude Code CLI 升級）。剩餘 Phase 2「循環偵測 + 新鮮視角」兩個保險絲機制為觸發條件式 backlog（觀察反覆修改同段未收斂案例後再評估），git history 保留原設計脈絡 |
+| 九 | Agent 任務序列 — 核心佇列機制 | ✅ Stage 27a（v3.12.0，2026-04-15）+ Stage 27b（v3.13.0，2026-04-15）— DB-as-Queue + per-agent SemaphoreSlim(1,1) + AgentQueueProcessor + Agent 狀態管理（Active/Paused/Stopped）+ 5 個 Discord 指令 + Dashboard 佇列視覺化 + SignalR。剩餘擴充性需求（PM Petra 佇列化 / Maya 自動化部署 / Error 狀態阻塞重試 / 優先級支援）為觸發條件式 backlog，git history 保留原設計脈絡 |
+| 三十二 | Self-implement 完整性閘門（Trial_v4 揭露的流程斷裂合集）| ✅ Stage 42（v3.29.0，2026-04-28，C+D+F+G prompt 補強）+ Stage 43（v3.30.0，2026-04-29，A+B+E Orchestrator 改動）— 七子項全完成；CLAUDE_Petra.md 範圍縮水升級規則 + ESCALATE_NEEDED 機制；CLAUDE_Vera.md Server Circuit Critical 邊界；CLAUDE_Sage.md 品質下限判準 + escalate JSON 格式；CLAUDE_Cody.md Dev 階段自我檢查；DevPlan 重產機制（DevPlanRevision 上限 2）；Dev/Dev_fix failed 中止 fix loop + needs_intervention；QA 3 處 escalate 路徑改 needs_intervention；MarkGroupDoneOrInterventionAsync 集中守門 method；Sage escalate JSON 解析 + PR URL hardcode 修；Trial_v5 對照組驗證 4 FF 補強有效 |
+| 三十三 | Token 計費機制 CLI Agent 涵蓋 | ✅ Stage 44（v3.31.0，2026-04-29）— `ClaudeCodeService.ParseJsonOutput` 升 3-tuple + `TryParseUsage` helper + `total_cost_usd` 解析；token_logs schema 加 5 nullable 欄位（Stage / Round / CacheCreationTokens / CacheReadTokens / TotalCostUsd HasPrecision(18,6)）+ `ComputeEffectiveTokens` static helper（公式 input + output + cache_creation × 1.25 + cache_read × 0.1）；新增 `TokenLogService` 共用 helper（內建 try-catch + 獨立 scope DbContext 保證硬規則「token 寫入失敗不阻塞主流程」）；Migration `Stage44TokenLogsSchemaUpgrade`；驗收 Christ 對 Victoria 對話實證 token_logs 寫入完整 11 欄位（cache 占比 95.5% 守門公式升級價值驗證）|
+| 三十四 | TaskGroup 流程暫停機制 | ✅ Stage 45（v3.32.0，2026-04-29）— 採方案 Ba（被動阻擋下階段）+ TaskGroup 加 4 欄位（IsPaused / PausedAt / PausedBy / PendingStepsJson）+ FireStepsAsync 統一閘門（22 caller 自動受保護）+ Mock 3 場景 + Crash Recovery 對齊 IsPaused 篩選 + Dashboard PipelineView 暫停 alert + 暫停/恢復按鈕；6 場景全 PASS + 0 follow-up；驗收期搭車 FF 三十七 完成 |
+| 三十五 | 自動拆任務機制（Petra 在 Design 階段 propose 拆 sub-task）| ✅ Stage 46（v3.33.0，2026-04-29，⭐ 戰略級）— Petra Design 階段 propose 拆 N 個依賴 sub-task → Christ 採納 → Sequential 鏈執行（Phase 1→2→3 → epic done）→ 各自獨立 PR；TaskGroup 加 4 欄位（ParentGroupId / EpicPaused / PhaseNumber / PhaseDescription）+ partial index `idx_task_groups_parent`；Petra 雙層判斷（規則層 EvaluateAndProposeSplitAsync 三條件 OR + Petra 層 RunPetraSplitTaskProposalAsync）；2 個新 BossInteraction type（split_task_proposal / epic_partial_paused）；CLAUDE_Petra.md 拆 task 判準新章節；解 Trial_v4「Cody 對大需求縮水」根因（12 Issue → 1 Issue）；驗收期 3 個 fix commits + 揭露 Stage 25b TryParseDesignIssues 既有 bug |
+| 三十七 | escalate skip 路徑 TaskGroup status 殘留 | ✅ Stage 45 搭車修（v3.32.0，2026-04-29）— Aria 預掃假設「4 處需修」實際只剩 1 處（3 處先前已修 + 1 處 ButtonCallbackRouter.cs:241 本 Stage 新修）— **自省點 #19 升級教訓「FF backlog 描述 ≠ ground truth，必須 grep + Read 真實 handler 內容」**首次完整實證 |
+| 三十九 | Dashboard escalate skip action ID 不匹配 bug（Stage 43 既有衍生）| ✅ Stage 46 搭車修（v3.33.0，2026-04-29）— `AppealOrchestrationService.HandleDevPlanEscalationAsync` 改用 EndsWith 寬鬆比對涵蓋 Discord + Dashboard 命名變體（devplan_skip / devplan_unable_skip / devplan_escalate_skip）+ 清 InterventionReason（對齊 Stage 45 FF 三十七）；Dashboard 點「跳過審核」不再靜默變「放棄任務」|
+
+---
+
+> 此檔僅含已完成項目摘要表格。其他類型 FF 拆分如下：
+> - **進行中 active 主清單** → [`Future_Feature.md`](Future_Feature.md)
+> - **v4 後重評估** → [`Future_Feature_v4_eval.md`](Future_Feature_v4_eval.md)
+> - **冷凍 FF** → [`Future_Feature_frozen.md`](Future_Feature_frozen.md)
+> - **v4 動態架構吸收 / framework 內建 / Trial 完成** → [`Future_Feature_archived_v4.md`](Future_Feature_archived_v4.md)
+> - **變更紀錄** → [`Future_Feature_changelog.md`](Future_Feature_changelog.md)
