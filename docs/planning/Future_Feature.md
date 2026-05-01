@@ -1,11 +1,12 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.64
+> 版本：v7.65
 > 建立日期：2026-04-01
 > 最後更新：2026-05-02
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
+> **2026-05-02 v7.65**：Stage 48 spike 採用結論 — FF 四十九 ✅（4 強正向 + 2 中性 + 0 負向，啟動 Stage 49+ 漸進遷移路線「換引擎不換車身」，FF 三十六 Phase B 進入「等遷移過半再評估」）。
 
 ---
 
@@ -17,25 +18,27 @@
 | `Future_Feature_frozen.md` | 3 個冷凍 FF（觸發條件不滿足）| 評估解凍時 |
 | `Future_Feature_archived_v4.md` | 11 個已歸檔 FF（v4 吸收 / framework 內建 / Trial 完成）| 查歷史脈絡 |
 | `Future_Feature_completed.md` | 已完成項目摘要（FF + Stage 對照）| 查 Stage 完成歷史 |
-| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.64 | 追蹤版本演進 |
+| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.65 | 追蹤版本演進 |
 
 ---
 
-## 當前優先級 Top 5（2026-05-02）
+## 當前優先級 Top 5（2026-05-02 v7.65 — Stage 48 spike 採用後）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **四十九** | Microsoft Agent Framework 工具評估 | 🟠 中-高 | **戰略主軸** — Stage 48 spike，決定 v4 路線 |
-| 2 | **三十六** | v4 動態流程架構 — Phase B | ⚪ 依賴 FF 四十九 | **戰略主軸** — 架構級躍進，Phase B 設計拍板已 80% |
-| 3 | **四十三** | token_logs.TotalCostUsd 99.7% NULL | 🟡 中 | Trial_v5 follow-up，影響 Trial 對照組成本評估 |
-| 4 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
-| 5 | **四十二** | TryParseDesignIssues 邊界判斷重構 | 🔵 低 | Stage 25b 既有 bug，已 workaround，可搭車或留 v4 後 |
+| 1 | **三十六** | v4 動態流程架構 — Phase B | ⚪ Phase A 已通過解鎖，**等 Stage 49+ 漸進遷移過半（Stage 52 後）再評估** | 戰略主軸（pending）— FF 三十六 拍板路線：先做 6 Stage 漸進遷移，遷移過半再評估動態流程是否有獨立價值 |
+| 2 | **四十三** | token_logs.TotalCostUsd 99.7% NULL | 🟡 中 | Trial_v5 follow-up，影響 Trial 對照組成本評估 |
+| 3 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
+| 4 | **四十二** | TryParseDesignIssues 邊界判斷重構 | 🔵 低 | Stage 25b 既有 bug，已 workaround，可搭車或留 v4 後 |
+| 5 | **十二** | Sage 全系統文件健康檢查 | 🔵 低 | Phase 1 觀察期，定期排程 |
+
+> ⚠️ **戰略主軸已轉向**：v4 工具選型完成，剩下是 Stage 49-54 漸進遷移（不開新 FF，按 Stage 走）。`Stage 49 = Cody-Vera-Petra Appeal loop` 為下個工作主軸（不在 Top 5 內，因為 Stage 工作不算 FF backlog）。
 
 ---
 
 ## Active 主清單
 
-> 以下 6 個 FF 為「進行中 / 仍需做」狀態，與 v4 路線無關或為 v4 戰略主軸。
+> 以下 5 個 FF 為「進行中 / 仍需做」狀態（v4 戰略主軸 FF 三十六 + 4 個觀察類）。
 
 ## 七、客戶專案交付流程與驗收閘門
 
@@ -135,8 +138,8 @@ Sage 作為獨立定期任務（非 pipeline 內），掃描整個專案：
 
 ## 三十六、AiTeam v4 動態流程架構 — Phase B（FF 四十九 後續）
 
-> 狀態：⚪ 待觀察 — 依賴 **FF 四十九（工具評估 Phase A）** 通過 + 結果支持動態流程
-> 提出日期：2026-04-28（Trial_v4 結案戰略討論）；2026-05-01 拆分為 Phase B（架構評估獨立於工具評估）
+> 狀態：⚪ 待觀察 — **FF 四十九 Phase A 已通過（採用結論，Stage 48 完成 2026-05-02）**，Phase B 啟動條件解除但 Christ 拍板「Stage 49+ 漸進遷移過半（Stage 52 後）再評估」是否有獨立價值
+> 提出日期：2026-04-28（Trial_v4 結案戰略討論）；2026-05-01 拆分為 Phase B（架構評估獨立於工具評估）；2026-05-02 Phase A 通過解鎖但延後評估
 
 ### 拆分說明（2026-05-01）
 
@@ -242,16 +245,27 @@ Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟
 6. 評估**遷移成本**
 7. **驗證 Hybrid 會議 trigger 條件**：小需求 / 大需求 / 邊界 case + 頻率分析 + 品質 vs cost 對比，預期省 30-50% cost vs 全會議模式
 
-### 啟動觸發條件（2026-05-01 重寫）
+### 啟動觸發條件（2026-05-02 v7.65 更新）
 
 ```
-階段順序：
-1. Stage 49（FF 四十五 + 四十六 補丁，1-2 週）→ ⚠️ 但 FF 四十五/四十六 已歸檔到 archived_v4（v4 吸收）
-2. FF 四十九 Phase A spike（MS Agent Framework 工具評估，2-3 週）
-3. Phase A 結論：
-   - 正向 + 動態流程仍有獨立價值 → 啟動本 FF Phase B spike
-   - 正向 + Phase A 已解大部分議題 → 本 FF 永久 ⚪ 待觀察
-   - 負向 → 本 FF 自動失效（沒框架基礎做動態）
+實際執行軌跡：
+✅ Stage 47（FF 四十七 ops 補丁，已完成 v3.34.0，2026-05-02）
+✅ Stage 48 FF 四十九 Phase A spike → 結論 = 採用（4 強正向 + 2 中性，2026-05-02）
+
+當前狀態：
+🚧 Stage 49-54 漸進遷移路線（4-6 個月，spike 報告節 7）：
+   - Stage 49 Cody-Vera-Petra Appeal loop 遷移
+   - Stage 50 RunMeetingSession → Group Chat
+   - Stage 51 BossInteraction → Human-in-the-Loop
+   - Stage 52 WorkflowEngine → Workflow Builder（最大遷移點）
+   - Stage 53 Crash Recovery → Checkpointing
+   - Stage 54 收尾 + production 切換
+
+本 FF Phase B 啟動評估點（Christ 拍板）：
+- ⏰ Stage 52 完成後（遷移過半）→ 評估動態流程是否仍有獨立價值
+  - 若 framework Magentic Orchestration 已解大部分動態調度需求 → 本 FF 永久 ⚪ 待觀察
+  - 若仍有獨立價值（per-task session 持久記憶 / Capability-based 調度）→ 啟動 Phase B spike
+- 不在 Stage 49-51 期間啟動（避免兩個架構級變動疊加風險）
 ```
 
 ### 規模 / 風險
@@ -351,161 +365,32 @@ SELECT COUNT("TotalCostUsd") AS filled, COUNT(*) AS total
 
 ## 四十九、Microsoft Agent Framework 工具評估（替換手刻 Orchestration framework）
 
-> 狀態：🟠 **中-高** — Trial_v5 6 議題大部分為「手刻 framework 的痛點」，2026-04-03 GA 的 MS Agent Framework 1.0 是時機完美的標準化選項
-> 提出日期：2026-05-01（Trial_v5 結束戰略討論 + WebSearch research）
+> 狀態：✅ **已完成** — Stage 48 spike 採用結論（2026-05-02），詳見 [Future_Feature_completed.md](Future_Feature_completed.md) FF 四十九 條目。**主體段已歸檔**，下方保留 Stage 48 spike 結論摘要供 Stage 49+ 遷移期參考。
 
-### 背景
+### Stage 48 Spike 結論摘要
 
-Trial_v5 結束後 Christ 提出戰略級議題：「AiTeam 固定流程式架構是否該停損 + 換架構？」Aria research（WebSearch + WebFetch 官方文件）後揭露兩件事：
+- **結論 = 採用**（4 強正向 + 2 中性 + 0 負向）
+- **6 Stage 漸進遷移路線**（Stage 49-54，估 4-6 個月 senior dev focused effort）：
+  1. **Stage 49**（2-3 週）：第一個 Workflow 遷移 — Cody-Vera-Petra Appeal loop（POC 已有藍本）
+  2. **Stage 50**（2-3 週）：RunMeetingSession → Group Chat orchestration
+  3. **Stage 51**（1-2 週）：BossInteraction → Human-in-the-Loop
+  4. **Stage 52**（4-6 週）：WorkflowEngine 整體 → Workflow Builder（最大遷移點）
+  5. **Stage 53**（2 週）：Crash Recovery → framework Checkpointing
+  6. **Stage 54**（2-3 週）：收尾 + token middleware + production 切換
+- **詳細報告**：[`docs/experiments/Spike_v1_MsAgentFramework.md`](../experiments/Spike_v1_MsAgentFramework.md)（含 8 條踩坑紀錄 + 6 個關鍵設計決策，給 Stage 49+ 遷移預警）
+- **spike branch**：`origin/spike/ms-agent-framework`（commits `161e694` → `1b9742b` → `916b860`）
 
-1. **AiTeam 多年累積的 Orchestration 層是「手刻 framework」** — WorkflowEngine + Crash Recovery + BossInteraction + RunMeetingSession + ClaudeCodeService 流程編排，全部 C# 從零實作
-2. **Microsoft Agent Framework 1.0 GA（2026-04-03）剛發布** — Microsoft 把 Semantic Kernel + AutoGen 合併成 single SDK，**.NET first-class support**，把 AiTeam 想做的事情全部標準化
+### 採用後續對 v4 路線的影響
 
-### 工具決定 vs 架構決定（關鍵解構）
+- **FF 三十六 Phase B 動態流程架構**：Phase A 通過解鎖 Phase B 啟動條件，但拍板「Stage 49+ 漸進遷移過半（Stage 52 後）再評估」
+- **觀察類 backlog**（FF 四十二 / 四十三 / 七 / 十二）：採用後優先級**不變**，可在 Stage 49+ 遷移空檔做
 
-兩個獨立決定：
-- **(1) 工具選型**：手刻 framework vs MS Agent Framework
-- **(2) 架構選型**：固定 pipeline vs 動態流程（FF 三十六 範圍）
+### 原 FF 四十九 評估記錄（已封存）
 
-→ **本 FF 只處理 (1) 工具選型**，保留 AiTeam 現有架構（固定 pipeline + 部分 conditional），只換底層 framework。**(2) 架構選型留給 FF 三十六**（先做本 FF 再評估）。
+> 詳細的 6 維度成功門檻 / Hybrid 整合策略 / 替換 vs 保留清單等內容於 spike 完成後不再需要為 active backlog，相關設計決策已寫入 Stage 48 Roadmap + Spike v1 報告。本 FF 主體歷史內容見 git log + Future_Feature_changelog v7.60 (新立) → v7.65 (完成)。
 
-比喻：**換引擎，車身保留**。AiTeam 的「車身」（Agent / DB / Discord / Dashboard）不變，只換底層引擎（手刻 framework → MS Agent Framework）。
+<!-- 主體封存佔位符：舊 FF 四十九 完整段（背景 / 工具決定 vs 架構決定 / 行業先例 research / Microsoft Agent Framework 對應 AiTeam 議題 / 內建功能對應 AiTeam / Hybrid 整合策略 / 替換 vs 保留清單 / Spike Phase A 範圍 / 規模風險時間 / 啟動條件優先級 / 與 FF 三十六 的關係 / 參考來源）已於 v7.65 移除，內容被 Stage 48 Roadmap + Spike v1 報告取代 -->
 
-### 行業先例 research（2026-05-01 WebSearch 結論）
-
-| 框架 | 狀態 | .NET 支援 | 推薦度 |
-|---|---|---|---|
-| **Microsoft Agent Framework 1.0** | **2026-04-03 GA** | ✅ first-class | ⭐⭐⭐ 首選 |
-| LangGraph | 已成熟（Klarna/Replit/Elastic 用）| Python only | ⭐ 次選 backup |
-| CrewAI | 持續活躍 | Python only | 🟡 PoC 工具 |
-| AutoGen | **maintenance mode**（被 MS Agent Framework 取代）| .NET 有 | ❌ 戰略排除 |
-| Anthropic Multi-Agent Patterns | 設計指南 | — | 設計參考（非 framework）|
-
-**Anthropic 研究 hard data**（驗證 AiTeam 設計選擇）：
-- Supervisor pattern with explicit routing **outperform implicit by 31%**
-- **85% of quality improvement in first 2 iterations**
-- 3 iterations 後 lateral changes 不再 improvement
-
-### Microsoft Agent Framework 對應 AiTeam 議題
-
-| Trial_v5 議題 | MS Agent Framework 內建解 |
-|---|---|
-| **議題 A**（MarkGroupDoneOrIntervention）| ✅ Conditional Edge + Type-safe State 自動處理 |
-| **議題 B**（ImplementationNote 路徑斷裂）| ✅ State schema 強制 |
-| 議題 C/D（Token / CI/CD）| ❌ 與架構無關（FF 四十七 補丁解）|
-| 議題 E（Cody maxTurns）| ❌ 與 framework 無關 |
-| 議題 F（Stage 42 補強單向性）| ⚠️ 部分緩解 |
-
-### 內建功能對應 AiTeam 已做 / 規劃中
-
-| MS Agent Framework | 對應 AiTeam |
-|---|---|
-| Workflow API（Workflow Builder + Executors + Edges）| 取代 WorkflowEngine.cs hardcoded pipeline |
-| Checkpointing（superstep-boundary）| 取代手刻 Crash Recovery |
-| Pause/Resume | 取代 FF 三十四 |
-| Human-in-the-loop（RequestInfoExecutor）| 取代 BossInteraction 機制 |
-| Group Chat orchestration | 取代 RunMeetingSessionAsync 多 Agent 會議 |
-| Handoff Orchestration | 取代 Petra 路由判斷 |
-| Magentic Orchestration | **對應 FF 三十六 動態調度**（內建 pattern）|
-| Sub-Workflow | 取代 FF 三十五自動拆任務（內建）|
-| Loop with max iteration safety | 取代 ReviewAppeal/QaFix loop |
-| Writer-Critic Workflow（內建 sample）| **== AiTeam Cody-Vera-Petra Appeal loop** |
-
-### Hybrid 整合策略（保留 Claude Code CLI 能力）
-
-**問題**：Anthropic provider 在 .NET 上沒內建 file system / shell / web search tools。  
-**解法**：用 Custom Agent Executor 包 Claude Code subprocess。
-
-| AiTeam Agent | 整合方式 | 理由 |
-|---|---|---|
-| Cody / Vera / Quinn / Sage（CLI 路徑）| **Custom Agent Executor + 既有 ClaudeCodeService** | 保留 Claude Code 全套能力 + 既有 C# 投資 |
-| Victoria / Petra / Rosa / Demi（API 路徑）| **原生 MS Agent Framework Agent + Anthropic/Gemini provider** | 不需檔案探索，享受 Agent Framework telemetry / middleware |
-| Kickoff / Design 多 Agent 會議 | **Group Chat orchestration**（內建）| 取代手刻 RunMeetingSessionAsync |
-| Workflow 編排層 | **MS Agent Framework Workflow Builder** | 取代 WorkflowEngine.cs hardcoded pipeline |
-
-### 替換 vs 保留清單
-
-**換掉（底層 framework）**：
-- WorkflowEngine.cs（hardcoded if-else pipeline）
-- 手刻 Crash Recovery（ActiveOrchestration 欄位 + RecoverStuckMeetings 機制）
-- 手刻 BossInteraction 處理流程（InteractionProcessor / InteractionService）
-- 手刻 RunMeetingSessionAsync（多 Agent meeting）
-- 手刻 ClaudeCodeService 流程編排部分
-
-**保留（功能 / 資產）**：
-- Cody/Vera/Quinn/Sage 全部 CLAUDE_*.md prompt
-- DB schema（task_groups / tasks / boss_interactions / token_logs）
-- Discord 整合（victoria-ceo channel / 各 Agent channel）
-- Dashboard UI（流程追蹤 / 操作中心 / Token 監控）
-- ClaudeCodeService 本身（subprocess 包裝層）
-- Token 計費邏輯（cost 計算 + 記錄）
-- Migration 機制 + Bot internal API
-- 既有 Stage 1-46 的 production behavior
-
-### Spike Phase A 範圍（本 FF）
-
-**POC**：用 MS Agent Framework 重寫 1 個 AiTeam workflow（建議：CEO 分類 → Kickoff），對照組 vs 現有 C# 實作。
-
-**評估維度**：
-1. **開發速度**：手刻 vs framework API 的 LoC 對比
-2. **議題自動解**：6 議題裡哪些直接被 framework 解掉（預期 A/B）
-3. **學習曲線**：團隊熟悉度（.NET 友好 + Microsoft 文件完整）
-4. **整合複雜度**：Custom Agent Executor 包 ClaudeCodeService 的可行性
-5. **production 穩定性**：跑 Mock 場景看 Workflow 行為對齊現有 pipeline
-6. **遷移成本**：每個 Agent 改寫工時 + 整體 Stage 數估算
-
-**關鍵 sample 參考（POC 階段優先讀）**：
-- `dotnet/samples/03-workflows/_StartHere/07_WriterCriticWorkflow`（== AiTeam Appeal loop）
-- `dotnet/samples/03-workflows/Agents/GroupChatToolApproval`（== Kickoff/Design 會議）
-- `dotnet/samples/03-workflows/HumanInTheLoop`（== BossInteraction）
-- `dotnet/samples/03-workflows/Checkpoint`（== Crash Recovery）
-- `dotnet/samples/02-agents/AgentWithAnthropic`（Anthropic provider 整合）
-- `dotnet/samples/02-agents/ModelContextProtocol`（Claude Code as MCP server 路線）
-
-**預期產出**：
-1. spike 報告（推薦：採用 / 不採用 + 理由 + 風險）
-2. POC code（1 個小 workflow + Custom Agent Executor 範例）
-3. 漸進遷移計劃（若採用，估 Stage 數 + 順序）
-
-### 規模 / 風險 / 時間
-
-**規模**：M（spike Phase A POC）；後續遷移 L-XL（漸進 2-4 月）  
-**風險**：中（4/3 GA 但 Microsoft 大力推 + 行業驗證 + 漸進可退）  
-**時間**：spike Phase A **2-3 週**
-
-### 啟動條件 / 優先級
-
-🟠 **中-高** — 建議排在 FF 四十七 ops 補丁完成後
-
-啟動順序：
-1. FF 四十七 ops 補丁（1-2 週）
-2. **Stage 50: spike Phase A**（本 FF，2-3 週）
-3. spike 結論驅動：
-   - **正向** → Stage 51+ 漸進遷移
-   - **負向** → 維持手刻 + 補丁路線
-4. spike 正向 → 評估是否啟動 FF 三十六（Phase B 動態流程）
-
-### 與 FF 三十六 的關係
-
-**本 FF 是 FF 三十六 的前置條件**：
-- FF 四十九（本 FF）= 工具評估（換 framework，保留架構）
-- FF 三十六 = 架構評估（動態流程 + per-task session）
-
-→ **必須先做 FF 四十九**：
-- Phase A 通過 → Phase B（FF 三十六）才有 framework 基礎可動態
-- Phase A 不通過 → Phase B 自動失效
-
-兩個 FF 串成完整 v4 升級路線圖。
-
-### 參考來源
-
-- [Microsoft Agent Framework Overview | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/overview/)
-- [Microsoft Agent Framework Workflows | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/workflows/)
-- [Tools Overview | Microsoft Learn](https://learn.microsoft.com/en-us/agent-framework/agents/tools/)
-- [GitHub - microsoft/agent-framework](https://github.com/microsoft/agent-framework)
-- [Building Effective AI Agents | Anthropic](https://resources.anthropic.com/building-effective-ai-agents)
-
----
 
 ## v4 後重評估 FF 簡表
 

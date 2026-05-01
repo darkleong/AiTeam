@@ -11,10 +11,14 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：① **Stage 48 = FF 四十九 spike Phase A**（MS Agent Framework POC，2-3 週，戰略主軸）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）/ ④ FF 四十（Stage 46 Dashboard razor UI 接線）
-- **戰略主軸**：FF 四十九（Phase A 工具評估）→ Phase A 結論驅動 Stage 51+ 漸進遷移 / 維持手刻 + 補丁路線；Phase A 正向才啟動 FF 三十六 Phase B
-- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅**
+- **🎉 Stage 48 spike 採用結論**：[Stage 48](docs/planning/Stage_48_Roadmap.md) FF 四十九 Phase A spike 完成（commit `22c1187`，4 強正向 + 2 中性 + 0 負向）→ **採用 MS Agent Framework**，啟動 Stage 49+ 漸進遷移路線。報告：[docs/experiments/Spike_v1_MsAgentFramework.md](docs/experiments/Spike_v1_MsAgentFramework.md)
+- **戰略主軸轉向**：v4 工具選型已拍板「換引擎不換車身」，剩下是 6 Stage 漸進遷移（Stage 49-54，估 4-6 個月 senior dev focused effort）
+- **下個動作候選**：① **Stage 49 = 第一個 Workflow 遷移**（Cody-Vera-Petra Appeal loop，POC 已有藍本，加 DB / Discord / Crash Recovery 整合，2-3 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
+- **6 Stage 遷移路線**（spike 報告節 7）：Stage 49 Appeal loop → 50 RunMeetingSession → Group Chat / 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
+- **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 49+ 漸進遷移過半（Stage 52 後）再評估 Phase B**
+- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
+- **Stage 48 揭露候選 FF**（Forge 結案紀錄）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（Stage 49 注意事項，可能立 production hardening FF — 待 Christ 拍板）
 
 ---
 
