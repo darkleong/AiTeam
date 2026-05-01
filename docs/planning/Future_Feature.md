@@ -1,12 +1,13 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.65
+> 版本：v7.66
 > 建立日期：2026-04-01
 > 最後更新：2026-05-02
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
 > **2026-05-02 v7.65**：Stage 48 spike 採用結論 — FF 四十九 ✅（4 強正向 + 2 中性 + 0 負向，啟動 Stage 49+ 漸進遷移路線「換引擎不換車身」，FF 三十六 Phase B 進入「等遷移過半再評估」）。
+> **2026-05-02 v7.66**：Stage 49 ⭐ v4 漸進遷移首發完成（v3.35.0）— Cody-Vera-Petra Appeal loop 切 framework + feature flag 並行雙系統 + 0 follow-up + production fallback 防呆真實生效。6 Stage 遷移 1/6 達成。
 
 ---
 
@@ -18,7 +19,7 @@
 | `Future_Feature_frozen.md` | 3 個冷凍 FF（觸發條件不滿足）| 評估解凍時 |
 | `Future_Feature_archived_v4.md` | 11 個已歸檔 FF（v4 吸收 / framework 內建 / Trial 完成）| 查歷史脈絡 |
 | `Future_Feature_completed.md` | 已完成項目摘要（FF + Stage 對照）| 查 Stage 完成歷史 |
-| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.65 | 追蹤版本演進 |
+| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.66 | 追蹤版本演進 |
 
 ---
 

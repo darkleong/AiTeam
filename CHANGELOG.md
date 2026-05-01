@@ -11,16 +11,33 @@
 
 ## [Unreleased]
 
-- **🎉 Stage 48 spike 採用結論**：[Stage 48](docs/planning/Stage_48_Roadmap.md) FF 四十九 Phase A spike 完成（commit `22c1187`，4 強正向 + 2 中性 + 0 負向）→ **採用 MS Agent Framework**，啟動 Stage 49+ 漸進遷移路線。報告：[docs/experiments/Spike_v1_MsAgentFramework.md](docs/experiments/Spike_v1_MsAgentFramework.md)
-- **戰略主軸轉向**：v4 工具選型已拍板「換引擎不換車身」，剩下是 6 Stage 漸進遷移（Stage 49-54，估 4-6 個月 senior dev focused effort）
-- **下個動作候選**：① **Stage 49 = 第一個 Workflow 遷移**（Cody-Vera-Petra Appeal loop，POC 已有藍本，加 DB / Discord / Crash Recovery 整合，2-3 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
-- **6 Stage 遷移路線**（spike 報告節 7）：Stage 49 Appeal loop → 50 RunMeetingSession → Group Chat / 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
-- **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 49+ 漸進遷移過半（Stage 52 後）再評估 Phase B**
-- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅**
+- **🎉 Stage 49 v4 漸進遷移首發完成 ⭐**：[Stage 49](docs/planning/Stage_49_Roadmap.md) Cody-Vera-Petra Appeal loop 切 MS Agent Framework + feature flag 並行雙系統 — **0 follow-up commits + production 真實任務驗證 fallback 防呆生效**。v4 漸進遷移路線正式啟動，6 Stage 遷移 1/6 達成。
+- **下個動作候選**：① **Stage 50 = RunMeetingSession → Group Chat orchestration**（v4 漸進遷移第 2 步，估 2-3 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
+- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** → Stage 50 RunMeetingSession → Group Chat / 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
+- **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 52 漸進遷移過半再評估 Phase B**
+- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
-- **Stage 48 揭露候選 FF**（Forge 結案紀錄）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（Stage 49 注意事項，可能立 production hardening FF — 待 Christ 拍板）
+- **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
 
 ---
+
+## [3.35.0] — 2026-05-02 — [Stage 49](docs/planning/Stage_49_Roadmap.md) ⭐ v4 漸進遷移首發
+
+v4 漸進遷移 6 Stage 路線首發完成 — Cody-Vera-Petra Appeal loop 切 MS Agent Framework Workflow Builder + Checkpointing + feature flag 並行雙系統，**0 follow-up commits + production 真實任務驗證 fallback 防呆生效**。
+
+「換引擎不換車身」首發實踐：Cody/Vera/Petra/Quinn/Sage 5 個 Agent prompt 完全不動 + DB schema 加 1 nullable 欄位（`task_groups.FrameworkAppealStateJson`）+ Discord/Dashboard/ClaudeCodeService 包裝層保留 + 換 Appeal loop 編排層用 framework Workflow Builder + Checkpointing。
+
+**核心拍板**（Christ 2026-05-02）：① 並行雙系統 + feature flag（`Workflow:UseFrameworkAppealLoop` 預設 false，舊 path 保留至 Stage 54）② framework Checkpointing 為主 + superstep 結束同步寫既有 task_groups（採風險點 #4 首選路徑成功，實作 `ICheckpointStore<JsonElement>` framework 擴充點）③ POC 重寫 production 版本 spike branch 留 reference ④ Petra 切 framework 但暫保留 LlmProviderFactory wrapper 維持 TokenLogService（Stage 54 才完全切原生）⑤ BossInteraction 不包進 Stage 49（Stage 51 才動 HITL）。
+
+**Forge 揭露 + Aria 拍板路線 B 設計**（v1.1 修正 Aria Roadmap 內部不一致）：framework Executor 整合層級從「底層接 IClaudeCodeService / LlmProviderFactory」改為「**包既有 service method**」（CodyReviewAppealExecutor → `ReviewAppealService.RunCodyAppealAsync` / VeraReviewAppealExecutor → `ReviewAppealService.RunVeraReviewAsync` / PetraReviewExecutors → `PmReviewService.ReviewVeraAsync` 等），三 Agent 同層整合 + Prompt SoT 統一消解 R4 prompt drift 風險 + 工時 -30%。Stage 54 才把 framework Executor 從 service 切回直連（+1-1.5 天）。`ClaudeCodeAgentExecutor.cs` 標 `[Obsolete]` 預留 Stage 50+ Group Chat orchestration（會議多 Agent 直連需要）。
+
+**Forge DI factory 模式**（Session A 主動發現比 Aria 建議更穩）：framework Executor 不註冊 DI，由 `AppealWorkflowFactory` 內 new Executor + 注入 `IServiceScopeFactory`，`HandleAsync` 內 `CreateAsyncScope()` 取 scoped services（DbContext / LlmProviderFactory / ReviewAppealService）— 完整解 Singleton + Scoped 陷阱（既有 ClaudeCodeAgentExecutor lifecycle undocumented 議題完整解）。
+
+**FrameworkAppealRouter F3 scope 精簡**（5 entry → 2 真實分流）：`HandleReviewerCompletedAsync` + `HandleDevPlanCompletedAsync` 才建 framework Workflow，其他 3 entry（`RunPetraGate` / `HandleDevBlocker` / `HandleDevPlanEscalation`）pass-through 走 legacy 避免循環依賴。Crash Recovery 雙系統隔離：`MeetingOrchestrationService.RecoverStuckOrchestrationsAsync` 加排除條件 `g.FrameworkAppealStateJson == null` + `AgentQueueProcessor` 啟動 hook `frameworkRouter.RecoverStuckFrameworkAppealsAsync` + 雙 marker 區隔（`ActiveOrchestration = "FrameworkAppeal"` + `FrameworkAppealStateJson != null`）。
+
+**戰略級驗收結果**：6 場景全部通過，0 follow-up commits（驗收期全部跑在 production 容器，0 行程式碼修正）+ **意外驗到防呆生效**（production 真實 tech_improvement 任務 Cody Dev_plan 缺結構 marker → `IsDevPlanFailed=true` → FrameworkAppealRouter **自動 fallback to legacy** `HandleDevPlanCompletedAsync` — Forge Session B 主動加的防呆 production 真實觸發）。Aria 校準錨：實際 606K / Charter 中位 485K = **×1.25**（混合型 Stage 新資料點，落 Charter 預估 ×1.0-1.5 mid 帶）。
+
+**新建 13 檔 ~2700 LoC**：`src/AiTeam.Bot/Workflows/Appeal/` 全新資料夾（AppealState / AppealWorkflowFactory / AppealCheckpointStore 209 LoC / AppealMessages / AppealLogHelpers / 5 個 Executor）+ `Orchestration/Appeal/FrameworkAppealRouter.cs` 397 LoC + `Migration Stage49TaskGroupFrameworkState`。
 
 ## [3.34.0] — 2026-05-02 — [Stage 47](docs/planning/Stage_47_Roadmap.md)
 
