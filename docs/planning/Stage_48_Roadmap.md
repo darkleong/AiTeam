@@ -360,6 +360,49 @@ shim + sandbox 全部建在 `%TEMP%` 子目錄並在 smoke 結束後 cleanup，�
 
 > 順序由 Christ 拍板。Stage 49 起跑前須處理三個前置：① integration test snapshot 鎖 production behavior ② lock framework 版本機制 ③ Anthropic provider prerelease 風險評估（必要時準備 Custom Executor 包 Anthropic.SDK 備援）。
 
+### 關鍵設計決策（為什麼這樣選）
+
+| 決策 | 選擇 | 為什麼這樣選（vs 替代方案） |
+|---|---|---|
+| **branch 隔離** | `spike/ms-agent-framework` 獨立 branch + `spike/` 子目錄 + 獨立 `AiTeam.Spike.MsAgentFramework.slnx` | 計劃書時 vs 「main 子目錄 / 獨立 repo」拍板：獨立 repo 失去 ClaudeCodeService 引用、main 子目錄 CI/CD 可能誤觸發。spike branch 三者兼得 |
+| **ClaudeCodeService 引用策略** | **ProjectReference** 到 `AiTeam.Bot`（不複製） | 複製等於迴避維度 4「整合複雜度」驗證—— ProjectReference 才能真正測「不修改 production 是否可行」。代價：拖入 Discord/EF Core 編譯期相依，但 runtime 不 instantiate 即無 side-effect |
+| **Petra 路徑** | 原生 framework Anthropic provider（一層 wrapper）| Phase 1 lock 後不再評估替代。Petra workload = 純 reasoning + Structured Outputs，不需 file system；provider .NET 的 Function Tools + Structured Outputs 充分對應。Custom Executor 包 Anthropic.SDK 是兩層 wrapper，整合複雜度反而升 |
+| **Mock 而非 real LLM 跑 10 次** | 全 Mock executor 跑 10 次 | Phase 3 驗證對象 = framework Workflow Builder 控制流，不是 LLM 回應品質（後者 Phase 2 SingleAgentDemo 已驗）。Mock = deterministic + 0 cost + reproducible，10/10 結果可信。Real LLM 10 次反而引入 API/網路 noise 降低結論可信度 |
+| **POC 範圍鎖定** | 純 in-memory，禁連 DB / Discord / Dashboard | Charter「不在範圍」清單。POC 範圍蔓延是 spike 失敗最常見原因，整合 DB/Discord 等到 Stage 49 漸進遷移時才做 |
+| **Forge 一氣呵成 Phase 1-4** | 同 session 跑完所有 4 階段 | Aria 計劃書原建議「Phase 4 獨立 session 寫報告（context 乾淨）」。實際執行：Phase 1-3 累積 context 仍健康 < 150K，且 Phase 1-3 spike notes 已捕捉所有結構化 finding，Phase 4 主要是「整合 / 對齊」而非「synthesis」，繼續同 session 完成優於拆 session 的 handoff 成本 |
+
+### 踩坑紀錄彙整
+
+> 詳細在 `spike/notes/phase{1,2,3}-*.md`，本段彙整對 Stage 49+ 遷移有預警價值的坑：
+
+1. **`Anthropic.SDK 5.10.0`（社群）≠ `Anthropic 12.13.0`（官方）**：AiTeam 既有用社群版 by Tristan Smith（namespace `Anthropic.SDK`），但 `Microsoft.Agents.AI.Anthropic` 透過依賴拖入的是官方 `Anthropic` SDK（namespace `Anthropic`，無 `.SDK`）。spike 用 `using Anthropic;`。Stage 49 漸進遷移時需注意兩個 SDK 並存與否的策略。
+
+2. **NuGet `Microsoft.Agents.AI.Workflows.Generators` 必須單獨引用**：`Microsoft.Agents.AI.Workflows` 1.3.0 stable 本身**不含 source generator**（無 `analyzers/`），但 Microsoft Learn doc 完全沒提這件事。`[MessageHandler]` + `partial class : Executor` 模式會 build error。修法：
+   ```xml
+   <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.3.0"
+                     PrivateAssets="all"
+                     OutputItemType="Analyzer"
+                     ReferenceOutputAssembly="false" />
+   ```
+   只能從 GitHub canonical sample csproj 學到。**Stage 49 第一個 PR 的 csproj 設定務必對齊**。
+
+3. **Microsoft Learn doc 與 SDK 實際 API 不一致**：
+   - doc snippet: `AnthropicClient client = new() { APIKey = apiKey };`（`APIKey` 大寫）
+   - 實際 SDK: 屬性是 `ApiKey`（camelCase）
+   - GitHub canonical sample: `new AnthropicClient(new ClientOptions { ApiKey = apiKey })`
+   - 環境變數：doc 用 `ANTHROPIC_DEPLOYMENT_NAME`，sample 用 `ANTHROPIC_CHAT_MODEL_NAME`
+   - **教訓**：`Microsoft Agent Framework` 文件期間有滯後，Stage 49+ 開發以 GitHub canonical sample 為準，而非 Microsoft Learn doc snippet
+
+4. **NU1605 `Microsoft.Extensions.Logging.Abstractions` downgrade**：framework 1.3.0 transitive 需求 ≥ 10.0.6，spike .csproj 一開始寫 10.0.0 報錯，需顯式提升。Stage 49 PR csproj 注意。
+
+5. **`Microsoft.Agents.AI.Anthropic` 仍 prerelease**（`1.3.0-preview.260423.1`，無 stable 1.0）：FF 49 line 354 描述「Microsoft Agent Framework 1.0 GA」對 Anthropic provider 而言**過度樂觀**。Stage 49 lock 版本機制必須含此套件，prerelease 期可能 breaking change。
+
+6. **Windows .NET `Process.Start` + `UseShellExecute=false` 不 honor PATHEXT for `.cmd`**：smoke 2 一開始 fail。Production Linux Docker 容器無此問題（`claude` 是 node-installed 無副檔名 binary）。Stage 49 起若 Windows 開發機 local 跑遷移後的 framework workflow，需 (a) 重建 `claude.exe` shim 或 (b) ClaudeCodeService 內判 OS 改 invoke 方式。**建議列為 FF 候選作 production hardening**，本身不阻擋遷移。
+
+7. **Loop with max iteration safety 不是 framework 內建**：FF 49 line 411 描述「Loop with max iteration safety → 取代 ReviewAppeal/QaFix loop」可能誤導。實際 framework 提供「conditional edge」工具讓你寫安全 loop，但 max iter 計數**仍需手動 shared state counter + routing condition**。WriterCritic canonical sample 與本 spike 都用此 pattern。Stage 49 Cody-Vera-Petra 遷移時須延續此 pattern。
+
+8. **報告維度 5 一度誤判 7/10**：第一次跑 10 次 mock，4 個 max-iter scenarios 因我 demo 的 regex `round (\d+)` 沒匹配 MockPetra 的 `(N) reached` 輸出，誤判為失敗。修正 MockPetra 統一輸出格式為 `at round N` 後 10/10 通過。**框架本身行為從未失敗**——是我自己的解析 bug。**教訓**：spike 報告的「失敗」case 須先排除 demo 自身 bug 再下結論。
+
 ---
 
 ## 版本歷史
@@ -369,3 +412,4 @@ shim + sandbox 全部建在 `%TEMP%` 子目錄並在 smoke 結束後 cleanup，�
 | v1.0 | 2026-05-02 | 初版 Spike Charter 建立（Aria）—— 本 Stage 為 spike，文件結構為 Charter（成功門檻 + 探索路徑）非傳統 production Stage 子項拆分 |
 | v2.0 | 2026-05-02 | Spike 結案（Forge）—— 4 強正向 + 2 中性 + 0 負向，結論 = 採用，啟動 Stage 49+ 漸進遷移；spike branch 最終 commit `916b860`，報告檔 `docs/experiments/Spike_v1_MsAgentFramework.md`；本檔狀態更新為 ✅ 已完成 |
 | v2.1 | 2026-05-02 | Live runtime smoke 補測（Christ 要求）—— phase1-smoke + single-agent 兩 demo 用 production ANTHROPIC_API_KEY 跑通，整合鏈 runtime-validated；發現 Windows .NET Process.Start vs PATHEXT `.cmd` 問題（環境性，不影響 Linux 容器部署）|
+| v2.2 | 2026-05-02 | Forge 結案最終潤飾 —— 補「關鍵設計決策」段（6 個議題）+「踩坑紀錄」彙整段（8 個坑，給 Stage 49+ 遷移預警）。`dotnet build AiTeam.slnx` 0 errors 確認 production untouched |
