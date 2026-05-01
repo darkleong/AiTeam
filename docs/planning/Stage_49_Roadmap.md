@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 6 Stage 路線首發（[Stage 48 spike 報告](../experiments/Spike_v1_MsAgentFramework.md) 節 7）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.35.0**（v4 漸進遷移首個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：✅ **已完成**（驗收通過，6 場景 A/B/E 完整 + C 70% + D 80% + F 路線 B 結構保證；殘留 30% 留 Stage 50+ 自然演進）
-> 文件版本：v1.2
+> 狀態：✅ **已完成**（2026-05-01 驗收通過，6 場景 A/B/E 完整 + C 70% + D 80% + F 路線 B 結構保證；殘留 30% 留 Stage 50+ 自然演進）
+> 文件版本：v2.0
 
 ---
 
@@ -473,6 +473,23 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 ## 實作紀錄
 
+### 子項完成度對照（對齊 Aria 計劃書 8 子項）
+
+| # | 子項 | 狀態 | 備註 |
+|---|---|---|---|
+| 1 | DB schema `task_groups.FrameworkAppealStateJson` + Migration | ✅ | Migration `20260501111503_Stage49TaskGroupFrameworkState`；text NULL 0 影響既有 schema |
+| 2 | `AppealState` production 版 | ✅ | 含 `AppealLoopKind` / `VeraDecision` / `PetraReviewSnapshot` + `AppealStateHelpers` |
+| 3 | `ClaudeCodeAgentExecutor` production 化 | ✅ **路線 B 修正** | 寫完整 production 化版本（98 LoC）但**標 `[Obsolete]` 預留 Stage 50+**（Stage 49 業務 Executor 改路線 B 直接 call legacy service） |
+| 4 | `AppealWorkflowFactory` + Checkpointing 整合 DB | ✅ | 含 ReviewAppeal + DevPlanAppeal 兩個 Workflow；`AppealCheckpointStore : ICheckpointStore<JsonElement>` 採風險點 #4 首選路徑（無需 fallback）|
+| 5 | Petra 切 framework Anthropic provider | ✅ **路線 B 修正** | 改寫為「**Petra Executor 包 PmReviewService method 與 Cody/Vera 同層整合**」（v1.1 拍板）；不切原生 provider，等 Stage 54 收尾 |
+| 6 | feature flag + AppealOrchestrationService entry 分流 | ✅ **F3 精簡** | 路線 B 拍板後 5 entry 縮為 **2 entry 真分流**（HandleReviewerCompletedAsync + HandleDevPlanCompletedAsync），3 entry pass-through 走 legacy 避免循環依賴 |
+| 7 | CLAUDE_*.md prompt schema hint 微調 | ✅ **不動** | 預判不動實作，路線 B 路徑下 framework Executor 直接 call 既有 service，service 內 prompt 構建邏輯不動，CLAUDE_*.md 風險更低；Mock 5 場景驗收期未觸發 LLM schema 衝突 |
+| 8 | Mock 5 場景 + Christ 線下驗收 + 結案 | ✅ | 5 個 `framework_appeal_loop_*` 場景全寫入 `MockScenarioService`；Forge 自驗 6 場景（A/B/E 完整 + C 70% + D 80%）+ 真實 LLM 補驗（HandleDevPlanCompletedAsync + DevPlan 失敗 fallback 防呆 production 真實生效） |
+
+**新增（不在 Aria 計劃書範圍但實作必需）**：
+- `AppealMessages.cs`（VeraAppealRoundResult / DevPlanAppealRoundResult / AppealLoopResult）— 解 framework `AddSwitch<T>` predicate 限制
+- `AppealLogHelpers.cs`（寫 group.ReviewAppealLog / DevPlanAppealLog 對齊 legacy 行為）
+
 ### Session A 結案（2026-05-01，Forge）
 
 **範圍**：子項 1-4 + 部分 5/6（基礎設施 + framework 整合層）。
@@ -533,6 +550,12 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 **驗收 group**：4 個 Mock + 1 個真實 LLM（共 5 個 production 真實 group），全部 Status='done'/'cancelled'、marker 全清空、流程跑到既有 dispatcher。
 
+### 驗收後修正
+
+**無**。驗收期 Forge 自驗 + 真實 LLM 補驗全部跑在 production 容器，**0 行程式碼修正**。所有「殘留 30%」（C 場景 framework Checkpointing 真實 ResumeAsync / D 場景真 LLM 觸 escalate / F 場景 MockMode=false 必驗）均屬「機制層保證已強，靜態 code review 證實無誤，等 Stage 50+ 自然演進時驗證」性質的驗收限制，**非 Stage 49 程式碼缺陷**。
+
+⚠️ **驗收期意外驗到的關鍵防呆**：`/task` 觸發 tech_improvement 任務（加 1 行 comment）→ Cody Dev_plan 因任務太小缺結構 marker → `IsDevPlanFailed=true` → **`FrameworkAppealRouter` 主動 fallback to legacy `AppealOrchestrationService.HandleDevPlanCompletedAsync`**（Forge Session B 自設計防呆 production 真實生效）。這是 Stage 49 設計關鍵韌性，計劃書原本沒列出但實作期主動加入，驗收期意外觸發證實有效。
+
 ### 關鍵設計決策（為什麼這樣選）
 
 | # | 決策 | 選擇 | 為什麼這樣選（vs 替代方案） |
@@ -574,3 +597,4 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移首發 Stage |
 | v1.1 | 2026-05-02 | Forge 實作完成 + Aria 拍板路線 B 補強 —— ① 子項 3 加註 [Obsolete] 預留 Stage 50+ ② 子項 5 改寫為「包 PmReviewService method 與 Cody/Vera 同層」③ 設計決策段加「framework Executor 整合層級拍板（路線 B）」+「DI factory 模式」兩條 ④ 風險點 R3 標 ✅ 已消解（路線 B 自然解 Petra prompt drift）⑤ 文件版本與狀態更新 |
 | v1.2 | 2026-05-01 | Forge 實作紀錄補強 —— Session A + Session B 兩段 commit 紀錄 + 6 場景驗收結果（A/B/E 完整、C 70%、D 80%、F 路線 B 結構保證 + 真實 LLM 同源驗證）+ 7 個關鍵設計決策表格 + 8 條踩坑紀錄。狀態更新為「實作完成 + 驗收通過（30% 殘留留 Stage 50+ 自然演進）」 |
+| **v2.0** | **2026-05-01** | **Stage 49 結案版（forge-end SOP）—— 規劃→實作完成分水嶺 major bump**：① 加「子項完成度對照」段（對齊 Aria 計劃書 8 子項 + 含路線 B 修正 / F3 精簡 / 不動 CLAUDE_*.md 等實作偏離 Aria 計劃書處的明確標記）② 加「驗收後修正」段（**無修正**，驗收期意外驗到 DevPlan 失敗 fallback 防呆 production 真實生效）③ header 文件版本 v1.2 → v2.0 + 狀態加日期 ④ 等 Aria 接結案第二段（CHANGELOG v3.35.0 + Future_Feature_changelog v7.66）|
