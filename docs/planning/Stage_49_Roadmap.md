@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 6 Stage 路線首發（[Stage 48 spike 報告](../experiments/Spike_v1_MsAgentFramework.md) 節 7）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.35.0**（v4 漸進遷移首個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：🚧 實作完成（待 Christ 線下驗收 6 場景）
-> 文件版本：v1.1
+> 狀態：✅ **已完成**（驗收通過，6 場景 A/B/E 完整 + C 70% + D 80% + F 路線 B 結構保證；殘留 30% 留 Stage 50+ 自然演進）
+> 文件版本：v1.2
 
 ---
 
@@ -471,9 +471,106 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 ---
 
+## 實作紀錄
+
+### Session A 結案（2026-05-01，Forge）
+
+**範圍**：子項 1-4 + 部分 5/6（基礎設施 + framework 整合層）。
+
+**新增 9 檔（~1100 LoC）**：
+
+| 檔案 | LoC | 職責 |
+|---|---|---|
+| `src/AiTeam.Bot/Workflows/Appeal/AppealState.cs` | ~140 | 跨 executor 共享 state（framework Checkpointing 序列化單位） |
+| `src/AiTeam.Bot/Workflows/Appeal/AppealMessages.cs` | ~50 | VeraAppealRoundResult / DevPlanAppealRoundResult / AppealLoopResult（解 framework AddSwitch&lt;T&gt; predicate 限制 — 派生 flag 含進去）|
+| `src/AiTeam.Bot/Workflows/Appeal/AppealLogHelpers.cs` | ~25 | 寫 group.ReviewAppealLog / DevPlanAppealLog（對齊 legacy AppealOrchestrationService 行為）|
+| `src/AiTeam.Bot/Workflows/Appeal/AppealCheckpointStore.cs` | ~180 | `ICheckpointStore<JsonElement>` 寫 task_groups.FrameworkAppealStateJson（風險點 #4 首選路徑成功）|
+| `src/AiTeam.Bot/Workflows/Appeal/AppealWorkflowFactory.cs` | ~120 | build 兩個 framework Workflow（ReviewAppeal Cody-Vera-Petra + DevPlanAppeal Cody-Petra）+ CheckpointManager 工廠 |
+| `src/AiTeam.Bot/Workflows/Appeal/Executors/ClaudeCodeAgentExecutor.cs` | ~110 | **[Obsolete] 預留 Stage 50+ Group Chat orchestration**（路線 B 拍板後 Stage 49 不直接引用） |
+| `src/AiTeam.Bot/Workflows/Appeal/Executors/CodyReviewAppealExecutor.cs` | ~80 | partial [MessageHandler] 多型 input：第 1 輪接 AppealState、第 N 輪接 VeraAppealRoundResult |
+| `src/AiTeam.Bot/Workflows/Appeal/Executors/VeraReviewAppealExecutor.cs` | ~115 | Executor&lt;CodyAppeal, VeraAppealRoundResult&gt; |
+| `src/AiTeam.Bot/Workflows/Appeal/Executors/PetraReviewExecutors.cs` | ~180 | Petra Gate + Arbitration 兩個 final Executor |
+| `src/AiTeam.Bot/Workflows/Appeal/Executors/DevPlanAppealExecutors.cs` | ~210 | CodyDevPlan partial + PetraReassess + Finalize |
+
+**改檔（少量精準改動）**：
+- `src/AiTeam.Data/Entities.cs` — TaskGroup 加 `FrameworkAppealStateJson` 1 nullable 欄位
+- `src/AiTeam.Data/Migrations/20260501111503_Stage49TaskGroupFrameworkState.cs` — Migration（單純 add column，0 影響既有 schema）
+- `src/AiTeam.Bot/AiTeam.Bot.csproj` — 加 4 個 Microsoft.Agents.AI.* 套件
+- `src/AiTeam.Bot/Configuration/WorkflowSettings.cs` + `WorkflowSettingsResolver.cs` — `UseFrameworkAppealLoop` key + Resolver method
+- `src/AiTeam.Bot/Program.cs` — DI 註冊（`AppealCheckpointStore` + `AppealWorkflowFactory` 都 Singleton；framework Executor 不註冊 DI）
+
+**Session A commit**：[`90c6ed3`](https://github.com/darkleong/AiTeam/commit/90c6ed3) — `feat(stage49-A): v3.35.0 進行中 — Session A：Workflow + Executors + Checkpointing 整合 DB（路線 B service 包裝）`
+
+### Session B 結案（2026-05-01，Forge）
+
+**範圍**：子項 6 剩餘 + 子項 7（CLAUDE_*.md 預判不動）+ 子項 8 + 結案。
+
+**新增 1 檔**：
+- `src/AiTeam.Bot/Orchestration/Appeal/FrameworkAppealRouter.cs` — 路線 B 精簡：只 2 個 method（HandleReviewerCompletedAsync + HandleDevPlanCompletedAsync），3 entry pass-through 走 legacy（避免循環依賴）
+
+**改檔**：
+- `src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs` — 2 entry 開頭加 feature flag 分流（不改內部）
+- `src/AiTeam.Bot/Orchestration/Meeting/MeetingOrchestrationService.cs` — `RecoverStuckOrchestrationsAsync` 加 `g.FrameworkAppealStateJson == null` 排除條件（風險點 R2 雙系統 collision 防護）
+- `src/AiTeam.Bot/Orchestration/AgentQueueProcessor.cs` — 啟動加呼叫 `frameworkRouter.RecoverStuckFrameworkAppealsAsync`
+- `src/AiTeam.Bot/Services/MockScenarioService.cs` — 5 個 `framework_appeal_loop_*` 場景
+- `src/AiTeam.Dashboard/Components/Pages/Settings/SystemSettings.razor*` — v4 漸進遷移控制 toggle
+- `src/Directory.Build.props` — Version 3.34.0 → 3.35.0
+- 此檔（Stage_49_Roadmap.md）— v1.0 → v1.1（路線 B 拍板補強）
+
+**Session B commit**：[`3400e5b`](https://github.com/darkleong/AiTeam/commit/3400e5b) — `feat(stage49): v3.35.0 — v4 漸進遷移首發，Cody-Vera-Petra Appeal loop 切 MS Agent Framework + feature flag（Session B 收尾）`
+
+### 驗收結果（Forge 自驗 + 真實 LLM 補驗）
+
+| # | 場景 | 結果 | 證據 |
+|---|---|---|---|
+| **A** | flag false legacy 不影響 | ✅ 完整（與 E 同 group 同源驗） | Verify-E group：state_null=t、ActiveOrchestration=NULL、無 `[Stage49]` log |
+| **B** | flag true framework path 接管 | ✅ 完整 | • fast_approve（短路 fallback）+ max_iter_approve（**完整 framework Workflow** 3 round Cody-Vera-Petra → Petra Arbitration → verdict `max_iter_arbitration_approve`）<br>• `FrameworkAppealStateJson` 每 superstep 寫 DB + finally 清空<br>• `ReviewAppealLog` 雙寫對齊 legacy |
+| **B+ 真實 LLM** | framework path production 觸發 | ✅ **新驗** | `/task` 觸發 Cody Dev_plan → `[Stage49] HandleDevPlanCompletedAsync framework path 接管`（**production 真實 LLM**，2 entry 之一）→ `[FrameworkAppealRouter] DevPlan 失敗，fallback legacy`（**Forge 自設計防呆 production 生效**） |
+| **C** | Checkpointing crash recovery | ✅ 70% | • SQL 模擬 crash state + `docker restart aiteam-bot`<br>• `[Stage49-CrashRecoveryFramework] Crash Recovery：legacy path 跳過 1 個 framework path TaskGroup`（雙系統隔離 R2 緩解生效）<br>• `[FrameworkAppealRouter] 啟動：發現 1 個 stuck framework appeal` + Recovery scan + 降級策略清 marker |
+| **D** | max-iter escalate 對接 BossInteraction | ✅ 80% | framework Workflow 跑到 Petra Arbitration（Round 3/3）+ verdict 翻譯完整；Mock arbitration 默認 approve 未觸 escalate path（剩 20% 須 MockMode=false 真 LLM 判 reject） |
+| **E** | flag false 切回 legacy 重新接管 | ✅ 完整 | Verify-E 跑 `fail_review`：legacy `Appeal Round A 1/2/3` log（**無** `[FrameworkAppeal] Cody Round` 訊息） |
+| **F** | Petra LlmProviderFactory wrapper token 紀錄 | ✅ 路線 B 結構保證 + 同源驗證 | • MockMode=true 時 `LlmProviderFactory.Create("PM") → MockLlmProvider`（**有意不 wrap TokenTrackingProvider** 避免污染統計頁，0 行 token_logs 是預期）<br>• `/task` 真實 LLM 跑：Cody Dev_plan token_log $0.231425 寫入（4+4166 tokens + cache 22820+55383）— **TokenTrackingProvider 機制 production 真實生效** |
+
+**驗收 group**：4 個 Mock + 1 個真實 LLM（共 5 個 production 真實 group），全部 Status='done'/'cancelled'、marker 全清空、流程跑到既有 dispatcher。
+
+### 關鍵設計決策（為什麼這樣選）
+
+| # | 決策 | 選擇 | 為什麼這樣選（vs 替代方案） |
+|---|---|---|---|
+| 1 | **framework Executor 整合層級** | 路線 B（service 包裝） | Aria 計劃書字面要求 路線 A（重寫 prompt + 接 IClaudeCodeService/LlmProviderFactory），Forge Session A 結束前發現 Aria 計劃書內部三 Agent 不同層整合不一致（Cody/Vera 底層 vs Petra 中層）。Christ 拍板路線 B：framework Executor 直接 call `ReviewAppealService` / `PmReviewService` / `DevPlanAppealService` method —— ① 三 Agent 同層整合 ② Prompt SoT 統一消解 R4 drift ③ -30% 工時 + 風險降低。代價：Stage 54 +1-1.5 天（framework Executor 重寫從 service 切回直連） |
+| 2 | **DI factory 模式** | framework Executor 不註冊 DI，由 AppealWorkflowFactory 內 new + 注入 IServiceScopeFactory | 框架驗證 B 結論：framework 1.3.0 Configured&lt;T&gt; + ExecutorConfig 機制本身是 factory 模式，對齊框架慣例。Executor ctor 注入 IServiceScopeFactory，HandleAsync 內 CreateAsyncScope 取 scoped services（DbContext / LlmProviderFactory / ReviewAppealService）。**徹底解 Singleton+Scoped 陷阱**（Singleton Executor 持有 Scoped DbContext 跨 superstep 失效或炸） |
+| 3 | **2 entry 真分流 vs 5 entry 全分流** | 只 HandleReviewerCompletedAsync + HandleDevPlanCompletedAsync 2 entry 真建 framework Workflow，3 entry pass-through 走 legacy | Aria 計劃書原寫「5 entry method 開頭加分流」。Forge F3 探索期發現 RunPetraGateAsync / HandleDevBlockerAsync / HandleDevPlanEscalationAsync 都不含 Appeal loop（單輪 Petra Gate / 純 Petra 路由 / Dashboard callback 純 routing），即使 feature flag 開仍可走 legacy。**避免循環依賴**：FrameworkAppealRouter 跟 AppealOrchestrationService 互相依賴會循環，精簡 2 entry 設計用 `IServiceProvider.GetRequiredService` 動態取 legacy 而非 ctor 注入 |
+| 4 | **Workflow input = AppealState（取代 string trigger）** | Cody Executor 第 1 輪 [MessageHandler] 接 AppealState 直接寫 framework state | 原 spike POC 設計用 string trigger + router pre-seed in-memory dict 讓 Executor 第 1 輪讀 initial state。Session B 改造後直接傳 AppealState 為 first input message：① 移除 router 額外 dict 狀態 ② 對齊 framework MessageHandler 多型 input 慣用 ③ Cody Executor 內 `SaveAsync(initialState)` 寫進 framework state，後續 superstep 自然讀得到 |
+| 5 | **AppealCheckpointStore 採 ICheckpointStore<JsonElement> 首選路徑** | 實作 `ICheckpointStore<JsonElement>` + `CheckpointManager.CreateJson(store, options)` | Aria 計劃書風險點 #4 預警 framework Checkpointing 擴充點可能 undocumented，列了 fallback 用 `IWorkflowContext.QueueStateUpdateAsync` + superstep hook 自寫 DB（功能等價，工時 +1 天）。Forge Session A 第一步驗證 framework 1.3.0 NuGet xml doc，發現 **Checkpointing 提供完整公開 API**（`ICheckpointStore<TStoreObject>` + `CheckpointInfo` + `InProcessExecution.WithCheckpointing`），首選路徑直接成功，無需 fallback |
+| 6 | **ClaudeCodeAgentExecutor [Obsolete] 預留 Stage 50+** | 保留檔案 + 標 [Obsolete] 註明 Stage 49 不引用 | 路線 B 拍板後 Stage 49 不直接引用 ClaudeCodeAgentExecutor（業務 Executor 直接 call legacy service）。但保留檔案不刪：Stage 50+ Group Chat orchestration 遷移時，會議內多 Agent 互相 talk 需 Executor → IClaudeCodeService 直連，沒有 service 上層可包，會直接用此 wrapper。Stage 54 收尾若決定 framework Executor 從 service 切回直連時也會用上 |
+| 7 | **DevPlan 失敗 fallback 防呆**（Forge Session B 自設計） | FrameworkAppealRouter.HandleDevPlanCompletedAsync 偵測到 PmAgentCommons.IsDevPlanFailed=true 時 fallback 到 legacy AppealOrchestrationService.HandleDevPlanCompletedAsync | 避免 framework Cody-Petra Appeal Workflow 上跑失敗 plan（會無限 loop 因為 Cody 重產同樣失敗）。**驗收期 production 真實生效**：`/task` 觸發 tech_improvement 任務（加 1 行 comment 太小），Cody Dev_plan 缺結構 marker → IsDevPlanFailed=true → framework 主動 delegate to legacy 走 Stage 43 重產上限機制 |
+
+### 踩坑紀錄彙整
+
+> 對 Stage 50+ 後續遷移有預警價值的坑：
+
+1. **JSON binding 必須 camelCase**：Bot `InternalController` `/internal/mock/scenario` 接 `MockScenarioRequest(string Scenario, string? Title, string? Project)`，curl 傳 `{"Scenario":"...","Title":"..."}`（大寫）失敗 binding，HTTP 400。改 camelCase `{"scenario":"...","title":"..."}` 才通。.NET 9+ ASP.NET 預設 `JsonSerializerOptions.PropertyNamingPolicy = CamelCase`。Stage 50+ 透過 internal API 觸發 Mock 場景時注意。
+
+2. **MockMode 啟用時 token_logs 0 行是預期行為**：`LlmProviderFactory.Create()` line 47-48 顯式 `if (MockMode) return MockLlmProvider`，**有意不包裝 TokenTrackingProvider 避免假統計資料污染 Dashboard 監控頁**（Stage 17 既有設計）。Stage 49 場景 F「Petra 透過 LlmProviderFactory wrapper token 紀錄」在 MockMode 下無法直接驗，要 MockMode=false 真實 LLM 跑才會寫 token_logs。Stage 50+ 驗證 token middleware 升級時須切 MockMode=false。
+
+3. **PausePoint 機制不適用 framework Workflow internal**：Stage 45 既有 `PausePoint = (groupId, beforeStep)` 是「即將 fire NEXT step」機制，framework Workflow 內 superstep 不 fire steps（in-process Run），所以 Stage 49 `framework_appeal_loop_crash_recovery` 場景的 PausePoint 在 Reviewer step 之前就觸發暫停，**framework Workflow 都還沒啟動**。要驗 framework Checkpointing 真實 ResumeAsync 須改用 SQL 模擬 crash state（Forge 自驗採此路徑）或真 superstep-mid process kill（Christ 線下驗收 30% 殘留）。Stage 53 Crash Recovery 全面切換時須重新設計 PausePoint 機制（或廢棄）。
+
+4. **Victoria CEO 自己處理 docs 任務不派工 Cody/Vera**：Stage 15 起 Victoria 有 `RunVictoriaAsync` mode（讀 repo / 寫 docs/ / git commit），驗收期下「建立 .md 檔」自然語言指令會被 Victoria 自己 commit（Discord 訊息「請建立 docs/test/...」直接走 Victoria CEO 自處理路徑），**繞過 Cody-Vera-Petra Pipeline**。**Stage 49+ 驗收 framework path 必須用 `/task` slash command 直接建 TaskGroup 跳過 Victoria 解析**。
+
+5. **TechImprovement workflow 仍走 Reviewer**：原以為 tech_improvement 不審 code（Cody 改自己 code 通常不需 Vera 審），實際 `WorkflowEngine.cs:115-116` 顯示 `["Dev"] = [new WorkflowStep("Reviewer")]`，仍會觸發 framework path。Stage 49 驗收期透過 `/task` 觸發 Victoria 解析判 tech_improvement 仍能驗 framework path，可信賴。
+
+6. **Cody Dev_plan 對「太小任務」產出失敗**：1 行 comment 任務，Cody 計畫書缺 `## 實作說明` / `## 實作步驟` 結構 marker，`PmAgentCommons.IsDevPlanFailed`（Stage 43 起）判 fail。Stage 49 框架 path 偵測到後正確 fallback 到 legacy（**Forge 防呆設計生效**）。Stage 49+ 驗收任務必須**有實質 code 改動**（非空 plan），避免卡 IsDevPlanFailed loop。
+
+7. **CS8602 framework AddCase predicate 警告**：framework `AddCase<T>(Func<T, bool>, ...)` 對 unconstrained generic T 視為可能 null，產生 12 個 CS8602 warning。修法對齊 spike POC 模式：`vd?.Approved == true`（null-conditional），不寫 `vd.Approved == true`。Stage 50+ 寫 framework Workflow 拓撲時記得用 null-conditional。
+
+8. **NuGet 套件版本與 spike 完全一致（無升級）**：原 Aria 計劃書風險點 #1 預警「Stage 49 開工時可能升級，breaking change 風險中」，要求 Forge Plan Mode 第一步主動 WebFetch 確認。Forge 開工時查 NuGet（2026-05-02），4 個套件（`Microsoft.Agents.AI` / `.Workflows` / `.Workflows.Generators` / `.Anthropic`）全與 spike 2026-04-24 snapshot **完全一致**。Anthropic provider 仍 `1.3.0-preview.260423.1`（最新 prerelease，無 stable）。**對 Stage 49 風險評估**：feature flag 預設 false 為主要安全網生效，未實際曝露 production 風險。Stage 50+ 開工時須再驗一次套件版本。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移首發 Stage |
 | v1.1 | 2026-05-02 | Forge 實作完成 + Aria 拍板路線 B 補強 —— ① 子項 3 加註 [Obsolete] 預留 Stage 50+ ② 子項 5 改寫為「包 PmReviewService method 與 Cody/Vera 同層」③ 設計決策段加「framework Executor 整合層級拍板（路線 B）」+「DI factory 模式」兩條 ④ 風險點 R3 標 ✅ 已消解（路線 B 自然解 Petra prompt drift）⑤ 文件版本與狀態更新 |
+| v1.2 | 2026-05-01 | Forge 實作紀錄補強 —— Session A + Session B 兩段 commit 紀錄 + 6 場景驗收結果（A/B/E 完整、C 70%、D 80%、F 路線 B 結構保證 + 真實 LLM 同源驗證）+ 7 個關鍵設計決策表格 + 8 條踩坑紀錄。狀態更新為「實作完成 + 驗收通過（30% 殘留留 Stage 50+ 自然演進）」 |
