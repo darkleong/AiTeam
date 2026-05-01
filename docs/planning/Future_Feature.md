@@ -1,10 +1,11 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.63
+> 版本：v7.64
 > 建立日期：2026-04-01
-> 最後更新：2026-05-01
+> 最後更新：2026-05-02
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
+> **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
 
 ---
 
@@ -16,25 +17,25 @@
 | `Future_Feature_frozen.md` | 3 個冷凍 FF（觸發條件不滿足）| 評估解凍時 |
 | `Future_Feature_archived_v4.md` | 11 個已歸檔 FF（v4 吸收 / framework 內建 / Trial 完成）| 查歷史脈絡 |
 | `Future_Feature_completed.md` | 已完成項目摘要（FF + Stage 對照）| 查 Stage 完成歷史 |
-| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.63 | 追蹤版本演進 |
+| `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.64 | 追蹤版本演進 |
 
 ---
 
-## 當前優先級 Top 5（2026-05-01）
+## 當前優先級 Top 5（2026-05-02）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **四十九** | Microsoft Agent Framework 工具評估 | 🟠 中-高 | **戰略主軸** — Stage 50 spike，決定 v4 路線 |
+| 1 | **四十九** | Microsoft Agent Framework 工具評估 | 🟠 中-高 | **戰略主軸** — Stage 48 spike，決定 v4 路線 |
 | 2 | **三十六** | v4 動態流程架構 — Phase B | ⚪ 依賴 FF 四十九 | **戰略主軸** — 架構級躍進，Phase B 設計拍板已 80% |
-| 3 | **四十七** | Token limit SoT 統一 + CI/CD 部署可靠性 | 🔴 高 | Trial_v5 揭露 ops 重大設計坑，影響所有未來 settings 改動 |
-| 4 | **四十三** | token_logs.TotalCostUsd 99.7% NULL | 🟡 中 | Trial_v5 follow-up，影響 Trial 對照組成本評估 |
-| 5 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
+| 3 | **四十三** | token_logs.TotalCostUsd 99.7% NULL | 🟡 中 | Trial_v5 follow-up，影響 Trial 對照組成本評估 |
+| 4 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
+| 5 | **四十二** | TryParseDesignIssues 邊界判斷重構 | 🔵 低 | Stage 25b 既有 bug，已 workaround，可搭車或留 v4 後 |
 
 ---
 
 ## Active 主清單
 
-> 以下 7 個 FF 為「進行中 / 仍需做」狀態，與 v4 路線無關或為 v4 戰略主軸。
+> 以下 6 個 FF 為「進行中 / 仍需做」狀態，與 v4 路線無關或為 v4 戰略主軸。
 
 ## 七、客戶專案交付流程與驗收閘門
 
@@ -348,52 +349,6 @@ SELECT COUNT("TotalCostUsd") AS filled, COUNT(*) AS total
 
 ---
 
-## 四十七、Token limit SoT 統一 + CI/CD 部署可靠性
-
-> 狀態：🔴 高 — Trial_v5 揭露 ops 重大設計坑
-> 提出日期：2026-04-30（Trial_v5 揭露議題 C+D 合一）
-
-### 背景
-
-#### 子項 A：Token limit SoT 分歧（議題 C）
-
-Trial_v5 排查：commit `f7e476b` 改 appsettings.json (1000→20000) 完全沒生效 — **docker-compose.prod.yml env 寫死 `MonthlyTokenLimitK: 2000` 完全 override**。.NET Configuration 順序 env > appsettings → 改 appsettings 但 env 沒對齊 = 靜默無效。
-
-#### 子項 B：CI/CD 部署不重啟容器（議題 D）
-
-Trial_v5 第一次重啟 Bot 容器（`docker restart`）後 in-memory 仍是舊 env 值 — env 是 startup inject，docker restart 不重新 fetch。需要 docker compose env 改動才會 trigger recreate container（commit `df3bfb7` 驗證 env 改動 → recreate 成功）。
-
-### 影響
-
-- 任何「改 token limit」action 需懷疑是否真的生效
-- Aria 排查時間 ~10 分鐘（Trial_v5 中段）
-- ops 高風險陷阱：改檔不對齊 env → 靜默失敗
-
-### 修法方向
-
-**子項 A（Token SoT 統一）**：兩種選項拍板：
-- (a) **統一 SoT 到 appsettings.json**：移除 docker-compose env 中所有 `AgentSettings__*Token*` 條目（讓 image 內 appsettings 為唯一 source）
-- (b) **Token limit 移到 DB AppSettings 動態化**（FF 十一升級 spike）：可 Dashboard UI 改 + 不需重 deploy
-
-**子項 B（CI/CD 部署可靠性）**：
-- 文件補強：CLAUDE.md 加「ops 配置改動 SoP」段（先確認 SoT + 部署觸發路徑 + verify env 真的更新）
-- CI/CD workflow 改用 `docker compose up --force-recreate` 強制 recreate（即使 image hash 沒變）
-
-### 規模 / 風險
-
-**規模**：S-M（子項 A 改 docker-compose.prod.yml + 子項 B 改 .github/workflows）  
-**風險**：低（純 ops 配置，不動代碼）
-
-### 優先級
-
-🔴 高 — 影響所有未來 token limit / 其他 settings 改動的可靠性
-
-### v4 兼容性
-
-與 framework 無關，v4 落地後仍可獨立做（甚至應該優先做，因為 v4 部署也會踩同類坑）。
-
----
-
 ## 四十九、Microsoft Agent Framework 工具評估（替換手刻 Orchestration framework）
 
 > 狀態：🟠 **中-高** — Trial_v5 6 議題大部分為「手刻 framework 的痛點」，2026-04-03 GA 的 MS Agent Framework 1.0 是時機完美的標準化選項
@@ -559,7 +514,6 @@ Trial_v5 結束後 Christ 提出戰略級議題：「AiTeam 固定流程式架�
 | FF | 標題 | 狀態 | v4 重評估點 |
 |---|---|---|---|
 | 十 | Dashboard UI 細節打磨（第四批）| 🔵 低 | 動態架構下 UI 重新設計 |
-| 十一 | Dashboard 可調整 Token 守門全域限額 | 🟡 中 | FF 四十七 部分涵蓋 |
 | 十四 | Agent I/O 完整記錄 | ⚪ 待討論 | MS Agent Framework 內建 telemetry 涵蓋 |
 | 十九 | Agent maxTurns 動態化 | ⚪ 待觀察 | v4 framework maxTurns 機制改變 |
 | 二十二 | Agent 命名一致性 | 🔵 低 | 動態架構下 Worker pool 命名規則改變 |

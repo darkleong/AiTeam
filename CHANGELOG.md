@@ -11,13 +11,16 @@
 
 ## [Unreleased]
 
-- **🎉 Trial_v5 鎖死前置條件全 ✅ — 即可開跑！** 重跑 FF 十六（驗 FF 三十二/三十三/三十四/三十五 對照 Trial_v4 13 bugs）
-- **下個動作（Trial_v5 開跑前選一）**：① 直接開 Trial_v5 / ② 先做 FF 四十（Stage 46 Dashboard razor UI 接線，影響 Trial_v5 觀察期 UX）/ ③ 一併處理 FF 四十/四十一/四十二
-- **Trial_v5 之後評估 backlog**：FF 十一（Token 守門 Dashboard 化）/ FF 三十六（v4 架構雙支柱 spike）/ FF 三十八（跨專案能力 spike）
-- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅**
+- **下個動作候選**：① **Stage 48 = FF 四十九 spike Phase A**（MS Agent Framework POC，2-3 週，戰略主軸）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）/ ④ FF 四十（Stage 46 Dashboard razor UI 接線）
+- **戰略主軸**：FF 四十九（Phase A 工具評估）→ Phase A 結論驅動 Stage 51+ 漸進遷移 / 維持手刻 + 補丁路線；Phase A 正向才啟動 FF 三十六 Phase B
+- **FF 三十二 ✅ 全七子項完成** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 
 ---
+
+## [3.34.0] — 2026-05-02 — [Stage 47](docs/planning/Stage_47_Roadmap.md)
+
+FF 四十七 Token limit SoT 統一（路線 b：DB AppSettings 動態化）+ 順帶完成 FF 十一 Dashboard 可調 Token 守門 — 解 Trial_v5 議題 C（appsettings 改了 docker env override 靜默無效）+ 議題 D（手動 docker restart 不 reload env，認知差非 CI/CD 缺陷，CI/CD `--force-recreate` 已就緒）；`AgentConfig` 加 `DailyTokenLimitK?` / `MonthlyTokenLimitK?` 欄位（呼應 Stage 38 Provider/Model 模式）+ Migration `Stage47AgentConfigTokenLimits`；`AppSettingsService.GetIntAsync(key, fallback=0)` + `>0` 防呆判斷確保 DB row="0" 也走 fallback；`AgentConfigCache` cache tuple 擴成 4-tuple（Provider/Model/DailyTokenLimitK/MonthlyTokenLimitK）；`TokenTrackingProvider` 4 個 Check 改 DB-first → appsettings fallback；Check 4 警報訊息指向 Dashboard【系統設定 → Token 守門設定】；`SystemSettings.razor` 新增「Token 守門設定」區塊 + 儲存後立即 `ReloadCacheAsync("all")`；`AgentSettings.razor` 加 per-agent Token Limit 欄位（nullable int，0=fallback）+ `UpdateTokenLimitsAsync`；移除 `docker-compose.prod.yml` 24 個 Token env（Bot 2 + Dashboard 22）；CLAUDE.md 加「ops 配置改動 SoP」段；DbSeeder **不動**（v2 修正：DB 不 seed Token 預設值，讓 fallback 安全網真實可達）；Aria 兩輪審查機制揭露 v1「DbSeeder 自動 seed 讓 fallback 永遠走不到」核心矛盾並完整修正；驗收 4 場景待 Christ 線下實跑（A/B/C/D），其中場景 D（CI/CD push 後容器啟動）+ 場景 C（DB 空值 fallback）為最關鍵安全網；**Forge Sonnet 200K + High 中段 compact 一次**（Aria 校準錨教訓：估 ~260K 卻推 Sonnet 200K 自我矛盾，下次 >180K 直接推 Opus 1M）
 
 ## [3.33.0] — 2026-04-29 — [Stage 46](docs/planning/Stage_46_Roadmap.md)
 
