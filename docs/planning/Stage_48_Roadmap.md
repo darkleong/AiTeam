@@ -330,6 +330,22 @@ Stage 48 spike Phase A（本 FF 四十九，**結論驅動下一步**）
 
 **報告檔**：[`docs/experiments/Spike_v1_MsAgentFramework.md`](../experiments/Spike_v1_MsAgentFramework.md)
 
+**Live runtime smoke 補測（2026-05-02 Christ 要求補做）**：
+
+兩個 demo 用 AiTeam Bot 容器內的 production `ANTHROPIC_API_KEY` 跑通（key 從 `docker exec aiteam-aiteam-bot-1` 取出，僅注入 dotnet subprocess env，不寫入任何檔案 / log）：
+
+| Smoke | 測試項 | 結果 |
+|---|---|---|
+| **1. phase1-smoke** | framework 原生 Anthropic provider 直接 API 呼叫（`AnthropicClient → AsAIAgent → RunAsync`），對應 Petra 路徑 | ✅ exit 0，Claude haiku-4-5 回 "Spike phase 1 smoke OK" |
+| **2. single-agent** | 整合鏈：`framework Workflow → ClaudeCodeAgentExecutor → ClaudeCodeService.RunReadOnlyAsync → claude CLI subprocess → 真 Anthropic API → 結果回 framework`，對應 Cody/Vera 路徑 | ✅ exit 0，`WorkflowOutputEvent` 正確捕獲 Claude 回應 |
+
+→ 兩條路徑（API 直連 + Custom Executor 包 ClaudeCodeService）live runtime 證實可用，**維度 4 整合複雜度的「強正向」評分由 compile-time 提升為 runtime-validated 強正向**，不影響採用結論但提高信心。
+
+**Smoke 2 過程小障礙**：Windows .NET `Process.Start("claude") + UseShellExecute=false` 不會 honor PATHEXT 找 `claude.cmd`，需建一個 `claude.exe` shim 把呼叫導向 `cmd.exe /c claude.cmd`。**這是 Windows 開發機獨有的環境問題**，不影響 production Linux Docker 容器內 `claude` 是 node-installed 無副檔名 binary 的部署。Stage 49 起若在 Windows 開發機 local 跑遷移後的 framework workflow，需重做此 shim 或 ClaudeCodeService 內判 OS 改 invoke 方式（FF 候選備註）。
+
+shim + sandbox 全部建在 `%TEMP%` 子目錄並在 smoke 結束後 cleanup，未污染 spike/ 或任何 git-tracked 路徑。
+
+
 **結論一句話**：MS Agent Framework 1.0 GA + Workflows.Generators source generator 套件可作為 AiTeam 手刻 Orchestration framework 的替代引擎；POC 級驗證表明整合成本低（ClaudeCodeService 不動）+ Trial_v5 議題 A/B 直接被內建解掉，可啟動 Stage 49+ 漸進遷移（Hybrid 整合策略：CLI 路徑 Custom Agent Executor + API 路徑原生 Anthropic provider）。
 
 **下個 Stage 候選**（依本報告節 7 漸進遷移計劃）：
@@ -352,3 +368,4 @@ Stage 48 spike Phase A（本 FF 四十九，**結論驅動下一步**）
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版 Spike Charter 建立（Aria）—— 本 Stage 為 spike，文件結構為 Charter（成功門檻 + 探索路徑）非傳統 production Stage 子項拆分 |
 | v2.0 | 2026-05-02 | Spike 結案（Forge）—— 4 強正向 + 2 中性 + 0 負向，結論 = 採用，啟動 Stage 49+ 漸進遷移；spike branch 最終 commit `916b860`，報告檔 `docs/experiments/Spike_v1_MsAgentFramework.md`；本檔狀態更新為 ✅ 已完成 |
+| v2.1 | 2026-05-02 | Live runtime smoke 補測（Christ 要求）—— phase1-smoke + single-agent 兩 demo 用 production ANTHROPIC_API_KEY 跑通，整合鏈 runtime-validated；發現 Windows .NET Process.Start vs PATHEXT `.cmd` 問題（環境性，不影響 Linux 容器部署）|

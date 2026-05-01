@@ -387,23 +387,28 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構評估（基於�
 - [GitHub canonical sample 02-agents/AgentWithAnthropic/Step01](https://github.com/microsoft/agent-framework/tree/main/dotnet/samples/02-agents/AgentWithAnthropic/Agent_Anthropic_Step01_Running)
 - [Anthropic Multi-Agent Patterns（設計參考）](https://resources.anthropic.com/building-effective-ai-agents)
 
-### 9.4 待 Christ 後驗的 live runtime 項目
+### 9.4 Live runtime smoke 結果（2026-05-02 補測 ✅）
 
-本 spike 在無 `ANTHROPIC_API_KEY` 設定下完成 compile-time + Mock-stability 驗證。下列 live runtime 仍待 Christ 後驗（不阻擋本報告結論）：
+> 報告寫作時為「待 Christ 後驗」，後續 Christ 要求結案前補做，已完成。
 
-```powershell
-# Win11 PowerShell：
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-$env:ANTHROPIC_CHAT_MODEL_NAME = "claude-haiku-4-5"
-$env:SPIKE_WORKING_DIR = "C:\path\to\sandbox-repo"
+本 spike 結案前用 AiTeam Bot 容器內的 production `ANTHROPIC_API_KEY` 跑通兩個 demo（key 僅注入 dotnet subprocess env，不寫入任何檔案 / log，smoke 結束後從 session env wipe）：
 
-cd "D:\Source Code\AI Team\spike\MsAgentFramework.Poc"
-dotnet run -- phase1-smoke      # 確認 Anthropic provider 真連得通
-dotnet run -- single-agent      # 確認 framework → Custom Executor → ClaudeCodeService 整鏈跑通
-```
+| Smoke | 測試項 | 結果 |
+|---|---|---|
+| **1. phase1-smoke** | framework 原生 Anthropic provider 直接 API 呼叫，對應 **Petra 路徑** | ✅ exit 0，Claude haiku-4-5 回 "Spike phase 1 smoke OK" |
+| **2. single-agent** | 整合鏈：framework Workflow → `ClaudeCodeAgentExecutor` → `ClaudeCodeService.RunReadOnlyAsync` → `claude` CLI subprocess → 真 Anthropic API → 結果回 framework，對應 **Cody/Vera 路徑** | ✅ exit 0，`WorkflowOutputEvent` 正確捕獲 |
+
+→ **維度 4 整合複雜度評分**從「compile-time 強正向」**升級為 runtime-validated 強正向**。Petra 路徑（API 直連）+ Cody/Vera 路徑（Custom Executor 包 ClaudeCodeService）兩條路徑都 runtime 實證可用。
+
+**Smoke 2 環境性障礙**：Windows .NET `Process.Start("claude")` + `UseShellExecute=false` 不 honor PATHEXT 找 `claude.cmd`。建了一個 `claude.exe` shim（C# console 包 `cmd /c claude.cmd $args`）導入 PATH 才跑通。
+
+→ **此非框架/spike 問題**，是 .NET 已知 Windows 行為。Production Linux Docker 容器內 `claude` 是 node-installed 無副檔名 binary，沒這個問題。
+
+→ **Stage 49 注意事項**：若在 Windows 開發機 local 跑遷移後的 framework workflow，需 (a) 重建 shim 或 (b) ClaudeCodeService 內判 OS 改 invoke 方式（後者建議列為 FF 候選作 production hardening）。
 
 ### 9.5 文件版本
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版報告（Forge）—— 結論 = 採用，4 強正向 + 2 中性 + 0 負向，啟動 Stage 49+ 漸進遷移 |
+| v1.1 | 2026-05-02 | Live runtime smoke 補測 ✅（Christ 結案前要求）—— phase1-smoke + single-agent 兩 demo 跑通，整合鏈 runtime-validated；揭露 Windows .NET PATHEXT-with-UseShellExecute 環境性障礙 |
