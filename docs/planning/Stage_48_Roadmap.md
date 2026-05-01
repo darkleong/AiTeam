@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 四十九（Microsoft Agent Framework 工具評估）
 > 對應版本：**v3.34.0 不變**（spike 性質，不產生 production 變動）
 > 建立日期：2026-05-02
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ **已完成**（spike 結論 = 採用）
+> 文件版本：v2.0
 > **特殊性質聲明**：本 Stage 是 **spike**（探索 > 規格化），文件結構為「Spike Charter」（成功門檻 + 探索路徑）而非傳統 production Stage 子項拆分。
 
 ---
@@ -303,8 +303,52 @@ Stage 48 spike Phase A（本 FF 四十九，**結論驅動下一步**）
 
 ---
 
+## 實作紀錄
+
+### Spike 結案（2026-05-02，Forge）
+
+**結論 = 採用（Adopt）**，啟動 Stage 49+ 漸進遷移。
+
+**6 維度打分**：4 強正向 + 2 中性 + 0 負向 + 0 N/A
+
+| 維度 | 評分 |
+|---|---|
+| 1. 開發速度 LoC | ✅ 強正向（POC 687 vs baseline 1454，減少 ~53%）|
+| 2. 議題 A/B 自動解 | ✅ 強正向（兩個都被 framework 內建解掉）|
+| 3. 學習曲線 | 🟡 中性（doc gap：Anthropic provider 仍 prerelease + source generator 套件分離 doc 沒提）|
+| 4. 整合複雜度 | ✅ 強正向（ClaudeCodeService 0 修改 + ProjectReference + 1 層 Custom Executor）|
+| 5. POC 穩定性 | ✅ 強正向（10/10 mock 場景全成功）|
+| 6. 遷移成本 | 🟡 中性（估 4-6 個月 senior dev focused effort，落在強正向門檻邊界，保守判中性）|
+
+**Spike branch 最終 commit**：`916b860`（spike/ms-agent-framework）
+
+```
+916b860  spike(stage48-phase3): Cody-Vera-Petra Writer-Critic Workflow + 10/10 mock runs
+1b9742b  spike(stage48-phase2): Custom Agent Executor wrapping ClaudeCodeService
+161e694  spike(stage48-phase1): MS Agent Framework setup + compile validation
+```
+
+**報告檔**：[`docs/experiments/Spike_v1_MsAgentFramework.md`](../experiments/Spike_v1_MsAgentFramework.md)
+
+**結論一句話**：MS Agent Framework 1.0 GA + Workflows.Generators source generator 套件可作為 AiTeam 手刻 Orchestration framework 的替代引擎；POC 級驗證表明整合成本低（ClaudeCodeService 不動）+ Trial_v5 議題 A/B 直接被內建解掉，可啟動 Stage 49+ 漸進遷移（Hybrid 整合策略：CLI 路徑 Custom Agent Executor + API 路徑原生 Anthropic provider）。
+
+**下個 Stage 候選**（依本報告節 7 漸進遷移計劃）：
+
+- **Stage 49**：第一個 Workflow 遷移 — Cody-Vera-Petra Appeal loop（POC 已有藍本，加 DB / Discord / Crash Recovery 整合，2-3 週）
+- **Stage 50**：RunMeetingSession 重寫為 Group Chat orchestration（2-3 週）
+- **Stage 51**：BossInteraction 重寫為 Human-in-the-Loop RequestInfoExecutor（1-2 週）
+- **Stage 52**：WorkflowEngine 整體 hardcoded pipeline → Workflow Builder（4-6 週，最大遷移點）
+- **Stage 53**：Crash Recovery 切換到 framework Checkpointing（2 週）
+- **Stage 54**：收尾 + token middleware + production 切換 + 老 code 刪除（2-3 週）
+- **Stage 55+**：FF 三十六 Phase B 動態流程架構評估（基於本 spike 採用結論的 framework 基礎啟動）
+
+> 順序由 Christ 拍板。Stage 49 起跑前須處理三個前置：① integration test snapshot 鎖 production behavior ② lock framework 版本機制 ③ Anthropic provider prerelease 風險評估（必要時準備 Custom Executor 包 Anthropic.SDK 備援）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版 Spike Charter 建立（Aria）—— 本 Stage 為 spike，文件結構為 Charter（成功門檻 + 探索路徑）非傳統 production Stage 子項拆分 |
+| v2.0 | 2026-05-02 | Spike 結案（Forge）—— 4 強正向 + 2 中性 + 0 負向，結論 = 採用，啟動 Stage 49+ 漸進遷移；spike branch 最終 commit `916b860`，報告檔 `docs/experiments/Spike_v1_MsAgentFramework.md`；本檔狀態更新為 ✅ 已完成 |
