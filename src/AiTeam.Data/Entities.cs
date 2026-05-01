@@ -131,8 +131,17 @@ public class TaskGroup
     /// <summary>Stage 37：Crash Recovery 標記，紀錄目前進行中的非佇列化編排流程
     /// （Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting / null）。
     /// Bot 重啟後 MeetingOrchestrationService.RecoverStuckOrchestrationsAsync 掃描此欄位自動重跑。
-    /// 原為 ActiveMeetingType（Stage 31，僅涵蓋 Meeting），Stage 37 升級涵蓋所有編排流程。</summary>
+    /// 原為 ActiveMeetingType（Stage 31，僅涵蓋 Meeting），Stage 37 升級涵蓋所有編排流程。
+    /// Stage 49：framework path 啟動時寫 "FrameworkAppeal"，搭配 FrameworkAppealStateJson 雙 marker
+    /// 區隔 legacy / framework 雙系統 Crash Recovery（避免 collision）。</summary>
     public string? ActiveOrchestration { get; set; }
+    /// <summary>Stage 49：MS Agent Framework Appeal loop Checkpointing 序列化 state（JSON，CheckpointManager.CreateJson 寫入）。
+    /// null = 走 legacy AppealOrchestrationService path（feature flag false）；
+    /// 有值 = framework Workflow 進行中或已完成，superstep 結束時自動同步寫 DB。
+    /// 走 framework path 時搭配 ActiveOrchestration = "FrameworkAppeal"。
+    /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.FrameworkAppealStateJson == null
+    /// 避免 legacy/framework 雙系統 collision（Stage 49 風險點 R2 緩解）。</summary>
+    public string? FrameworkAppealStateJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

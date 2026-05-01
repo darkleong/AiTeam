@@ -12,6 +12,7 @@ namespace AiTeam.Bot.Configuration;
 ///   Workflow:DevPlanAppealMaxRounds
 ///   Workflow:KickoffMaxRounds
 ///   Workflow:DesignMeetingMaxRounds
+///   Workflow:UseFrameworkAppealLoop  (Stage 49 v4 漸進遷移)
 ///
 /// AppSettings 無值或解析失敗 / 非正整數時，fallback 到 IOptions&lt;WorkflowSettings&gt;（讀 appsettings.json）。
 /// </summary>
@@ -36,9 +37,19 @@ public class WorkflowSettingsResolver(
     public Task<int> GetDesignMeetingMaxRoundsAsync(CancellationToken ct = default)
         => GetIntAsync("Workflow:DesignMeetingMaxRounds", Defaults.DesignMeetingMaxRounds, ct);
 
+    /// <summary>Stage 49：v4 漸進遷移 feature flag。預設 false（走 legacy AppealOrchestrationService）。</summary>
+    public Task<bool> GetUseFrameworkAppealLoopAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseFrameworkAppealLoop", Defaults.UseFrameworkAppealLoop, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);
         return int.TryParse(raw, out var v) && v > 0 ? v : fallback;
+    }
+
+    private async Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct)
+    {
+        var raw = await appSettings.GetAsync(key, ct);
+        return bool.TryParse(raw, out var v) ? v : fallback;
     }
 }

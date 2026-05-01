@@ -125,6 +125,14 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.MeetingOrchestrat
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Appeal.AppealOrchestrationService>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Qa.QaCoordinationService>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Proposal.ProposalConfirmationService>();
+
+// Stage 49：v4 漸進遷移首發 — MS Agent Framework Appeal Workflow 整合層
+// 設計（驗證 B 結論）：framework Executor 不註冊到 DI（factory 模式由 AppealWorkflowFactory 內 new 出 Executor instance）
+// AppealCheckpointStore 持有 in-memory checkpoint dict + 同步寫 task_groups.FrameworkAppealStateJson（Singleton 以保留 process 生命週期 cache）
+// AppealWorkflowFactory 無 scoped state，可 Singleton；FrameworkAppealRouter（Stage 49 後續子項）會由此 factory 建 Workflow
+// feature flag 預設 false（Workflow:UseFrameworkAppealLoop AppSettings key），詳見 WorkflowSettingsResolver
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Appeal.AppealCheckpointStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Appeal.AppealWorkflowFactory>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();

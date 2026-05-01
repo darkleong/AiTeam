@@ -20,4 +20,10 @@ public class WorkflowSettings
 
     /// <summary>期望的版本號（Vera 版本檢查用）。空白時略過版本檢查。</summary>
     public string TargetVersion { get; set; } = "";
+
+    /// <summary>Stage 49：v4 漸進遷移首發 — 是否啟用 MS Agent Framework Appeal loop（Cody-Vera-Petra + Cody-Petra）。
+    /// 預設 false（保留 legacy AppealOrchestrationService 路徑），Dashboard SystemSettings → v4 漸進遷移控制 切換為 true
+    /// 後 framework path 接管 Cody-Vera-Petra Critical Issue 申訴 + Cody-Petra Dev_plan 申訴 loop。
+    /// AppSettings 表 key = "Workflow:UseFrameworkAppealLoop"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseFrameworkAppealLoop { get; set; } = false;
 }
