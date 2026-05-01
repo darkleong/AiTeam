@@ -1,10 +1,10 @@
 # Stage 47：FF 四十七 Token limit SoT 統一 + CI/CD 部署可靠性（路線 b：DB AppSettings 動態化）+ 順帶完成 FF 十一
 
 > 對應 Future Feature：FF 四十七（Token SoT + CI/CD ops 補丁）+ 順帶 FF 十一（Dashboard 可調整 Token 守門全域限額）
-> 對應版本：v3.34.0（預計）
+> 對應版本：v3.34.0
 > 建立日期：2026-05-02
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-01）
+> 文件版本：v2.0
 
 ---
 
