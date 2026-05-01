@@ -51,7 +51,7 @@ public class LlmProviderFactory(
             throw new InvalidOperationException($"找不到 Agent 設定：{agentName}");
 
         // Stage 38：DB override 優先，null 欄位 fallback appsettings（per-field）
-        var (dbProvider, dbModel) = agentConfigCache.Get(agentName);
+        var (dbProvider, dbModel, _, _) = agentConfigCache.Get(agentName);
         var finalProvider = dbProvider ?? config.Provider;
         var finalModel    = dbModel    ?? config.Model;
 
@@ -74,6 +74,8 @@ public class LlmProviderFactory(
             discordAlert,
             _settings,
             config,
+            appSettings,
+            agentConfigCache,
             tokenLogger,
             agentName,
             finalModel);

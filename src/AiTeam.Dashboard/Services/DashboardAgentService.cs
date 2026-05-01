@@ -40,14 +40,16 @@ public class DashboardAgentService(AppDbContext db)
         var team = await db.Teams.FindAsync([teamId], cancellationToken);
         return new AgentConfigDto
         {
-            Id          = agent.Id,
-            Name        = agent.Name,
-            Description = agent.Description,
-            TrustLevel  = agent.TrustLevel,
-            IsActive    = agent.IsActive,
-            TeamName    = team?.Name ?? "",
-            Provider    = agent.Provider,
-            Model       = agent.Model
+            Id               = agent.Id,
+            Name             = agent.Name,
+            Description      = agent.Description,
+            TrustLevel       = agent.TrustLevel,
+            IsActive         = agent.IsActive,
+            TeamName         = team?.Name ?? "",
+            Provider         = agent.Provider,
+            Model            = agent.Model,
+            DailyTokenLimitK  = agent.DailyTokenLimitK,
+            MonthlyTokenLimitK = agent.MonthlyTokenLimitK
         };
     }
 
@@ -103,6 +105,22 @@ public class DashboardAgentService(AppDbContext db)
         return true;
     }
 
+    /// <summary>Stage 47：更新 Agent 的 Daily / Monthly Token Limit（0 或負數 → 清為 null，回到 appsettings fallback）。</summary>
+    public async Task<bool> UpdateTokenLimitsAsync(
+        Guid agentId,
+        int? dailyTokenLimitK,
+        int? monthlyTokenLimitK,
+        CancellationToken cancellationToken = default)
+    {
+        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
+        if (agent is null) return false;
+
+        agent.DailyTokenLimitK   = dailyTokenLimitK > 0   ? dailyTokenLimitK   : null;
+        agent.MonthlyTokenLimitK = monthlyTokenLimitK > 0 ? monthlyTokenLimitK : null;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)
@@ -111,14 +129,16 @@ public class DashboardAgentService(AppDbContext db)
             .Include(a => a.Team)
             .Select(a => new AgentConfigDto
             {
-                Id          = a.Id,
-                Name        = a.Name,
-                Description = a.Description,
-                TrustLevel  = a.TrustLevel,
-                IsActive    = a.IsActive,
-                TeamName    = a.Team.Name,
-                Provider    = a.Provider,
-                Model       = a.Model
+                Id               = a.Id,
+                Name             = a.Name,
+                Description      = a.Description,
+                TrustLevel       = a.TrustLevel,
+                IsActive         = a.IsActive,
+                TeamName         = a.Team.Name,
+                Provider         = a.Provider,
+                Model            = a.Model,
+                DailyTokenLimitK  = a.DailyTokenLimitK,
+                MonthlyTokenLimitK = a.MonthlyTokenLimitK
             })
             .ToListAsync(cancellationToken);
 

@@ -40,6 +40,10 @@ public class AgentConfig
     public string? Provider { get; set; }
     /// <summary>Stage 38：Model 名稱（如 "claude-sonnet-4-6" / "gemini-2.5-flash"）。null = 啟動時從 appsettings.json 補 seed。</summary>
     public string? Model { get; set; }
+    /// <summary>Stage 47：Agent 日 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
+    public int? DailyTokenLimitK { get; set; }
+    /// <summary>Stage 47：Agent 月 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
+    public int? MonthlyTokenLimitK { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public Team Team { get; set; } = null!;

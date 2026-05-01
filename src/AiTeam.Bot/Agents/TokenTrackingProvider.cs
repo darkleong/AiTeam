@@ -13,6 +13,8 @@ namespace AiTeam.Bot.Agents;
 /// 包裝在 LlmProviderFactory.Create() 中，AgentService 無需任何改動。
 /// Stage 17：支援 MockMode，啟用時直接回傳 MockLlmProvider（有意跳過此類，
 /// 避免假的 Token 統計資料污染 Dashboard 監控頁）。
+/// Stage 47：4 個 Check 改讀 DB（AppSettings + AgentConfigCache），
+/// appsettings.json 保留作 fallback 安全網（DB 無值時生效）。
 /// </summary>
 public class TokenTrackingProvider(
     ILlmProvider inner,
@@ -21,6 +23,8 @@ public class TokenTrackingProvider(
     DiscordAlertService discordAlert,
     BotAgentSettings agentSettings,
     BotAgentConfig agentConfig,
+    AppSettingsService appSettings,
+    AgentConfigCache agentConfigCache,
     ILogger<TokenTrackingProvider> logger,
     string agentName,
     string model) : ILlmProvider
@@ -31,13 +35,20 @@ public class TokenTrackingProvider(
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null)
     {
+        // Stage 47：讀 per-agent DB 設定（null = DB 未設定，runtime fallback appsettings）
+        var (_, _, dbDailyK, dbMonthlyK) = agentConfigCache.Get(agentName);
+
         // ── Token 守門：呼叫 LLM 之前執行 ────────────────────────────
         // Stage 44：守門用 long 比較，避免高用量月份 overflow（DailyTokenLimitK × 1000 仍是 int 範圍，
         // 但累加 dailyUsed/monthlyUsed 後可能跨 int 邊界）。
         long estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4;
 
-        // Check 1：單次請求估算超過全域上限
-        long singleLimit = (long)agentSettings.SingleRequestTokenLimitK * 1000;
+        // Check 1：單次請求上限（Stage 47：DB AppSettings 優先，fallback appsettings）
+        var singleLimitFromDb = await appSettings.GetIntAsync("Token:SingleRequestLimitK", 0, cancellationToken);
+        long singleLimit = singleLimitFromDb > 0
+            ? (long)singleLimitFromDb * 1000
+            : (long)agentSettings.SingleRequestTokenLimitK * 1000;
+
         if (estimatedTokens > singleLimit)
         {
             var msg = $"⚠️ **[Token 守門]** Agent `{agentName}` 單次請求估算 token 數 {estimatedTokens:N0} " +
@@ -48,8 +59,11 @@ public class TokenTrackingProvider(
             throw new InvalidOperationException($"Token 守門：單次請求估算 {estimatedTokens:N0} tokens 超過上限 {singleLimit:N0}。");
         }
 
-        // Check 2：Agent 日限
-        long dailyLimit = (long)agentConfig.DailyTokenLimitK * 1000;
+        // Check 2：Agent 日限（Stage 47：AgentConfigCache DB 優先，fallback appsettings）
+        long dailyLimit = dbDailyK.HasValue
+            ? (long)dbDailyK.Value * 1000
+            : (long)agentConfig.DailyTokenLimitK * 1000;
+
         var dailyUsed = await tokenRepository.GetAgentDailyTotalAsync(agentName, cancellationToken);
         if (dailyUsed + estimatedTokens > dailyLimit)
         {
@@ -61,8 +75,11 @@ public class TokenTrackingProvider(
             throw new InvalidOperationException($"Token 守門：Agent {agentName} 今日用量 {dailyUsed:N0} + 估算 {estimatedTokens:N0} 超過日限 {dailyLimit:N0}。");
         }
 
-        // Check 3：Agent 月限
-        long agentMonthlyLimit = (long)agentConfig.MonthlyTokenLimitK * 1000;
+        // Check 3：Agent 月限（Stage 47：AgentConfigCache DB 優先，fallback appsettings）
+        long agentMonthlyLimit = dbMonthlyK.HasValue
+            ? (long)dbMonthlyK.Value * 1000
+            : (long)agentConfig.MonthlyTokenLimitK * 1000;
+
         var agentMonthlyUsed = await tokenRepository.GetAgentMonthlyTotalAsync(agentName, cancellationToken);
         if (agentMonthlyUsed + estimatedTokens > agentMonthlyLimit)
         {
@@ -74,14 +91,18 @@ public class TokenTrackingProvider(
             throw new InvalidOperationException($"Token 守門：Agent {agentName} 本月用量 {agentMonthlyUsed:N0} + 估算 {estimatedTokens:N0} 超過月限 {agentMonthlyLimit:N0}。");
         }
 
-        // Check 4：全域月限
-        long globalMonthlyLimit = (long)agentSettings.MonthlyTokenLimitK * 1000;
+        // Check 4：全域月限（Stage 47：DB AppSettings 優先，fallback appsettings）
+        var globalMonthlyFromDb = await appSettings.GetIntAsync("Token:GlobalMonthlyLimitK", 0, cancellationToken);
+        long globalMonthlyLimit = globalMonthlyFromDb > 0
+            ? (long)globalMonthlyFromDb * 1000
+            : (long)agentSettings.MonthlyTokenLimitK * 1000;
+
         var globalMonthlyUsed = await tokenRepository.GetGlobalMonthlyTotalAsync(cancellationToken);
         if (globalMonthlyUsed + estimatedTokens > globalMonthlyLimit)
         {
             var msg = $"🚨 **[Token 守門 — 全域月限]** 本月所有 Agent 累計已用 {globalMonthlyUsed:N0} tokens，" +
                       $"加上本次估算 {estimatedTokens:N0} 將超過全域月限 {globalMonthlyLimit:N0}。\n" +
-                      $"**所有 LLM 呼叫已暫停。** 請修改 `AgentSettings:MonthlyTokenLimitK` 並重啟 Bot 後恢復。";
+                      $"**所有 LLM 呼叫已暫停。** 請至 Dashboard【系統設定 → Token 守門設定】調整全域月限，5 分鐘內自動生效。";
             logger.LogError("Token 守門攔截（全域月限）：全域已用={Used}, 估算={Estimated}, 上限={Limit}",
                 globalMonthlyUsed, estimatedTokens, globalMonthlyLimit);
             await discordAlert.SendAsync(msg);

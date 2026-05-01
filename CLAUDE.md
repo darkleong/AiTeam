@@ -82,6 +82,33 @@ AiTeam.slnx   ← 解決方案檔位於 repo root（注意是 .slnx 不是 .sln�
 
 ---
 
+## ops 配置改動 SoP（Stage 47 起）
+
+修改 Token / 系統設定 / docker-compose 配置時，依下列分類選對的方式：
+
+### Token limit / 系統設定（5 分鐘內生效，不重啟）
+
+→ **走 Dashboard**：系統設定頁 / Agent 設定頁
+- 全域月限 / 單次請求上限 → 系統設定 → Token 守門設定
+- per-agent 日限 / 月限 → Agent 設定 → 編輯該 Agent
+- 修改後自動呼叫 `ReloadCache`，Bot Cache 立即刷新
+
+### docker-compose.prod.yml / appsettings.json 預設值（push 觸發 CI/CD）
+
+→ **commit + push 到 main**：GitHub Actions self-hosted runner 自動 `docker compose up -d --force-recreate`
+- ⚠️ **不要單獨 `docker restart aiteam-bot`** — restart 不 reload env，必須 recreate
+- 若需要不 push 直接 recreate，手動執行：`docker compose -f docker-compose.prod.yml up -d --force-recreate`
+
+### 配置 SoT 確認（Stage 47 後的 Token 架構）
+
+| 設定類型 | SoT | fallback |
+|---|---|---|
+| **Token limit（全域 / per-agent）** | DB（app_settings + agent_configs）| appsettings.json（env 已移除）|
+| **其他 AgentSettings**（RulesCacheTtlMinutes 等）| docker-compose.prod.yml env | appsettings.json |
+| **Discord / GitHub / DB 連線**（含敏感資訊）| docker-compose.prod.yml env | 無 fallback |
+
+---
+
 ## 重要設計原則
 
 - **動態 Agent 清單**：從資料庫載入，不寫死在程式碼

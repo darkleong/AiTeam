@@ -30,6 +30,9 @@ public partial class SystemSettings
     private int     _devPlanAppealMaxRounds = 3;
     private int     _kickoffMaxRounds       = 3;
     private int     _designMeetingMaxRounds = 3;
+    private int     _globalMonthlyLimitK = 0;   // 0 = DB 無設定，fallback appsettings
+    private int     _singleRequestLimitK = 0;   // 0 = DB 無設定，fallback appsettings
+    private bool    _isSavingTokenLimits;
     private bool    _isReloading;
     private bool    _isSavingChannel;
     private bool    _isSavingUserId;
@@ -68,12 +71,21 @@ public partial class SystemSettings
         _devPlanAppealMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DevPlanAppealMaxRounds", 3);
         _kickoffMaxRounds       = await LoadWorkflowRoundsAsync("Workflow:KickoffMaxRounds", 3);
         _designMeetingMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DesignMeetingMaxRounds", 3);
+
+        _globalMonthlyLimitK = await LoadTokenLimitAsync("Token:GlobalMonthlyLimitK");
+        _singleRequestLimitK = await LoadTokenLimitAsync("Token:SingleRequestLimitK");
     }
 
     private async Task<int> LoadWorkflowRoundsAsync(string key, int fallback)
     {
         var setting = await AppSettingsService.GetAsync(key);
         return int.TryParse(setting?.Value, out var v) && v > 0 ? v : fallback;
+    }
+
+    private async Task<int> LoadTokenLimitAsync(string key)
+    {
+        var setting = await AppSettingsService.GetAsync(key);
+        return int.TryParse(setting?.Value, out var v) && v > 0 ? v : 0;
     }
 
     #endregion
@@ -156,6 +168,22 @@ public partial class SystemSettings
         await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
         _isSavingWorkflow = false;
         _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
+    }
+
+    private async Task SaveTokenLimitsAsync()
+    {
+        if (_globalMonthlyLimitK <= 0 || _singleRequestLimitK <= 0)
+        {
+            _saveMessage = "格式錯誤：Token 上限必須大於 0";
+            return;
+        }
+        _isSavingTokenLimits = true;
+        await AppSettingsService.UpsertAsync("Token:GlobalMonthlyLimitK", _globalMonthlyLimitK.ToString());
+        await AppSettingsService.UpsertAsync("Token:SingleRequestLimitK", _singleRequestLimitK.ToString());
+        // 立即刷新 Bot Cache，不需等 5 分鐘 TTL
+        await BotService.ReloadCacheAsync("all");
+        _isSavingTokenLimits = false;
+        _saveMessage = $"Token 守門設定已儲存（全域月限={_globalMonthlyLimitK}K / 單次上限={_singleRequestLimitK}K），Bot Cache 已立即刷新。";
     }
 
     private async Task ReloadCacheAsync()

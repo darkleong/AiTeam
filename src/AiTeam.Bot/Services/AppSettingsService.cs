@@ -17,6 +17,13 @@ public class AppSettingsService(
     private DateTime _cacheExpiry = DateTime.MinValue;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>取得 int 設定值，找不到 / 解析失敗時回傳 fallback。</summary>
+    public async Task<int> GetIntAsync(string key, int fallback, CancellationToken cancellationToken = default)
+    {
+        var value = await GetAsync(key, cancellationToken);
+        return int.TryParse(value, out var result) ? result : fallback;
+    }
+
     /// <summary>取得 bool 設定值，找不到時回傳 defaultValue。</summary>
     public async Task<bool> GetBoolAsync(string key, bool defaultValue = false, CancellationToken cancellationToken = default)
     {

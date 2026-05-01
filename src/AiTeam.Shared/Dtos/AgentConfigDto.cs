@@ -13,4 +13,8 @@ public class AgentConfigDto
     public string? Provider { get; set; }
     /// <summary>Stage 38：Model 名稱。null = 尚未設定。</summary>
     public string? Model { get; set; }
+    /// <summary>Stage 47：Agent 日 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
+    public int? DailyTokenLimitK { get; set; }
+    /// <summary>Stage 47：Agent 月 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
+    public int? MonthlyTokenLimitK { get; set; }
 }

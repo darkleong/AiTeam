@@ -133,6 +133,41 @@ public partial class AgentSettings
         await SaveProviderModelAsync(agent);
     }
 
+    /// <summary>Stage 47：儲存 per-agent Token Limit，成功後立即刷新 Bot AgentConfigCache。</summary>
+    private async Task SaveTokenLimitsAsync(AgentConfigDto agent)
+    {
+        if (_isSavingLlm) return;
+        _isSavingLlm = true;
+        try
+        {
+            var ok = await AgentService.UpdateTokenLimitsAsync(
+                agent.Id,
+                agent.DailyTokenLimitK,
+                agent.MonthlyTokenLimitK);
+            if (!ok)
+            {
+                Snackbar.Add($"{agent.Name} Token Limit 儲存失敗：查無 Agent", Severity.Error);
+                return;
+            }
+            await BotService.ReloadCacheAsync("agent-config");
+            var dailyStr   = agent.DailyTokenLimitK > 0
+                ? $"{agent.DailyTokenLimitK}K"
+                : "未設定（fallback appsettings）";
+            var monthlyStr = agent.MonthlyTokenLimitK > 0
+                ? $"{agent.MonthlyTokenLimitK}K"
+                : "未設定（fallback appsettings）";
+            Snackbar.Add($"{agent.Name}：日限={dailyStr} / 月限={monthlyStr} 已更新，Bot Cache 已刷新。", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingLlm = false;
+        }
+    }
+
     private async Task SaveProviderModelAsync(AgentConfigDto agent)
     {
         if (_isSavingLlm) return;

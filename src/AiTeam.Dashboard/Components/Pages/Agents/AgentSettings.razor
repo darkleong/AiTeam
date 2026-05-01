@@ -151,6 +151,38 @@ else
                             目前 Model「@_selectedAgent.Model」不在 Provider「@_selectedAgent.Provider」支援清單，請重新選擇。
                         </MudAlert>
                     }
+
+                    <MudDivider Class="my-3" />
+
+                    @* Stage 47：per-agent Token Limit 動態設定（DB SoT，null = fallback appsettings） *@
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Token 限額設定</MudText>
+                    <p class="text-muted" style="font-size:0.85rem; margin:0 0 8px">
+                        留空（0）表示未設定，Bot fallback appsettings.json 預設值（日限=1000K / 月限=5000K）。
+                        修改後立即刷新 Bot Cache，5 分鐘內生效。
+                    </p>
+                    <MudStack Row="true" Spacing="2" Class="mb-2">
+                        <MudNumericField T="int?"
+                                         Label="日 Token 上限（千）"
+                                         Value="@_selectedAgent.DailyTokenLimitK"
+                                         ValueChanged="@((int? v) => _selectedAgent.DailyTokenLimitK = v)"
+                                         Variant="Variant.Outlined"
+                                         Min="0" Max="100000"
+                                         Style="max-width:200px"
+                                         Disabled="@_isSavingLlm" />
+                        <MudNumericField T="int?"
+                                         Label="月 Token 上限（千）"
+                                         Value="@_selectedAgent.MonthlyTokenLimitK"
+                                         ValueChanged="@((int? v) => _selectedAgent.MonthlyTokenLimitK = v)"
+                                         Variant="Variant.Outlined"
+                                         Min="0" Max="1000000"
+                                         Style="max-width:200px"
+                                         Disabled="@_isSavingLlm" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   OnClick="@(() => SaveTokenLimitsAsync(_selectedAgent))"
+                                   Disabled="@_isSavingLlm">
+                            @(_isSavingLlm ? "儲存中..." : "儲存 Token 限額")
+                        </MudButton>
+                    </MudStack>
                 </MudPaper>
             }
         </MudItem>
