@@ -32,8 +32,12 @@ internal sealed partial class CodyDevPlanAppealExecutor : Executor
     }
 
     [MessageHandler]
-    private async ValueTask<CodyDevPlanAppeal> HandleInitialAsync(string trigger, IWorkflowContext context)
-        => await ExecuteRoundAsync(context, isFirstRound: true, lastReassess: null);
+    private async ValueTask<CodyDevPlanAppeal> HandleInitialAsync(AppealState initialState, IWorkflowContext context)
+    {
+        // 第 1 輪：input 是 router 傳入的 initial state（含 GroupId / MaxRounds / DevPlan / InitialPetraReview）
+        await AppealStateHelpers.SaveAsync(context, initialState);
+        return await ExecuteRoundAsync(context, isFirstRound: true, lastReassess: null);
+    }
 
     [MessageHandler]
     private async ValueTask<CodyDevPlanAppeal> HandleReassessAsync(DevPlanAppealRoundResult lastReassess, IWorkflowContext context)

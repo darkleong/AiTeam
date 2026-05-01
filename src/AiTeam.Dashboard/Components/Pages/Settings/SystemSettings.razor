@@ -209,6 +209,30 @@
 
 <MudDivider Style="margin: 32px 0" />
 
+<h3 style="margin-bottom:16px">v4 漸進遷移控制 ⚠️ 實驗性</h3>
+
+<div class="system-config-card system-config-card--warning">
+    <div class="system-config-header">
+        <div>
+            <strong>使用 MS Agent Framework Appeal Loop</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後 <strong>Cody-Vera-Petra</strong> 與 <strong>Cody-Petra Dev_plan</strong> Appeal loop 改用 MS Agent Framework Workflow Builder + Checkpointing，<br/>
+                替換 legacy <code>AppealOrchestrationService</code> 的手刻 while-loop（v4 遷移首發 Stage 49）。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">
+                    ⚠️ 實驗性功能。啟用前確認 ANTHROPIC_API_KEY 設定 + 跑過 Mock 驗收（場景 framework_appeal_loop_*）。修改後 5 分鐘內自動生效。
+                </MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_useFrameworkAppealLoop"
+                   ValueChanged="@OnUseFrameworkAppealLoopChanged"
+                   Color="Color.Warning"
+                   Label="@(_useFrameworkAppealLoop ? "啟用" : "停用")" />
+    </div>
+</div>
+
+<MudDivider Style="margin: 32px 0" />
+
 <h3 style="margin-bottom:16px">Token 守門設定</h3>
 
 <div class="system-config-card">

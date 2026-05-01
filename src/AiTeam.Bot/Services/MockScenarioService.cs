@@ -76,6 +76,17 @@ public class MockScenarioService(
         // 失敗版本另在 sub-task 啟動後製造 Cody Dev_plan failed → epic_partial_paused
         else if (scenario is "split_task_propose_accept" or "split_task_subtask_fail_intervention")
             MockClaudeCodeService.FailScenario = scenario;
+        // ── Stage 49 v4 漸進遷移：framework Appeal Loop 5 個 Mock 場景 ──
+        // Christ 線下驗收時必須先 toggle Dashboard → 系統設定 → 使用 MS Agent Framework Appeal Loop = ON
+        // 否則 feature flag 為 false，AppealOrchestrationService 走 legacy path，這 5 個場景就跟 fail_review 等價，無 framework path 可驗
+        else if (scenario == "framework_appeal_loop_fast_approve")
+            MockClaudeCodeService.FailScenario = null;  // 無失敗，Vera 第 1 輪 approve
+        else if (scenario is "framework_appeal_loop_max_iter_approve"
+                          or "framework_appeal_loop_max_iter_reject"
+                          or "framework_appeal_loop_max_iter_escalate")
+            MockClaudeCodeService.FailScenario = "review_appeal";  // 同 fail_review，框架 path 走 max-iter Petra arbitration
+        else if (scenario == "framework_appeal_loop_crash_recovery")
+            MockClaudeCodeService.FailScenario = "review_appeal";  // 觸發 framework path Round 2，配合下方 PausePoint 設定模擬 crash
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -98,6 +109,12 @@ public class MockScenarioService(
             // Stage 46-FF 三十五：拆 task 2 個場景，從 Kickoff 起跑（必須完整跑會議才到 Design 拆 task 階段）
             "split_task_propose_accept"            => (WorkflowType.NewFeature, "拆task-採納成功",             "Kickoff"),
             "split_task_subtask_fail_intervention" => (WorkflowType.NewFeature, "拆task-Phase2失敗",          "Kickoff"),
+            // Stage 49 v4 漸進遷移：framework Appeal Loop 5 個場景（initialStep="Dev" 直接進入 Reviewer 路徑驗 ReviewAppeal Workflow）
+            "framework_appeal_loop_fast_approve"      => (WorkflowType.NewFeature, "Framework-FastApprove",   "Dev"),
+            "framework_appeal_loop_max_iter_approve"  => (WorkflowType.NewFeature, "Framework-MaxIterApprove", "Dev"),
+            "framework_appeal_loop_max_iter_reject"   => (WorkflowType.NewFeature, "Framework-MaxIterReject",  "Dev"),
+            "framework_appeal_loop_max_iter_escalate" => (WorkflowType.NewFeature, "Framework-MaxIterEscalate","Dev"),
+            "framework_appeal_loop_crash_recovery"    => (WorkflowType.NewFeature, "Framework-CrashRecovery",  "Dev"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -127,21 +144,42 @@ public class MockScenarioService(
             MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");      // Dev done → 即將 fire Reviewer 時暫停（被動延遲）
         else if (scenario == "pause_resume_with_boss_interaction")
             MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");      // 老闆按 dev_intervention_skip → fire Reviewer 時暫停
+        // Stage 49：framework_appeal_loop_crash_recovery 場景
+        // 觸發點對齊「framework path round 2 期間 simulate crash」拍板（路線 ③ pause + 手動 docker restart）
+        // PausePoint 設在 Dev 完成後（即將 fire Reviewer），Christ 線下驗收按以下步驟：
+        //   1. 跑此 Mock，等流程觸發 Vera Appeal round 1 開始（Bot log 觀察 framework path 啟動）
+        //   2. 在 Dashboard 操作中心觀察 IsPaused 狀態，確認流程暫停
+        //   3. 手動 `docker compose restart aiteam-bot`
+        //   4. Bot 重啟後 RecoverStuckFrameworkAppealsAsync 掃 FrameworkAppealStateJson != null
+        //   5. 觀察 framework recovery log + 流程是否能繼續（暫降級策略：清 marker 後重觸發 entry）
+        else if (scenario == "framework_appeal_loop_crash_recovery")
+            MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");
 
         _ = Task.Run(() => taskGroupService.FireStepsAsync(group, [new WorkflowStep(initialStep)]));
 
         var emoji = scenario switch
         {
-            "bug_fix"          => "🐛",
-            "tech_improvement" => "🔧",
-            _                  => "✨"
+            "bug_fix"                                              => "🐛",
+            "tech_improvement"                                     => "🔧",
+            "framework_appeal_loop_fast_approve"                   => "🚀",
+            "framework_appeal_loop_max_iter_approve"               => "🚀",
+            "framework_appeal_loop_max_iter_reject"                => "🚀",
+            "framework_appeal_loop_max_iter_escalate"              => "🚀",
+            "framework_appeal_loop_crash_recovery"                 => "🚀",
+            _                                                       => "✨"
         };
+
+        // Stage 49 v4 漸進遷移：framework Mock 場景啟動時提示 Christ 確認 feature flag
+        var frameworkHint = scenario.StartsWith("framework_appeal_loop_")
+            ? "\n⚠️ **v4 漸進遷移驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Appeal Loop = ON**，否則此 Mock 走 legacy path 無法驗 framework Workflow。"
+            : "";
 
         return (true,
             $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +
             $"任務：`{title}`\n" +
             $"起始步驟：`{initialStep}` → 後續由 Orchestrator 自動推進\n" +
-            $"請至 Dashboard → 任務中心 觀察流程進度，所有輸出將標記 `[MOCK]`。");
+            $"請至 Dashboard → 任務中心 觀察流程進度，所有輸出將標記 `[MOCK]`。" +
+            frameworkHint);
     }
 
     /// <summary>

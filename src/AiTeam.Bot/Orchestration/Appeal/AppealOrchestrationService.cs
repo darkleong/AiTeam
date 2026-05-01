@@ -35,6 +35,7 @@ public class AppealOrchestrationService(
     IOptions<GitHubSettings> gitHubSettings,
     WorkflowSettingsResolver workflowResolver,
     InteractionService interactionService,
+    FrameworkAppealRouter frameworkRouter,  // Stage 49：v4 漸進遷移 framework path 路由（feature flag true 時接管 2 entry）
     ILogger<AppealOrchestrationService> logger)
 {
     private readonly DiscordSettings _discord = discordSettings.Value;
@@ -57,6 +58,13 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
+        // Stage 49：v4 漸進遷移 feature flag 分流（路線 B service 包裝）— framework Workflow 接管 Cody-Vera-Petra Appeal loop
+        if (await workflowResolver.GetUseFrameworkAppealLoopAsync(cancellationToken))
+        {
+            logger.LogInformation("[Stage49] HandleReviewerCompletedAsync framework path 接管（Group={Id}）", group.Id);
+            return await frameworkRouter.HandleReviewerCompletedAsync(group, result, taskRepo, projectId, cancellationToken);
+        }
+
         // Stage 37：Crash Recovery 標記。涵蓋短路（直接 Petra Gate）與 Appeal 迴圈兩條路徑，
         // 因為 RunPetraGateAsync 內部仍會呼叫 Petra CLI subprocess，同樣有卡住風險。
         await using var dbScope = serviceProvider.CreateAsyncScope();
@@ -285,6 +293,13 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
+        // Stage 49：v4 漸進遷移 feature flag 分流（路線 B service 包裝）— framework Workflow 接管 Cody-Petra Dev_plan Appeal loop
+        if (await workflowResolver.GetUseFrameworkAppealLoopAsync(cancellationToken))
+        {
+            logger.LogInformation("[Stage49] HandleDevPlanCompletedAsync framework path 接管（Group={Id}）", group.Id);
+            return await frameworkRouter.HandleDevPlanCompletedAsync(group, result, taskRepo, projectId, cancellationToken);
+        }
+
         await using var dbScope = serviceProvider.CreateAsyncScope();
         var db = dbScope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.TaskGroups.Where(g => g.Id == group.Id)

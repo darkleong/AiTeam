@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 6 Stage 路線首發（[Stage 48 spike 報告](../experiments/Spike_v1_MsAgentFramework.md) 節 7）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.35.0**（v4 漸進遷移首個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：🚧 實作完成（待 Christ 線下驗收 6 場景）
+> 文件版本：v1.1
 
 ---
 
@@ -27,6 +27,26 @@
 ---
 
 ## 設計決策（Christ 2026-05-02 拍板）
+
+### v1.1 補強拍板（Forge Session A 揭露）
+
+**framework Executor 整合層級拍板**（路線 B service 包裝）：
+
+| 項目 | 拍板 |
+|---|---|
+| **拍板** | 路線 B（service 包裝）— framework Executor 直接 call ReviewAppealService / DevPlanAppealService / PmReviewService method |
+| **理由** | ① Aria 計劃書內部 Cody/Vera（IClaudeCodeService 底層）vs Petra（LlmProviderFactory 中層）三 Agent 不同層整合不一致 ② Prompt SoT 統一消解 R4 prompt drift 風險 ③ -30% 工時 + 風險降低 |
+| **影響** | Stage 54 工時 +1-1.5 天（framework Executor 重寫從 service 切回直連，砍 legacy path） |
+| **退場時機** | Stage 54 收尾時與 legacy AppealOrchestrationService / PmReviewService / ReviewAppealService / DevPlanAppealService 一起砍，連帶將 framework Executor 切回直連 IClaudeCodeService / framework Anthropic provider |
+
+**DI factory 模式拍板**（Forge Session A 主動發現比 Aria 建議更穩）：
+
+| 項目 | 拍板 |
+|---|---|
+| **拍板** | framework Executor 不註冊到 DI（factory 模式） |
+| **實作** | AppealWorkflowFactory 內 `new` Executor + 注入 ctor；Executor ctor 接 `IServiceScopeFactory`；HandleAsync 內 `CreateAsyncScope()` 取 scoped services（DbContext / LlmProviderFactory / ReviewAppealService） |
+| **理由** | 解 Singleton + Scoped 陷阱（Singleton Executor 持有 Scoped DbContext 跨 superstep 失效或炸）；framework 1.3.0 Configured&lt;T&gt; + ExecutorConfig 機制本身就是 factory 模式，對齊 framework 慣例 |
+| **與既有 ClaudeCodeAgentExecutor lifecycle undocumented 議題**（Christ 提醒 #1） | 完整解 — 不依賴 framework runtime 提供 per-superstep DI scope |
 
 ### 主路線拍板（戰略級）
 
@@ -53,9 +73,9 @@
 |---|---|---|
 | **1** | DB schema：`task_groups` 加 framework Checkpointing state 欄位 + Migration | S |
 | **2** | `AppealState` production 版（對齊既有 task_groups / tasks 欄位）| S |
-| **3** | `ClaudeCodeAgentExecutor` production 化（從 spike branch 搬 main + 加 production 整合）| M |
+| **3** | `ClaudeCodeAgentExecutor` production 化（從 spike branch 搬 main + 加 production 整合）— **v1.1 修正：Stage 49 路線 B 不直接引用本 wrapper，標 [Obsolete] 預留 Stage 50+ Group Chat orchestration**（會議多 Agent 直連 IClaudeCodeService 沒有 service 上層可包） | M |
 | **4** | `AppealWorkflowFactory` production 版（framework Workflow Builder + Checkpointing 整合 DB）| M |
-| **5** | Petra 切 framework Anthropic provider（保留 LlmProviderFactory wrapper 維持 TokenLogService）| M |
+| **5** | Petra 切 framework Anthropic provider（保留 LlmProviderFactory wrapper 維持 TokenLogService）— **v1.1 修正：Petra 整合層升級為包 PmReviewService / ReviewAppealService / DevPlanAppealService method（與 Cody/Vera 同層整合，三 Agent 一致）；不切原生 Anthropic provider，等 Stage 54 才切** | M |
 | **6** | feature flag `Workflow:UseFrameworkAppealLoop` + `AppealOrchestrationService` 5 入口分流 | S |
 | **7** | CLAUDE_*.md prompt schema hint 微調（如需）| XS |
 | **8** | Mock 場景 + Christ 線下驗收 + 文件 + 結案 | M |
@@ -343,14 +363,11 @@ if (await workflowSettings.GetUseFrameworkAppealLoopAsync(ct))
 - legacy `RecoverStuckMeetings` 篩選邏輯加 `task_groups.FrameworkAppealStateJson != null` 排除（不接管 framework path 的 task_group）
 - framework Checkpointing 同步寫 DB 機制需驗證 superstep 邊界一致性
 
-### 3. Petra 切 framework provider 動依賴鏈（中）
+### 3. Petra 切 framework provider 動依賴鏈（中）— ✅ 已消解（v1.1 路線 B）
 
 **風險**：spike 已驗 framework Anthropic provider 能跑 Petra，但 production Petra 的真實 prompt（CLAUDE_Petra.md）+ 真實任務（DevPlan / Review escalate）可能踩 spike 沒驗到的 corner case。
 
-**緩解**：
-- 子項 8 Mock 場景含 max iterations escalate（場景 D）覆蓋 Petra 真實仲裁路徑
-- Stage 49 仍透過 LlmProviderFactory wrapper（不切原生 provider）— 行為盡量對齊 legacy
-- Stage 54 才完全切原生 provider
+**v1.1 消解**：路線 B 拍板後 Petra 不切 framework 原生 provider，整合層升級為包 PmReviewService method（同 Cody/Vera 三 Agent 同層）。Petra 既有 prompt + LlmProviderFactory + TokenTrackingProvider 完全不動，spike 沒驗到的 corner case 風險自然消解。Stage 54 收尾才會真切原生 provider。
 
 ### 4. 子項 4 Checkpointing → DB 同步機制可能 framework undocumented（中）
 
@@ -459,3 +476,4 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移首發 Stage |
+| v1.1 | 2026-05-02 | Forge 實作完成 + Aria 拍板路線 B 補強 —— ① 子項 3 加註 [Obsolete] 預留 Stage 50+ ② 子項 5 改寫為「包 PmReviewService method 與 Cody/Vera 同層」③ 設計決策段加「framework Executor 整合層級拍板（路線 B）」+「DI factory 模式」兩條 ④ 風險點 R3 標 ✅ 已消解（路線 B 自然解 Petra prompt drift）⑤ 文件版本與狀態更新 |

@@ -39,8 +39,13 @@ internal sealed partial class CodyReviewAppealExecutor : Executor
     }
 
     [MessageHandler]
-    private async ValueTask<CodyAppeal> HandleInitialAsync(string trigger, IWorkflowContext context)
-        => await ExecuteRoundAsync(context, isFirstRound: true);
+    private async ValueTask<CodyAppeal> HandleInitialAsync(AppealState initialState, IWorkflowContext context)
+    {
+        // 第 1 輪：input 是 router 傳入的 initial state（含 GroupId / MaxRounds / LastReviewBody / RemainingCriticalIds）
+        // 寫進 framework state 供 Vera/Petra 後續 superstep 讀
+        await AppealStateHelpers.SaveAsync(context, initialState);
+        return await ExecuteRoundAsync(context, isFirstRound: true);
+    }
 
     [MessageHandler]
     private async ValueTask<CodyAppeal> HandleRevisionAsync(VeraAppealRoundResult veraResult, IWorkflowContext context)

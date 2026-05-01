@@ -443,8 +443,10 @@ public class MeetingOrchestrationService(
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         // Stage 45 硬規則：paused TaskGroup 不參與 crash recovery（暫停意圖保留）
+        // Stage 49 風險點 R2：framework path 接管的 group（FrameworkAppealStateJson != null）由 FrameworkAppealRouter
+        // 自己 recovery，legacy 路徑必須排除避免雙系統 collision
         var stuckGroups = await db.TaskGroups
-            .Where(g => g.ActiveOrchestration != null && !g.IsPaused)
+            .Where(g => g.ActiveOrchestration != null && !g.IsPaused && g.FrameworkAppealStateJson == null)
             .ToListAsync(ct);
 
         // Stage 45：log 跳過的 paused 數量（驗收期 docker logs 觀察用）
@@ -453,6 +455,13 @@ public class MeetingOrchestrationService(
         if (pausedSkippedCount > 0)
             logger.LogInformation("[Stage45-CrashRecoveryPaused] Crash Recovery：跳過 {N} 個 paused TaskGroup（暫停意圖保留）",
                 pausedSkippedCount);
+
+        // Stage 49：log 跳過的 framework path 數量（FrameworkAppealRouter 自己 recovery）
+        var frameworkSkippedCount = await db.TaskGroups
+            .CountAsync(g => g.ActiveOrchestration != null && !g.IsPaused && g.FrameworkAppealStateJson != null, ct);
+        if (frameworkSkippedCount > 0)
+            logger.LogInformation("[Stage49-CrashRecoveryFramework] Crash Recovery：legacy path 跳過 {N} 個 framework path TaskGroup（由 FrameworkAppealRouter 接管）",
+                frameworkSkippedCount);
 
         if (stuckGroups.Count == 0) return;
 

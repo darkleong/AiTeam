@@ -69,8 +69,12 @@ public class AgentQueueProcessor(
         // 27a-3：啟動掃描，恢復被中斷的任務
         await RecoverStuckTasksAsync(stoppingToken);
         // Stage 37：啟動掃描，恢復被中斷的編排流程
-        // （Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting 統一）
+        // （Kickoff / Design / ReviewAppeal / DevPlanAppeal / QaRouting 統一，Stage 49 加 FrameworkAppealStateJson != null 排除條件）
         await taskGroupService.RecoverStuckOrchestrationsAsync(stoppingToken);
+        // Stage 49：啟動掃描 framework path 卡住的 Appeal Workflow（與 legacy RecoverStuckOrchestrationsAsync 雙系統各管自己）
+        // 風險點 R2 緩解：legacy 排除 FrameworkAppealStateJson != null，framework 排除 == null
+        var frameworkRouter = serviceProvider.GetRequiredService<AiTeam.Bot.Orchestration.Appeal.FrameworkAppealRouter>();
+        await frameworkRouter.RecoverStuckFrameworkAppealsAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
