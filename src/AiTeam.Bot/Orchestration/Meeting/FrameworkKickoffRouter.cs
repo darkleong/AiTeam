@@ -332,24 +332,44 @@ public class FrameworkKickoffRouter(
         KickoffState initialState,
         CancellationToken ct)
     {
-        // initialState 直接作為 first input message：KickoffStartExecutor 的 [MessageHandler]
-        // BroadcastInitialAsync 接 KickoffState 為 first message，內部 SaveAsync 寫進 framework state
-        var run = await InProcessExecution.RunAsync(workflow, initialState, checkpointManager, sessionId, ct);
+        // 驗收期 bug 修正（2026-05-02 Forge 自驗階段）：
+        // 原 InProcessExecution.RunAsync 對 fan-out + fan-in barrier 拓撲無法完整 dispatch superstep（events=5 但 5 Agent 一個都沒 invoke）。
+        // Stage 49 線性串聯（AddEdge/AddSwitch 單一推進路徑）用 RunAsync OK，Stage 50 fan-out/fan-in 必須改 streaming。
+        // 對齊 MapReduce sample（dotnet/samples/03-workflows/Concurrent/MapReduce/Program.cs）+ Group Chat sample。
+        await using var run = await InProcessExecution.RunStreamingAsync(workflow, initialState, checkpointManager, sessionId, ct);
 
-        // 找 WorkflowOutputEvent 取 KickoffLoopResult
-        foreach (var ev in run.OutgoingEvents)
+        KickoffLoopResult? loopResult = null;
+        await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
         {
-            if (ev is WorkflowOutputEvent outputEvent && outputEvent.Is<KickoffLoopResult>(out var loopResult))
+            if (ev is WorkflowOutputEvent outputEvent && outputEvent.Is<KickoffLoopResult>(out var r))
             {
-                return loopResult;
+                loopResult = r;
+                logger.LogInformation(
+                    "[Stage50] WorkflowOutputEvent 取得 KickoffLoopResult（sessionId={Id}，decision={Decision}，rounds={Rounds}）",
+                    sessionId, r.Decision, r.TotalRounds);
+                // 不 break — 讓 framework 收完所有 superstep events（避免 cleanup 時 race condition）
+            }
+            else if (ev is WorkflowErrorEvent errorEvent)
+            {
+                logger.LogError(
+                    "[Stage50] WorkflowErrorEvent: sessionId={Id}, exception={Exception}",
+                    sessionId, errorEvent.Exception?.ToString() ?? "(null)");
+            }
+            else if (ev is ExecutorFailedEvent failedEvent)
+            {
+                logger.LogError(
+                    "[Stage50] ExecutorFailedEvent: executorId={ExecutorId}, data={Data}",
+                    failedEvent.ExecutorId, failedEvent.Data?.ToString() ?? "(null)");
             }
         }
 
-        // 沒拿到 output event — fallback 視為失敗
-        logger.LogWarning(
-            "[Stage50] Workflow run 完成但無 WorkflowOutputEvent (sessionId={Id}, events={Count})",
-            sessionId, run.OutgoingEvents.Count());
-        return null;
+        if (loopResult is null)
+        {
+            logger.LogWarning(
+                "[Stage50] Workflow streaming run 完成但無 WorkflowOutputEvent (sessionId={Id})",
+                sessionId);
+        }
+        return loopResult;
     }
 
     /// <summary>
