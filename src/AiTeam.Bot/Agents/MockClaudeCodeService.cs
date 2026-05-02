@@ -213,7 +213,12 @@ public class MockClaudeCodeService(
         // Stage 26：改用 prompt 內容判斷角色（各 prompt builder 均以「你是 {Name}，」開頭）
         // 原本用 sessionId.Split('-').Last() 無法正確匹配純 UUID 格式的 session ID
         // Stage 50：BuildPetraPlanPrompt（KickoffPlanExecutor 用）無「你是 Petra」字樣，補識別 "Kick-off 會議已結束" 特徵字串
-        var agentName = prompt.Contains("你是 Petra") || prompt.Contains("Kick-off 會議已結束") ? "petra"
+        // Stage 52 驗收期 follow-up #1：DesignPrompts.BuildDesignPetraPlanPrompt 開頭「設計會議已結束」+ DesignAdjustmentExecutor
+        // evalSb「Rosa 和 Demi 已完成修改」兩字串無「你是 Petra」開頭 → 補識別（對齊 Stage 50 踩坑 #11 教訓延續）
+        var agentName = prompt.Contains("你是 Petra")
+                     || prompt.Contains("Kick-off 會議已結束")
+                     || prompt.Contains("設計會議已結束")
+                     || prompt.Contains("Rosa 和 Demi 已完成修改") ? "petra"
                       : prompt.Contains("你是 Rosa")  ? "rosa"
                       : prompt.Contains("你是 Demi")  ? "demi"
                       : prompt.Contains("你是 Cody")  ? "cody"
