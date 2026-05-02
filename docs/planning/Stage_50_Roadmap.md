@@ -600,20 +600,34 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 ### 驗收結果
 
-對齊 Stage 49「Forge 自驗 + 真實 LLM 補驗」結構：
+對齊 Stage 49「Forge 自驗 + 真實 LLM 補驗」結構。**Forge 自驗階段已 production-grade 全綠 6/6 場景 + 額外 2 子場景**（2026-05-02 完成）。
 
 | 場景 | Forge 自驗 | Christ 線下補驗（真實 LLM / Discord UI） |
 |---|---|---|
-| **A**：feature flag false → legacy 不變 | ✅ build 0 error + 入口分流邏輯確認（`if (await workflowResolver.GetUseFrameworkKickoffAsync) → router; return;` 在 ActiveOrchestration set 前 → false 時走下方 legacy 邏輯不變） | 跑一般 Mock 確認流程通暢，無 [Stage50] log |
-| **B**：feature flag true → framework path 接管 | ✅ MockScenarioService 5 場景 + MockClaudeCodeService 切換邏輯邏輯一致；Workflow 拓撲 build 通過；DI graph 全 Singleton 對齊 | Dashboard toggle ON + 跑 `framework_kickoff_consensus_round1` → log 應出現 `[Stage50] HandleKickoffMeetingAsync framework path 接管` + DB `KickoffFrameworkStateJson` 寫入 |
-| **C**：framework Checkpointing crash recovery | ✅ RecoverStuckFrameworkKickoffsAsync 篩選 `g.KickoffFrameworkStateJson != null && !g.IsPaused`（Stage 45 紀律）+ Recovery 雙系統隔離 log 對齊 | 跑 `framework_kickoff_crash_recovery` 場景 + Round 2 期間 `docker compose restart aiteam-bot` → 觀察 `[Stage50-CrashRecoveryFrameworkKickoff]` log + 降級策略生效（清 marker → dispatcher 重觸發） |
-| **D**：Petra escalate → BossInteraction | ✅ FrameworkKickoffRouter.CreateKickoffConfirmationAsync escalate 路徑邏輯確認（embed Color.Orange + 沿用 kickoff_* button id + InteractionService.KickoffActionsJson） | 跑 `framework_kickoff_escalate` 場景 → 觀察 Discord embed `⚠️ Kick-off 會議需老闆裁決（escalate）` + BossInteraction 卡片 |
-| **E**：feature flag false 切回 → legacy 接管 | ✅ 入口分流檢查邏輯在每次呼叫時都執行（不 cache），Dashboard 切 OFF 後下次 RunKickoffMeetingAndWaitAsync 走 legacy | Dashboard 切 OFF + 跑一般 Mock 確認流程與場景 A 一致 |
-| **F**：5 Agent token + Christ Modify 沿用 legacy | ✅ KickoffAgentExecutor + KickoffPetraExecutor 全 call MeetingCommons.RunAgentTurnAsync 含 `meetingType: "Kickoff"` 群組計法（對齊 legacy 行為，token_logs AgentName="Meeting-Kickoff"）；Modify 流程 KickoffMeetingService.ModifyTaskPlanAsync 不變 | 真實 LLM 跑 `framework_kickoff_consensus_round1` 後查 token_logs 5 個 Agent + AgentName=Meeting-Kickoff；點 ✏️ 修改計劃書 → Petra session resume 對話 |
+| **A**：feature flag false → legacy 不變 | ✅ feature flag 透過 SQL UPDATE 切 OFF → ReloadCache → 跑 `framework_kickoff_consensus_round1` → 完全走 legacy `KickoffMeetingService：Kick-off 第 1 輪開始` + `Petra 第 1 輪 decision=consensus`，**0 個 `[Stage50]` log** | （已自驗，無需補測） |
+| **B**：feature flag true → framework path 接管 | ✅ feature flag ON + 跑 `framework_kickoff_consensus_round1` → 完整 Workflow 拓撲 production-grade 跑通：`[Stage50] HandleKickoffMeetingAsync framework path 接管` → Workflow 啟動 maxRounds=3 → 4 Agent 並行（Rosa/Demi/Cody/Quinn round 1 完成）→ Aggregator 收齊 → Petra round 1 decision=consensus → Plan executor → WorkflowOutputEvent → DB 寫入（`KickoffMeetingLog` 999 字元 + `TaskPlan` 329 字元 Mock Markdown 計劃書 + `KickoffRound=1` + cleanup 後 `KickoffFrameworkStateJson` NULL） | Discord embed `🚀 Kick-off 會議完成` 視覺顯示 + 3 buttons（▶️繼續 / ⏹️停止 / ✏️修改計劃書） |
+| **C**：framework Checkpointing crash recovery | ✅ simulate stuck state（UPDATE task_groups SET KickoffFrameworkStateJson 假 JSON + ActiveOrchestration='FrameworkKickoff'）→ `docker compose restart aiteam-bot`（Christ 授權範圍）→ 重啟後雙重驗證：① **legacy `RecoverStuckOrchestrationsAsync` 雙系統隔離 log**：`[Stage50-CrashRecoveryFrameworkKickoff] Crash Recovery：legacy path 跳過 1 個 framework Kickoff path TaskGroup（由 FrameworkKickoffRouter 接管）` ② **`FrameworkKickoffRouter.RecoverStuckFrameworkKickoffsAsync` Recovery hook**：`啟動：發現 1 個 stuck framework kickoff，採降級策略重啟` + `Recovery Group=...：framework Checkpointing 還原 superstep（latest=sim-1）` + `暫採降級策略（清 marker）`；DB 驗證 ActiveOrchestration + KickoffFrameworkStateJson 雙 marker 100% cleared（vs Stage 49 case study「30% 殘留」） | 真實 superstep-mid process kill（非 simulate）的 30% 殘留行為觀察 |
+| **D**：Petra escalate → BossInteraction | ✅ 跑 `framework_kickoff_escalate` → Petra round 1 decision=escalate → KickoffEscalateExecutor 完成（rounds=1，reason=`[MOCK] framework Kickoff 偵測到無法團隊內解決的分歧，上呈老闆裁決`）→ WorkflowOutputEvent → DB 寫入；Switch escalate case 路由 production live | Discord embed `⚠️ Kick-off 會議需老闆裁決（escalate）` 視覺顯示 + BossInteraction 卡片在 Dashboard 操作中心 |
+| **E**：feature flag false 切回 → legacy 接管 | ✅ feature flag 切回 ON → 跑同 `framework_kickoff_consensus_round1` → 立即 `[Stage50] HandleKickoffMeetingAsync framework path 接管` + 完整 Workflow 拓撲跑通 | （已自驗，無需補測） |
+| **F**：5 Agent token + Christ Modify 沿用 legacy | ✅ MockMode 全程 `token_logs` 0 行（預期 — Mock 不寫 token_log，符合計劃書設計） | 真實 LLM（MockMode=false）跑 `framework_kickoff_consensus_round1` → 查 `token_logs` 5 個 Agent 對應 row（AgentName="Meeting-Kickoff" + Stage="Kickoff" 群組計法）；點 ✏️ 修改計劃書 → 提供 Christ 修改指引 → Petra session_id=group.Id resume 對話確認 |
+
+**Bonus 子場景驗收**（額外覆蓋 Switch routing 完整路徑）：
+- ✅ **`framework_kickoff_consensus_round2`**：Round 1 needs_discussion → Switch 路由 KickoffStartExecutor（**loop back** production live）→ Round 2 重跑 fan-out 4 Agent → Aggregator → Petra Round 2 consensus → Plan executor decision=consensus rounds=2 → DB 寫入。**多輪 + loop back 機制 production-grade 跑通**。
+- ✅ **`framework_kickoff_max_iter`**：Round 1+2+3 全 needs_discussion → Switch case `Round >= MaxRounds → KickoffPlanExecutor`（強制結束）→ Plan executor decision=max_iter rounds=3 → DB 寫入。**3 輪上限 + max_iter 強制結束 production-grade 跑通**。
+
+**Forge 自驗結論**：A2 fan-out/fan-in 路線（`WorkflowBuilder` + `AddFanOutEdge` + `AddFanInBarrierEdge` + `AddSwitch` + loop back）production-grade 完整跑通；feature flag 切換 ON/OFF 在每次 `RunKickoffMeetingAndWaitAsync` 即時生效（無 cache TTL 問題）；Recovery 雙系統隔離 + 降級策略 production live；MockMode token 0 行符合預期。**Christ 線下補驗 = Discord embed 視覺 + 真實 LLM token + Modify resume Discord 對話 3 項**。
 
 ### 驗收後修正
 
-> 待 Christ 線下驗收後補（如有）。
+驗收期共 **3 個 follow-up fix commits**，全部源自 framework 1.3.0 fan-out/fan-in 拓撲首次 production 整合的踩坑（Stage 49 線性串聯沒踩到）：
+
+| # | commit | 修正範圍 | 根因 |
+|---|---|---|---|
+| 1 | `a50059c` | FrameworkKickoffRouter.RunWorkflowAsync：`InProcessExecution.RunAsync` → `RunStreamingAsync` + `WatchStreamAsync` foreach；加 WorkflowErrorEvent / ExecutorFailedEvent 觀察 log | Forge 自驗階段揭露：原 RunAsync 對 fan-out + fan-in barrier 拓撲無法完整 dispatch superstep（events=5 但 5 Agent 一個都沒 invoke），Workflow 啟動後直接結束無 WorkflowOutputEvent。Stage 49 線性串聯（AddEdge/AddSwitch 單一推進）用 RunAsync 跑通沒踩此坑；MapReduce / Group Chat sample 兩個 fan-out 範本都用 RunStreamingAsync 證實 |
+| 2 | `cd6d61a` | 4 個顯式 send/yield 的 Executor 加 attribute + partial class：`KickoffStartExecutor [SendsMessage(typeof(KickoffState))]` / `KickoffAggregator [SendsMessage(typeof(KickoffRoundCollected))]` / `KickoffPlanExecutor [YieldsOutput(typeof(KickoffLoopResult))]` / `KickoffEscalateExecutor [YieldsOutput(typeof(KickoffLoopResult))]`；3 個 class（Aggregator/Plan/Escalate）加 `partial` 修飾子 | streaming 修正後 ExecutorFailedEvent 揭露 framework 1.3.0 type validation 錯：`Executor 'Kickoff-Start' cannot send messages of type 'KickoffState'`。framework 對 SendMessageAsync / YieldOutputAsync 顯式 send/yield 的 Executor 要求標 [SendsMessage]/[YieldsOutput] attribute（type-safe message validation）。Stage 49 用 [MessageHandler] return ValueTask<T> generic 模式 generator 自動推導；Stage 50 用顯式 SendMessageAsync 必須手動標 attribute。加 attribute 後 generator 又要求 partial class（MAFGENWF003） |
+| 3 | `1023104` | MockClaudeCodeService.RunMeetingSessionAsync agentName 判斷加 `prompt.Contains("Kick-off 會議已結束")` 識別為 petra | 場景 B 跑通後 DB TaskPlan="[MOCK] 會議發言完成。"（14 字元 default 訊息），預期 Mock Markdown 計劃書。根因：`KickoffPrompts.BuildPetraPlanPrompt` 開頭是「Kick-off 會議已結束。請基於完整的會議討論...」沒「你是 Petra」字樣，Mock agentName 判斷失敗。修法：用 prompt 獨特開頭字串作為 Petra 識別補強 |
+
+3 個 fix 共 +42/-17 行。**驗收後 Forge 自驗 6 場景 + 2 bonus 子場景全綠 0 殘留**，Stage 51+ 後續 v4 遷移踩坑紀錄已寫入「踩坑紀錄彙整」段給後續預警。
 
 ### 關鍵設計決策（為什麼這樣選）
 
@@ -639,6 +653,18 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 6. **Petra 第 1 輪 `isFirstMessage` 判定**：4 Agent 第 1 輪都是 first message（新 sessionId），Petra Round 1 也是 first message（state.PetraSessionId 第一次用）。但 KickoffPlanExecutor 跑 Petra plan prompt 時 `isFirstMessage: false`（接續 Petra session）。對 Stage 51+ 提醒：跨 Executor 共用 sessionId 時，必須在每個 Executor 內判斷 `isFirstMessage`，不能用 state.Round == 1 一刀切（KickoffPlanExecutor 在 Round 1 也是 false）。
 7. **Mock Petra round 偵測機制**：`prompt.Contains("## 第 N 輪各角色意見")` 對齊 KickoffPrompts.BuildPetraRoundPrompt 格式 line 12。對 Stage 51+ 提醒：若改 prompt 格式必須同步更新 MockClaudeCodeService 偵測字串（建議引用 const string 集中化，避免漂移）。
 8. **PetraDecision / ModifyDecision 兩個 record 抽出時注意 internal 跨 namespace**：legacy `KickoffMeetingService.cs` 檔尾兩個 `internal record` 搬到 `KickoffPrompts.cs` 後，跨 namespace 還是 internal（同 assembly 可見），但 caller 必須加 using。對 Stage 52 提醒：抽 record 出來時 grep 全 callers 確認沒漏。
+
+#### 驗收期額外踩坑（framework 1.3.0 fan-out/fan-in 首次 production 整合揭露）
+
+9. **🔴 RunAsync 對 fan-out 拓撲無法完整 dispatch superstep**：`InProcessExecution.RunAsync(workflow, initialState, ...)` 對線性串聯（Stage 49 AddEdge/AddSwitch 單一推進）跑通，但對 **AddFanOutEdge + AddFanInBarrierEdge + Switch loop back** 拓撲僅單一 dispatch 不足以推進 superstep（log events=5 但 5 Agent 一個都沒 invoke）。對 Stage 51+ 提醒：**fan-out/fan-in 拓撲 router 一律用 `RunStreamingAsync` + `WatchStreamAsync` foreach 找 WorkflowOutputEvent**（對齊 MapReduce + Group Chat sample），不要用 RunAsync。
+10. **🔴 顯式 SendMessageAsync / YieldOutputAsync 必須標 [SendsMessage] / [YieldsOutput] attribute + partial class**：framework 1.3.0 type validation 對 SendMessageAsync / YieldOutputAsync 顯式 send/yield 的 Executor 要求 class 上方標 attribute 宣告 send/yield 訊息類型；Stage 49 用 `[MessageHandler] ValueTask<T>` generic return 模式 generator 自動推導沒踩坑，Stage 50 用顯式 send 才踩到。加 attribute 後 generator 又要求 class 必須 `partial`（MAFGENWF003）。對 Stage 51+ 提醒：**用顯式 send/yield 的 Executor 必須三件套**：① `[SendsMessage(typeof(T))]` 或 `[YieldsOutput(typeof(T))]` ② `partial class` ③ 註解清楚說明為何用顯式而非 generic return。
+11. **🟡 抽 prompt builders 共用後 Mock 角色識別覆蓋不全**：`MockClaudeCodeService.RunMeetingSessionAsync` 用 `prompt.Contains("你是 {Name}")` 判 agentName，但 `KickoffPrompts.BuildPetraPlanPrompt`（KickoffPlanExecutor 跑）開頭是「Kick-off 會議已結束。請基於完整的會議討論...」沒「你是 Petra」字樣 → agentName="unknown" → Mock 回 default 訊息而非 Markdown 計劃書。修法用 prompt 獨特開頭字串作為角色識別補強。對 Stage 51+ 提醒：**抽 prompt 共用後必須 grep 全 prompt builders 確認 Mock 角色識別字串覆蓋每個 prompt 變體**（含後續對話無「你是 X」開頭的 prompt）。
+
+#### 戰略洞察：Stage 49 vs Stage 50 整合層級差異
+
+> Stage 49 線性串聯路線 0 follow-up（spike Phase 3 已驗 [MessageHandler] generator 完整 pattern）；
+> Stage 50 fan-out/fan-in 拓撲 3 follow-up — 揭露 framework 1.3.0 對「拓撲 dispatch 模式 + 顯式 send/yield type validation」兩層額外要求。
+> Stage 52 Design Meeting B3 路線（主迴圈遷移）若沿用 Stage 50 fan-out/fan-in pattern 可直接複用此 3 條踩坑紀錄；若改走更動態的拓撲（FF 三十六 Phase B 動態流程架構）則需重做 spike。
 
 ### Aria 校準錨候選（Aria 結案第二段填）
 
