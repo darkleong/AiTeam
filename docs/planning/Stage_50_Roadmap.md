@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 6 Stage 路線第二步（[Stage 48 spike 報告](../experiments/Spike_v1_MsAgentFramework.md) 節 7）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.36.0**（v4 漸進遷移第二個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：📋 **規劃中**（等 Christ 通過計劃書 → Aria 備 Forge prompt → Forge Plan Mode）
-> 文件版本：v1.0
+> 狀態：✅ **已完成**（2026-05-02 — Session A + B + 3 follow-up fix + Forge 自驗 6 場景 + 結案第一段）
+> 文件版本：v2.0
 
 ---
 
@@ -677,3 +677,4 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第二步 Stage：Kickoff Meeting 切 framework Group Chat（A4 路線 + B2 範圍 + C2 Petra session + D2 獨立 flag + E 三項 spike 全驗）|
+| v2.0 | 2026-05-02 | Forge 結案第一段（Session A + B 完成）—— spike 第一步驗證 E1❌→A2 fallback 路線拍板（WorkflowBuilder + AddFanOutEdge + AddFanInBarrierEdge + AddSwitch + loop back，Group Chat 不支援 multi-speaker per round）；11 新檔（Workflows/Kickoff/）+ 1 router 新檔 + 11 既有檔修改 + Migration `Stage50TaskGroupKickoffFrameworkState`；Forge 自驗 6 場景全綠 + bonus consensus_round2 / max_iter 雙子場景；驗收期 3 follow-up fix（streaming dispatch / [SendsMessage] type validation / Mock Petra 識別）；踩坑紀錄擴充至 11 條（含 3 條驗收期戰略級踩坑）；commits：`7d37a48`(A) → `24b62dc`(B) → `a50059c` → `cd6d61a` → `1023104` → `ff6a26f`（結案第一段）|
