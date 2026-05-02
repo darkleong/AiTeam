@@ -657,7 +657,17 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 
 ### Session B 結案（commit 8b3ead1）
 
-子項 8-11 完成；新增 FrameworkDesignRouter + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景；Version bump v3.38.0；Forge 自驗 5 靜態場景全綠（場景 F crash recovery 由 Christ 線下實跑）；0 follow-up。
+子項 8-11 完成；新增 FrameworkDesignRouter + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景；Version bump v3.38.0；Forge 自驗 5 靜態場景全綠（場景 F crash recovery 由 Christ 線下實跑）。
+
+### 驗收期實跑（2026-05-03，Forge 授權 ops 驗收）
+
+Forge 授權 ops 透過 docker exec / Bot Internal API 實跑場景 B/C/D/E（Kickoff 階段透過 Dashboard `/api/interactions/{id}/respond` 自動 continue），揭露 2 個拓撲 bug 已當場修：
+
+- **follow-up #1**（commit `806b22b`）：場景 B 揭露 DesignPlan 寫入「[MOCK] 會議發言完成。」(default unknown agent fall-through)。根因：`MockClaudeCodeService` agentName 識別僅含「你是 Petra」+「Kick-off 會議已結束」，漏 `BuildDesignPetraPlanPrompt` 開頭「設計會議已結束」+ DesignAdjustmentExecutor evalSb「Rosa 和 Demi 已完成修改」兩字串。修法擴充 agentName 識別字串（不改 prompt 文字對齊 legacy）。Stage 50 踩坑 #11 預警的實際命中。
+
+- **follow-up #2**（commit `27ce0b7`）：場景 D 揭露 `WorkflowErrorEvent: Expected exactly one update for key 'singleton'` + Plan executor 被 needs_meeting 路徑 DesignPetraVerdict 誤觸發（DB DesignRound=1 應該 2 + DesignPlan = Round 1 plan 應該 Round 2 plan）。根因：原 DesignPlanExecutor 雙 [MessageHandler] 接 DesignPetraVerdict + DesignAdjustmentApproved；framework 1.3.0 AddEdge type-based dispatch **不 source-aware**，把 adjust needs_meeting 路徑送的 DesignPetraVerdict 也 dispatch 給 plan，造成 plan 跑 LLM + state 同 superstep 衝突。修法拆 plan 成兩個 Executor（DesignPlanExecutor 只接 DesignPetraVerdict / DesignAdjustmentPlanExecutor 只接 DesignAdjustmentApproved）讓 type filter 自然分流。
+
+驗收期 5 場景全綠（A/B/C/D/E），場景 F crash recovery 由 Christ 線下實跑。共 4 commits（Session A `3b2343a` → Session B `8b3ead1` → Roadmap hash `b5dac50` → fix#1 `806b22b` → fix#2 `27ce0b7`）。
 
 ### 驗收結果
 
@@ -693,14 +703,21 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 3. **DesignMeetingService.TryParseSplitProposal 跨 service 外部 caller**：`TaskGroupService.cs:1124+1138` 直接 call `DesignMeetingService.TryParseSplitProposal(...)`（static method），抽出時 grep 沒掃到該 caller 造成 build error。對 Stage 53+ 提醒：抽 static method 必須 grep 整個 src 確認所有 callers（不只 抽出來源 service 內）。
 4. **DesignPlanExecutor 雙 [MessageHandler] 共用 [YieldsOutput]**：兩 handler 都 YieldOutputAsync 同一型別 DesignLoopResult，class 上 `[YieldsOutput(typeof(DesignLoopResult))]` 一次標即可（framework type validation 對 yield 用 class-level attribute）。對 Stage 53+ 提醒：雙 handler 共用 yield type 時不需重複標 attribute。
 5. **DesignAdjustmentExecutor needs_meeting 路徑 totalRounds 計算**：對齊 legacy line 291 `totalRounds++`，state.TotalRounds = state.Round + 1（Round 是 needs_adjustment 觸發時的 round，+1 等於 adjustment 流程結束後的 round 計數）。對 Stage 53+ 提醒：跨 Executor 持有 totalRounds 計數時，必須與 legacy 行為精確對齊避免一格落差。
-6. **Mock framework_design_* 場景 Petra prompt 4 種子分支識別**：PetraJudge / Petra round / Petra adjustment eval / Petra plan 共用 sessionId（PetraSessionId 跨 Executor resume），Mock 必須依 prompt 特徵字串區分。對 Stage 53+ 提醒：抽 prompt SoT 後 Mock 角色識別字串覆蓋全 prompt 變體（含後續對話無「你是 X」開頭的 prompt — Stage 50 踩坑 #11 延續）。
+6. **Mock framework_design_* 場景 Petra prompt 4 種子分支識別**：PetraJudge / Petra round / Petra adjustment eval / Petra plan 共用 sessionId（PetraSessionId 跨 Executor resume），Mock 必須依 prompt 特徵字串區分。對 Stage 53+ 提醒：抽 prompt SoT 後 Mock 角色識別字串覆蓋全 prompt 變體（含後續對話無「你是 X」開頭的 prompt — Stage 50 踩坑 #11 延續）。**驗收期 follow-up #1 實際命中**（commit `806b22b`）。
+
+#### 驗收期額外踩坑（framework 1.3.0 AddEdge type filter 不 source-aware 揭露）
+
+7. **🔴 framework 1.3.0 AddEdge type-based dispatch 不 source-aware**（驗收期 follow-up #2，commit `27ce0b7`）：原計畫單一 Executor 雙 [MessageHandler] 接兩種 type 是 plan 拍板（議題 7 Aria 必修），但 framework 對 AddEdge target 的 dispatch 只看 message type 跟 target handler 是否匹配，**不會看是否是 AddEdge 邊定義的 source**。當 Executor A 透過 AddSwitch 送 type X 給 B、同時 AddEdge 連到 C，C 又有 type X handler 時，C 會被誤觸發（兩個 dispatch 路徑衝突）。對 Stage 53+ 提醒：**避免單一 Executor 雙 [MessageHandler] 接兩種 message type 同時被 AddEdge 跟 AddSwitch 連接**；type-explicit 拆兩個 Executor 是更穩健的拓撲設計，特別在 AddEdge target 有多 handler 時。Stage 51 MidInterruptCheckExecutor 雙 [MessageHandler] 沒踩到是因為兩 input type（KickoffPetraVerdict / MidInterruptResponseData）配 AddEdge 來源不同（前者 AddSwitch 從 petra / 後者 AddEdge 從 midPort），不是同 source 雙 dispatch 場景。
+
+8. **🟡 framework AddEdge type filter 不踢 wrong type**：當 AddEdge(source, target) target 沒對應 type handler 時，message 被 framework 忽略（不 dispatch）— 這是修法 #7 拆 plan 後驗證可行的 root mechanism。對 Stage 53+ 設計可信任此 filter 行為做 type-explicit 拓撲分流。
 
 ### Aria 校準錨候選（Aria 結案第二段補完）
 
 **Forge 自評混合型 Stage 倍率**：
 - Stage 49（×1.25）/ Stage 50（×1.09）/ Stage 51（×0.96）三資料點 mid 帶下半至中段
 - Stage 52 預估範圍 ×0.96-1.4（Charter 中位 460K、實際範圍 410-750K）
-- Forge 自評 Stage 52 落在 **mid 帶中下緣 ~×1.0-1.15**（一氣呵成兩 session + 0 follow-up + 1 plan 修訂迭代 + 抽出機械化重構順利 + spike 結論在實作前已可推導出 — 風險低於 Stage 49/50）
+- Forge 自評 Stage 52 **驗收期前** 落在 mid 帶中下緣 ~×1.0-1.15（一氣呵成兩 session + 1 plan 修訂迭代 + 抽出機械化重構順利）
+- **驗收期 +0.10-0.15**（2 follow-up：Mock 識別 + framework AddEdge type filter 拓撲拆分），Forge 自評最終約 **×1.10-1.30**（mid 帶上半，仍守 ×0.96-1.4 上界）
 
 **戰略意義**：
 - 混合型 Stage 第 4 個資料點 — 進一步收斂 ×0.96-1.25 區間穩定性（議題 A 拆 Stage 守區間精神驗證）
@@ -715,3 +732,4 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第四步 Stage：Design Meeting B3 路線（A2 拆 Stage + B2 single-Executor wrapper + C2 router 後置 + D2 兩項 spike + E1 獨立 flag + F-mid 6 Mock 場景 + G1 沿用 legacy + H1 沿用 PendingConfirmationStore）|
 | v2.0 | 2026-05-03 | Forge 結案第一段（Session A + B 一氣呵成）—— spike F1/F2 結論寫入（Executor 內 short-circuit + 同 WorkflowBuilder 串接）；Workflows/Design/ 11 新檔（DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + 11 Executor 含 DesignAdjustmentExecutor 兩出口 + DesignPlanExecutor 雙 handler）+ FrameworkDesignRouter + DesignSplitProposalEvaluator 共 17 新檔；既有檔機械化抽出 + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景共 12 改檔；Migration `Stage52TaskGroupDesignFrameworkState`；Forge 自驗 5 靜態場景全綠 + 場景 F 留 Christ 線下；0 follow-up；commits：`3b2343a`(A) → `8b3ead1`(B)（結案第一段）|
+| v2.1 | 2026-05-03 | Forge 驗收期實跑（授權 ops 透過 docker exec / Bot Internal API 跑場景 B/C/D/E）—— 揭露並修 2 follow-up：① Mock agentName 識別補 Petra plan + adjustment eval 兩 prompt（commit `806b22b`，Stage 50 踩坑 #11 預警命中）② 拆 DesignPlanExecutor 雙 [MessageHandler] 解 framework 1.3.0 AddEdge type filter 不 source-aware（commit `27ce0b7`，新 DesignAdjustmentPlanExecutor 18 檔→18 檔）；驗收 5 場景全綠（A baseline / B consensus_round1 / C adjustment_approved / D adjustment_needs_meeting / E no_demi）+ DB 寫入正確 + meeting log Demi 跳過段對齊 legacy；場景 F crash recovery 留 Christ 線下；Forge 自評倍率 ×1.10-1.30（mid 帶上半，2 follow-up +0.10-0.15）|
