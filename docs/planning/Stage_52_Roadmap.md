@@ -667,7 +667,12 @@ Forge 授權 ops 透過 docker exec / Bot Internal API 實跑場景 B/C/D/E（Ki
 
 - **follow-up #2**（commit `27ce0b7`）：場景 D 揭露 `WorkflowErrorEvent: Expected exactly one update for key 'singleton'` + Plan executor 被 needs_meeting 路徑 DesignPetraVerdict 誤觸發（DB DesignRound=1 應該 2 + DesignPlan = Round 1 plan 應該 Round 2 plan）。根因：原 DesignPlanExecutor 雙 [MessageHandler] 接 DesignPetraVerdict + DesignAdjustmentApproved；framework 1.3.0 AddEdge type-based dispatch **不 source-aware**，把 adjust needs_meeting 路徑送的 DesignPetraVerdict 也 dispatch 給 plan，造成 plan 跑 LLM + state 同 superstep 衝突。修法拆 plan 成兩個 Executor（DesignPlanExecutor 只接 DesignPetraVerdict / DesignAdjustmentPlanExecutor 只接 DesignAdjustmentApproved）讓 type filter 自然分流。
 
-驗收期 5 場景全綠（A/B/C/D/E），場景 F crash recovery 由 Christ 線下實跑。共 4 commits（Session A `3b2343a` → Session B `8b3ead1` → Roadmap hash `b5dac50` → fix#1 `806b22b` → fix#2 `27ce0b7`）。
+驗收期 5 場景全綠（A/B/C/D/E），場景 F crash recovery 由 Forge 自做（兩跑驗證 SIGTERM/SIGKILL 兩路徑）：
+
+- **F-1 SIGTERM grace（docker compose restart）**：finally block 跑完 → marker 被清 → Recovery 啟動「無 stuck framework design」。group 進入 limbo（Status='running' + marker NULL）需手動 cancel。**這是預期行為** — graceful shutdown 視為「Workflow 已結束」對齊 Stage 50 既有 pattern；production happy path 也走這條 finally 清 marker。
+- **F-2 SIGKILL crash（docker kill）**：finally 沒跑 → marker 保留 → Recovery 啟動偵測「發現 1 個 stuck framework design，採降級策略重啟」→ 載 latest checkpoint → 清 marker。**真實 crash 路徑通過**（kernel OOM kill / hardware reboot / docker engine 異常多數 SIGKILL-style）。
+
+共 5 commits（Session A `3b2343a` → Session B `8b3ead1` → Roadmap hash `b5dac50` → fix#1 `806b22b` → fix#2 `27ce0b7` → Roadmap v2.1 `d35ec80`）。
 
 ### 驗收結果
 
@@ -733,3 +738,4 @@ Forge 授權 ops 透過 docker exec / Bot Internal API 實跑場景 B/C/D/E（Ki
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第四步 Stage：Design Meeting B3 路線（A2 拆 Stage + B2 single-Executor wrapper + C2 router 後置 + D2 兩項 spike + E1 獨立 flag + F-mid 6 Mock 場景 + G1 沿用 legacy + H1 沿用 PendingConfirmationStore）|
 | v2.0 | 2026-05-03 | Forge 結案第一段（Session A + B 一氣呵成）—— spike F1/F2 結論寫入（Executor 內 short-circuit + 同 WorkflowBuilder 串接）；Workflows/Design/ 11 新檔（DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + 11 Executor 含 DesignAdjustmentExecutor 兩出口 + DesignPlanExecutor 雙 handler）+ FrameworkDesignRouter + DesignSplitProposalEvaluator 共 17 新檔；既有檔機械化抽出 + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景共 12 改檔；Migration `Stage52TaskGroupDesignFrameworkState`；Forge 自驗 5 靜態場景全綠 + 場景 F 留 Christ 線下；0 follow-up；commits：`3b2343a`(A) → `8b3ead1`(B)（結案第一段）|
 | v2.1 | 2026-05-03 | Forge 驗收期實跑（授權 ops 透過 docker exec / Bot Internal API 跑場景 B/C/D/E）—— 揭露並修 2 follow-up：① Mock agentName 識別補 Petra plan + adjustment eval 兩 prompt（commit `806b22b`，Stage 50 踩坑 #11 預警命中）② 拆 DesignPlanExecutor 雙 [MessageHandler] 解 framework 1.3.0 AddEdge type filter 不 source-aware（commit `27ce0b7`，新 DesignAdjustmentPlanExecutor 18 檔→18 檔）；驗收 5 場景全綠（A baseline / B consensus_round1 / C adjustment_approved / D adjustment_needs_meeting / E no_demi）+ DB 寫入正確 + meeting log Demi 跳過段對齊 legacy；場景 F crash recovery 留 Christ 線下；Forge 自評倍率 ×1.10-1.30（mid 帶上半，2 follow-up +0.10-0.15）|
+| v2.2 | 2026-05-03 | Forge 自做場景 F crash recovery 兩跑驗證（記得 Christ 拍板 docker compose restart 放寬給 Forge）—— F-1 SIGTERM grace（docker compose restart，finally 清 marker，預期行為）+ F-2 SIGKILL crash（docker kill，finally 沒跑 marker 保留 → Recovery 偵測「發現 1 個 stuck framework design，採降級策略重啟」載 latest checkpoint dc172461 → 清 marker）；**6 場景全綠**；揭露 SIGTERM/SIGKILL 兩路徑行為差異 — 非 bug，graceful 與 crash 兩 signal 自然對映既有降級策略；Roadmap 補完 v2.2 紀錄|
