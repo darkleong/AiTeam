@@ -11,15 +11,39 @@
 
 ## [Unreleased]
 
-- **🎉 Stage 50 v4 漸進遷移第二步完成**：[Stage 50](docs/planning/Stage_50_Roadmap.md) Kickoff Meeting 切 MS Agent Framework Group Chat（A2 fan-out/fan-in 路線） + feature flag 並行雙系統 — **3 follow-up fix 揭露 framework 1.3.0 fan-out 拓撲首次 production 整合的 streaming dispatch + type validation 兩層額外要求**。v4 漸進遷移路線 6 Stage 遷移 **2/6 達成**。
-- **下個動作候選**：① **Stage 51 = BossInteraction → Human-in-the-Loop**（v4 漸進遷移第 3 步，估 1-2 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
-- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** ✅ **Stage 50 Kickoff Meeting** → Stage 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine + Design Meeting → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
+- **🎉 Stage 51 v4 漸進遷移第三步完成 ⭐**：[Stage 51](docs/planning/Stage_51_Roadmap.md) framework HITL pattern 試點（Kickoff Workflow 中途介入）+ feature flag — **6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過（含跨 process restart requestId stable 證據鏈）**。v4 漸進遷移路線 6 Stage 遷移 **3/6 達成**。
+- **下個動作候選**：① **Stage 52 = Design Meeting B3 路線（主迴圈遷移）+ WorkflowEngine 整體 → Workflow Builder（最大遷移點）**（v4 漸進遷移第 4 步，估 4-6 週，必拆 session 2-3 段）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
+- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** ✅ **Stage 50 Kickoff Meeting** ✅ **Stage 51 framework HITL 試點** → Stage 52 WorkflowEngine + Design Meeting → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換 + 真正切既有 BossInteraction 到 framework HITL（Stage 51 試點 know-how 全面 wire）
 - **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 52 漸進遷移過半再評估 Phase B**
-- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅**
+- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 - **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
 
 ---
+
+## [3.37.0] — 2026-05-02 — [Stage 51](docs/planning/Stage_51_Roadmap.md) v4 漸進遷移第三步 ⭐ framework HITL 試點
+
+v4 漸進遷移 6 Stage 路線第三步完成 — framework **Human-in-the-Loop（HITL）pattern 試點** + Checkpointing pause-resume 機制（Kickoff Workflow 中途介入）+ 獨立 feature flag 雙 flag 連動。**6 場景全綠 + 0 follow-up commits + Aria spike 三項關注點實證通過**（含跨 process restart requestId stable 證據鏈）。
+
+「換引擎不換車身」第三步實踐：**A3 試點精神** — 既有 BossInteraction 10+ type 任何一個都不切（46 檔涉及 + 雙通道樂觀鎖機制成熟，無法 1:1 對應 framework HITL 替代），新建 `framework_kickoff_mid_interrupt` BossInteraction type + `FrameworkHitlBridge` service 作橋接層；既有 InteractionService / InteractionRespondService / InteractionProcessor 主流程不動。**B1 試點場景** = Christ 在 Kickoff 多輪會議跑期間 Dashboard 點「✏️ 中途介入」按鈕，下個 Petra Round 邊界 framework workflow yield 等回應，Christ 透過 BossInteraction（Discord 或 Dashboard）回「套用修改 + 指引文字」或「取消介入」，workflow 從 checkpoint resume 帶新指引繼續跑。
+
+**核心 lifecycle 質變（vs Stage 49/50 同步跑完）**：framework Workflow 跑到 RequestPort 點 yield → router 在 `WatchStreamAsync` 收到 `RequestInfoEvent` 時 break loop（保留 checkpoint pending request）→ 開 BossInteraction → Christ 回應後**新 HTTP scope** rehydrate workflow（`InProcessExecution.ResumeStreamingAsync(workflow, savedCheckpoint, manager)` 對齊 spike F3 結論）+ `SendResponseAsync` 送回應 → workflow 從 yield 點繼續跑到結束。
+
+**Spike 第一步 F1/F2/F3 三項全綠**：① `RequestPort.Create<TReq, TResp>` C# 1.3.0 stable API（含 ExecutorBinding 隱式轉換進 Workflow 拓撲）② `ICheckpointStore<JsonElement>` 對 pending requests 序列化可用（framework 內部隨 checkpoint 序列化 + RestoreCheckpointAsync 自動 re-emit RequestInfoEvent）③ 跨 HTTP scope rehydrate 模式（Bridge 不持有 run 物件，每次新 scope 內 ResumeStreamingAsync）。
+
+**核心拍板**（Christ 2026-05-02）：① A3 試點不切既有 BossInteraction ② B1 Kickoff 中途介入場景 ③ C2 Petra session 沿用 Claude Code `--resume` 機制（Modify 流程不動）④ D2 獨立 `Workflow:UseFrameworkKickoffMidInterrupt` flag（雙 flag 連動：本 flag 只在 UseFrameworkKickoff = true 時有意義）⑤ E D2 抽 `FrameworkHitlBridge` service（解耦給 Stage 54 收尾真正切 HITL 時複用）⑥ F spike 三項全驗。
+
+**Forge 主動範圍變更（Aria 認可）**：trigger flag 改用 **in-memory `KickoffMidInterruptTriggerStore`** Singleton（vs 計劃書原 framework state JSON mutation helper / Plan B DB fallback）— 避免 framework checkpoint JsonElement 內部結構 mutation brittleness（framework 版本變動易破壞），代價是 Bot 重啟「待按按鈕」狀態丟失（Christ 重新點即可，按下到下個 superstep 邊界本就時間敏感，HITL 等待 phase 已轉化為 KickoffState.MidInterruptRequestPending 持久化）。
+
+**8 個關鍵設計決策**：① in-memory TriggerStore 第三條路 ② Bridge 不持有 run 物件 rehydrate 模式 ③ MidInterruptCheckExecutor 雙 [MessageHandler] partial class（對齊 Stage 50 踩坑 #10 三件套紀律）④ Bridge ⇄ Router service locator 解循環依賴 ⑤ finally cleanup 條件式（`yieldedForHitl` flag）⑥ KickoffTaskId 寫進 KickoffState 跨 scope 持久化 ⑦ `ScanForGuidProperty`/`ScanForStringProperty` 寬鬆 scan framework state JSON（fail-open 設計，避 framework 版本變動 break）⑧ Cancel 拍板「丟棄所有累積指引回到正常對話」每次介入是獨立 trigger-response cycle。
+
+**戰略級驗收結果（Aria spike 三項關注點實證通過）**：場景 D（crash during wait）是最強驗證 — yield 後 `docker restart aiteam-bot` → 重啟 log `[FrameworkKickoffRouter] 啟動：發現 1 個 stuck framework kickoff` → `[Stage51] Recovery Group=df65b28c...：等待人類回應（MidInterruptRequestPending=true），保留 marker 等 BossInteraction 觸發 resume` → Discord 點按鈕 + 輸入文字 → `ResumeStreamingAsync 啟動（requestId=0daeccaa...）` **跨 process restart 仍找到 latest checkpoint** → `SendResponseAsync 完成` → `WorkflowOutputEvent（decision=consensus，rounds=2）` → `FinishKickoffAsync 完成`。requestId `0daeccaa72714604812add3427ba4d9d` 在 yield emit + Bridge resume + Recovery 跨重啟全程 stable。**Aria 校準錨：實際 448K / Charter 中位 465K = ×0.96**（混合型 Stage 第 3 個資料點，落 mid 帶**下半**，比 Stage 50 ×1.09 / Stage 49 ×1.25 還準）。
+
+**新建 4 檔 ~600 LoC**：`Workflows/Kickoff/Executors/MidInterruptCheckExecutor.cs` 111 LoC（雙 [MessageHandler] partial class）+ `Orchestration/Hitl/FrameworkHitlBridge.cs` 353 LoC + `Orchestration/Hitl/KickoffMidInterruptTriggerStore.cs` 35 LoC + ~600 LoC Bridge service；改檔 ~15 個（含 KickoffWorkflowFactory 拓撲擴充 + KickoffState 加 4 欄位 + 2 record + Router lifecycle 改寫 + ButtonCallbackRouter customId 路由 + CommandHandler modal handler + Dashboard PipelineView 按鈕 + SystemSettings 第三 toggle + Bot Internal API + 4 Mock scenario）。
+
+**Forge 自驗能力擴張第三次完整實踐**（Stage 49 → Stage 50 → Stage 51）：5 場景靜態自驗（A.1/A.2/A.3 + E + F 程式碼路徑審視）+ B/C/D Christ 線下實跑（HITL 真實互動性質決定，Forge 主動誠實標明 + 提供完整 step-by-step 操作步驟）+ 結案 Forge 自做 Roadmap v2.0（forge-end skill 沿用 Stage 50 慣例）+ 12 stale TaskGroups DB 清理紀錄。**8 條踩坑紀錄**含戰略級對 Stage 52+ 預警（`RequestPort` 隱式轉換 ExecutorBinding 接線方式 / Blazor lifecycle 選擇 / customId prefix 順序紀律）。
+
+commits：`67a9b0a`（Session A）+ `e65a4b3`（Session B 收尾）+ `3bb7f28`（Roadmap v2.0 forge-end SOP）。
 
 ## [3.36.0] — 2026-05-02 — [Stage 50](docs/planning/Stage_50_Roadmap.md) v4 漸進遷移第二步
 
