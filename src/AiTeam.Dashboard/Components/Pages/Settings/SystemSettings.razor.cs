@@ -33,6 +33,7 @@ public partial class SystemSettings
     private int     _globalMonthlyLimitK = 0;   // 0 = DB 無設定，fallback appsettings
     private int     _singleRequestLimitK = 0;   // 0 = DB 無設定，fallback appsettings
     private bool    _useFrameworkAppealLoop;    // Stage 49：v4 漸進遷移 feature flag
+    private bool    _useFrameworkKickoff;       // Stage 50：v4 漸進遷移第二步 feature flag
     private bool    _isSavingTokenLimits;
     private bool    _isReloading;
     private bool    _isSavingChannel;
@@ -79,6 +80,10 @@ public partial class SystemSettings
         // Stage 49：v4 漸進遷移 feature flag
         var frameworkAppealSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkAppealLoop");
         _useFrameworkAppealLoop = bool.TryParse(frameworkAppealSetting?.Value, out var fav) && fav;
+
+        // Stage 50：v4 漸進遷移第二步 feature flag
+        var frameworkKickoffSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkKickoff");
+        _useFrameworkKickoff = bool.TryParse(frameworkKickoffSetting?.Value, out var fkv) && fkv;
     }
 
     private async Task<int> LoadWorkflowRoundsAsync(string key, int fallback)
@@ -116,6 +121,13 @@ public partial class SystemSettings
         _useFrameworkAppealLoop = newValue;
         await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
         _saveMessage = $"「MS Agent Framework Appeal Loop」已{(_useFrameworkAppealLoop ? "啟用" : "停用")}（v4 漸進遷移 Stage 49 首發），5 分鐘內自動生效";
+    }
+
+    private async Task OnUseFrameworkKickoffChanged(bool newValue)
+    {
+        _useFrameworkKickoff = newValue;
+        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
+        _saveMessage = $"「MS Agent Framework Kickoff Meeting」已{(_useFrameworkKickoff ? "啟用" : "停用")}（v4 漸進遷移 Stage 50 第二步），5 分鐘內自動生效";
     }
 
     private async Task SaveCeoChannelIdAsync()

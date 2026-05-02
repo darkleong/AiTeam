@@ -135,6 +135,13 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Proposal.ProposalConfirma
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Appeal.AppealCheckpointStore>();
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Appeal.AppealWorkflowFactory>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Appeal.FrameworkAppealRouter>();
+// Stage 50：framework Kickoff Workflow（v4 漸進遷移第二步） — A2 fan-out/fan-in 路線
+// KickoffCheckpointStore Singleton（process 生命週期 in-memory cache + 同步寫 task_groups.KickoffFrameworkStateJson）
+// KickoffWorkflowFactory 無 scoped state，可 Singleton；FrameworkKickoffRouter 對齊 Stage 49 Singleton 慣例（DI 生命週期驗證見 Plan Mode）
+// feature flag 預設 false（Workflow:UseFrameworkKickoff AppSettings key），與 Stage 49 UseFrameworkAppealLoop 完全獨立
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Kickoff.KickoffCheckpointStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Kickoff.KickoffWorkflowFactory>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkKickoffRouter>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();

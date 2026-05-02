@@ -13,6 +13,7 @@ namespace AiTeam.Bot.Configuration;
 ///   Workflow:KickoffMaxRounds
 ///   Workflow:DesignMeetingMaxRounds
 ///   Workflow:UseFrameworkAppealLoop  (Stage 49 v4 漸進遷移)
+///   Workflow:UseFrameworkKickoff     (Stage 50 v4 漸進遷移第二步)
 ///
 /// AppSettings 無值或解析失敗 / 非正整數時，fallback 到 IOptions&lt;WorkflowSettings&gt;（讀 appsettings.json）。
 /// </summary>
@@ -40,6 +41,10 @@ public class WorkflowSettingsResolver(
     /// <summary>Stage 49：v4 漸進遷移 feature flag。預設 false（走 legacy AppealOrchestrationService）。</summary>
     public Task<bool> GetUseFrameworkAppealLoopAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseFrameworkAppealLoop", Defaults.UseFrameworkAppealLoop, ct);
+
+    /// <summary>Stage 50：v4 漸進遷移第二步 feature flag。預設 false（走 legacy KickoffMeetingService）。</summary>
+    public Task<bool> GetUseFrameworkKickoffAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseFrameworkKickoff", Defaults.UseFrameworkKickoff, ct);
 
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {

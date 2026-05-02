@@ -231,6 +231,26 @@
     </div>
 </div>
 
+<div class="system-config-card system-config-card--warning" style="margin-top: 16px;">
+    <div class="system-config-header">
+        <div>
+            <strong>使用 MS Agent Framework Kickoff Meeting</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後 <strong>Kick-off 5 Agent 多輪會議</strong>（Rosa/Demi/Cody/Quinn 並行 + Petra 整理）改用 MS Agent Framework Workflow Builder fan-out/fan-in + Checkpointing，<br/>
+                替換 legacy <code>KickoffMeetingService</code> 的手刻 for-loop（v4 漸進遷移第二步 Stage 50）。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">
+                    ⚠️ 實驗性功能。啟用前請確認 ① ANTHROPIC_API_KEY 設定 ② 跑過 Mock 驗收（場景 framework_kickoff_*）③ Stage 49 Appeal Loop 已通過驗收。修改後 5 分鐘內自動生效。
+                </MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_useFrameworkKickoff"
+                   ValueChanged="@OnUseFrameworkKickoffChanged"
+                   Color="Color.Warning"
+                   Label="@(_useFrameworkKickoff ? "啟用" : "停用")" />
+    </div>
+</div>
+
 <MudDivider Style="margin: 32px 0" />
 
 <h3 style="margin-bottom:16px">Token 守門設定</h3>

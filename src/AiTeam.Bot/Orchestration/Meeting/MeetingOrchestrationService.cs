@@ -52,6 +52,20 @@ public class MeetingOrchestrationService(
     /// </summary>
     public async Task RunKickoffMeetingAndWaitAsync(TaskGroup group, CancellationToken ct)
     {
+        // ── Stage 50：v4 漸進遷移第二步 feature flag 入口分流 ──
+        // feature flag true → framework path 接管（FrameworkKickoffRouter），不走下方 legacy 邏輯
+        await using (var flagScope = serviceProvider.CreateAsyncScope())
+        {
+            var workflowResolver = flagScope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkKickoffAsync(ct))
+            {
+                logger.LogInformation("[Stage50] HandleKickoffMeetingAsync framework path 接管（Group={Id}）", group.Id);
+                var router = flagScope.ServiceProvider.GetRequiredService<FrameworkKickoffRouter>();
+                await router.HandleKickoffMeetingAsync(group, ct);
+                return;
+            }
+        }
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
@@ -445,8 +459,12 @@ public class MeetingOrchestrationService(
         // Stage 45 硬規則：paused TaskGroup 不參與 crash recovery（暫停意圖保留）
         // Stage 49 風險點 R2：framework path 接管的 group（FrameworkAppealStateJson != null）由 FrameworkAppealRouter
         // 自己 recovery，legacy 路徑必須排除避免雙系統 collision
+        // Stage 50 R2 緩解擴充：framework Kickoff path（KickoffFrameworkStateJson != null）由 FrameworkKickoffRouter
+        // 自己 recovery，legacy 路徑同樣必須排除
         var stuckGroups = await db.TaskGroups
-            .Where(g => g.ActiveOrchestration != null && !g.IsPaused && g.FrameworkAppealStateJson == null)
+            .Where(g => g.ActiveOrchestration != null && !g.IsPaused
+                     && g.FrameworkAppealStateJson == null
+                     && g.KickoffFrameworkStateJson == null)
             .ToListAsync(ct);
 
         // Stage 45：log 跳過的 paused 數量（驗收期 docker logs 觀察用）
@@ -462,6 +480,13 @@ public class MeetingOrchestrationService(
         if (frameworkSkippedCount > 0)
             logger.LogInformation("[Stage49-CrashRecoveryFramework] Crash Recovery：legacy path 跳過 {N} 個 framework path TaskGroup（由 FrameworkAppealRouter 接管）",
                 frameworkSkippedCount);
+
+        // Stage 50：log 跳過的 framework Kickoff path 數量（FrameworkKickoffRouter 自己 recovery）
+        var frameworkKickoffSkippedCount = await db.TaskGroups
+            .CountAsync(g => g.ActiveOrchestration != null && !g.IsPaused && g.KickoffFrameworkStateJson != null, ct);
+        if (frameworkKickoffSkippedCount > 0)
+            logger.LogInformation("[Stage50-CrashRecoveryFrameworkKickoff] Crash Recovery：legacy path 跳過 {N} 個 framework Kickoff path TaskGroup（由 FrameworkKickoffRouter 接管）",
+                frameworkKickoffSkippedCount);
 
         if (stuckGroups.Count == 0) return;
 
@@ -868,8 +893,9 @@ public class MeetingOrchestrationService(
     //  Helpers
     // ============================================================
 
-    /// <summary>Stage 25a：組建 Kick-off 會議的提案說明內容。</summary>
-    private static string BuildKickoffProposalContent(TaskGroup group)
+    /// <summary>Stage 25a：組建 Kick-off 會議的提案說明內容。
+    /// Stage 50：改 internal static 給 FrameworkKickoffRouter 共用（v4 漸進遷移第二步）。</summary>
+    internal static string BuildKickoffProposalContent(TaskGroup group)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine(group.Title);

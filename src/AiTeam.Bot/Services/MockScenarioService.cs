@@ -87,6 +87,16 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "review_appeal";  // 同 fail_review，框架 path 走 max-iter Petra arbitration
         else if (scenario == "framework_appeal_loop_crash_recovery")
             MockClaudeCodeService.FailScenario = "review_appeal";  // 觸發 framework path Round 2，配合下方 PausePoint 設定模擬 crash
+        // ── Stage 50 v4 漸進遷移第二步：framework Kickoff Meeting 5 個 Mock 場景 ──
+        // Christ 線下驗收時必須先 toggle Dashboard → 系統設定 → 使用 MS Agent Framework Kickoff Meeting = ON
+        // 否則 feature flag 為 false，KickoffMeetingService 走 legacy path，這 5 個場景就跟一般 new_feature 等價
+        // 機制：scenario key 透過 MockClaudeCodeService.FailScenario 傳遞（active scenario key 模式對齊 Stage 49）
+        else if (scenario is "framework_kickoff_consensus_round1"
+                          or "framework_kickoff_consensus_round2"
+                          or "framework_kickoff_max_iter"
+                          or "framework_kickoff_escalate"
+                          or "framework_kickoff_crash_recovery")
+            MockClaudeCodeService.FailScenario = scenario;
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -115,6 +125,12 @@ public class MockScenarioService(
             "framework_appeal_loop_max_iter_reject"   => (WorkflowType.NewFeature, "Framework-MaxIterReject",  "Dev"),
             "framework_appeal_loop_max_iter_escalate" => (WorkflowType.NewFeature, "Framework-MaxIterEscalate","Dev"),
             "framework_appeal_loop_crash_recovery"    => (WorkflowType.NewFeature, "Framework-CrashRecovery",  "Dev"),
+            // Stage 50 v4 漸進遷移第二步：framework Kickoff 5 個場景（initialStep="Kickoff" 從 Kickoff 起跑驗 fan-out/fan-in Workflow）
+            "framework_kickoff_consensus_round1" => (WorkflowType.NewFeature, "FrameworkKickoff-ConsensusR1",  "Kickoff"),
+            "framework_kickoff_consensus_round2" => (WorkflowType.NewFeature, "FrameworkKickoff-ConsensusR2",  "Kickoff"),
+            "framework_kickoff_max_iter"         => (WorkflowType.NewFeature, "FrameworkKickoff-MaxIter",      "Kickoff"),
+            "framework_kickoff_escalate"         => (WorkflowType.NewFeature, "FrameworkKickoff-Escalate",     "Kickoff"),
+            "framework_kickoff_crash_recovery"   => (WorkflowType.NewFeature, "FrameworkKickoff-CrashRecovery","Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -166,13 +182,24 @@ public class MockScenarioService(
             "framework_appeal_loop_max_iter_reject"                => "🚀",
             "framework_appeal_loop_max_iter_escalate"              => "🚀",
             "framework_appeal_loop_crash_recovery"                 => "🚀",
+            // Stage 50：framework Kickoff 5 場景（v4 漸進遷移第二步）
+            "framework_kickoff_consensus_round1"                   => "🤝",
+            "framework_kickoff_consensus_round2"                   => "🤝",
+            "framework_kickoff_max_iter"                           => "🤝",
+            "framework_kickoff_escalate"                           => "🤝",
+            "framework_kickoff_crash_recovery"                     => "🤝",
             _                                                       => "✨"
         };
 
         // Stage 49 v4 漸進遷移：framework Mock 場景啟動時提示 Christ 確認 feature flag
         var frameworkHint = scenario.StartsWith("framework_appeal_loop_")
             ? "\n⚠️ **v4 漸進遷移驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Appeal Loop = ON**，否則此 Mock 走 legacy path 無法驗 framework Workflow。"
-            : "";
+            : scenario.StartsWith("framework_kickoff_")
+                ? "\n⚠️ **v4 漸進遷移第二步驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Kickoff Meeting = ON**，否則此 Mock 走 legacy KickoffMeetingService。" +
+                  (scenario == "framework_kickoff_crash_recovery"
+                      ? "\n💡 場景 C 流程：等 Round 2 4 Agent 並行進行中（log 觀察）→ 手動 `docker compose restart aiteam-bot` → 觀察 Bot 啟動時 [Stage50-CrashRecoveryFrameworkKickoff] log 與降級策略。"
+                      : "")
+                : "";
 
         return (true,
             $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +

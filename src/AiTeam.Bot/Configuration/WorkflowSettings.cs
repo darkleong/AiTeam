@@ -26,4 +26,11 @@ public class WorkflowSettings
     /// 後 framework path 接管 Cody-Vera-Petra Critical Issue 申訴 + Cody-Petra Dev_plan 申訴 loop。
     /// AppSettings 表 key = "Workflow:UseFrameworkAppealLoop"，DB 優先，appsettings.json fallback。</summary>
     public bool UseFrameworkAppealLoop { get; set; } = false;
+
+    /// <summary>Stage 50：v4 漸進遷移第二步 — 是否啟用 MS Agent Framework Kickoff Meeting Group Chat orchestration。
+    /// 預設 false（保留 legacy KickoffMeetingService 路徑），Dashboard SystemSettings → v4 漸進遷移控制 切換為 true 後
+    /// framework path 接管 Kickoff Meeting 5 Agent fan-out/fan-in 會議流程。
+    /// AppSettings 表 key = "Workflow:UseFrameworkKickoff"，DB 優先，appsettings.json fallback。
+    /// 與 Stage 49 Workflow:UseFrameworkAppealLoop 完全獨立。</summary>
+    public bool UseFrameworkKickoff { get; set; } = false;
 }

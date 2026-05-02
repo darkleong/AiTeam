@@ -219,6 +219,59 @@ public class MockClaudeCodeService(
                       : prompt.Contains("你是 Quinn") ? "quinn"
                       : "unknown";
 
+        // Stage 50：framework Kickoff Meeting 5 場景下 Petra 依 round 切換 decision
+        // prompt 包含 "## 第 N 輪各角色意見"（KickoffPrompts.BuildPetraRoundPrompt 格式）— 以此判 Round
+        // 注意：場景 C crash_recovery 的 PausePoint 機制不適用 Kickoff（Kickoff 不走 dispatcher fire steps），
+        // 改採「Round 1+2 needs_discussion 推進 framework Workflow Round 2」+ Christ 線下 docker restart 驗 Recovery
+        if (agentName == "petra" && FailScenario is "framework_kickoff_consensus_round1"
+                                                or "framework_kickoff_consensus_round2"
+                                                or "framework_kickoff_max_iter"
+                                                or "framework_kickoff_escalate"
+                                                or "framework_kickoff_crash_recovery")
+        {
+            var round = prompt.Contains("## 第 1 輪各角色意見") ? 1
+                      : prompt.Contains("## 第 2 輪各角色意見") ? 2
+                      : prompt.Contains("## 第 3 輪各角色意見") ? 3
+                      : 0;  // 0 = 非 round prompt（如 BuildPetraPlanPrompt 產出最終計劃書）
+
+            // round == 0 → BuildPetraPlanPrompt（KickoffPlanExecutor 觸發）→ 回 Markdown 計劃書，無 decision JSON
+            if (round == 0)
+            {
+                return new ClaudeCodeResult(true,
+                    "# 任務計劃書\n\n## 任務摘要\n[MOCK] framework Kickoff 路徑產出之任務計劃書。\n\n" +
+                    "## 關鍵決策\n- [MOCK] 5 Agent 達成共識（或 max_iter 強制結束）\n\n" +
+                    "## 各角色意見摘要\n| 角色 | 主要意見 | 結論 |\n|------|---------|------|\n" +
+                    "| Rosa | [MOCK] 需求清晰 | 已確認 |\n" +
+                    "| Demi | [MOCK] UI 可容納 | 已確認 |\n" +
+                    "| Cody | [MOCK] 技術可行 | 已確認 |\n" +
+                    "| Quinn | [MOCK] 可測試 | 已確認 |\n\n" +
+                    "## 風險與注意事項\n- [MOCK] 無重大風險\n\n" +
+                    "## 建議實作方向\n[MOCK] 沿用既有架構。", 0, "");
+            }
+
+            // round 1-3：依 scenario 切 decision
+            var decision = (FailScenario, round) switch
+            {
+                ("framework_kickoff_consensus_round1", _)              => "consensus",
+                ("framework_kickoff_consensus_round2", 1)              => "needs_discussion",
+                ("framework_kickoff_consensus_round2", _)              => "consensus",
+                ("framework_kickoff_escalate", _)                      => "escalate",
+                ("framework_kickoff_max_iter", _)                      => "needs_discussion",   // 全部 needs_discussion，Round >= MaxRounds 時 Switch 走 max_iter 路徑
+                ("framework_kickoff_crash_recovery", _)                => "needs_discussion",   // Round 1+2 推進，Christ 線下 restart 觀察 Recovery
+                _                                                       => "consensus",
+            };
+            var summaryText = decision switch
+            {
+                "consensus"        => "[MOCK] framework Kickoff 達成共識",
+                "needs_discussion" => "[MOCK] framework Kickoff 需進一步討論",
+                "escalate"         => "[MOCK] framework Kickoff 偵測到無法團隊內解決的分歧，上呈老闆裁決",
+                _                  => "[MOCK]"
+            };
+            return new ClaudeCodeResult(true,
+                $"[MOCK] Petra Round {round} 整理完成（framework path / scenario={FailScenario}）。\n" +
+                "{\"decision\":\"" + decision + "\",\"summary\":\"" + summaryText + "\",\"discussion_points\":[]}", 0, "");
+        }
+
         var output = agentName switch
         {
             "petra" =>

@@ -562,39 +562,87 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 ## 實作紀錄
 
-> Forge 結案第一段補。
+> Forge 結案第一段補（v3.36.0，2026-05-02 完成）。
 
 ### 子項完成度對照（對齊 Aria 計劃書 10 子項）
 
-> 待 Forge 結案第一段補。
+| # | 子項 | 狀態 | 完成備註 |
+|---|---|---|---|
+| **0** | Spike 第一步 3 項驗證（議題 E） | ✅ | E1 ❌ Group Chat custom manager 不支援 multi-speaker per round → 走 A2 fallback；E2 ✅ ICheckpointStore 通用；E3 ✅ 並行度不被框架限制（OS-level subprocess） |
+| **1** | DB schema `task_groups.KickoffFrameworkStateJson` + Migration `Stage50TaskGroupKickoffFrameworkState` | ✅ | Entities.cs +8 行 / Migration 自動產出 |
+| **2** | `KickoffState` production 版（Workflows/Kickoff/KickoffState.cs） | ✅ | 含 4 records（KickoffAgentOutput / KickoffRoundCollected / KickoffPetraVerdict / KickoffLoopResult）+ KickoffStateHelpers ReadAsync/SaveAsync |
+| **3** | `ClaudeCodeAgentExecutor` Stage 50 處理 | ✅ | 拍板 reverse Aria 計劃書原案 — 保留 [Obsolete] 預留，僅更新 message 說明（Stage 50 5 Agent 走 service-call 路線 B，wrapper 仍未 production wire） |
+| **4** | `KickoffWorkflowFactory` + 6 Executors + `KickoffPrompts` 抽出 | ✅ | A2 路線 fan-out/fan-in + AddSwitch + loop back；KickoffPrompts 抽出後 legacy 8 處 call site 直接 inline（Aria 計劃書範圍擴張認可） |
+| **5** | `KickoffCheckpointStore` | ✅ | 90% 複用 Stage 49 AppealCheckpointStore（換 DB 欄位 + namespace + class name） |
+| **6** | feature flag `Workflow:UseFrameworkKickoff` + WorkflowSettings/Resolver 擴充 | ✅ | 與 Stage 49 UseFrameworkAppealLoop 完全獨立 |
+| **7** | `FrameworkKickoffRouter`（單一 entry + Recovery + escalate 整合） | ✅ | HandleKickoffMeetingAsync + RecoverStuckFrameworkKickoffsAsync + NotifyKickoffFailureAsync（fallback 拍板：不 fallback to legacy）+ escalate 路徑沿用既有 BossInteraction 手刻 path |
+| **8** | `MeetingOrchestrationService` 入口分流 + Recovery 雙系統 + Dashboard UI + Program.cs DI + AgentQueueProcessor hook | ✅ | RunKickoffMeetingAndWaitAsync 開頭 feature flag 分流；Recovery 篩選追加 `&& g.KickoffFrameworkStateJson == null` + `[Stage50-CrashRecoveryFrameworkKickoff]` log；Dashboard 加 v4 漸進遷移控制 toggle 第二個 |
+| **9** | Mock 場景 5 個 framework_kickoff_* + 結案 + Version → 3.36.0 | ✅ | scenario active key 機制對齊 Stage 49 framework_appeal_loop_*（透過 MockClaudeCodeService.FailScenario static 欄位傳遞），MockClaudeCodeService.RunMeetingSessionAsync 內 Petra 分支依 Round 切換 decision JSON |
 
 ### Session A 結案
 
-> 待 Forge 結案第一段補。
+**commit**：[`7d37a48`](https://github.com/darkleong/AiTeam/commit/7d37a48) `feat(stage50-A): v3.36.0 進行中 — Session A：DB + State + Workflow Factory + CheckpointStore（路線 A2 fan-out/fan-in）`
+
+**範圍**：spike 第一步 + 子項 1-5（11 新檔 + 4 改檔）：
+- DB：TaskGroup.KickoffFrameworkStateJson + Migration
+- 新建 Workflows/Kickoff/：State / Prompts / WorkflowFactory / CheckpointStore + 6 Executors
+- 改：legacy KickoffMeetingService（淨刪 213 行 prompt builders + records，全委派 KickoffPrompts）+ DesignMeetingService using 補（ModifyDecision 跨檔 reference）+ ClaudeCodeAgentExecutor [Obsolete] message 更新
+
+**閘門一**：Aria 抽樣驗證 11 新檔 + 4 修改檔全到位 + Migration schema 對齊 + Workflow 拓撲 100% 對齊 + KickoffStartExecutor partial class + 雙 [MessageHandler] 對齊 Stage 49 pattern → ✅ 通過放行進 Session B
 
 ### Session B 結案
 
-> 待 Forge 結案第一段補。
+**commit**：（本 commit）`feat(stage50): v3.36.0 — v4 漸進遷移第二步，Kickoff Meeting 切 MS Agent Framework Group Chat + feature flag（Session B 收尾）`
+
+**範圍**：子項 6-9（1 新檔 + 6 改檔 + Version bump）：
+- 新建 FrameworkKickoffRouter（Orchestration/Meeting/，單一 entry + Recovery + escalate 整合 BossInteraction）
+- 改：WorkflowSettings + WorkflowSettingsResolver（feature flag）+ MeetingOrchestrationService（入口分流 + Recovery 雙系統隔離 + BuildKickoffProposalContent internal）+ AgentQueueProcessor（啟動 hook）+ Program.cs（DI 註冊 3 Singleton）+ SystemSettings.razor/.razor.cs（Dashboard toggle）+ MockScenarioService（5 個 framework_kickoff_* 場景）+ MockClaudeCodeService（Petra 分支 Round-aware decision）+ Directory.Build.props（3.35 → 3.36）
 
 ### 驗收結果
 
-> 待 Forge 結案第一段補（對齊 Stage 49 「Forge 自驗 + 真實 LLM 補驗」結構）。
+對齊 Stage 49「Forge 自驗 + 真實 LLM 補驗」結構：
+
+| 場景 | Forge 自驗 | Christ 線下補驗（真實 LLM / Discord UI） |
+|---|---|---|
+| **A**：feature flag false → legacy 不變 | ✅ build 0 error + 入口分流邏輯確認（`if (await workflowResolver.GetUseFrameworkKickoffAsync) → router; return;` 在 ActiveOrchestration set 前 → false 時走下方 legacy 邏輯不變） | 跑一般 Mock 確認流程通暢，無 [Stage50] log |
+| **B**：feature flag true → framework path 接管 | ✅ MockScenarioService 5 場景 + MockClaudeCodeService 切換邏輯邏輯一致；Workflow 拓撲 build 通過；DI graph 全 Singleton 對齊 | Dashboard toggle ON + 跑 `framework_kickoff_consensus_round1` → log 應出現 `[Stage50] HandleKickoffMeetingAsync framework path 接管` + DB `KickoffFrameworkStateJson` 寫入 |
+| **C**：framework Checkpointing crash recovery | ✅ RecoverStuckFrameworkKickoffsAsync 篩選 `g.KickoffFrameworkStateJson != null && !g.IsPaused`（Stage 45 紀律）+ Recovery 雙系統隔離 log 對齊 | 跑 `framework_kickoff_crash_recovery` 場景 + Round 2 期間 `docker compose restart aiteam-bot` → 觀察 `[Stage50-CrashRecoveryFrameworkKickoff]` log + 降級策略生效（清 marker → dispatcher 重觸發） |
+| **D**：Petra escalate → BossInteraction | ✅ FrameworkKickoffRouter.CreateKickoffConfirmationAsync escalate 路徑邏輯確認（embed Color.Orange + 沿用 kickoff_* button id + InteractionService.KickoffActionsJson） | 跑 `framework_kickoff_escalate` 場景 → 觀察 Discord embed `⚠️ Kick-off 會議需老闆裁決（escalate）` + BossInteraction 卡片 |
+| **E**：feature flag false 切回 → legacy 接管 | ✅ 入口分流檢查邏輯在每次呼叫時都執行（不 cache），Dashboard 切 OFF 後下次 RunKickoffMeetingAndWaitAsync 走 legacy | Dashboard 切 OFF + 跑一般 Mock 確認流程與場景 A 一致 |
+| **F**：5 Agent token + Christ Modify 沿用 legacy | ✅ KickoffAgentExecutor + KickoffPetraExecutor 全 call MeetingCommons.RunAgentTurnAsync 含 `meetingType: "Kickoff"` 群組計法（對齊 legacy 行為，token_logs AgentName="Meeting-Kickoff"）；Modify 流程 KickoffMeetingService.ModifyTaskPlanAsync 不變 | 真實 LLM 跑 `framework_kickoff_consensus_round1` 後查 token_logs 5 個 Agent + AgentName=Meeting-Kickoff；點 ✏️ 修改計劃書 → Petra session resume 對話 |
 
 ### 驗收後修正
 
-> 待 Forge 結案第一段補。
+> 待 Christ 線下驗收後補（如有）。
 
 ### 關鍵設計決策（為什麼這樣選）
 
-> 待 Forge 結案第一段補（對齊 Stage 49 7 個關鍵決策表格）。
+| # | 決策 | Why |
+|---|---|---|
+| 1 | **A2 fallback 路線（WorkflowBuilder fan-out/fan-in）** vs A1（Group Chat custom manager） | spike 第一步 E1 揭露 framework Group Chat 是 star topology + single-speaker turn-by-turn 設計，與「4 Agent 獨立並行視角」相反；Concurrent Orchestration 又不支援 loop back。WorkflowBuilder + AddFanOutEdge/AddFanInBarrierEdge/AddSwitch 是唯一可同時滿足「並行 + 多輪」的 API（agent-framework MapReduce + Loop sample 雙重佐證） |
+| 2 | **`ClaudeCodeAgentExecutor` 仍保留 [Obsolete]，Stage 50 不 production wire** | 5 Agent Executor 直接 call legacy `MeetingCommons.RunAgentTurnAsync` 比包 wrapper 乾淨：① 沿用 token Meeting-Kickoff 群組計法（對齊 legacy）② 沿用 cleanup 邏輯（workingDir 由 router 統一管理，wrapper 不擁有生命週期）③ wrapper 預留 Stage 54+ 收尾或 Stage 55+ 動態流程架構真正 wire 用 |
+| 3 | **`KickoffPrompts.cs` 抽出 + legacy 全刪 wrapper inline call** | 計劃書 v1.1 line 327「全刪 wrapper + call site 直接寫」優化路線 — 兩條路徑（legacy + framework）共用同 SoT，避免雙寫漂移；純機械化重構，prompt 文字 0 變動（Aria 計劃書範圍擴張認可） |
+| 4 | **`KickoffCheckpointStore` 直接複製 vs 抽 base class** | 符合「3 次再抽象」原則 — Appeal + Kickoff 是第 2 次出現相似 pattern，Stage 51+ Design Meeting / Human-in-the-Loop 是第 3 次再評估抽象。當前複製成本（90% 邏輯相同）< 提早抽象的維護成本 |
+| 5 | **fallback 拍板：framework Workflow 跑失敗 → 不 fallback to legacy** | Petra session_id = group.Id 已被 framework path 佔用，再走 legacy 會 double session creation；對齊 Stage 49 R2 緩解原則「雙系統不互相 invoke」。改發 Discord error embed + 標 group failed，由 Christ 線下決定 retry |
+| 6 | **`KickoffAggregator` 採 SendMessageAsync 顯式模式 + Dictionary（非 ConcurrentDictionary）** | MapReduce sample Shuffler pattern 證實 framework AddFanInBarrierEdge 序列化 deliver（Shuffler 用 List 而非 ConcurrentList），Dictionary 即可；`_expectedRound` 比對 round 自動 reset bucket，loop back 場景無需 reset 每次 SaveAsync 同步寫框架 state（持續 append meeting log） |
+| 7 | **Mock 場景透過 `MockClaudeCodeService.FailScenario` static 傳遞 scenario key** | 對齊 Stage 49 既有 `framework_appeal_loop_*` 模式（active scenario key），不依 sessionId pattern（sessionId 對 framework + legacy 都是 group.Id 或臨時 GUID 不能區分）；MockClaudeCodeService.RunMeetingSessionAsync 內 Petra 分支依 (FailScenario, prompt round 標記) 切換 decision JSON |
 
 ### 踩坑紀錄彙整
 
-> 待 Forge 結案第一段補（對齊 Stage 49 8 條踩坑紀錄，給 Stage 51+ 後續遷移預警）。
+> 給 Stage 51+ 後續 v4 遷移預警。
+
+1. **`Microsoft.Agents.AI.Workflows.Checkpointing.CheckpointManager` namespace 錯**：build error CS0234。實際 `CheckpointManager` 在 `Microsoft.Agents.AI.Workflows`（無 .Checkpointing 後綴），但 `ICheckpointStore<>` 在 `.Checkpointing`。修法：fully qualified 用 `Microsoft.Agents.AI.Workflows.CheckpointManager` 或直接 `using Microsoft.Agents.AI.Workflows;`。對 Stage 51+ 提醒：跨 router fully qualified 寫 method 簽名時注意 framework type 命名空間分裂。
+2. **`KickoffMeetingService` 內 `ModifyDecision` record 跨檔共用**：搬 `ModifyDecision` 到 `KickoffPrompts.cs` 後，DesignMeetingService 也用 `ModifyDecision` → CS0246 編譯錯。修法：DesignMeetingService 加 `using AiTeam.Bot.Workflows.Kickoff;`（internal record 同 assembly 跨 namespace）。對 Stage 52 提醒：抽 prompt/parser 共用時跨 service 用同 record 類型，必須 grep 全 callers 補 using。
+3. **`TaskRepository.GetByIdAsync` vs `GetTaskByIdAsync`**：直覺寫 GetTaskByIdAsync 但實際 method 名是 GetByIdAsync。修法：grep 確認 method 名後再寫。對齊既有 `legacy MeetingOrchestrationService` 不直接重用 task reference 而是 repo 取（避免 EF tracking 跨 scope）。
+4. **`AgentQueueProcessor` Recovery hook 順序**：Stage 49 既有 `RecoverStuckFrameworkAppealsAsync` hook 在 line 73 `RecoverStuckOrchestrationsAsync`（legacy）之後 — Stage 50 同樣加在 Stage 49 hook 之後，**不能搶在 legacy 之前**（legacy 排除條件依賴 framework marker 已 set，順序錯會雙觸發）。
+5. **Mock 場景 `framework_kickoff_crash_recovery` 用 PausePoint 機制**：但 Kickoff 不走 dispatcher fire steps 路徑，PausePoint 不適用。改採「Round 1+2 needs_discussion 推進到 Round 2」+ Christ 線下手動 docker restart 驗 Recovery。對 Stage 51 BossInteraction 提醒：framework Workflow 內部 superstep 不對應 dispatcher fire steps，crash recovery Mock 設計需另闢蹊徑。
+6. **Petra 第 1 輪 `isFirstMessage` 判定**：4 Agent 第 1 輪都是 first message（新 sessionId），Petra Round 1 也是 first message（state.PetraSessionId 第一次用）。但 KickoffPlanExecutor 跑 Petra plan prompt 時 `isFirstMessage: false`（接續 Petra session）。對 Stage 51+ 提醒：跨 Executor 共用 sessionId 時，必須在每個 Executor 內判斷 `isFirstMessage`，不能用 state.Round == 1 一刀切（KickoffPlanExecutor 在 Round 1 也是 false）。
+7. **Mock Petra round 偵測機制**：`prompt.Contains("## 第 N 輪各角色意見")` 對齊 KickoffPrompts.BuildPetraRoundPrompt 格式 line 12。對 Stage 51+ 提醒：若改 prompt 格式必須同步更新 MockClaudeCodeService 偵測字串（建議引用 const string 集中化，避免漂移）。
+8. **PetraDecision / ModifyDecision 兩個 record 抽出時注意 internal 跨 namespace**：legacy `KickoffMeetingService.cs` 檔尾兩個 `internal record` 搬到 `KickoffPrompts.cs` 後，跨 namespace 還是 internal（同 assembly 可見），但 caller 必須加 using。對 Stage 52 提醒：抽 record 出來時 grep 全 callers 確認沒漏。
 
 ### Aria 校準錨候選（Aria 結案第二段填）
 
-> 預估 ×1.0-1.5（混合型 Stage，spike 第一步 + production 整合）— 待 Forge 自評實際耗時後補完。
+> 預估 ×1.0-1.5（混合型 Stage，spike 第一步 + production 整合）— 實際 Forge 自評：Session A + Session B 全程 ~155K context（spike + 11 新檔 + 7 改檔 + Mock 場景 + 結案文件 + 0 build/runtime fix follow-up），對齊「混合型 ×1.0-1.4 區間」中段。Aria 結案第二段補實際倍率。
 
 ---
 
