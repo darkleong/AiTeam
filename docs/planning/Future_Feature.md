@@ -238,38 +238,11 @@ Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟
 
 #### Phase B Spike 任務（2026-05-01 更新）
 
-**從原本「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」**：
+**從原本「探索動態流程要不要做」變為「驗證可行性 + 細節打磨」**。7 個驗證項：Victoria Router 模式 / Petra 自主調度行為 / per-task session 跨階段記憶 / Crash Recovery 重跑 / Mock Mode 用 Gemini Flash 跑 Petra / 遷移成本 / Hybrid 會議 trigger 條件（預期省 30-50% cost vs 全會議模式）。
 
-1. 驗證 **Victoria Router 模式**對 Christ 互動的回應品質
-2. 驗證 **Petra 自主調度**的行為（會不會亂跳？開會頻率合理？）
-3. 驗證 **per-task session** 跨階段記憶力
-4. 驗證 **Crash Recovery 重跑機制**
-5. 驗證 **Mock Mode 用 Gemini Flash** 跑 Petra 的對齊度
-6. 評估**遷移成本**
-7. **驗證 Hybrid 會議 trigger 條件**：小需求 / 大需求 / 邊界 case + 頻率分析 + 品質 vs cost 對比，預期省 30-50% cost vs 全會議模式
+### 啟動觸發條件（Christ 拍板）
 
-### 啟動觸發條件（2026-05-02 v7.65 更新）
-
-```
-實際執行軌跡：
-✅ Stage 47（FF 四十七 ops 補丁，已完成 v3.34.0，2026-05-02）
-✅ Stage 48 FF 四十九 Phase A spike → 結論 = 採用（4 強正向 + 2 中性，2026-05-02）
-
-當前狀態：
-🚧 Stage 49-54 漸進遷移路線（4-6 個月，spike 報告節 7）：
-   - Stage 49 Cody-Vera-Petra Appeal loop 遷移
-   - Stage 50 RunMeetingSession → Group Chat
-   - Stage 51 BossInteraction → Human-in-the-Loop
-   - Stage 52 WorkflowEngine → Workflow Builder（最大遷移點）
-   - Stage 53 Crash Recovery → Checkpointing
-   - Stage 54 收尾 + production 切換
-
-本 FF Phase B 啟動評估點（Christ 拍板）：
-- ⏰ Stage 52 完成後（遷移過半）→ 評估動態流程是否仍有獨立價值
-  - 若 framework Magentic Orchestration 已解大部分動態調度需求 → 本 FF 永久 ⚪ 待觀察
-  - 若仍有獨立價值（per-task session 持久記憶 / Capability-based 調度）→ 啟動 Phase B spike
-- 不在 Stage 49-51 期間啟動（避免兩個架構級變動疊加風險）
-```
+⏰ **Stage 52 完成後**（v4 漸進遷移過半）評估：framework Magentic Orchestration 是否已解大部分動態調度需求？若已解 → 永久 ⚪ 待觀察；若仍有獨立價值（per-task session 持久記憶 / Capability-based 調度）→ 啟動 Phase B spike。**不在 Stage 49-51 期間啟動**（避免架構級變動疊加風險）。Stage 49-54 路線詳見 CHANGELOG / Spike v1 報告節 7。
 
 ### 規模 / 風險
 
@@ -365,35 +338,6 @@ SELECT COUNT("TotalCostUsd") AS filled, COUNT(*) AS total
 與 framework 無關，v4 落地後仍可獨立做。
 
 ---
-
-## 四十九、Microsoft Agent Framework 工具評估（替換手刻 Orchestration framework）
-
-> 狀態：✅ **已完成** — Stage 48 spike 採用結論（2026-05-02），詳見 [Future_Feature_completed.md](Future_Feature_completed.md) FF 四十九 條目。**主體段已歸檔**，下方保留 Stage 48 spike 結論摘要供 Stage 49+ 遷移期參考。
-
-### Stage 48 Spike 結論摘要
-
-- **結論 = 採用**（4 強正向 + 2 中性 + 0 負向）
-- **6 Stage 漸進遷移路線**（Stage 49-54，估 4-6 個月 senior dev focused effort）：
-  1. **Stage 49**（2-3 週）：第一個 Workflow 遷移 — Cody-Vera-Petra Appeal loop（POC 已有藍本）
-  2. **Stage 50**（2-3 週）：RunMeetingSession → Group Chat orchestration
-  3. **Stage 51**（1-2 週）：BossInteraction → Human-in-the-Loop
-  4. **Stage 52**（4-6 週）：WorkflowEngine 整體 → Workflow Builder（最大遷移點）
-  5. **Stage 53**（2 週）：Crash Recovery → framework Checkpointing
-  6. **Stage 54**（2-3 週）：收尾 + token middleware + production 切換
-- **詳細報告**：[`docs/experiments/Spike_v1_MsAgentFramework.md`](../experiments/Spike_v1_MsAgentFramework.md)（含 8 條踩坑紀錄 + 6 個關鍵設計決策，給 Stage 49+ 遷移預警）
-- **spike branch**：`origin/spike/ms-agent-framework`（commits `161e694` → `1b9742b` → `916b860`）
-
-### 採用後續對 v4 路線的影響
-
-- **FF 三十六 Phase B 動態流程架構**：Phase A 通過解鎖 Phase B 啟動條件，但拍板「Stage 49+ 漸進遷移過半（Stage 52 後）再評估」
-- **觀察類 backlog**（FF 四十二 / 四十三 / 七 / 十二）：採用後優先級**不變**，可在 Stage 49+ 遷移空檔做
-
-### 原 FF 四十九 評估記錄（已封存）
-
-> 詳細的 6 維度成功門檻 / Hybrid 整合策略 / 替換 vs 保留清單等內容於 spike 完成後不再需要為 active backlog，相關設計決策已寫入 Stage 48 Roadmap + Spike v1 報告。本 FF 主體歷史內容見 git log + Future_Feature_changelog v7.60 (新立) → v7.65 (完成)。
-
-<!-- 主體封存佔位符：舊 FF 四十九 完整段（背景 / 工具決定 vs 架構決定 / 行業先例 research / Microsoft Agent Framework 對應 AiTeam 議題 / 內建功能對應 AiTeam / Hybrid 整合策略 / 替換 vs 保留清單 / Spike Phase A 範圍 / 規模風險時間 / 啟動條件優先級 / 與 FF 三十六 的關係 / 參考來源）已於 v7.65 移除，內容被 Stage 48 Roadmap + Spike v1 報告取代 -->
-
 
 ## v4 後重評估 FF 簡表
 
