@@ -655,7 +655,7 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 
 子項 0-7 完成；17 新檔（Workflows/Design/ 11 Executor + DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + FrameworkDesignRouter + DesignSplitProposalEvaluator）+ 8 既有檔修改 + Migration `Stage52TaskGroupDesignFrameworkState`（Bot 啟動 auto-migrate）。dotnet build 0 errors。
 
-### Session B 結案（commit 待補）
+### Session B 結案（commit 8b3ead1）
 
 子項 8-11 完成；新增 FrameworkDesignRouter + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景；Version bump v3.38.0；Forge 自驗 5 靜態場景全綠（場景 F crash recovery 由 Christ 線下實跑）；0 follow-up。
 
@@ -714,4 +714,4 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第四步 Stage：Design Meeting B3 路線（A2 拆 Stage + B2 single-Executor wrapper + C2 router 後置 + D2 兩項 spike + E1 獨立 flag + F-mid 6 Mock 場景 + G1 沿用 legacy + H1 沿用 PendingConfirmationStore）|
-| v2.0 | 2026-05-03 | Forge 結案第一段（Session A + B 一氣呵成）—— spike F1/F2 結論寫入（Executor 內 short-circuit + 同 WorkflowBuilder 串接）；Workflows/Design/ 11 新檔（DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + 11 Executor 含 DesignAdjustmentExecutor 兩出口 + DesignPlanExecutor 雙 handler）+ FrameworkDesignRouter + DesignSplitProposalEvaluator 共 17 新檔；既有檔機械化抽出 + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景共 12 改檔；Migration `Stage52TaskGroupDesignFrameworkState`；Forge 自驗 5 靜態場景全綠 + 場景 F 留 Christ 線下；0 follow-up；commits：`3b2343a`(A) → 待補(B)（結案第一段）|
+| v2.0 | 2026-05-03 | Forge 結案第一段（Session A + B 一氣呵成）—— spike F1/F2 結論寫入（Executor 內 short-circuit + 同 WorkflowBuilder 串接）；Workflows/Design/ 11 新檔（DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + 11 Executor 含 DesignAdjustmentExecutor 兩出口 + DesignPlanExecutor 雙 handler）+ FrameworkDesignRouter + DesignSplitProposalEvaluator 共 17 新檔；既有檔機械化抽出 + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景共 12 改檔；Migration `Stage52TaskGroupDesignFrameworkState`；Forge 自驗 5 靜態場景全綠 + 場景 F 留 Christ 線下；0 follow-up；commits：`3b2343a`(A) → `8b3ead1`(B)（結案第一段）|
