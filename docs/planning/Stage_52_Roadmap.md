@@ -716,18 +716,25 @@ Forge 授權 ops 透過 docker exec / Bot Internal API 實跑場景 B/C/D/E（Ki
 
 8. **🟡 framework AddEdge type filter 不踢 wrong type**：當 AddEdge(source, target) target 沒對應 type handler 時，message 被 framework 忽略（不 dispatch）— 這是修法 #7 拆 plan 後驗證可行的 root mechanism。對 Stage 53+ 設計可信任此 filter 行為做 type-explicit 拓撲分流。
 
-### Aria 校準錨候選（Aria 結案第二段補完）
+### Aria 校準錨（混合型第 4 個資料點 ×1.05）
 
-**Forge 自評混合型 Stage 倍率**：
-- Stage 49（×1.25）/ Stage 50（×1.09）/ Stage 51（×0.96）三資料點 mid 帶下半至中段
-- Stage 52 預估範圍 ×0.96-1.4（Charter 中位 460K、實際範圍 410-750K）
-- Forge 自評 Stage 52 **驗收期前** 落在 mid 帶中下緣 ~×1.0-1.15（一氣呵成兩 session + 1 plan 修訂迭代 + 抽出機械化重構順利）
-- **驗收期 +0.10-0.15**（2 follow-up：Mock 識別 + framework AddEdge type filter 拓撲拆分），Forge 自評最終約 **×1.10-1.30**（mid 帶上半，仍守 ×0.96-1.4 上界）
+**精確計算**：
+- Aria Charter 預估範圍 410-750K（Roadmap line 487-492 七項公式），中位 **580K**
+- Forge 實際 context 累積（Christ 紀錄）：Plan Mode 235K → 計劃書修正 248K（+13K）→ Session A 394K（+146K）→ Session B 465K（+71K）→ 驗收 605K（+140K）→ 結案 **609K**（+4K）
+- 倍率 = 609 / 580 = **×1.05**（mid 帶中段，介於 Stage 50 ×1.09 與 Stage 51 ×0.96 之間）
+
+**驗收期 +144K 拆解**（Stage 51 +9K 對照下偏多）：
+- 場景 B-E 4 場景 Forge 線下 docker exec 實跑（Christ 授權 ops 範圍）+ 觀察 log + 修 2 follow-up（fix#1 Mock agentName + fix#2 framework AddEdge type filter 拓撲拆分）
+- 場景 F crash recovery 兩跑（SIGTERM + SIGKILL）
+- v2.1 / v2.2 Roadmap 補完
 
 **戰略意義**：
-- 混合型 Stage 第 4 個資料點 — 進一步收斂 ×0.96-1.25 區間穩定性（議題 A 拆 Stage 守區間精神驗證）
-- DesignCheckpointStore 是「3 次再抽象」原則第 3 次出現相似 pattern → Stage 53 評估抽 base class
-- DesignAdjustmentExecutor B2 兩出口 pattern + DesignPlanExecutor 雙 [MessageHandler] 不對稱處理邏輯給 Stage 53 macro pipeline / Stage 55 真切 BossInteraction 鋪 know-how 基礎
+- 混合型 Stage 4 資料點區間 ×0.96-1.25 進一步穩定（4 個資料點全落區間內，議題 A 拆 Stage 守 ×0.96-1.4 上界精神驗證 ✅）
+- **驗收期揭露 framework 1.3.0 戰略級 bug**：「AddEdge type-based dispatch 不 source-aware」（Stage 50 沒踩過的新雷區）— 修法為拆 plan executor，給 Stage 53+ 拓撲設計新預警「避免單一 Executor 雙 [MessageHandler] 接兩種 type 同時被 AddEdge 跟 AddSwitch 連接」
+- DesignCheckpointStore 第 3 次出現相似 pattern → Stage 53 評估抽 base class
+- DesignAdjustmentExecutor B2 兩出口 + DesignPlanExecutor / DesignAdjustmentPlanExecutor 拆分 give Stage 53 macro pipeline + Stage 55 真切 BossInteraction know-how 基礎
+
+**Forge 自評對照**：Forge plan 檔節 13 自評 ×1.10-1.30 — 用 Forge 自己 Charter 中位 415K 算（609/415=×1.47，超預期）；Aria 校準錨用 Aria Charter 中位 580K 算 ×1.05（標準算法），差異源自兩 Charter 預估範圍不同（Forge 預估偏樂觀 ~30%）。
 
 ---
 

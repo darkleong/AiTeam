@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.68
+> 版本：v7.69
 > 建立日期：2026-04-01
-> 最後更新：2026-05-02
+> 最後更新：2026-05-03
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
@@ -10,6 +10,7 @@
 > **2026-05-02 v7.66**：Stage 49 ⭐ v4 漸進遷移首發完成（v3.35.0）— Cody-Vera-Petra Appeal loop 切 framework + feature flag 並行雙系統 + 0 follow-up + production fallback 防呆真實生效。6 Stage 遷移 1/6 達成。
 > **2026-05-02 v7.67**：Stage 50 v4 漸進遷移第二步完成（v3.36.0）— Kickoff Meeting 切 framework Group Chat（A2 fan-out/fan-in 路線）+ feature flag + 3 follow-up 揭露 framework 1.3.0 fan-out 拓撲首次 production 整合的 streaming dispatch + type validation 兩層額外要求。6 Stage 遷移 **2/6** 達成。
 > **2026-05-02 v7.68**：Stage 51 ⭐ v4 漸進遷移第三步完成（v3.37.0）— framework HITL pattern 試點（Kickoff Workflow 中途介入）+ feature flag。**6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過**（含跨 process restart requestId stable 證據鏈，requestId `0daeccaa72714604812add3427ba4d9d` 在 yield emit + Bridge resume + Recovery 跨重啟全程 stable）。6 Stage 遷移 **3/6** 達成。
+> **2026-05-03 v7.69**：Stage 52 v4 漸進遷移第四步完成（v3.38.0）— Design Meeting B3 路線（fan-out/fan-in + 條件式 Demi + needs_adjustment B2 子流程 + 拆 task 提案後置）。議題 A 拆 Stage：原 v4 路線 Stage 52 含 WorkflowEngine pipeline 拆出獨立 Stage 53，**v4 路線 6→7 Stage**。6 場景全綠 + 2 follow-up（戰略級 framework AddEdge type filter 不 source-aware 揭露，修法拆 plan executor）。Aria 校準錨 **×1.05**（混合型第 4 資料點 mid 中段，×0.96-1.25 四資料點穩定）。7 Stage 遷移 **4/7** 達成。
 
 ---
 

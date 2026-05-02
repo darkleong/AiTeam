@@ -11,15 +11,19 @@
 
 ## [Unreleased]
 
-- **🎉 Stage 51 v4 漸進遷移第三步完成 ⭐**：[Stage 51](docs/planning/Stage_51_Roadmap.md) framework HITL pattern 試點（Kickoff Workflow 中途介入）+ feature flag — **6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過（含跨 process restart requestId stable 證據鏈）**。v4 漸進遷移路線 6 Stage 遷移 **3/6 達成**。
-- **下個動作候選**：① **Stage 52 = Design Meeting B3 路線（主迴圈遷移）+ WorkflowEngine 整體 → Workflow Builder（最大遷移點）**（v4 漸進遷移第 4 步，估 4-6 週，必拆 session 2-3 段）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
-- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** ✅ **Stage 50 Kickoff Meeting** ✅ **Stage 51 framework HITL 試點** → Stage 52 WorkflowEngine + Design Meeting → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換 + 真正切既有 BossInteraction 到 framework HITL（Stage 51 試點 know-how 全面 wire）
-- **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 52 漸進遷移過半再評估 Phase B**
-- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐**
+- **🎉 Stage 52 v4 漸進遷移第四步完成**：[Stage 52](docs/planning/Stage_52_Roadmap.md) Design Meeting B3 路線（fan-out/fan-in + 條件式 Demi + needs_adjustment B2 子流程 + 拆 task 提案後置）+ feature flag — **6 場景全綠 + 2 follow-up（戰略級 framework AddEdge type filter 不 source-aware 揭露）**。議題 A 拆 Stage：原 v4 路線 Stage 52 含 WorkflowEngine pipeline 拆出獨立 Stage 53，v4 路線 6→7 Stage。**4/7 達成**。
+- **下個動作候選**：① **Stage 53 = WorkflowEngine pipeline → framework Workflow（macro-orchestration，最大遷移點）** / ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）/ ④ 立新 FF「Design Meeting Crash Recovery Issue 重複建立」🟡 觀察類（Stage 52 議題 G1 拍板沿用 legacy）
+- **7 Stage 遷移路線進度**（議題 A 拆 Stage 後）：✅ **Stage 49 Appeal loop** ✅ **Stage 50 Kickoff Meeting** ✅ **Stage 51 framework HITL 試點** ✅ **Stage 52 Design Meeting** → 53 WorkflowEngine pipeline（macro 最大遷移點）/ 54 Crash Recovery → Checkpointing / 55 收尾 + production 切換 + 真正切既有 BossInteraction 到 framework HITL
+- **FF 三十六 Phase B 動態流程架構**：路線 = **Stage 53/54 後再評估 Phase B**（Stage 53 macro pipeline 揭露 framework 1.3.0 動態拓撲表達極限後資料點才足）
+- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐** / **Stage 52 v4 第四步 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 - **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
 
 ---
+
+## [3.38.0] — 2026-05-03 — [Stage 52](docs/planning/Stage_52_Roadmap.md) v4 漸進遷移第四步 Design Meeting B3 路線
+
+議題 A 拆 Stage：原 v4 路線 Stage 52 含「Design Meeting + WorkflowEngine pipeline」一氣呵成，Aria 規劃時拆 Stage 守混合型 ×0.96-1.25 區間精神 — Stage 52 = Design Meeting B3 only / Stage 53 = WorkflowEngine macro / Stage 54 = Crash Recovery / Stage 55 = 收尾切 BossInteraction（v4 路線 6→7 Stage）。Design Meeting 三層 Stage 50 沒踩過的拓撲擴展：① 條件式 Demi（needsDemi=false short-circuit pass-through 對齊 Stage 51 MidInterruptCheckExecutor pattern）② needs_adjustment B2 子流程（DesignAdjustmentExecutor 兩出口：approved → DesignPlanExecutor.HandleAdjustmentApprovedAsync 直接 wrap / needs_meeting → escalate 邊界先處理對齊 legacy line 290-298）③ 拆 task 提案 router 後置（C2 抽 DesignSplitProposalEvaluator helper SoT 給 framework + legacy 共用，避免 Stage 46-FF 三十五 戰略級機制漂移）。Spike F1/F2 兩項全綠。**驗收期 2 follow-up**：① fix#1 Mock agentName 識別補 Petra plan + adjustment eval 兩 prompt（Stage 50 踩坑 #11 預警命中，commit `806b22b`）② **fix#2 戰略級 framework 1.3.0 行為揭露**（commit `27ce0b7`）：「AddEdge type-based dispatch 不 source-aware」— 原計畫 DesignPlanExecutor 雙 [MessageHandler] 接 DesignPetraVerdict + DesignAdjustmentApproved 被 needs_meeting 路徑送的 verdict 誤觸發，修法拆成 DesignPlanExecutor + DesignAdjustmentPlanExecutor 讓 type filter 自然分流（Stage 53+ 拓撲設計新預警）。**6 場景全綠**（A baseline / B consensus_round1 / C ⭐ adjustment_approved / D ⭐ adjustment_needs_meeting / E ⭐ no_demi / F crash recovery 兩跑 SIGTERM+SIGKILL）。新建 17 檔 + DesignAdjustmentPlanExecutor（fix#2）+ FrameworkDesignRouter 572 行 + 改 12 既有檔（含 CreateSplitTaskProposalInteractionAsync private→internal 共用 SoT）+ Migration `Stage52TaskGroupDesignFrameworkState`。**Aria 校準錨 ×1.05**（609K vs Charter 中位 580K，混合型第 4 個資料點 mid 中段；混合型 ×0.96-1.25 四資料點區間穩定驗證）。詳見 Stage 52 Roadmap。commits：`3b2343a`(A) + `8b3ead1`(B) + `b5dac50`(v2.0) + `806b22b`/`27ce0b7` 兩 fix + `d35ec80`/`754ff34`/`d951e6c`(v2.1/v2.2/header)。
 
 ## [3.37.0] — 2026-05-02 — [Stage 51](docs/planning/Stage_51_Roadmap.md) ⭐ v4 漸進遷移第三步 framework HITL 試點
 
