@@ -109,6 +109,19 @@ public class MockScenarioService(
                           or "framework_kickoff_mid_interrupt_crash_during_wait"
                           or "framework_kickoff_mid_interrupt_no_trigger")
             MockClaudeCodeService.FailScenario = scenario;
+        // ── Stage 52 v4 漸進遷移第四步：framework Design Meeting 6 個 Mock 場景 ──
+        // Christ 線下驗收時必須先 toggle Dashboard → 系統設定 → 使用 MS Agent Framework Design Meeting = ON
+        // 否則 feature flag 為 false，DesignMeetingService 走 legacy path，這 6 個場景就跟一般 new_feature_with_proposal 等價
+        // 機制：scenario key 透過 MockClaudeCodeService.FailScenario 傳遞（active scenario key 模式對齊 Stage 49/50/51）
+        // 6 場景全部 issuesJson < 8 + plan < 500 + no phase 標記 → DesignSplitProposalEvaluator 規則層 0 觸發 → fall through fire Dev_plan
+        // （Stage 52 不重驗 split proposal 路徑，由 Stage 46 既有 Mock 驗證）
+        else if (scenario is "framework_design_consensus_round1"
+                          or "framework_design_consensus_round2"
+                          or "framework_design_needs_adjustment_approved"
+                          or "framework_design_needs_adjustment_needs_meeting"
+                          or "framework_design_no_demi"
+                          or "framework_design_crash_recovery_during_round")
+            MockClaudeCodeService.FailScenario = scenario;
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -148,6 +161,13 @@ public class MockScenarioService(
             "framework_kickoff_mid_interrupt_cancel"             => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptCancel",        "Kickoff"),
             "framework_kickoff_mid_interrupt_crash_during_wait"  => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptCrashWait",     "Kickoff"),
             "framework_kickoff_mid_interrupt_no_trigger"         => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptNoTrigger",     "Kickoff"),
+            // Stage 52：framework Design Meeting 6 場景（從 Kickoff 起跑，Kickoff 階段 Mock 走 default consensus → Design 階段 Mock 依 FailScenario 切換）
+            "framework_design_consensus_round1"                  => (WorkflowType.NewFeature, "FrameworkDesign-ConsensusR1",                "Kickoff"),
+            "framework_design_consensus_round2"                  => (WorkflowType.NewFeature, "FrameworkDesign-ConsensusR2",                "Kickoff"),
+            "framework_design_needs_adjustment_approved"         => (WorkflowType.NewFeature, "FrameworkDesign-AdjustmentApproved",         "Kickoff"),
+            "framework_design_needs_adjustment_needs_meeting"    => (WorkflowType.NewFeature, "FrameworkDesign-AdjustmentNeedsMeeting",     "Kickoff"),
+            "framework_design_no_demi"                           => (WorkflowType.NewFeature, "FrameworkDesign-NoDemi",                     "Kickoff"),
+            "framework_design_crash_recovery_during_round"       => (WorkflowType.NewFeature, "FrameworkDesign-CrashRecovery",              "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

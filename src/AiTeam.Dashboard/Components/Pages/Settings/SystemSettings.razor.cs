@@ -35,6 +35,7 @@ public partial class SystemSettings
     private bool    _useFrameworkAppealLoop;        // Stage 49：v4 漸進遷移 feature flag
     private bool    _useFrameworkKickoff;           // Stage 50：v4 漸進遷移第二步 feature flag
     private bool    _useFrameworkKickoffMidInterrupt; // Stage 51：v4 漸進遷移第三步 HITL 試點 feature flag
+    private bool    _useFrameworkDesign;             // Stage 52：v4 漸進遷移第四步 Design Meeting feature flag
     private bool    _isSavingTokenLimits;
     private bool    _isReloading;
     private bool    _isSavingChannel;
@@ -89,6 +90,10 @@ public partial class SystemSettings
         // Stage 51：v4 漸進遷移第三步 HITL 試點 feature flag
         var frameworkKickoffMidInterruptSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkKickoffMidInterrupt");
         _useFrameworkKickoffMidInterrupt = bool.TryParse(frameworkKickoffMidInterruptSetting?.Value, out var fkmi) && fkmi;
+
+        // Stage 52：v4 漸進遷移第四步 Design Meeting feature flag
+        var frameworkDesignSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkDesign");
+        _useFrameworkDesign = bool.TryParse(frameworkDesignSetting?.Value, out var fdv) && fdv;
     }
 
     private async Task<int> LoadWorkflowRoundsAsync(string key, int fallback)
@@ -140,6 +145,13 @@ public partial class SystemSettings
         _useFrameworkKickoffMidInterrupt = newValue;
         await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
         _saveMessage = $"「MS Agent Framework HITL（Kickoff 中途介入試點）」已{(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")}（v4 漸進遷移 Stage 51 第三步試點），5 分鐘內自動生效";
+    }
+
+    private async Task OnUseFrameworkDesignChanged(bool newValue)
+    {
+        _useFrameworkDesign = newValue;
+        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
+        _saveMessage = $"「MS Agent Framework Design Meeting」已{(_useFrameworkDesign ? "啟用" : "停用")}（v4 漸進遷移 Stage 52 第四步），5 分鐘內自動生效";
     }
 
     private async Task SaveCeoChannelIdAsync()

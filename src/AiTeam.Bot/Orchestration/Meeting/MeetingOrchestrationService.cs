@@ -248,6 +248,20 @@ public class MeetingOrchestrationService(
     /// </summary>
     public async Task RunDesignPhaseAsync(TaskGroup group, CancellationToken ct)
     {
+        // ── Stage 52：v4 漸進遷移第四步 feature flag 入口分流 ──
+        // feature flag UseFrameworkDesign=true → framework path 接管（FrameworkDesignRouter），不走下方 legacy 邏輯
+        await using (var flagScope = serviceProvider.CreateAsyncScope())
+        {
+            var workflowResolver = flagScope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkDesignAsync(ct))
+            {
+                logger.LogInformation("[Stage52] HandleDesignMeetingAsync framework path 接管（Group={Id}）", group.Id);
+                var router = flagScope.ServiceProvider.GetRequiredService<FrameworkDesignRouter>();
+                await router.HandleDesignMeetingAsync(group, ct);
+                return;
+            }
+        }
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
@@ -937,8 +951,11 @@ public class MeetingOrchestrationService(
     /// Stage 46-FF 三十五：建 split_task_proposal BossInteraction（卡片 2，DesignPlan 卡片 1 後的拆 task 提案）。
     /// Discord embed 顯示 phases 預覽 + 4 按鈕（採納 / 修改 / 不拆 / 停止）；Dashboard 操作中心對應顯示。
     /// 老闆按鈕路由由 TaskGroupService.ProcessBossResponseAsync case "split_task_proposal" 處理。
+    ///
+    /// Stage 52：改 internal 給 FrameworkDesignRouter finalize 段共用 SoT（feature flag legacy + framework 雙路徑共用，
+    /// 避免 Stage 46-FF 三十五 戰略級機制雙寫漂移；同 namespace 跨類別 internal 可見）。
     /// </summary>
-    private async Task CreateSplitTaskProposalInteractionAsync(
+    internal async Task CreateSplitTaskProposalInteractionAsync(
         TaskGroup group, SplitProposal proposal, CancellationToken ct)
     {
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);

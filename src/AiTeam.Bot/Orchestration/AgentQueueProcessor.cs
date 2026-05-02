@@ -79,6 +79,10 @@ public class AgentQueueProcessor(
         // 風險點 R2 緩解擴充：legacy 排除 KickoffFrameworkStateJson != null，framework 排除 == null
         var frameworkKickoffRouter = serviceProvider.GetRequiredService<AiTeam.Bot.Orchestration.Meeting.FrameworkKickoffRouter>();
         await frameworkKickoffRouter.RecoverStuckFrameworkKickoffsAsync(stoppingToken);
+        // Stage 52：啟動掃描 framework path 卡住的 Design Workflow（雙系統各管自己）
+        // 風險點 R5 緩解：legacy 排除 DesignFrameworkStateJson != null，framework 排除 == null
+        var frameworkDesignRouter = serviceProvider.GetRequiredService<AiTeam.Bot.Orchestration.Meeting.FrameworkDesignRouter>();
+        await frameworkDesignRouter.RecoverStuckFrameworkDesignAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {

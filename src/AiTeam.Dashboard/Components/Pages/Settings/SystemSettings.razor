@@ -274,6 +274,27 @@
     </div>
 </div>
 
+<div class="system-config-card system-config-card--warning" style="margin-top: 16px;">
+    <div class="system-config-header">
+        <div>
+            <strong>使用 MS Agent Framework Design Meeting</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後 <strong>設計規劃會議</strong>（Petra needsDemi 判斷 + Rosa Issues + 條件式 Demi UI 規格 + 4 Agent 並行 + needs_adjustment B2 子流程）改用 MS Agent Framework Workflow Builder
+                fan-out/fan-in + Checkpointing + 條件式 short-circuit Demi 拓撲，
+                替換 legacy <code>DesignMeetingService</code> 的手刻 for-loop（v4 漸進遷移第四步 Stage 52）。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">
+                    ⚠️ 實驗性功能。啟用前請確認 ① ANTHROPIC_API_KEY 設定 ② 跑過 Mock 驗收（場景 framework_design_*）③ Stage 49/50/51 三 flag 已通過驗收。修改後 5 分鐘內自動生效。
+                </MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_useFrameworkDesign"
+                   ValueChanged="@OnUseFrameworkDesignChanged"
+                   Color="Color.Warning"
+                   Label="@(_useFrameworkDesign ? "啟用" : "停用")" />
+    </div>
+</div>
+
 <MudDivider Style="margin: 32px 0" />
 
 <h3 style="margin-bottom:16px">Token 守門設定</h3>

@@ -288,6 +288,155 @@ public class MockClaudeCodeService(
                 "{\"decision\":\"" + decision + "\",\"summary\":\"" + summaryText + "\",\"discussion_points\":[]}", 0, "");
         }
 
+        // ============================================================
+        // Stage 52：framework Design Meeting 6 場景 Mock 邏輯（v4 漸進遷移第四步）
+        // 識別 prompt 特徵：
+        //   - PetraJudge：「正在判斷設計階段是否需要 Demi 參與」
+        //   - Petra round（Design）：「正在主持設計會議第 N 輪」+ 「## 第 N 輪各角色意見」
+        //   - Petra adjustment eval：「Rosa 和 Demi 已完成修改」
+        //   - Petra plan（Design）：「設計會議已結束」+「產出設計規劃書」
+        //   - Rosa pre-work：「你是 Rosa」+「正在進行設計前置作業」
+        //   - Demi pre-work：「你是 Demi」+「正在進行設計前置作業」
+        //   - Rosa adjust：「請調整你的 GitHub Issues」
+        //   - Demi adjust：「請調整你的 UI 規格」
+        //   - Cody/Quinn 主迴圈：「你是 Cody」/「你是 Quinn」+「正在參加設計會議」→ default agentName switch 處理（line 末段）
+        // ============================================================
+        var isFrameworkDesignScenario = FailScenario is "framework_design_consensus_round1"
+                                                      or "framework_design_consensus_round2"
+                                                      or "framework_design_needs_adjustment_approved"
+                                                      or "framework_design_needs_adjustment_needs_meeting"
+                                                      or "framework_design_no_demi"
+                                                      or "framework_design_crash_recovery_during_round";
+
+        if (isFrameworkDesignScenario)
+        {
+            // PetraJudge：needs_demi 判斷
+            if (agentName == "petra" && prompt.Contains("正在判斷設計階段是否需要 Demi 參與"))
+            {
+                var needsDemi = FailScenario != "framework_design_no_demi";
+                return new ClaudeCodeResult(true,
+                    $"[MOCK] Petra needsDemi 判斷完成（scenario={FailScenario}）。\n" +
+                    $"{{\"needs_demi\":{needsDemi.ToString().ToLower()},\"reason\":\"[MOCK] judge based on scenario\"}}",
+                    0, "");
+            }
+
+            // Petra adjustment eval（DesignAdjustmentExecutor 內）
+            if (agentName == "petra" && prompt.Contains("Rosa 和 Demi 已完成修改"))
+            {
+                var evaluation = FailScenario == "framework_design_needs_adjustment_needs_meeting"
+                               ? "needs_meeting" : "approved";
+                // approved 路徑帶 design_plan（議題 7 主路徑驗證 — DesignPlanExecutor 直接 wrap 不再 LLM call）
+                var planJson = evaluation == "approved"
+                    ? "[MOCK] 設計規劃書（adjustment approved 直接帶 plan，DesignPlanExecutor 直接 wrap）"
+                    : "";
+                return new ClaudeCodeResult(true,
+                    $"[MOCK] Petra 評估調整完成（scenario={FailScenario}）。\n" +
+                    $"{{\"evaluation\":\"{evaluation}\",\"design_plan\":\"{planJson}\",\"reason\":\"[MOCK] eval\"}}",
+                    0, "");
+            }
+
+            // Petra plan（DesignPlanExecutor.HandleVerdictAsync consensus / max_iter 入口）
+            if (agentName == "petra" && prompt.Contains("設計會議已結束"))
+            {
+                return new ClaudeCodeResult(true,
+                    "# 設計規劃書\n\n## 需求摘要\n[MOCK] framework Design 路徑產出設計規劃書（< 500 行 + 0 phase 標記，不觸發 split proposal）\n\n" +
+                    "## GitHub Issues 清單\n| # | Issue | 標題 | 說明 |\n|---|-------|------|------|\n" +
+                    "| 1 | mock-1 | [MOCK] Issue 1 | mock |\n\n" +
+                    "## 設計決策\n- [MOCK] 設計會議達成共識\n\n" +
+                    "## 風險與注意事項\n- [MOCK] 無重大風險\n\n" +
+                    "## 開發建議\n[MOCK] 沿用既有架構。",
+                    0, "");
+            }
+
+            // Petra round（Design 主迴圈，prompt 含 "## 第 N 輪各角色意見"）
+            if (agentName == "petra" && prompt.Contains("正在主持設計會議第"))
+            {
+                var round = prompt.Contains("## 第 1 輪各角色意見") ? 1
+                          : prompt.Contains("## 第 2 輪各角色意見") ? 2
+                          : prompt.Contains("## 第 3 輪各角色意見") ? 3
+                          : 1;
+
+                var decision = (FailScenario, round) switch
+                {
+                    ("framework_design_consensus_round1", _)               => "consensus",
+                    ("framework_design_consensus_round2", 1)               => "needs_discussion",
+                    ("framework_design_consensus_round2", _)               => "consensus",
+                    ("framework_design_needs_adjustment_approved", 1)      => "needs_adjustment",
+                    ("framework_design_needs_adjustment_approved", _)      => "consensus",        // 備援（approved 路徑不會跑到 Round 2）
+                    ("framework_design_needs_adjustment_needs_meeting", 1) => "needs_adjustment",
+                    ("framework_design_needs_adjustment_needs_meeting", _) => "consensus",        // 外層 loop back round+1 後 consensus
+                    ("framework_design_no_demi", _)                        => "consensus",
+                    ("framework_design_crash_recovery_during_round", _)    => "needs_discussion", // Round 1+2 推進，Christ 線下 restart 觀察 Recovery
+                    _                                                      => "consensus",
+                };
+
+                // needs_adjustment 路徑需帶 adjustment_targets / adjustment_instructions（DesignAdjustmentExecutor 解析用）
+                var (targetsJson, instructionsJson) = decision == "needs_adjustment"
+                    ? ("[\"rosa\",\"demi\"]",
+                       "{\"rosa\":\"[MOCK] 請調整 Issue 描述更具體\",\"demi\":\"[MOCK] 請調整 UI 規格細節\"}")
+                    : ("[]", "{}");
+
+                var summaryText = decision switch
+                {
+                    "consensus"        => "[MOCK] 設計會議達成共識",
+                    "needs_discussion" => "[MOCK] 設計會議需進一步討論",
+                    "needs_adjustment" => "[MOCK] Petra 要求 Rosa/Demi 調整",
+                    "escalate"         => "[MOCK] 設計會議偵測到無法團隊內解決的分歧",
+                    _                  => "[MOCK]"
+                };
+
+                return new ClaudeCodeResult(true,
+                    $"[MOCK] Petra Round {round} 整理完成（framework Design path / scenario={FailScenario}）。\n" +
+                    $"{{\"decision\":\"{decision}\",\"summary\":\"{summaryText}\",\"adjustment_targets\":{targetsJson},\"adjustment_instructions\":{instructionsJson},\"escalate_reason\":\"\"}}",
+                    0, "");
+            }
+
+            // Rosa pre-work（Design 階段，3 個 Issue，issuesJson < 8 不觸發 split proposal 規則層）
+            if (agentName == "rosa" && prompt.Contains("正在進行設計前置作業"))
+            {
+                return new ClaudeCodeResult(true,
+                    "MOCK Rosa Design pre-work 完成（3 Issues，不觸發拆 task）\n" +
+                    "[" +
+                    "{\"title\":\"MOCK Design Issue 1\",\"body\":\"模擬 Issue 1\",\"labels\":[\"feature\"]}," +
+                    "{\"title\":\"MOCK Design Issue 2\",\"body\":\"模擬 Issue 2\",\"labels\":[\"feature\"]}," +
+                    "{\"title\":\"MOCK Design Issue 3\",\"body\":\"模擬 Issue 3\",\"labels\":[\"feature\"]}" +
+                    "]",
+                    0, "");
+            }
+
+            // Demi pre-work（Design 階段）
+            if (agentName == "demi" && prompt.Contains("正在進行設計前置作業"))
+            {
+                return new ClaudeCodeResult(true,
+                    "[MOCK] Demi UI/UX 規格\n## 頁面結構\n- 元件 A\n## 元件清單\n- MudButton\n## 互動說明\n- 點擊觸發\n## MudBlazor 元件建議\n- MudStack",
+                    0, "");
+            }
+
+            // Rosa adjust（DesignAdjustmentExecutor 內）
+            if (agentName == "rosa" && prompt.Contains("請調整你的 GitHub Issues"))
+            {
+                return new ClaudeCodeResult(true,
+                    "MOCK Rosa adjust 完成\n" +
+                    "[" +
+                    "{\"title\":\"MOCK Design Issue 1 (adjusted)\",\"body\":\"adjusted\",\"labels\":[\"feature\"]}," +
+                    "{\"title\":\"MOCK Design Issue 2 (adjusted)\",\"body\":\"adjusted\",\"labels\":[\"feature\"]}," +
+                    "{\"title\":\"MOCK Design Issue 3 (adjusted)\",\"body\":\"adjusted\",\"labels\":[\"feature\"]}" +
+                    "]",
+                    0, "");
+            }
+
+            // Demi adjust（DesignAdjustmentExecutor 內）
+            if (agentName == "demi" && prompt.Contains("請調整你的 UI 規格"))
+            {
+                return new ClaudeCodeResult(true,
+                    "[MOCK] Demi adjust 完成\n## 頁面結構\n- 元件 A v2\n## 元件清單\n- MudButton (updated)",
+                    0, "");
+            }
+
+            // Rosa Design 主迴圈 / Demi Design 主迴圈 / Cody Design 主迴圈 / Quinn Design 主迴圈：
+            // fall through 到下方 default agentName switch（mock 各自意見）
+        }
+
         var output = agentName switch
         {
             "petra" =>

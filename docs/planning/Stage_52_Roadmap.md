@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 7 Stage 路線第四步（議題 A 拆 Stage 後從 6 Stage 路線擴為 7 Stage）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.38.0**（v4 漸進遷移第四個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：📋 計劃書建立完成，待 Forge 開工
-> 文件版本：v1.0
+> 狀態：✅ **已完成**（2026-05-03，Session A + B 一氣呵成 + 6 場景 5 靜態自驗綠 + 0 follow-up）
+> 文件版本：v2.0（結案版）
 
 ---
 
@@ -634,7 +634,78 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 
 ## 實作紀錄
 
-> 由 Forge 結案第一段填（Roadmap 章節對齊 Stage 51 v1.2 結構：子項完成度對照 / Session A B 結案 / 驗收結果 / 驗收後修正 / 關鍵設計決策 / 踩坑紀錄彙整 / Aria 校準錨候選）
+### 子項完成度對照
+
+| # | 子項 | 狀態 | 實際 |
+|---|---|---|---|
+| 0 | Spike F1/F2 驗證 | ✅ | F1 → Executor 內 short-circuit pass-through（對齊 Stage 51 MidInterruptCheckExecutor）/ F2 → 同 WorkflowBuilder 內串接 + state 跨 superstep 共享（DesignStateHelpers） |
+| 1 | feature flag UseFrameworkDesign | ✅ | WorkflowSettings + Resolver + AppSettings key |
+| 2 | DB schema + Migration + legacy 排除 | ✅ | Entities.cs DesignFrameworkStateJson 欄位 + Migration `Stage52TaskGroupDesignFrameworkState` + legacy `RecoverStuckOrchestrationsAsync` 排除條件擴充 |
+| 3 | DesignState + 6 record + helpers | ✅ | DesignPetraVerdict 5 分支共用 verdict + EscalateReason 欄位（Aria 實作期提醒 #2）|
+| 4 | DesignPrompts.cs SoT 抽出 | ✅ | 9 prompt builder + 4 TryParse* + 3 record 抽出（純機械化，prompt 文字 0 變動）；ModifyDecision 沿用 KickoffPrompts |
+| 5 | DesignSplitProposalEvaluator 抽出 | ✅ | feature flag legacy + framework 共用 SoT；DesignMeetingService + TaskGroupService 同步切換 |
+| 6 | DesignWorkflowFactory + 11 Executor | ✅ | 拓撲：前置線性段（Start→PetraJudge→RosaPreWork→DemiPreWork）+ 主迴圈 fan-out/fan-in + 5 路 AddSwitch + adjust 兩出口 AddSwitch（escalate 邊界 + loop back）|
+| 7 | DesignCheckpointStore | ✅ | 對齊 KickoffCheckpointStore 90% 邏輯（Stage 53 評估抽 base class）|
+| 8 | FrameworkDesignRouter | ✅ | HandleDesignMeetingAsync + RecoverStuckFrameworkDesignAsync + FinalizeDesignAsync（split proposal + escalate Discord embed）+ 共用 SoT call MeetingOrchestrationService.CreateSplitTaskProposalInteractionAsync |
+| 9 | 入口分流 | ✅ | MeetingOrchestrationService.RunDesignPhaseAsync 開頭 feature flag 入口分流（對齊 Stage 50 同 service Kickoff 分流 pattern）|
+| 10 | Crash Recovery + Dashboard + Mock | ✅ | AgentQueueProcessor hook + Dashboard 第四 toggle + 6 個 framework_design_* Mock 場景（Petra Judge/round/eval/plan + Rosa/Demi pre-work/adjust 全 prompt 識別）|
+| 11 | Version bump + 結案 | ✅ | Directory.Build.props v3.38.0 + Roadmap v2.0 結案版 |
+
+### Session A 結案（commit 3b2343a）
+
+子項 0-7 完成；17 新檔（Workflows/Design/ 11 Executor + DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + FrameworkDesignRouter + DesignSplitProposalEvaluator）+ 8 既有檔修改 + Migration `Stage52TaskGroupDesignFrameworkState`（Bot 啟動 auto-migrate）。dotnet build 0 errors。
+
+### Session B 結案（commit 待補）
+
+子項 8-11 完成；新增 FrameworkDesignRouter + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景；Version bump v3.38.0；Forge 自驗 5 靜態場景全綠（場景 F crash recovery 由 Christ 線下實跑）；0 follow-up。
+
+### 驗收結果
+
+| 場景 | 路徑 | 結果 |
+|---|---|---|
+| A baseline UseFrameworkDesign=false | legacy DesignMeetingService.RunDesignMeetingAsync 路徑 0 變動 | ✅（純機械化抽出 prompt + split helper，行為等同）|
+| B framework_design_consensus_round1 | 主路徑：前置 + Round 1 consensus + DesignPlanExecutor | ✅ 靜態審視通過 |
+| C framework_design_needs_adjustment_approved ⭐ | B2 Executor approved 路徑：Petra eval=approved + design_plan 已帶 → DesignPlanExecutor.HandleAdjustmentApprovedAsync 直接 wrap | ✅ 議題 7 雙 handler 路徑驗證 |
+| D framework_design_needs_adjustment_needs_meeting ⭐ | B2 Executor needs_meeting：state.Round=1 < max → loop back → Round 2 consensus | ✅ 議題 6 escalate 邊界（< max 不觸發）+ 外層 loop back |
+| E framework_design_no_demi ⭐ | F1 條件式拓撲：Petra needs_demi=false → DemiPreWork short-circuit + DesignAgentExecutor[Demi] short-circuit + DesignAggregator 跳過 Demi 段 | ✅ Spike F1 結論驗證 |
+| F framework_design_crash_recovery_during_round | Christ 線下 docker compose restart → RecoverStuckFrameworkDesignAsync 降級策略清 marker | 留 Christ 線下實跑 |
+
+### 關鍵設計決策（為什麼這樣選）
+
+| # | 決策 | Why |
+|---|---|---|
+| 1 | **F1 條件式拓撲：Executor 內 short-circuit pass-through** vs AddSwitch 兩條完整 fan-out 分支 | spike F1 結論 — framework 1.3.0 fan-out 目標 build 期固定無動態剃除 API；對齊 Stage 51 MidInterruptCheckExecutor 既有 short-circuit pattern；不踩 framework type validation；0 拓撲規模放大 |
+| 2 | **F2 前置→主迴圈：同一 WorkflowBuilder 內串接 + state 跨 superstep 共享** vs 兩個獨立 Workflow | spike F2 結論 — KickoffStartExecutor 雙 [MessageHandler] 已驗，Stage 52 沿用；DesignStateHelpers ReadAsync/SaveAsync 自動跨 superstep 共享，0 lifecycle 額外處理 |
+| 3 | **B2 single-Executor wrapper（DesignAdjustmentExecutor 兩出口）** | 對齊 Stage 50 KickoffPlanExecutor / KickoffEscalateExecutor 兩出口慣例；對齊 Stage 51 MidInterruptCheckExecutor 雙 [SendsMessage] partial class pattern；規模最小（1 Executor 內 3 LLM call + 兩出口）|
+| 4 | **DesignPlanExecutor 雙 [MessageHandler] 處理邏輯不對稱（Aria 議題 7）** | consensus / max_iter 入口跑 LLM 產 plan；adjustment_approved 入口直接 wrap 已產的 plan（不再 LLM call 避免重複 token 消耗）；DesignAdjustmentApproved record 帶 non-null DesignPlan（DesignAdjustmentExecutor 內保證已產出，evalDecision.DesignPlan 為空時 fallback BuildDesignPetraPlanPrompt 補產）|
+| 5 | **DesignAdjustmentExecutor needs_meeting 路徑先處理 escalate 邊界（Aria 議題 6）** | 對齊 legacy DesignMeetingService.cs:290-298 行為 — `state.Round >= MaxRounds` 時送 escalate verdict 走 DesignEscalateExecutor，避免無限 loop back；對齊 Stage 51 MidInterruptCheckExecutor.HandleResponseAsync Round 推進邏輯 |
+| 6 | **DesignSplitProposalEvaluator 抽到獨立 service** vs DesignMeetingService 內 method 改 public | 對齊 KickoffPrompts SoT 抽出慣例；Stage 55 收尾真切 BossInteraction 時容易找到複用點；DesignMeetingService 已 1100+ 行，避免擴大；Singleton lifecycle 對齊 DesignMeetingService 既有 |
+| 7 | **DesignPrompts.ModifyDecision 沿用 KickoffPrompts.ModifyDecision** | Stage 50 踩坑 #2 教訓 — internal record 跨 namespace OK；Stage 52 同 record 結構（Impact / RevisedPlan）零差異，沒必要重抽 |
+| 8 | **MeetingOrchestrationService.CreateSplitTaskProposalInteractionAsync 改 internal 給 framework path 共用** vs FrameworkDesignRouter 自寫 | Stage 46-FF 三十五 戰略級拆 task 提案機制不能漂移（議題 C2）；同 namespace 跨類別 internal 可見，最小改動 |
+| 9 | **fallback 拍板：framework Workflow 跑失敗 → 不 fallback to legacy** | Petra session_id 已被 framework path 佔用，再走 legacy 會 double session creation；對齊 Stage 49/50 既有 fallback 拍板（NotifyDesignFailureAsync Discord error embed + 標 group failed）|
+
+### 踩坑紀錄彙整
+
+> 給 Stage 53+ 後續 v4 遷移預警。
+
+1. **Edit `replace_all` 過度貪婪改到 method 宣告本身**：`Edit replace_all="true" old_string="BuildDesignPetraJudgePrompt("` 把 method 宣告 `private static string BuildDesignPetraJudgePrompt(...)` 也替換成 `private static string DesignPrompts.BuildDesignPetraJudgePrompt(...)` 造成語法破壞。對 Stage 53+ 提醒：**機械化重構抽出 method 時，replace_all 必須 grep 確認沒匹配到 method 宣告本身**，或先單獨改 caller 再刪 declarations 兩段做。
+2. **DesignMeetingService DI lifecycle 與 Plan 預期不符**：Plan 寫「scoped」但實際 Program.cs:122 `AddSingleton<DesignMeetingService>()`。對 Stage 53+ 提醒：抽 helper service 註冊時務必先 grep `Program.cs` 確認 caller 既有 lifecycle，避免 plan 寫錯實作再修。
+3. **DesignMeetingService.TryParseSplitProposal 跨 service 外部 caller**：`TaskGroupService.cs:1124+1138` 直接 call `DesignMeetingService.TryParseSplitProposal(...)`（static method），抽出時 grep 沒掃到該 caller 造成 build error。對 Stage 53+ 提醒：抽 static method 必須 grep 整個 src 確認所有 callers（不只 抽出來源 service 內）。
+4. **DesignPlanExecutor 雙 [MessageHandler] 共用 [YieldsOutput]**：兩 handler 都 YieldOutputAsync 同一型別 DesignLoopResult，class 上 `[YieldsOutput(typeof(DesignLoopResult))]` 一次標即可（framework type validation 對 yield 用 class-level attribute）。對 Stage 53+ 提醒：雙 handler 共用 yield type 時不需重複標 attribute。
+5. **DesignAdjustmentExecutor needs_meeting 路徑 totalRounds 計算**：對齊 legacy line 291 `totalRounds++`，state.TotalRounds = state.Round + 1（Round 是 needs_adjustment 觸發時的 round，+1 等於 adjustment 流程結束後的 round 計數）。對 Stage 53+ 提醒：跨 Executor 持有 totalRounds 計數時，必須與 legacy 行為精確對齊避免一格落差。
+6. **Mock framework_design_* 場景 Petra prompt 4 種子分支識別**：PetraJudge / Petra round / Petra adjustment eval / Petra plan 共用 sessionId（PetraSessionId 跨 Executor resume），Mock 必須依 prompt 特徵字串區分。對 Stage 53+ 提醒：抽 prompt SoT 後 Mock 角色識別字串覆蓋全 prompt 變體（含後續對話無「你是 X」開頭的 prompt — Stage 50 踩坑 #11 延續）。
+
+### Aria 校準錨候選（Aria 結案第二段補完）
+
+**Forge 自評混合型 Stage 倍率**：
+- Stage 49（×1.25）/ Stage 50（×1.09）/ Stage 51（×0.96）三資料點 mid 帶下半至中段
+- Stage 52 預估範圍 ×0.96-1.4（Charter 中位 460K、實際範圍 410-750K）
+- Forge 自評 Stage 52 落在 **mid 帶中下緣 ~×1.0-1.15**（一氣呵成兩 session + 0 follow-up + 1 plan 修訂迭代 + 抽出機械化重構順利 + spike 結論在實作前已可推導出 — 風險低於 Stage 49/50）
+
+**戰略意義**：
+- 混合型 Stage 第 4 個資料點 — 進一步收斂 ×0.96-1.25 區間穩定性（議題 A 拆 Stage 守區間精神驗證）
+- DesignCheckpointStore 是「3 次再抽象」原則第 3 次出現相似 pattern → Stage 53 評估抽 base class
+- DesignAdjustmentExecutor B2 兩出口 pattern + DesignPlanExecutor 雙 [MessageHandler] 不對稱處理邏輯給 Stage 53 macro pipeline / Stage 55 真切 BossInteraction 鋪 know-how 基礎
 
 ---
 
@@ -643,3 +714,4 @@ Stage 56+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 53/5
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第四步 Stage：Design Meeting B3 路線（A2 拆 Stage + B2 single-Executor wrapper + C2 router 後置 + D2 兩項 spike + E1 獨立 flag + F-mid 6 Mock 場景 + G1 沿用 legacy + H1 沿用 PendingConfirmationStore）|
+| v2.0 | 2026-05-03 | Forge 結案第一段（Session A + B 一氣呵成）—— spike F1/F2 結論寫入（Executor 內 short-circuit + 同 WorkflowBuilder 串接）；Workflows/Design/ 11 新檔（DesignState + DesignPrompts + DesignWorkflowFactory + DesignCheckpointStore + 11 Executor 含 DesignAdjustmentExecutor 兩出口 + DesignPlanExecutor 雙 handler）+ FrameworkDesignRouter + DesignSplitProposalEvaluator 共 17 新檔；既有檔機械化抽出 + 入口分流 + Recovery hook + Dashboard 第四 toggle + Mock 6 場景共 12 改檔；Migration `Stage52TaskGroupDesignFrameworkState`；Forge 自驗 5 靜態場景全綠 + 場景 F 留 Christ 線下；0 follow-up；commits：`3b2343a`(A) → 待補(B)（結案第一段）|
