@@ -20,7 +20,8 @@ namespace AiTeam.Bot.Workflows.Kickoff.Executors;
 ///
 /// 對齊 legacy KickoffMeetingService.RunKickoffMeetingAsync line 175-192 行為。
 /// </summary>
-internal sealed class KickoffPlanExecutor : Executor<KickoffPetraVerdict>
+[YieldsOutput(typeof(KickoffLoopResult))]
+internal sealed partial class KickoffPlanExecutor : Executor<KickoffPetraVerdict>
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<KickoffPlanExecutor> _logger;

@@ -14,6 +14,7 @@ namespace AiTeam.Bot.Workflows.Kickoff.Executors;
 ///   - HandleNextRoundAsync(KickoffPetraVerdict)
 ///   注意 ValueTask 簽名不含 CancellationToken（spike Phase 3 揭露 source generator 嚴格簽名要求）
 /// </summary>
+[SendsMessage(typeof(KickoffState))]
 internal sealed partial class KickoffStartExecutor : Executor
 {
     private readonly IServiceScopeFactory _scopeFactory;

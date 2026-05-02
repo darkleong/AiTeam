@@ -12,7 +12,8 @@ namespace AiTeam.Bot.Workflows.Kickoff.Executors;
 ///   - YieldOutputAsync KickoffLoopResult：Decision = "escalate"，EscalateReason = verdict.Summary
 ///   - 後續由 FrameworkKickoffRouter 接 result 開 BossInteraction 給 Christ 裁決（C2 拍板：BossInteraction 沿用既有手刻 path，Stage 51 才動 framework Human-in-the-Loop）
 /// </summary>
-internal sealed class KickoffEscalateExecutor : Executor<KickoffPetraVerdict>
+[YieldsOutput(typeof(KickoffLoopResult))]
+internal sealed partial class KickoffEscalateExecutor : Executor<KickoffPetraVerdict>
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<KickoffEscalateExecutor> _logger;

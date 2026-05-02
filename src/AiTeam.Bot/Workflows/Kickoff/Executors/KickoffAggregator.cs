@@ -13,7 +13,8 @@ namespace AiTeam.Bot.Workflows.Kickoff.Executors;
 ///   - loop back 時 round 變了 → 用 _expectedRound 比對自動 reset bucket
 ///   - 累積完成後同步 append meeting log（state.MeetingLog 含 4 Agent 段）+ SaveAsync 寫框架 state
 /// </summary>
-internal sealed class KickoffAggregator : Executor<KickoffAgentOutput>
+[SendsMessage(typeof(KickoffRoundCollected))]
+internal sealed partial class KickoffAggregator : Executor<KickoffAgentOutput>
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<KickoffAggregator> _logger;
