@@ -21,69 +21,17 @@
 
 ---
 
-## [3.37.0] — 2026-05-02 — [Stage 51](docs/planning/Stage_51_Roadmap.md) v4 漸進遷移第三步 ⭐ framework HITL 試點
+## [3.37.0] — 2026-05-02 — [Stage 51](docs/planning/Stage_51_Roadmap.md) ⭐ v4 漸進遷移第三步 framework HITL 試點
 
-v4 漸進遷移 6 Stage 路線第三步完成 — framework **Human-in-the-Loop（HITL）pattern 試點** + Checkpointing pause-resume 機制（Kickoff Workflow 中途介入）+ 獨立 feature flag 雙 flag 連動。**6 場景全綠 + 0 follow-up commits + Aria spike 三項關注點實證通過**（含跨 process restart requestId stable 證據鏈）。
-
-「換引擎不換車身」第三步實踐：**A3 試點精神** — 既有 BossInteraction 10+ type 任何一個都不切（46 檔涉及 + 雙通道樂觀鎖機制成熟，無法 1:1 對應 framework HITL 替代），新建 `framework_kickoff_mid_interrupt` BossInteraction type + `FrameworkHitlBridge` service 作橋接層；既有 InteractionService / InteractionRespondService / InteractionProcessor 主流程不動。**B1 試點場景** = Christ 在 Kickoff 多輪會議跑期間 Dashboard 點「✏️ 中途介入」按鈕，下個 Petra Round 邊界 framework workflow yield 等回應，Christ 透過 BossInteraction（Discord 或 Dashboard）回「套用修改 + 指引文字」或「取消介入」，workflow 從 checkpoint resume 帶新指引繼續跑。
-
-**核心 lifecycle 質變（vs Stage 49/50 同步跑完）**：framework Workflow 跑到 RequestPort 點 yield → router 在 `WatchStreamAsync` 收到 `RequestInfoEvent` 時 break loop（保留 checkpoint pending request）→ 開 BossInteraction → Christ 回應後**新 HTTP scope** rehydrate workflow（`InProcessExecution.ResumeStreamingAsync(workflow, savedCheckpoint, manager)` 對齊 spike F3 結論）+ `SendResponseAsync` 送回應 → workflow 從 yield 點繼續跑到結束。
-
-**Spike 第一步 F1/F2/F3 三項全綠**：① `RequestPort.Create<TReq, TResp>` C# 1.3.0 stable API（含 ExecutorBinding 隱式轉換進 Workflow 拓撲）② `ICheckpointStore<JsonElement>` 對 pending requests 序列化可用（framework 內部隨 checkpoint 序列化 + RestoreCheckpointAsync 自動 re-emit RequestInfoEvent）③ 跨 HTTP scope rehydrate 模式（Bridge 不持有 run 物件，每次新 scope 內 ResumeStreamingAsync）。
-
-**核心拍板**（Christ 2026-05-02）：① A3 試點不切既有 BossInteraction ② B1 Kickoff 中途介入場景 ③ C2 Petra session 沿用 Claude Code `--resume` 機制（Modify 流程不動）④ D2 獨立 `Workflow:UseFrameworkKickoffMidInterrupt` flag（雙 flag 連動：本 flag 只在 UseFrameworkKickoff = true 時有意義）⑤ E D2 抽 `FrameworkHitlBridge` service（解耦給 Stage 54 收尾真正切 HITL 時複用）⑥ F spike 三項全驗。
-
-**Forge 主動範圍變更（Aria 認可）**：trigger flag 改用 **in-memory `KickoffMidInterruptTriggerStore`** Singleton（vs 計劃書原 framework state JSON mutation helper / Plan B DB fallback）— 避免 framework checkpoint JsonElement 內部結構 mutation brittleness（framework 版本變動易破壞），代價是 Bot 重啟「待按按鈕」狀態丟失（Christ 重新點即可，按下到下個 superstep 邊界本就時間敏感，HITL 等待 phase 已轉化為 KickoffState.MidInterruptRequestPending 持久化）。
-
-**8 個關鍵設計決策**：① in-memory TriggerStore 第三條路 ② Bridge 不持有 run 物件 rehydrate 模式 ③ MidInterruptCheckExecutor 雙 [MessageHandler] partial class（對齊 Stage 50 踩坑 #10 三件套紀律）④ Bridge ⇄ Router service locator 解循環依賴 ⑤ finally cleanup 條件式（`yieldedForHitl` flag）⑥ KickoffTaskId 寫進 KickoffState 跨 scope 持久化 ⑦ `ScanForGuidProperty`/`ScanForStringProperty` 寬鬆 scan framework state JSON（fail-open 設計，避 framework 版本變動 break）⑧ Cancel 拍板「丟棄所有累積指引回到正常對話」每次介入是獨立 trigger-response cycle。
-
-**戰略級驗收結果（Aria spike 三項關注點實證通過）**：場景 D（crash during wait）是最強驗證 — yield 後 `docker restart aiteam-bot` → 重啟 log `[FrameworkKickoffRouter] 啟動：發現 1 個 stuck framework kickoff` → `[Stage51] Recovery Group=df65b28c...：等待人類回應（MidInterruptRequestPending=true），保留 marker 等 BossInteraction 觸發 resume` → Discord 點按鈕 + 輸入文字 → `ResumeStreamingAsync 啟動（requestId=0daeccaa...）` **跨 process restart 仍找到 latest checkpoint** → `SendResponseAsync 完成` → `WorkflowOutputEvent（decision=consensus，rounds=2）` → `FinishKickoffAsync 完成`。requestId `0daeccaa72714604812add3427ba4d9d` 在 yield emit + Bridge resume + Recovery 跨重啟全程 stable。**Aria 校準錨：實際 448K / Charter 中位 465K = ×0.96**（混合型 Stage 第 3 個資料點，落 mid 帶**下半**，比 Stage 50 ×1.09 / Stage 49 ×1.25 還準）。
-
-**新建 4 檔 ~600 LoC**：`Workflows/Kickoff/Executors/MidInterruptCheckExecutor.cs` 111 LoC（雙 [MessageHandler] partial class）+ `Orchestration/Hitl/FrameworkHitlBridge.cs` 353 LoC + `Orchestration/Hitl/KickoffMidInterruptTriggerStore.cs` 35 LoC + ~600 LoC Bridge service；改檔 ~15 個（含 KickoffWorkflowFactory 拓撲擴充 + KickoffState 加 4 欄位 + 2 record + Router lifecycle 改寫 + ButtonCallbackRouter customId 路由 + CommandHandler modal handler + Dashboard PipelineView 按鈕 + SystemSettings 第三 toggle + Bot Internal API + 4 Mock scenario）。
-
-**Forge 自驗能力擴張第三次完整實踐**（Stage 49 → Stage 50 → Stage 51）：5 場景靜態自驗（A.1/A.2/A.3 + E + F 程式碼路徑審視）+ B/C/D Christ 線下實跑（HITL 真實互動性質決定，Forge 主動誠實標明 + 提供完整 step-by-step 操作步驟）+ 結案 Forge 自做 Roadmap v2.0（forge-end skill 沿用 Stage 50 慣例）+ 12 stale TaskGroups DB 清理紀錄。**8 條踩坑紀錄**含戰略級對 Stage 52+ 預警（`RequestPort` 隱式轉換 ExecutorBinding 接線方式 / Blazor lifecycle 選擇 / customId prefix 順序紀律）。
-
-commits：`67a9b0a`（Session A）+ `e65a4b3`（Session B 收尾）+ `3bb7f28`（Roadmap v2.0 forge-end SOP）。
+A3 試點精神 — 不切既有 BossInteraction 10+ type，新建 `framework_kickoff_mid_interrupt` type + `FrameworkHitlBridge` service 橋接層；既有 InteractionService / InteractionProcessor 主流程不動。B1 試點 = Christ 在 Kickoff 多輪會議跑期間 Dashboard 點「中途介入」按鈕 → workflow 跑到 RequestPort 點 yield → 開 BossInteraction → Christ 回應後新 HTTP scope rehydrate workflow（`InProcessExecution.ResumeStreamingAsync` 對齊 spike F3 結論）+ SendResponseAsync → workflow 從 yield 點繼續跑。Spike F1/F2/F3 三項全綠（RequestPort C# stable / ICheckpointStore 對 pending requests 序列化可用 / 跨 HTTP scope rehydrate）。Forge 主動範圍變更（Aria 認可）：trigger flag 改用 in-memory `KickoffMidInterruptTriggerStore`（避免 framework state JSON mutation brittleness）。**6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過**（場景 D requestId `0daeccaa...` 跨 process restart stable 證據鏈）。新建 4 檔 ~600 LoC + 改 ~15 既有檔。**Aria 校準錨 ×0.96**（448K vs Charter 中位 465K，混合型第 3 個資料點 mid 帶下半最低；混合型 ×0.96-1.25 三資料點驗證）。詳見 Stage 51 Roadmap。commits：`67a9b0a`(A) + `e65a4b3`(B) + `3bb7f28`(v2.0)。
 
 ## [3.36.0] — 2026-05-02 — [Stage 50](docs/planning/Stage_50_Roadmap.md) v4 漸進遷移第二步
 
-v4 漸進遷移 6 Stage 路線第二步完成 — Kickoff Meeting 5 Agent 會議切 MS Agent Framework Workflow Builder fan-out/fan-in（A2 路線）+ feature flag 並行雙系統。**3 follow-up fix commits**（驗收期揭露 framework 1.3.0 對 fan-out/fan-in 拓撲 vs Stage 49 線性串聯的不同要求）。
-
-「換引擎不換車身」第二步實踐：5 個 Kickoff Agent prompt 完全不動（抽到 `KickoffPrompts.cs` 共用，legacy + framework 兩條路徑同 SoT）+ DB schema 加 1 nullable 欄位（`task_groups.KickoffFrameworkStateJson`，與 Stage 49 `FrameworkAppealStateJson` 完全獨立）+ Discord/Dashboard/ClaudeCodeService 包裝層保留 + 換 Kickoff Meeting 編排層用 framework Workflow Builder。
-
-**Spike 第一步驗證結論驅動路線拍板**：① E1 ❌ — framework Group Chat custom manager 不允許「multi-speaker per round」（star topology + single-speaker turn-by-turn 設計，與「Rosa/Demi/Cody/Quinn 4 個獨立並行視角」相反）→ **走 A2 fallback：`WorkflowBuilder` + `AddFanOutEdge` + `AddFanInBarrierEdge` + `AddSwitch` + loop back**（對齊 MapReduce + Loop sample）② E2 ✅ `ICheckpointStore<JsonElement>` 通用（Stage 49 pattern 100% 複用）③ E3 ✅ 5 個並行 Claude Code subprocess 不被 framework 限制（OS-level subprocess 並行）。
-
-**核心拍板**（Christ 2026-05-02）：① A4：spike 第一步驗 A1 不可行 → A2 fallback ② B2：只遷 Kickoff，Design 留 legacy 給 Stage 52 走 B3 漸進 ③ C2：Petra session 沿用 Claude Code `--resume` 機制（Modify 流程不動）④ D2：獨立 `Workflow:UseFrameworkKickoff` flag（與 Stage 49 `UseFrameworkAppealLoop` 完全獨立）⑤ E：spike 第一步三項全驗。
-
-**驗收期 3 follow-up fix（戰略級 framework 1.3.0 踩坑揭露）**：① `a50059c` `RunAsync` → `RunStreamingAsync` + `WatchStreamAsync` foreach（fan-out + fan-in barrier 拓撲必須 streaming dispatch，Stage 49 線性串聯沒踩到）② `cd6d61a` 4 個顯式 `SendMessageAsync`/`YieldOutputAsync` 的 Executor 加 `[SendsMessage(typeof(T))]`/`[YieldsOutput(typeof(T))]` attribute + 3 個 class 加 `partial` 修飾子（framework 1.3.0 type validation MAFGENWF003，Stage 49 用 `[MessageHandler] ValueTask<T>` generic return 模式 generator 自動推導沒踩此坑）③ `1023104` Mock Petra 角色識別補 "Kick-off 會議已結束" 特徵字串（抽 prompt builders 共用後 BuildPetraPlanPrompt 沒「你是 Petra」字樣）。
-
-**Forge 自驗 6 場景全綠 + 2 bonus 子場景**：A flag false → legacy 不變 / B flag true → framework 完整跑通（4 Agent 並行 + Aggregator 收齊 + Petra consensus + Plan + WorkflowOutputEvent + DB 寫入）/ C Recovery 雙系統隔離 + 降級策略 marker **100% cleared**（vs Stage 49 case study「30% 殘留」更乾淨）/ D escalate → KickoffEscalateExecutor / E flag 切回 → framework 重新接管 / F MockMode token 0 行（預期）/ Bonus consensus_round2 Switch loop back + max_iter Switch case round>=max。
-
-**Forge 自驗能力擴張第二次完整實踐**（Stage 49 case study 後）：跑全 6 場景揭露 3 個真實 production bug + 自己診斷修根因 + 對齊 framework canonical sample 補佐證 + 寫踩坑紀錄 + 戰略洞察段；Christ 線下補驗縮減到只剩 3 項（Discord embed 視覺 + 真實 LLM token_logs + Modify resume 對話）；**結案 Forge 自做 Roadmap v2.0**（forge-end skill 升級 — Stage 49 是 Aria 做 v2.0，Stage 50 Forge 自做）。
-
-**Aria 校準錨：×1.09**（500K 實際 vs Charter 中位 460K，混合型 Stage 第 2 個資料點，比 Stage 49 ×1.25 更接近 mid 中心；混合型 Stage 倍率穩定在 ×1.0-1.3 區間，Stage 49 + Stage 50 兩資料點驗證不到 ×1.4 上界）。
-
-**新建 11 檔 ~1100 LoC**：`src/AiTeam.Bot/Workflows/Kickoff/`（KickoffState / KickoffPrompts / KickoffWorkflowFactory / KickoffCheckpointStore + 6 個 Executor）+ `Orchestration/Meeting/FrameworkKickoffRouter.cs` 499 LoC + `Migration Stage50TaskGroupKickoffFrameworkState`；改檔 11 個（含 KickoffMeetingService 淨刪 213 行 prompt builders 全委派 KickoffPrompts、ClaudeCodeAgentExecutor [Obsolete] message 更新、Program.cs 3 Singleton DI、Dashboard SystemSettings 第二 toggle）。
-
-**踩坑紀錄 11 條**（Forge 結案第一段補完）給 Stage 51+ v4 遷移預警，含 3 條驗收期戰略級踩坑（🔴 #9 fan-out 拓撲 streaming dispatch / 🔴 #10 顯式 send/yield 三件套 / 🟡 #11 Mock 角色識別覆蓋）；新增「戰略洞察：Stage 49 vs Stage 50 整合層級差異」段對 Stage 52 Design Meeting B3 路線是否複用 Stage 50 pattern 給出明確指引。
+Kickoff Meeting 5 Agent 切 framework Workflow Builder fan-out/fan-in（A2 路線）+ feature flag。Spike E1 ❌ → A2 fallback 路線拍板（framework Group Chat 不支援 multi-speaker per round + Concurrent 不支援 loop back，唯一路徑 `WorkflowBuilder` + `AddFanOutEdge` + `AddFanInBarrierEdge` + `AddSwitch` + loop back）；E2/E3 ✅。**3 follow-up fix（戰略級 framework 1.3.0 fan-out 拓撲首次 production 整合踩坑）**：① RunAsync → RunStreamingAsync（fan-out 必須 streaming dispatch，Stage 49 線性串聯沒踩到）② 顯式 SendMessageAsync/YieldOutputAsync Executor 加 `[SendsMessage]`/`[YieldsOutput]` + `partial class`（type validation MAFGENWF003）③ Mock Petra 角色識別補特徵字串。Forge 自驗 6 場景 + 2 bonus 全綠 + 場景 C marker 100% cleared（vs Stage 49「30% 殘留」）+ 結案 Forge 自做 v2.0（forge-end skill 升級）。新建 11 檔 ~1100 LoC + 改 11 檔（含 KickoffMeetingService 淨刪 213 行 prompt builders 全委派 KickoffPrompts）。**Aria 校準錨 ×1.09**（500K vs Charter 中位 460K，混合型第 2 個資料點 mid 中心）。詳見 Stage 50 Roadmap。commits：`7d37a48`(A) + `24b62dc`(B) + `a50059c`/`cd6d61a`/`1023104` 三 fix + `ff6a26f` + `b443546`(v2.0)。
 
 ## [3.35.0] — 2026-05-02 — [Stage 49](docs/planning/Stage_49_Roadmap.md) ⭐ v4 漸進遷移首發
 
-v4 漸進遷移 6 Stage 路線首發完成 — Cody-Vera-Petra Appeal loop 切 MS Agent Framework Workflow Builder + Checkpointing + feature flag 並行雙系統，**0 follow-up commits + production 真實任務驗證 fallback 防呆生效**。
-
-「換引擎不換車身」首發實踐：Cody/Vera/Petra/Quinn/Sage 5 個 Agent prompt 完全不動 + DB schema 加 1 nullable 欄位（`task_groups.FrameworkAppealStateJson`）+ Discord/Dashboard/ClaudeCodeService 包裝層保留 + 換 Appeal loop 編排層用 framework Workflow Builder + Checkpointing。
-
-**核心拍板**（Christ 2026-05-02）：① 並行雙系統 + feature flag（`Workflow:UseFrameworkAppealLoop` 預設 false，舊 path 保留至 Stage 54）② framework Checkpointing 為主 + superstep 結束同步寫既有 task_groups（採風險點 #4 首選路徑成功，實作 `ICheckpointStore<JsonElement>` framework 擴充點）③ POC 重寫 production 版本 spike branch 留 reference ④ Petra 切 framework 但暫保留 LlmProviderFactory wrapper 維持 TokenLogService（Stage 54 才完全切原生）⑤ BossInteraction 不包進 Stage 49（Stage 51 才動 HITL）。
-
-**Forge 揭露 + Aria 拍板路線 B 設計**（v1.1 修正 Aria Roadmap 內部不一致）：framework Executor 整合層級從「底層接 IClaudeCodeService / LlmProviderFactory」改為「**包既有 service method**」（CodyReviewAppealExecutor → `ReviewAppealService.RunCodyAppealAsync` / VeraReviewAppealExecutor → `ReviewAppealService.RunVeraReviewAsync` / PetraReviewExecutors → `PmReviewService.ReviewVeraAsync` 等），三 Agent 同層整合 + Prompt SoT 統一消解 R4 prompt drift 風險 + 工時 -30%。Stage 54 才把 framework Executor 從 service 切回直連（+1-1.5 天）。`ClaudeCodeAgentExecutor.cs` 標 `[Obsolete]` 預留 Stage 50+ Group Chat orchestration（會議多 Agent 直連需要）。
-
-**Forge DI factory 模式**（Session A 主動發現比 Aria 建議更穩）：framework Executor 不註冊 DI，由 `AppealWorkflowFactory` 內 new Executor + 注入 `IServiceScopeFactory`，`HandleAsync` 內 `CreateAsyncScope()` 取 scoped services（DbContext / LlmProviderFactory / ReviewAppealService）— 完整解 Singleton + Scoped 陷阱（既有 ClaudeCodeAgentExecutor lifecycle undocumented 議題完整解）。
-
-**FrameworkAppealRouter F3 scope 精簡**（5 entry → 2 真實分流）：`HandleReviewerCompletedAsync` + `HandleDevPlanCompletedAsync` 才建 framework Workflow，其他 3 entry（`RunPetraGate` / `HandleDevBlocker` / `HandleDevPlanEscalation`）pass-through 走 legacy 避免循環依賴。Crash Recovery 雙系統隔離：`MeetingOrchestrationService.RecoverStuckOrchestrationsAsync` 加排除條件 `g.FrameworkAppealStateJson == null` + `AgentQueueProcessor` 啟動 hook `frameworkRouter.RecoverStuckFrameworkAppealsAsync` + 雙 marker 區隔（`ActiveOrchestration = "FrameworkAppeal"` + `FrameworkAppealStateJson != null`）。
-
-**戰略級驗收結果**：6 場景全部通過，0 follow-up commits（驗收期全部跑在 production 容器，0 行程式碼修正）+ **意外驗到防呆生效**（production 真實 tech_improvement 任務 Cody Dev_plan 缺結構 marker → `IsDevPlanFailed=true` → FrameworkAppealRouter **自動 fallback to legacy** `HandleDevPlanCompletedAsync` — Forge Session B 主動加的防呆 production 真實觸發）。Aria 校準錨：實際 606K / Charter 中位 485K = **×1.25**（混合型 Stage 新資料點，落 Charter 預估 ×1.0-1.5 mid 帶）。
-
-**新建 13 檔 ~2700 LoC**：`src/AiTeam.Bot/Workflows/Appeal/` 全新資料夾（AppealState / AppealWorkflowFactory / AppealCheckpointStore 209 LoC / AppealMessages / AppealLogHelpers / 5 個 Executor）+ `Orchestration/Appeal/FrameworkAppealRouter.cs` 397 LoC + `Migration Stage49TaskGroupFrameworkState`。
+Cody-Vera-Petra Appeal loop 切 framework Workflow Builder + Checkpointing + feature flag 並行雙系統。**0 follow-up + production fallback 防呆生效**（tech_improvement task Cody Dev_plan 缺結構 marker → IsDevPlanFailed=true → FrameworkAppealRouter 自動 fallback to legacy `HandleDevPlanCompletedAsync`，Forge Session B 主動加防呆）。「換引擎不換車身」首發：5 Agent prompt 完全不動 + DB 加 1 nullable 欄位 + Discord/Dashboard/ClaudeCodeService 包裝層保留 + 換 Appeal loop 編排層用 framework。**核心拍板**：① 並行雙系統 + feature flag 預設 false ② framework Checkpointing 為主（採 `ICheckpointStore<JsonElement>` 首選路徑）③ **路線 B service 包裝**（v1.1 修正 Aria Roadmap 3 Agent 不同層整合不一致 — 三 Executor 都包既有 service method）④ **DI factory 模式**（Forge 主動發現 — 不註冊 DI + IServiceScopeFactory 解 Singleton+Scoped 陷阱）⑤ FrameworkAppealRouter F3 scope 精簡（5 entry → 2 真實分流）⑥ Crash Recovery 雙系統隔離。新建 13 檔 ~2700 LoC + Migration。**Aria 校準錨 ×1.25**（606K vs Charter 中位 485K）。詳見 Stage 49 Roadmap。commits：`90c6ed3`(A) + `3400e5b`(B) + `5debc96` + `33bf51c`(v2.0)。
 
 ## [3.34.0] — 2026-05-02 — [Stage 47](docs/planning/Stage_47_Roadmap.md)
 
