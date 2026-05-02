@@ -59,6 +59,12 @@ public class ButtonCallbackRouter(
             await HandleDesignButtonAsync(interaction);
             return;
         }
+        // Stage 51：framework HITL 中途介入 — 必須在 kickoff_ 之前 check（customId 起頭 framework_kickoff_mid_interrupt_）
+        if (interaction.Data.CustomId.StartsWith("framework_kickoff_mid_interrupt_", StringComparison.Ordinal))
+        {
+            await HandleFrameworkKickoffMidInterruptAsync(interaction);
+            return;
+        }
         if (interaction.Data.CustomId.StartsWith("kickoff_", StringComparison.Ordinal))
         {
             await HandleKickoffButtonAsync(interaction);
@@ -122,6 +128,72 @@ public class ButtonCallbackRouter(
             _          => $"✅ 已執行 {action}。"
         };
         await interaction.FollowupAsync(actionText);
+    }
+
+    /// <summary>
+    /// Stage 51：framework HITL 中途介入按鈕處理（v4 漸進遷移第三步試點）。
+    /// customId 格式：framework_kickoff_mid_interrupt_{action}_{groupId}（action = apply / cancel）。
+    ///
+    /// apply：複用 kickoff_modify pattern — 註冊 PendingKickoffMidInterruptApply，
+    ///        Christ 在頻道輸入指引文字後由 CommandHandler.HandleCeoChannelMessageAsync 接續觸發
+    ///        Bridge.HandleMidInterruptResponseAsync(group, "midinterrupt_apply", text)
+    /// cancel：複用 kickoff_continue/stop pattern — DeferAsync + Task.Run 直接呼叫
+    ///        Bridge.HandleMidInterruptResponseAsync(group, "midinterrupt_cancel", null)
+    /// </summary>
+    private async Task HandleFrameworkKickoffMidInterruptAsync(SocketMessageComponent interaction)
+    {
+        // customId = framework_kickoff_mid_interrupt_{action}_{groupId}
+        const string prefix = "framework_kickoff_mid_interrupt_";
+        var rest = interaction.Data.CustomId[prefix.Length..];
+        var sepIdx = rest.IndexOf('_');
+        if (sepIdx < 0
+            || !Guid.TryParse(rest[(sepIdx + 1)..], out var groupId))
+        {
+            await interaction.RespondAsync("⚠️ 無法解析中途介入按鈕資訊。", ephemeral: true);
+            return;
+        }
+        var action = rest[..sepIdx]; // apply / cancel
+
+        if (action == "apply")
+        {
+            store.RegisterKickoffMidInterruptApply(interaction.User.Id, groupId);
+            await interaction.RespondAsync(
+                "✏️ 請直接輸入你的中途介入指引（一則訊息），4 Agent + Petra 下一輪會議將優先考量你的指引。",
+                ephemeral: true);
+            logger.LogInformation(
+                "[Stage51] Mid-Interrupt Apply 待命：UserId={UserId}，GroupId={GroupId}",
+                interaction.User.Id, groupId);
+            return;
+        }
+
+        if (action == "cancel")
+        {
+            await interaction.DeferAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var scope = serviceProvider.CreateAsyncScope();
+                    var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+                    var group    = await taskRepo.GetGroupByIdAsync(groupId, CancellationToken.None);
+                    if (group is null) return;
+                    var bridge = scope.ServiceProvider
+                        .GetRequiredService<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
+                    await bridge.HandleMidInterruptResponseAsync(
+                        group, "midinterrupt_cancel", content: null, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "[Stage51] Mid-Interrupt Cancel 觸發失敗（GroupId={Id}）", groupId);
+                    try { await interaction.FollowupAsync("❌ 取消中途介入時發生錯誤，請查看 log。"); } catch { /* ignore */ }
+                }
+            }, CancellationToken.None);
+            await interaction.FollowupAsync("✅ 已取消中途介入，會議繼續進行下一輪。");
+            return;
+        }
+
+        await interaction.RespondAsync($"⚠️ 未知的中途介入 action：{action}", ephemeral: true);
     }
 
     private async Task HandleDesignButtonAsync(SocketMessageComponent interaction)

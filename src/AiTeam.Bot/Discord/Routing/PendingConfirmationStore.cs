@@ -79,4 +79,13 @@ public sealed class PendingConfirmationStore
         _cancelSelections.TryGetValue(userId, out groups!);
     public bool RemoveCancelSelection(ulong userId) =>
         _cancelSelections.TryRemove(userId, out _);
+
+    // ---------- Stage 51：Kickoff Mid-Interrupt Apply（Christ 修改指引文字等待） ----------
+    private readonly ConcurrentDictionary<ulong, Guid> _kickoffMidInterruptApply = new();
+    public void RegisterKickoffMidInterruptApply(ulong userId, Guid groupId) =>
+        _kickoffMidInterruptApply[userId] = groupId;
+    public bool TryGetKickoffMidInterruptApply(ulong userId, out Guid groupId) =>
+        _kickoffMidInterruptApply.TryGetValue(userId, out groupId);
+    public bool RemoveKickoffMidInterruptApply(ulong userId) =>
+        _kickoffMidInterruptApply.TryRemove(userId, out _);
 }

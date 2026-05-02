@@ -412,6 +412,31 @@ public class InternalController(
         return Accepted(new { message = "恢復 epic 指令已送出" });
     }
 
+    // ============================================================
+    //  Stage 51：framework HITL 中途介入觸發（v4 漸進遷移第三步試點）
+    // ============================================================
+
+    /// <summary>
+    /// Stage 51：Dashboard「✏️ 中途介入」按鈕觸發 — 寫 in-memory KickoffMidInterruptTriggerStore，
+    /// 下個 Petra Round 邊界 MidInterruptCheckExecutor 會 emit RequestInfoEvent 開 BossInteraction。
+    /// </summary>
+    [HttpPost("kickoff/trigger-mid-interrupt")]
+    public async Task<IActionResult> TriggerKickoffMidInterrupt(
+        [FromBody] TriggerMidInterruptRequest req, CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+        if (!Guid.TryParse(req.GroupId, out var groupId))
+            return BadRequest(new { message = "groupId 格式錯誤" });
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var bridge = scope.ServiceProvider
+            .GetRequiredService<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
+        var ok = await bridge.TriggerMidInterruptFlagAsync(groupId, ct);
+        return ok
+            ? Ok(new { message = "中途介入旗標已設置，下個 Petra Round 邊界生效" })
+            : BadRequest(new { message = "Group 無 framework Kickoff state 或不在 framework path" });
+    }
+
     /// <summary>
     /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
     /// 後續進度透過 SignalR push 給 Dashboard 任務中心。
@@ -464,3 +489,6 @@ public record MockScenarioRequest(string Scenario, string? Title, string? Projec
 
 /// <summary>Stage 45：TaskGroup 暫停請求（By = "Dashboard" / 未來 "Discord"）。</summary>
 public record PauseTaskGroupRequest(string? By);
+
+/// <summary>Stage 51：Dashboard 中途介入觸發請求（v4 漸進遷移第三步試點）。</summary>
+public record TriggerMidInterruptRequest(string GroupId);

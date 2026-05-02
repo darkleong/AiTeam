@@ -60,6 +60,15 @@ else if (Group.Status is not "done" and not "failed" and not "cancelled")
                OnClick="HandlePauseClickAsync" Disabled="@_pauseBusy">
         ⏸️ 暫停下階段啟動
     </MudButton>
+    @* Stage 51：framework HITL 中途介入按鈕（v4 漸進遷移第三步試點）— Kickoff 進行中且試點 flag 啟用時顯示 *@
+    @if (CanShowMidInterruptButton)
+    {
+        <MudButton StartIcon="@Icons.Material.Filled.Edit" Color="Color.Info" Variant="Variant.Outlined"
+                   Size="Size.Small" Class="mb-3 mt-2 ml-2"
+                   OnClick="HandleMidInterruptClickAsync" Disabled="@_midInterruptBusy">
+            ✏️ 中途介入 Kickoff
+        </MudButton>
+    }
 }
 
 @if (_loading)

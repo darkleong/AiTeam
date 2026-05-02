@@ -65,6 +65,48 @@ public class DashboardCeoCommandService(
             return new CeoCommandResult(false, null, null, "連線失敗，請確認 Bot 服務正常。");
         }
     }
+
+    /// <summary>
+    /// Stage 51：Dashboard「✏️ 中途介入」按鈕呼叫 — POST /internal/kickoff/trigger-mid-interrupt。
+    /// 回傳 (success, errorMessage)。Bot 端寫 in-memory KickoffMidInterruptTriggerStore，下個 Petra
+    /// Round 邊界 MidInterruptCheckExecutor 會 emit RequestInfoEvent 開 BossInteraction。
+    /// </summary>
+    public async Task<(bool Success, string? ErrorMessage)> TriggerKickoffMidInterruptAsync(
+        Guid groupId, CancellationToken ct = default)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                $"{_botInternalUrl.TrimEnd('/')}/internal/kickoff/trigger-mid-interrupt");
+            request.Headers.Add("X-Api-Key", _botInternalKey);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(new { GroupId = groupId.ToString() }),
+                System.Text.Encoding.UTF8,
+                "application/json");
+
+            var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(ct);
+                string? errorMsg = null;
+                try
+                {
+                    using var doc = JsonDocument.Parse(errorBody);
+                    errorMsg = doc.RootElement.TryGetProperty("message", out var m) ? m.GetString() : null;
+                }
+                catch { /* ignore parse failure */ }
+                logger.LogWarning("[Stage51] 中途介入觸發失敗（{Code}）：{Body}", response.StatusCode, errorBody);
+                return (false, errorMsg ?? "中途介入觸發失敗，請查看 Bot log。");
+            }
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[Stage51] 中途介入觸發時發生例外");
+            return (false, "連線失敗，請確認 Bot 服務正常。");
+        }
+    }
 }
 
 public record CeoCommandResult(bool Success, string? Action, string? Reply, string? ErrorMessage);

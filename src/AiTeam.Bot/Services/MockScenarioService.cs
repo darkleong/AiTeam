@@ -4,6 +4,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.Discord.Routing;
 using AiTeam.Bot.Orchestration;
+using AiTeam.Bot.Orchestration.Hitl;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Dtos;
@@ -26,6 +27,7 @@ public class MockScenarioService(
     IOptions<DiscordSettings> discordSettings,
     IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
+    KickoffMidInterruptTriggerStore midInterruptTriggerStore,
     ILogger<MockScenarioService> logger)
 {
     private readonly DiscordSettings _discord   = discordSettings.Value;
@@ -97,6 +99,16 @@ public class MockScenarioService(
                           or "framework_kickoff_escalate"
                           or "framework_kickoff_crash_recovery")
             MockClaudeCodeService.FailScenario = scenario;
+        // ── Stage 51 v4 漸進遷移第三步：framework HITL 中途介入 4 個 Mock 場景 ──
+        // Christ 線下驗收時必須先 toggle Dashboard → 系統設定 → ① 使用 MS Agent Framework Kickoff Meeting = ON
+        // 且 ② 使用 MS Agent Framework HITL（Kickoff 中途介入試點）= ON，否則試點 flag 不影響 framework Kickoff
+        // 機制：scenario key 透過 MockClaudeCodeService.FailScenario 傳遞（active scenario key 模式對齊 Stage 49/50）
+        // apply / cancel / crash_during_wait 在 group 建立後立刻設 trigger flag（避免 Round 1 跑完前 race condition）
+        else if (scenario is "framework_kickoff_mid_interrupt_apply"
+                          or "framework_kickoff_mid_interrupt_cancel"
+                          or "framework_kickoff_mid_interrupt_crash_during_wait"
+                          or "framework_kickoff_mid_interrupt_no_trigger")
+            MockClaudeCodeService.FailScenario = scenario;
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -131,6 +143,11 @@ public class MockScenarioService(
             "framework_kickoff_max_iter"         => (WorkflowType.NewFeature, "FrameworkKickoff-MaxIter",      "Kickoff"),
             "framework_kickoff_escalate"         => (WorkflowType.NewFeature, "FrameworkKickoff-Escalate",     "Kickoff"),
             "framework_kickoff_crash_recovery"   => (WorkflowType.NewFeature, "FrameworkKickoff-CrashRecovery","Kickoff"),
+            // Stage 51 HITL 試點 4 場景（從 Kickoff 起跑驗 framework HITL pause-resume lifecycle）
+            "framework_kickoff_mid_interrupt_apply"              => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptApply",         "Kickoff"),
+            "framework_kickoff_mid_interrupt_cancel"             => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptCancel",        "Kickoff"),
+            "framework_kickoff_mid_interrupt_crash_during_wait"  => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptCrashWait",     "Kickoff"),
+            "framework_kickoff_mid_interrupt_no_trigger"         => (WorkflowType.NewFeature, "FrameworkKickoff-MidInterruptNoTrigger",     "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -170,6 +187,17 @@ public class MockScenarioService(
         //   5. 觀察 framework recovery log + 流程是否能繼續（暫降級策略：清 marker 後重觸發 entry）
         else if (scenario == "framework_appeal_loop_crash_recovery")
             MockClaudeCodeService.PausePoint = (group.Id, "Reviewer");
+        // Stage 51：HITL 中途介入 — apply / cancel / crash_during_wait 在 group 建立後立刻設 trigger flag
+        // （MidInterruptCheckExecutor 在 Petra Round 1 結束後消耗）。no_trigger 不設，驗證 baseline 不影響。
+        else if (scenario is "framework_kickoff_mid_interrupt_apply"
+                          or "framework_kickoff_mid_interrupt_cancel"
+                          or "framework_kickoff_mid_interrupt_crash_during_wait")
+        {
+            midInterruptTriggerStore.Set(group.Id);
+            logger.LogInformation(
+                "[MockMode][Stage51] Mid-Interrupt trigger flag 已預設（GroupId={Id}，scenario={Scenario}）",
+                group.Id, scenario);
+        }
 
         _ = Task.Run(() => taskGroupService.FireStepsAsync(group, [new WorkflowStep(initialStep)]));
 
@@ -188,18 +216,34 @@ public class MockScenarioService(
             "framework_kickoff_max_iter"                           => "🤝",
             "framework_kickoff_escalate"                           => "🤝",
             "framework_kickoff_crash_recovery"                     => "🤝",
+            // Stage 51：HITL 中途介入試點 4 場景
+            "framework_kickoff_mid_interrupt_apply"                => "✏️",
+            "framework_kickoff_mid_interrupt_cancel"               => "✏️",
+            "framework_kickoff_mid_interrupt_crash_during_wait"    => "✏️",
+            "framework_kickoff_mid_interrupt_no_trigger"           => "✏️",
             _                                                       => "✨"
         };
 
         // Stage 49 v4 漸進遷移：framework Mock 場景啟動時提示 Christ 確認 feature flag
         var frameworkHint = scenario.StartsWith("framework_appeal_loop_")
             ? "\n⚠️ **v4 漸進遷移驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Appeal Loop = ON**，否則此 Mock 走 legacy path 無法驗 framework Workflow。"
-            : scenario.StartsWith("framework_kickoff_")
-                ? "\n⚠️ **v4 漸進遷移第二步驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Kickoff Meeting = ON**，否則此 Mock 走 legacy KickoffMeetingService。" +
-                  (scenario == "framework_kickoff_crash_recovery"
-                      ? "\n💡 場景 C 流程：等 Round 2 4 Agent 並行進行中（log 觀察）→ 手動 `docker compose restart aiteam-bot` → 觀察 Bot 啟動時 [Stage50-CrashRecoveryFrameworkKickoff] log 與降級策略。"
-                      : "")
-                : "";
+            : scenario.StartsWith("framework_kickoff_mid_interrupt_")
+                ? "\n⚠️ **v4 漸進遷移第三步試點驗收**：請先於 Dashboard → 系統設定 → 同時啟用 ① **使用 MS Agent Framework Kickoff Meeting = ON** 與 ② **使用 MS Agent Framework HITL（Kickoff 中途介入試點） = ON**，否則此 Mock 走 legacy KickoffMeetingService 或試點 flag 不生效。" +
+                  (scenario == "framework_kickoff_mid_interrupt_apply"
+                      ? "\n💡 場景 B 流程：trigger 已預設 → Round 1 Petra 結束會 emit RequestInfoEvent → Discord/Dashboard 出 BossInteraction「✏️ 套用修改」按鈕 → 點按鈕後輸入修改指引文字 → workflow resume Round 2 帶指引 → consensus。"
+                      : scenario == "framework_kickoff_mid_interrupt_cancel"
+                          ? "\n💡 場景 E 流程：trigger 已預設 → Round 1 結束 emit RequestInfoEvent → 在 Discord/Dashboard 點「取消介入」→ workflow resume Round 2 不帶指引 → consensus。"
+                          : scenario == "framework_kickoff_mid_interrupt_crash_during_wait"
+                              ? "\n💡 場景 D 流程：trigger 已預設 → Round 1 結束 emit RequestInfoEvent + BossInteraction → 不回應 → 手動 `docker compose restart aiteam-bot` → 重啟後 Recovery 識別「等待人類回應」不清 marker → 重啟後在 Discord 點「套用修改」→ workflow resume → consensus。"
+                              : scenario == "framework_kickoff_mid_interrupt_no_trigger"
+                                  ? "\n💡 場景 F 流程：未預設 trigger → workflow 跑完 Round 1 consensus（無 RequestInfoEvent emit），驗證試點不影響 default behavior。"
+                                  : "")
+                : scenario.StartsWith("framework_kickoff_")
+                    ? "\n⚠️ **v4 漸進遷移第二步驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Kickoff Meeting = ON**，否則此 Mock 走 legacy KickoffMeetingService。" +
+                      (scenario == "framework_kickoff_crash_recovery"
+                          ? "\n💡 場景 C 流程：等 Round 2 4 Agent 並行進行中（log 觀察）→ 手動 `docker compose restart aiteam-bot` → 觀察 Bot 啟動時 [Stage50-CrashRecoveryFrameworkKickoff] log 與降級策略。"
+                          : "")
+                    : "";
 
         return (true,
             $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +

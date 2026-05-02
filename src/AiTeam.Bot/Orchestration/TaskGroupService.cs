@@ -808,6 +808,26 @@ public class TaskGroupService(
                     await HandleEpicPartialPausedAsync(contextJson, action, ct);
                 break;
 
+            // Stage 51：framework HITL 試點 — Christ 中途介入回應路由
+            case "framework_kickoff_mid_interrupt":
+            {
+                if (contextJson is null) break;
+                using var doc = JsonDocument.Parse(contextJson);
+                if (!doc.RootElement.TryGetProperty("groupId", out var g)
+                    || !Guid.TryParse(g.GetString(), out var groupId))
+                    break;
+
+                await using var scope = serviceProvider.CreateAsyncScope();
+                var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+                var group    = await taskRepo.GetGroupByIdAsync(groupId, ct);
+                if (group is null) break;
+
+                var bridge = scope.ServiceProvider
+                    .GetRequiredService<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
+                await bridge.HandleMidInterruptResponseAsync(group, action, responseContent, ct);
+                break;
+            }
+
             default:
                 logger.LogInformation("InteractionProcessor：無需處理的互動類型（{Type}）", interactionType);
                 break;

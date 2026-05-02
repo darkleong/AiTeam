@@ -1,4 +1,5 @@
 using AiTeam.Dashboard.Helpers;
+using AiTeam.Dashboard.Services;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
@@ -16,6 +17,12 @@ public partial class PipelineView : IAsyncDisposable
 
     [Inject]
     private DashboardBotService BotService { get; set; } = null!;
+
+    [Inject]
+    private DashboardCeoCommandService CeoCommandService { get; set; } = null!;
+
+    [Inject]
+    private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
 
     [Inject]
     private ISnackbar Snackbar { get; set; } = null!;
@@ -41,10 +48,20 @@ public partial class PipelineView : IAsyncDisposable
     private bool _loading;
     private int  _activeStepIndex;
     private bool _pauseBusy;
+    // Stage 51：HITL 中途介入按鈕（v4 漸進遷移第三步試點）
+    private bool _useFrameworkKickoffMidInterrupt;
+    private bool _midInterruptBusy;
 
     #endregion
 
     #region Lifecycle
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Stage 51：載入 HITL 試點 feature flag（決定是否顯示「中途介入」按鈕）
+        var setting = await AppSettingsService.GetAsync("Workflow:UseFrameworkKickoffMidInterrupt");
+        _useFrameworkKickoffMidInterrupt = bool.TryParse(setting?.Value, out var v) && v;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -223,6 +240,29 @@ public partial class PipelineView : IAsyncDisposable
         }
         finally { _pauseBusy = false; }
     }
+
+    /// <summary>Stage 51：framework HITL 中途介入按鈕（v4 漸進遷移第三步試點）— Christ 觸發 trigger flag，
+    /// 下個 Petra Round 邊界 MidInterruptCheckExecutor emit RequestInfoEvent 開 BossInteraction。</summary>
+    private async Task HandleMidInterruptClickAsync()
+    {
+        if (Group is null || _midInterruptBusy) return;
+        _midInterruptBusy = true;
+        try
+        {
+            var (ok, err) = await CeoCommandService.TriggerKickoffMidInterruptAsync(Group.Id);
+            Snackbar.Add(
+                ok
+                    ? "✏️ 中途介入旗標已送，下個 Petra Round 邊界會收到 Discord/Dashboard 介入卡"
+                    : $"中途介入觸發失敗：{err ?? "未知錯誤"}",
+                ok ? Severity.Success : Severity.Error);
+        }
+        finally { _midInterruptBusy = false; }
+    }
+
+    /// <summary>Stage 51：是否可顯示「中途介入」按鈕（feature flag 開 + Kickoff 步驟 running）。</summary>
+    private bool CanShowMidInterruptButton =>
+        _useFrameworkKickoffMidInterrupt
+        && _steps.Any(s => s.Task.AssignedAgent == AgentNames.Kickoff && s.Task.Status == "running");
 
     private async Task HandleRequeueAsync(Guid taskId)
     {

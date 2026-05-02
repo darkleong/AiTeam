@@ -148,6 +148,9 @@ public class InteractionProcessor(
         ("split_task_proposal", "split_abort")   => "停止任務 ❌",
         ("epic_partial_paused", "epic_resume")   => "恢復 epic ▶️",
         ("epic_partial_paused", "epic_abort")    => "放棄整個 epic ❌",
+        // Stage 51：framework HITL 試點
+        ("framework_kickoff_mid_interrupt", "midinterrupt_apply")  => "套用修改 ✏️",
+        ("framework_kickoff_mid_interrupt", "midinterrupt_cancel") => "取消介入",
         _                                        => $"{type} → {action}"
     };
 }

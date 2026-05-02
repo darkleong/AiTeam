@@ -299,6 +299,45 @@ public class CommandHandler(
             return;
         }
 
+        // Stage 51：HITL 中途介入 Apply 修改指引文字
+        if (store.TryGetKickoffMidInterruptApply(msg.Author.Id, out var midInterruptGroupId))
+        {
+            store.RemoveKickoffMidInterruptApply(msg.Author.Id);
+            var hintText = msg.CleanContent;
+            logger.LogInformation(
+                "[Stage51] 收到中途介入指引（UserId={UserId}，GroupId={GroupId}）",
+                msg.Author.Id, midInterruptGroupId);
+
+            await msg.Channel.SendMessageAsync(
+                "✏️ 收到中途介入指引，會議將從 checkpoint 繼續，下一輪 4 Agent + Petra 會優先考量你的指引...");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var innerScope = serviceProvider.CreateAsyncScope();
+                    var taskRepo = innerScope.ServiceProvider.GetRequiredService<Data.Repositories.TaskRepository>();
+                    var group    = await taskRepo.GetGroupByIdAsync(midInterruptGroupId, CancellationToken.None);
+                    if (group is null)
+                    {
+                        await msg.Channel.SendMessageAsync("❌ 找不到對應的 TaskGroup，無法套用中途介入。");
+                        return;
+                    }
+                    var bridge = innerScope.ServiceProvider
+                        .GetRequiredService<Orchestration.Hitl.FrameworkHitlBridge>();
+                    await bridge.HandleMidInterruptResponseAsync(
+                        group, "midinterrupt_apply", hintText, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "[Stage51] 套用中途介入失敗（GroupId={Id}）", midInterruptGroupId);
+                    await msg.Channel.SendMessageAsync("❌ 套用中途介入時發生錯誤，請查看 log。");
+                }
+            }, CancellationToken.None);
+            return;
+        }
+
         // Stage 25b：Design 修改意見
         if (store.TryGetDesignModify(msg.Author.Id, out var designModifyInfo))
         {

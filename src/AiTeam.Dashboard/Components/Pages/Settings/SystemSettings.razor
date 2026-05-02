@@ -251,6 +251,29 @@
     </div>
 </div>
 
+<div class="system-config-card system-config-card--warning" style="margin-top: 16px;">
+    <div class="system-config-header">
+        <div>
+            <strong>使用 MS Agent Framework HITL（Kickoff 中途介入試點）</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後 <strong>Kick-off 多輪會議</strong>進行期間可從流程追蹤頁點「✏️ 中途介入」按鈕，
+                workflow 會在下個 Petra Round 邊界 yield 等老闆輸入修改指引（apply）或取消（cancel），
+                從 framework checkpoint resume 繼續會議（v4 漸進遷移第三步 Stage 51 試點）。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">
+                    ⚠️ 試點功能。需先啟用上方「MS Agent Framework Kickoff Meeting」，且 framework path
+                    跑 Kick-off 時才有效（legacy path 不適用）。修改後 5 分鐘內自動生效。
+                </MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_useFrameworkKickoffMidInterrupt"
+                   ValueChanged="@OnUseFrameworkKickoffMidInterruptChanged"
+                   Color="Color.Warning"
+                   Disabled="@(!_useFrameworkKickoff)"
+                   Label="@(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")" />
+    </div>
+</div>
+
 <MudDivider Style="margin: 32px 0" />
 
 <h3 style="margin-bottom:16px">Token 守門設定</h3>

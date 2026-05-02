@@ -228,7 +228,12 @@ public class MockClaudeCodeService(
                                                 or "framework_kickoff_consensus_round2"
                                                 or "framework_kickoff_max_iter"
                                                 or "framework_kickoff_escalate"
-                                                or "framework_kickoff_crash_recovery")
+                                                or "framework_kickoff_crash_recovery"
+                                                // Stage 51 v4 漸進遷移第三步：HITL 中途介入 4 場景
+                                                or "framework_kickoff_mid_interrupt_apply"
+                                                or "framework_kickoff_mid_interrupt_cancel"
+                                                or "framework_kickoff_mid_interrupt_crash_during_wait"
+                                                or "framework_kickoff_mid_interrupt_no_trigger")
         {
             var round = prompt.Contains("## 第 1 輪各角色意見") ? 1
                       : prompt.Contains("## 第 2 輪各角色意見") ? 2
@@ -259,6 +264,16 @@ public class MockClaudeCodeService(
                 ("framework_kickoff_escalate", _)                      => "escalate",
                 ("framework_kickoff_max_iter", _)                      => "needs_discussion",   // 全部 needs_discussion，Round >= MaxRounds 時 Switch 走 max_iter 路徑
                 ("framework_kickoff_crash_recovery", _)                => "needs_discussion",   // Round 1+2 推進，Christ 線下 restart 觀察 Recovery
+                // Stage 51 HITL 試點：apply / cancel / crash_during_wait Round 1 needs_discussion → Round 2 consensus
+                // （Round 1 結束後 MidInterruptCheckExecutor 看到預設 trigger flag → emit RequestInfoEvent → 等 Christ 回應 resume）
+                ("framework_kickoff_mid_interrupt_apply", 1)             => "needs_discussion",
+                ("framework_kickoff_mid_interrupt_apply", _)             => "consensus",
+                ("framework_kickoff_mid_interrupt_cancel", 1)            => "needs_discussion",
+                ("framework_kickoff_mid_interrupt_cancel", _)            => "consensus",
+                ("framework_kickoff_mid_interrupt_crash_during_wait", 1) => "needs_discussion",
+                ("framework_kickoff_mid_interrupt_crash_during_wait", _) => "consensus",
+                // no_trigger：所有 round 都 consensus（baseline 驗證試點 flag 不影響 default behavior）
+                ("framework_kickoff_mid_interrupt_no_trigger", _)        => "consensus",
                 _                                                       => "consensus",
             };
             var summaryText = decision switch

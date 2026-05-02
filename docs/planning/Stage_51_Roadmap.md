@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 6 Stage 路線第三步（[Stage 48 spike 報告](../experiments/Spike_v1_MsAgentFramework.md) 節 7）— 不對應特定 active FF（v4 路線進入 Stage 工作模式，按 Stage 走不開新 FF）
 > 對應版本：**v3.37.0**（v4 漸進遷移第三個產生版本變動的 Stage）
 > 建立日期：2026-05-02
-> 狀態：📋 **規劃中**（等 Christ 通過計劃書 → Aria 備 Forge prompt → Forge Plan Mode）
-> 文件版本：v1.0
+> 狀態：✅ **Forge 自驗完成（Session A + B）**（等 Aria 閘門一檢查 + Christ 線下驗 B/C/D 場景）
+> 文件版本：v1.2（v1.0 規劃 / v1.1 計劃書定稿 / v1.2 實作紀錄補完）
 
 ---
 
@@ -530,35 +530,85 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 
 ## 實作紀錄
 
-> Forge 結案第一段補。
-
 ### 子項完成度對照（對齊 Aria 計劃書 8 子項 + spike）
 
-> 待 Forge 結案第一段補。
+| # | 子項 | Session | 狀態 | 主要產物 |
+|---|---|---|---|---|
+| 0 | Spike F1/F2/F3 | A | ✅ | 全綠（NuGet 1.3.0 stable + Microsoft Learn checkpoints + GitHub HumanInTheLoopBasic 引證），走 framework 原生 RequestPort + ResumeStreamingAsync 路線（非 fallback） |
+| 1 | feature flag `Workflow:UseFrameworkKickoffMidInterrupt` | A | ✅ | `WorkflowSettings` + `WorkflowSettingsResolver.GetUseFrameworkKickoffMidInterruptAsync` |
+| 2 | KickoffState 加 3 HITL 欄位 + KickoffTaskId + 2 record | A | ✅ | `MidInterruptRequest` / `MidInterruptResponseData` record + state 內 `MidInterruptRequestPending` / `MidInterruptResponse` / `KickoffTaskId`（trigger flag 改 in-memory store） |
+| 3 | MidInterruptCheckExecutor + Workflow 拓撲 + prompt 注入 | A | ✅ | 新 `MidInterruptCheckExecutor`（雙 [MessageHandler] partial class）+ Factory 加 RequestPort + edge × 3 + `KickoffPrompts.AppendMidInterruptHint` + 4 Agent + Petra prompt builder 接 hint 參數 |
+| 4 | FrameworkHitlBridge service | A | ✅ | 三 method（TriggerMidInterruptFlagAsync / RequestMidInterruptInteractionAsync / HandleMidInterruptResponseAsync）+ in-memory `KickoffMidInterruptTriggerStore` + 冪等性 fail-open scan helper |
+| 5 | FrameworkKickoffRouter lifecycle 改寫 | A | ✅ | RunWorkflowAsync 回傳 `(loopResult, yielded)` tuple + finally 條件式 cleanup + 新 public `FinishKickoffAsync` + Recovery 加判斷 `MidInterruptRequestPending=true` 不算 stuck |
+| 6 | TaskGroupService case + InteractionProcessor label + CommandHandler button + modal | B | ✅ | case `framework_kickoff_mid_interrupt` 路由 + ButtonCallbackRouter `HandleFrameworkKickoffMidInterruptAsync`（apply 走 `RegisterKickoffMidInterruptApply` modal pattern / cancel DeferAsync + Task.Run）+ CommandHandler text-input handler + label switch 2 entries |
+| 7 | Bot Internal API + Dashboard UI + SystemSettings toggle | B | ✅ | `POST /internal/kickoff/trigger-mid-interrupt` + `DashboardCeoCommandService.TriggerKickoffMidInterruptAsync` + PipelineView「✏️ 中途介入」按鈕（feature flag + Kickoff running 雙條件）+ SystemSettings 第三 toggle（Disabled 條件 `!_useFrameworkKickoff`）|
+| 8 | Mock 4 場景 + 自驗 + 結案 | B | ✅ | `framework_kickoff_mid_interrupt_apply`/`cancel`/`crash_during_wait`/`no_trigger` 4 scenario + MockClaudeCodeService Petra Round 1 needs_discussion → Round 2 consensus + group 建立後立即 `triggerStore.Set` 預設 trigger（apply/cancel/crash 三變體） |
 
 ### Session A 結案
 
-> 待 Forge 結案第一段補。
+- 5 子項全綠（feature flag / KickoffState / MidInterruptCheckExecutor + 4 檔 / FrameworkHitlBridge / Router lifecycle）
+- Aria 二次檢查 12 點全部處理（含必修 #1 verdict.Round = state.Round 對齊 BroadcastNextRoundAsync 推進模式）
+- 設計變更：trigger flag 從 KickoffState 改用 `KickoffMidInterruptTriggerStore` Singleton（避免 framework JSON mutation brittle 解析；HITL 等待階段 trigger 已被消耗，重啟讀 `MidInterruptRequestPending=true` 即正確識別「等待人類回應」）
+- 14 檔變更，890 行新增，commit `67a9b0a`，push 後 CI/CD 部署
+- `dotnet build AiTeam.slnx` ✅ 0 Error / `dotnet test` ✅ 127 Passed
 
 ### Session B 結案
 
-> 待 Forge 結案第一段補。
+- 3 子項全綠（TaskGroupService case + Discord/Modal pattern / Bot Internal API + Dashboard UI / Mock 場景擴充）
+- 7 個檔案改動：TaskGroupService.cs / InteractionProcessor.cs / ButtonCallbackRouter.cs / CommandHandler.cs / PendingConfirmationStore.cs / InternalController.cs / DashboardCeoCommandService.cs / SystemSettings.razor + .cs / PipelineView.razor + .cs / MockScenarioService.cs / MockClaudeCodeService.cs / Directory.Build.props
+- Mock 4 場景透過 `triggerStore.Set(group.Id)` 在 group 建立後立即預設 trigger flag（避免 Round 1 race condition）— `no_trigger` baseline 不設，驗證試點 flag 不影響 default behavior
+- Version 3.37.0 bump
+- `dotnet test` ✅ 127 Passed
 
 ### 驗收結果
 
-> 待 Forge 結案第一段補（對齊 Stage 49/50「Forge 自驗 + Christ 線下補驗」結構）。
+**Forge 靜態自驗（建置 + 測試 + 程式碼審視）✅**
+
+| 場景 | Forge 靜態驗證方式 | 結果 |
+|---|---|---|
+| A.1 flag 全 false | 程式碼審視：`UseFrameworkKickoffMidInterrupt = false` 時 `MidInterruptCheckExecutor.HandleVerdictAsync` 仍跑但 `triggerStore.TryConsume` 永遠 false → pass-through。`UseFrameworkKickoff = false` 時整個 framework path 不啟用，走 legacy KickoffMeetingService | ✅ |
+| A.2 framework Kickoff = true / mid_interrupt = false | 程式碼審視：MidInterruptCheckExecutor 仍會跑（在 framework topology 內），但 trigger 永遠未設置（Mock 不預設 trigger 且 Dashboard UI 不顯示按鈕，CanShowMidInterruptButton 守 `_useFrameworkKickoffMidInterrupt`），故永遠 pass-through | ✅ |
+| A.3 framework Kickoff = false / mid_interrupt = true | 程式碼審視：legacy path 接管（`UseFrameworkKickoff = false` → MeetingOrchestrationService），framework topology 不啟用，trigger 即使被設也無 executor 消耗 | ✅ |
+| F no_trigger | Mock 場景 `framework_kickoff_mid_interrupt_no_trigger` 不調用 `triggerStore.Set`；Petra Round 1 全部 consensus（無 needs_discussion）；MidInterruptCheckExecutor 對 consensus verdict 直接 pass-through（不檢查 trigger） | ✅ |
+| E cancel | Mock 預設 trigger → MidInterruptCheckExecutor 消耗 trigger → emit MidInterruptRequest → Bridge 開 BossInteraction → Christ Discord 點「取消介入」→ ButtonCallbackRouter `HandleFrameworkKickoffMidInterruptAsync` cancel 分支 DeferAsync + Task.Run 呼叫 `bridge.HandleMidInterruptResponseAsync(group, "midinterrupt_cancel", null)` → Bridge ResumeStreamingAsync + SendResponseAsync(MidInterruptResponseData(Apply=false, Content=null)) → Round 2 consensus | ✅ 程式碼路徑完整 |
+
+**Christ 線下驗收（B/C/D）— push 後 CI/CD 部署完成由 Christ 跑 /mock 觸發**
+
+| 場景 | Christ 線下驗收方式 |
+|---|---|
+| B apply via Discord | 切兩 flag → 跑 `/mock framework_kickoff_mid_interrupt_apply` → 等 Round 1 結束（~5 min Mock delay）→ Discord 出 BossInteraction「✏️ 套用修改 / 取消介入」按鈕 → 點「✏️ 套用修改」→ 在 #victoria-ceo 頻道輸入修改指引文字 → 觀察 Bot log `[Stage51] HandleMidInterruptResponseAsync: ResumeStreamingAsync 啟動` + `SendResponseAsync 完成` → Round 2 consensus → TaskPlan 寫入 |
+| C apply via Dashboard | 同 B 步驟 1-3 → 在 Dashboard 操作中心點「✏️ 套用修改」+ 輸入指引 → InteractionProcessor 3 秒輪詢 → Bridge 觸發 → Discord 收到「📋 Christ 已在 Dashboard 回覆：套用修改 ✏️」同步訊息 |
+| D crash during wait | 跑 `/mock framework_kickoff_mid_interrupt_crash_during_wait` → 等 Round 1 結束 + BossInteraction 開 → 不回應 → 手動 `docker compose restart aiteam-bot` → 等 Bot 重啟 → 觀察啟動 log `[Stage51] Recovery Group=...：等待人類回應（MidInterruptRequestPending=true），保留 marker 等 BossInteraction 觸發 resume` → 在 Discord 點「✏️ 套用修改」+ 輸入指引 → workflow 從 checkpoint resume |
 
 ### 驗收後修正
 
-> 待 Forge 結案第一段補。
+> 待 Christ 線下驗收 B/C/D 場景後補（如有 follow-up）。
 
 ### 關鍵設計決策（為什麼這樣選）
 
-> 待 Forge 結案第一段補（對齊 Stage 49/50 7 個關鍵決策表格慣例）。
+| # | 決策 | 為什麼 | 代價 / 替代方案 |
+|---|---|---|---|
+| 1 | trigger flag 改用 in-memory `KickoffMidInterruptTriggerStore`（vs 寫 framework state JSON） | 框架 checkpoint JsonElement 內部結構由 framework 序列化，直接 mutation 需理解 ScopeKey + PortableValue 等內部型別，brittle 且 framework 版本變動易破壞 | 失代價：Bot 重啟後「待按按鈕」狀態丟失（Christ 重新點）— 可接受，因按下到下個 superstep 邊界本就時間敏感（HITL 等待階段 trigger 已被消耗，不影響 Crash Recovery） |
+| 2 | Bridge 不持有 run 物件跨 HTTP scope（rehydrate via `ResumeStreamingAsync`） | spike F3 結論：Microsoft Learn 文件明示 `InProcessExecution.ResumeStreamingAsync(workflow, savedCheckpoint, manager)` 是 canonical 跨 scope 模式 — 每次 new run from checkpoint，framework 自動 re-emit pending RequestInfoEvent | 替代方案：Bridge 持有 ConcurrentDictionary&lt;Guid, StreamingRun&gt; 跨 scope cache run 物件 — 複雜度 +30%，需處理 lifetime + race condition |
+| 3 | MidInterruptCheckExecutor 雙 [MessageHandler] partial class（vs Executor&lt;TIn, TOut&gt; generic） | 兩個 input message type（KickoffPetraVerdict / MidInterruptResponseData）+ HandleVerdictAsync 兩個出口型別（KickoffPetraVerdict / MidInterruptRequest），generic Executor 只支援單一 input + output 表達不了 | 對齊 Stage 50 踩坑 #10 三件套紀律（partial class + [SendsMessage] + 顯式 send） |
+| 4 | Bridge 與 Router 透過 service locator 解循環依賴（`serviceProvider.GetRequiredService<T>()`） | Bridge 需要 router.FinishKickoffAsync，Router 需要 bridge.RequestMidInterruptInteractionAsync — ctor 互注入會 DI 循環錯誤 | 對齊 router 既有 service locator 模式（line 431 `serviceProvider.GetRequiredService<CommandHandler>()`） |
+| 5 | finally cleanup 條件式（`yieldedForHitl` flag） | HITL yield 後 router HandleKickoffMeetingAsync 提早 return，但 finally 仍跑；workspace 必須保留給 Bridge resume，marker 必須保留給 Recovery 識別「等待人類回應」 | 替代：把 cleanup 完全搬到 FinishKickoffAsync — 但 sync path（無 HITL）也要 cleanup 等於兩條路徑都要呼叫，重複邏輯 |
+| 6 | KickoffTaskId 寫進 KickoffState（隨 framework state 序列化） | Bridge resume 完成後需要 mark task done，原 router scope 早已 dispose，無法傳遞；framework state 是天然跨 scope 持久化載體 | 替代：DB 加新欄位 `KickoffTaskId`（議題 #2 拍板「不加 schema」否決） |
+| 7 | FinishKickoffAsync 透過 `ScanForGuidProperty` / `ScanForStringProperty` 寬鬆 scan framework state JSON 取 KickoffTaskId / WorkingDir | framework state JSON 結構含 ScopeKey 包裝，固定 path 取值脆弱（framework 版本變動會破壞）；scan 整個 tree 找第一個匹配屬性名穩健且程式碼簡單 | fail-open：解析失敗時 KickoffTaskId = Guid.Empty / WorkingDir = ""，FinishKickoffAsync 跳過 confirmation embed + log warning，不影響資料一致性 |
+| 8 | Cancel 拍板「丟棄所有累積指引回到正常對話」（vs 保留之前 Apply 指引） | 對 Christ 來說「介入指引」邊界較直觀（每次介入是獨立 trigger-response cycle，按 cancel 直觀理解為「全部撤銷」） | Aria 二次檢查 #12 + #4 拍板，純 prompt 行為差異 |
 
 ### 踩坑紀錄彙整
 
-> 待 Forge 結案第一段補（對齊 Stage 49 8 條 / Stage 50 11 條踩坑紀錄慣例，給 Stage 52+ 後續遷移預警）。
+| # | 踩坑 | 原因 | 解 |
+|---|---|---|---|
+| 1 | Bridge ctor 加新依賴 → 循環依賴 | Bridge 需要 KickoffWorkflowFactory + KickoffCheckpointStore + InteractionService + ... 若再 ctor 加 router → DI 循環 | service locator 模式 lazy 取 router |
+| 2 | DashboardCeoCommandService 大括號錯位 | Edit 工具加新 method 時 `}` 放在 class 外 → orphan method 編譯錯誤 | 重新 Edit 修正大括號 |
+| 3 | ButtonCallbackRouter customId prefix 順序 | `framework_kickoff_mid_interrupt_*` 與 `kickoff_*` 都包含 "kickoff_" — 但 customId 起頭 `framework_`，不會被 `StartsWith("kickoff_")` 誤判（仍依紀律放在 kickoff_ 之前 check） | 顯式註解 + 放在 kickoff_ 檢查之前 |
+| 4 | MockClaudeCodeService Petra round prompt 識別 | KickoffPrompts.BuildPetraRoundPrompt 含 `## 第 N 輪各角色意見` 字樣，Mock 用此判 round | 沿用 Stage 50 既有識別模式擴充 |
+| 5 | RequestPort.Create&lt;TReq, TResp&gt; 在 Workflow 拓撲的接線 | `RequestPort` 透過隱式轉換成 `ExecutorBinding`（`op_Implicit(RequestPort)`）可直接出現在 AddEdge 任一端 | 兩條 AddEdge：`AddEdge(midCheck, midPort)` 出 + `AddEdge(midPort, midCheck)` 入 — type 過濾自然分流 |
+| 6 | KickoffState.MidInterruptTriggered 的 trigger 流向選擇 | 原計劃寫 framework state 內 mutate brittle；in-memory store 簡單但 Bot 重啟 lose | 拍板 in-memory（trigger lifecycle 短暫，重啟丟失可接受），KickoffState 移除此欄位避免雙寫 |
+| 7 | OnInitializedAsync vs OnParametersSetAsync 在 PipelineView | `_useFrameworkKickoffMidInterrupt` flag 載入要早於 step rendering — `OnInitializedAsync` 一次性，`OnParametersSetAsync` 每次 Group 變更觸發 | feature flag 用 OnInitializedAsync（不需重複載入），steps 用 OnParametersSetAsync（隨 Group 變化） |
+| 8 | MockScenarioCard.razor 不需擴充 | Stage 49/50 framework_appeal_loop_* / framework_kickoff_* 場景皆未加入 Dashboard MudSelect — 用 /mock CLI 觸發，沿用慣例 | Stage 51 新 4 場景同樣不加 Dashboard MudSelect，僅 /mock CLI 可用（保持 Card UI 簡潔） |
 
 ### Aria 校準錨候選（Aria 結案第二段填）
 
@@ -571,3 +621,4 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-02 | 初版規劃書建立（Aria）—— v4 漸進遷移第三步 Stage：framework HITL pattern 試點 — Kickoff Workflow 中途介入（A3 路線 + B1 試點 + C2 Petra session 沿用 + D2 獨立 flag + E D2 抽 FrameworkHitlBridge service + F 三項 spike 全驗）|
+| v1.2 | 2026-05-02 | Forge 結案第一段：Session A（5 子項）+ Session B（3 子項）全綠 + Forge 自驗 5 場景靜態驗證通過（A.1/A.2/A.3 + E + F）+ B/C/D 待 Christ 線下驗 + 8 條踩坑紀錄 + 8 個關鍵設計決策 + Aria 校準錨候選 |
