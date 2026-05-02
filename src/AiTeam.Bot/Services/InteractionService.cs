@@ -63,6 +63,11 @@ public class InteractionService(
     public const string EpicPartialPausedActionsJson =
         """[{"id":"epic_resume","label":"恢復 epic","color":"success"},{"id":"epic_abort","label":"放棄整個 epic","color":"error"}]""";
 
+    /// <summary>Stage 51：framework HITL 中途介入卡（v4 漸進遷移第三步試點）。
+    /// midinterrupt_apply 需 modal 收文字（修改指引）；midinterrupt_cancel 直接結束介入。</summary>
+    public const string MidInterruptActionsJson =
+        """[{"id":"midinterrupt_apply","label":"套用修改 ✏️","color":"info","requiresInput":true},{"id":"midinterrupt_cancel","label":"取消介入","color":"default","requiresInput":false}]""";
+
     public const string EmptyActionsJson = "[]";
 
     /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>

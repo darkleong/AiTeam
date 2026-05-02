@@ -57,12 +57,13 @@ internal sealed class KickoffAgentExecutor : Executor<KickoffState, KickoffAgent
                      ?? config["Anthropic:DefaultModel"]
                      ?? "claude-sonnet-4-6";
 
+        // Stage 51：HITL 中途介入指引（state.MidInterruptResponse）— Christ apply 時 prompt 注入；cancel 或無觸發時為 null
         var prompt = _agentKey switch
         {
-            "Rosa"  => KickoffPrompts.BuildRosaPrompt (state.ProposalContent, state.Round, state.LastPetraOutput),
-            "Demi"  => KickoffPrompts.BuildDemiPrompt (state.ProposalContent, state.Round, state.LastPetraOutput),
-            "Cody"  => KickoffPrompts.BuildCodyPrompt (state.ProposalContent, state.Round, state.LastPetraOutput),
-            "Quinn" => KickoffPrompts.BuildQuinnPrompt(state.ProposalContent, state.Round, state.LastPetraOutput),
+            "Rosa"  => KickoffPrompts.BuildRosaPrompt (state.ProposalContent, state.Round, state.LastPetraOutput, state.MidInterruptResponse),
+            "Demi"  => KickoffPrompts.BuildDemiPrompt (state.ProposalContent, state.Round, state.LastPetraOutput, state.MidInterruptResponse),
+            "Cody"  => KickoffPrompts.BuildCodyPrompt (state.ProposalContent, state.Round, state.LastPetraOutput, state.MidInterruptResponse),
+            "Quinn" => KickoffPrompts.BuildQuinnPrompt(state.ProposalContent, state.Round, state.LastPetraOutput, state.MidInterruptResponse),
             _ => throw new InvalidOperationException($"[KickoffAgentExecutor] unknown agentKey {_agentKey}"),
         };
         var sessionId = _agentKey switch

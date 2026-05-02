@@ -12,11 +12,13 @@ namespace AiTeam.Bot.Workflows.Kickoff;
 /// </summary>
 internal static class KickoffPrompts
 {
-    public static string BuildRosaPrompt(string proposal, int round, string? previousPetraOutput)
+    public static string BuildRosaPrompt(
+        string proposal, int round, string? previousPetraOutput, string? midInterruptHint = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是 Rosa，負責需求分析的 AI 團隊成員，正在參加 Kick-off 會議。");
         sb.AppendLine();
+        AppendMidInterruptHint(sb, midInterruptHint);
         sb.AppendLine("## 任務需求說明");
         sb.AppendLine(proposal);
         sb.AppendLine();
@@ -42,11 +44,13 @@ internal static class KickoffPrompts
         return sb.ToString();
     }
 
-    public static string BuildDemiPrompt(string proposal, int round, string? previousPetraOutput)
+    public static string BuildDemiPrompt(
+        string proposal, int round, string? previousPetraOutput, string? midInterruptHint = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是 Demi，負責 UI/UX 設計的 AI 團隊成員，正在參加 Kick-off 會議。");
         sb.AppendLine();
+        AppendMidInterruptHint(sb, midInterruptHint);
         sb.AppendLine("## 任務需求說明");
         sb.AppendLine(proposal);
         sb.AppendLine();
@@ -72,11 +76,13 @@ internal static class KickoffPrompts
         return sb.ToString();
     }
 
-    public static string BuildCodyPrompt(string proposal, int round, string? previousPetraOutput)
+    public static string BuildCodyPrompt(
+        string proposal, int round, string? previousPetraOutput, string? midInterruptHint = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是 Cody，負責後端開發的 AI 團隊成員，正在參加 Kick-off 會議。");
         sb.AppendLine();
+        AppendMidInterruptHint(sb, midInterruptHint);
         sb.AppendLine("## 任務需求說明");
         sb.AppendLine(proposal);
         sb.AppendLine();
@@ -101,11 +107,13 @@ internal static class KickoffPrompts
         return sb.ToString();
     }
 
-    public static string BuildQuinnPrompt(string proposal, int round, string? previousPetraOutput)
+    public static string BuildQuinnPrompt(
+        string proposal, int round, string? previousPetraOutput, string? midInterruptHint = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是 Quinn，負責 QA 測試的 AI 團隊成員，正在參加 Kick-off 會議。");
         sb.AppendLine();
+        AppendMidInterruptHint(sb, midInterruptHint);
         sb.AppendLine("## 任務需求說明");
         sb.AppendLine(proposal);
         sb.AppendLine();
@@ -131,11 +139,13 @@ internal static class KickoffPrompts
     }
 
     public static string BuildPetraRoundPrompt(
-        string rosaOutput, string demiOutput, string codyOutput, string quinnOutput, int round)
+        string rosaOutput, string demiOutput, string codyOutput, string quinnOutput, int round,
+        string? midInterruptHint = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("你是 Petra，AI 團隊的 PM，正在主持 Kick-off 會議。");
         sb.AppendLine();
+        AppendMidInterruptHint(sb, midInterruptHint);
         sb.AppendLine($"## 第 {round} 輪各角色意見");
         sb.AppendLine();
         sb.AppendLine("### Rosa（需求分析）");
@@ -184,6 +194,20 @@ internal static class KickoffPrompts
         sb.AppendLine("## 建議實作方向");
         sb.AppendLine("{基於討論結果的技術方向建議}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Stage 51：HITL 中途介入指引 prompt 注入 helper。
+    /// midInterruptHint 來自 KickoffState.MidInterruptResponse（Christ apply 時的修改指引文字）。
+    /// 拍板「持續保留」（每輪都注入），對齊 ModifyTaskPlanAsync「Petra 永遠記得」精神；
+    /// Cancel 時 caller 應傳 null（已在 MidInterruptCheckExecutor.HandleResponseAsync 處理）。
+    /// </summary>
+    public static void AppendMidInterruptHint(StringBuilder sb, string? midInterruptHint)
+    {
+        if (string.IsNullOrWhiteSpace(midInterruptHint)) return;
+        sb.AppendLine("## ⚠️ 老闆中途介入指引（必須優先考量）");
+        sb.AppendLine(midInterruptHint);
+        sb.AppendLine();
     }
 
     /// <summary>

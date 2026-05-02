@@ -2,6 +2,7 @@ using System.Text.Json;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Hitl;
 using AiTeam.Bot.Services;
 using AiTeam.Bot.Workflows.Kickoff;
 using AiTeam.Data;
@@ -124,6 +125,9 @@ public class FrameworkKickoffRouter(
             workingDir = Path.Combine(_gitHub.WorkspacePath, repo);
         }
 
+        // Stage 51：HITL yield 旗標 — true 時 finally 不清 marker / 不 cleanup workspace（保留給 Bridge resume）
+        var yieldedForHitl = false;
+
         try
         {
             // ── 設 framework KickoffState 起始 ──
@@ -148,13 +152,26 @@ public class FrameworkKickoffRouter(
                 Owner           = owner,
                 Repo            = repo,
                 MeetingLog      = $"# Kick-off 會議紀錄\n\n## 需求說明\n{proposalContent}\n\n",
+                KickoffTaskId   = kickoffTask.Id,              // Stage 51：FinishKickoffAsync 從 state 取此 id mark done
             };
 
             // ── 跑 framework Workflow ──
             var workflow          = workflowFactory.CreateKickoffWorkflow();
             var checkpointManager = workflowFactory.CreateCheckpointManager();
 
-            var loopResult = await RunWorkflowAsync(workflow, checkpointManager, sessionId, initialState, ct);
+            var (loopResult, yielded) =
+                await RunWorkflowAsync(workflow, checkpointManager, sessionId, initialState, ct);
+
+            // Stage 51：HITL yield path — workflow 暫停等 Christ 回應，由 FrameworkHitlBridge.HandleMidInterruptResponseAsync 接手
+            // 此處不寫 DB / 不開 confirmation embed / 不 cleanup workspace / 不清 marker（finally 內也守此語意）
+            if (yielded)
+            {
+                yieldedForHitl = true;
+                logger.LogInformation(
+                    "[Stage51] HandleKickoffMeetingAsync 提早 return — workflow yield for HITL（Group={Id}），等 Christ 回應",
+                    group.Id);
+                return;
+            }
 
             if (loopResult is null)
             {
@@ -240,18 +257,28 @@ public class FrameworkKickoffRouter(
         }
         finally
         {
-            // workingDir cleanup（對齊 legacy line 197-202）
-            if (!string.IsNullOrEmpty(workingDir))
+            // Stage 51：HITL yield 路徑 — workspace 保留給 Bridge resume，marker 保留給 Recovery 識別
+            if (yieldedForHitl)
             {
-                try { gitHubService.CleanupLocalRepo(workingDir); }
-                catch (Exception ex) { logger.LogWarning(ex, "[Stage50] cleanup workingDir 失敗"); }
+                logger.LogInformation(
+                    "[Stage51] finally：yieldedForHitl=true，保留 workspace + marker 等 Bridge resume（Group={Id}）",
+                    group.Id);
             }
-            // 清 marker（對齊 Stage 49 FrameworkAppealRouter pattern）
-            await db.TaskGroups.Where(g => g.Id == group.Id)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.ActiveOrchestration, (string?)null)
-                    .SetProperty(g => g.KickoffFrameworkStateJson, (string?)null),
-                    CancellationToken.None);
+            else
+            {
+                // workingDir cleanup（對齊 legacy line 197-202）
+                if (!string.IsNullOrEmpty(workingDir))
+                {
+                    try { gitHubService.CleanupLocalRepo(workingDir); }
+                    catch (Exception ex) { logger.LogWarning(ex, "[Stage50] cleanup workingDir 失敗"); }
+                }
+                // 清 marker（對齊 Stage 49 FrameworkAppealRouter pattern）
+                await db.TaskGroups.Where(g => g.Id == group.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                        .SetProperty(g => g.KickoffFrameworkStateJson, (string?)null),
+                        CancellationToken.None);
+            }
         }
     }
 
@@ -296,6 +323,17 @@ public class FrameworkKickoffRouter(
                     continue;
                 }
 
+                // Stage 51：先檢查是否「等待人類回應」狀態（MidInterruptRequestPending = true）
+                // 是 → 不算 stuck、不清 marker；由 Christ 透過 BossInteraction 回應觸發 Bridge.HandleMidInterruptResponseAsync resume
+                var ckptValue = await checkpointStore.RetrieveCheckpointAsync(sessionId, latest);
+                if (ScanForBoolProperty(ckptValue, "midInterruptRequestPending"))
+                {
+                    logger.LogInformation(
+                        "[Stage51] Recovery Group={Id}：等待人類回應（MidInterruptRequestPending=true），保留 marker 等 BossInteraction 觸發 resume",
+                        groupId);
+                    continue;
+                }
+
                 logger.LogInformation(
                     "[FrameworkKickoffRouter] Recovery Group={Id}：framework Checkpointing 還原 superstep（latest={Ckpt}）",
                     groupId, latest.CheckpointId);
@@ -321,11 +359,40 @@ public class FrameworkKickoffRouter(
         }
     }
 
+    private static bool ScanForBoolProperty(JsonElement element, string propertyName)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.NameEquals(propertyName)
+                        && (prop.Value.ValueKind == JsonValueKind.True
+                            || prop.Value.ValueKind == JsonValueKind.False))
+                    {
+                        return prop.Value.GetBoolean();
+                    }
+                    if (ScanForBoolProperty(prop.Value, propertyName))
+                        return true;
+                }
+                return false;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (ScanForBoolProperty(item, propertyName))
+                        return true;
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+
     // ============================================================
     //  Workflow run + Discord confirmation flow
     // ============================================================
 
-    private async Task<KickoffLoopResult?> RunWorkflowAsync(
+    private async Task<(KickoffLoopResult? loopResult, bool yieldedForHitl)> RunWorkflowAsync(
         Workflow workflow,
         Microsoft.Agents.AI.Workflows.CheckpointManager checkpointManager,
         string sessionId,
@@ -339,8 +406,37 @@ public class FrameworkKickoffRouter(
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, initialState, checkpointManager, sessionId, ct);
 
         KickoffLoopResult? loopResult = null;
+        var yielded = false;
+
         await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
         {
+            // Stage 51：HITL RequestPort emit RequestInfoEvent → 開 BossInteraction 後 break loop（保留 checkpoint）
+            // Bridge.HandleMidInterruptResponseAsync 在 Christ 回應後 ResumeStreamingAsync 接手
+            if (ev is RequestInfoEvent requestEvt
+                && requestEvt.Request.PortInfo.PortId == KickoffWorkflowFactory.MidInterruptPortId)
+            {
+                if (requestEvt.Request.TryGetDataAs<MidInterruptRequest>(out var midReq))
+                {
+                    var freshGroup = await GetFreshGroupAsync(midReq.GroupId, ct);
+                    if (freshGroup is not null)
+                    {
+                        var bridge = serviceProvider.GetRequiredService<FrameworkHitlBridge>();
+                        await bridge.RequestMidInterruptInteractionAsync(
+                            freshGroup, midReq, requestEvt.Request, ct);
+                    }
+                    logger.LogInformation(
+                        "[Stage51] RunWorkflowAsync: yield for HITL（sessionId={Id}，requestId={Rid}）",
+                        sessionId, requestEvt.Request.RequestId);
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "[Stage51] RunWorkflowAsync: RequestInfoEvent.Data 不是 MidInterruptRequest（sessionId={Id}），仍 yield 等 Bridge 處理",
+                        sessionId);
+                }
+                yielded = true;
+                break;  // 結束 watch loop，run dispose 時 framework 保留 pending request 給下次 ResumeStreamingAsync re-emit
+            }
             if (ev is WorkflowOutputEvent outputEvent && outputEvent.Is<KickoffLoopResult>(out var r))
             {
                 loopResult = r;
@@ -363,13 +459,152 @@ public class FrameworkKickoffRouter(
             }
         }
 
-        if (loopResult is null)
+        if (loopResult is null && !yielded)
         {
             logger.LogWarning(
                 "[Stage50] Workflow streaming run 完成但無 WorkflowOutputEvent (sessionId={Id})",
                 sessionId);
         }
-        return loopResult;
+        return (loopResult, yielded);
+    }
+
+    /// <summary>
+    /// Stage 51：抽出 HandleKickoffMeetingAsync 尾段「寫 DB + Discord embed + cleanup workspace + clear marker + mark task done」
+    /// 給 FrameworkHitlBridge.HandleMidInterruptResponseAsync resume 完成後調用（service locator 模式呼叫，避免 ctor 循環依賴）。
+    ///
+    /// 注意：sync path 也呼叫此 method 完成尾段；本 method 期待 KickoffState.WorkingDir 仍指向有效 workingDir
+    /// （HITL yield 期間 router finally 條件式跳過 cleanup 保留之）。
+    /// </summary>
+    public async Task FinishKickoffAsync(Guid groupId, KickoffLoopResult loopResult, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
+        var db          = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (freshGroup is null)
+        {
+            logger.LogError("[Stage51] FinishKickoffAsync: 找不到 Group={Id}", groupId);
+            return;
+        }
+
+        // 從 framework state 取 KickoffTaskId + WorkingDir（initialState 寫入時已序列化進 checkpoint）
+        await checkpointStore.LoadFromDbAsync(groupId, ct);
+        var sessionId = groupId.ToString();
+        var latest = checkpointStore.GetLatestCheckpoint(sessionId);
+        Guid kickoffTaskId = Guid.Empty;
+        var workingDir = "";
+        if (latest is not null)
+        {
+            try
+            {
+                var ckptValue = await checkpointStore.RetrieveCheckpointAsync(sessionId, latest);
+                kickoffTaskId = ScanForGuidProperty(ckptValue, "kickoffTaskId");
+                workingDir    = ScanForStringProperty(ckptValue, "workingDir") ?? "";
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "[Stage51] FinishKickoffAsync: 解 checkpoint 取 KickoffTaskId / WorkingDir 失敗（Group={Id}）", groupId);
+            }
+        }
+
+        // 寫 DB（對齊 sync path）
+        freshGroup.KickoffMeetingLog = loopResult.MeetingLog;
+        freshGroup.TaskPlan          = loopResult.TaskPlan;
+        freshGroup.KickoffRound      = loopResult.TotalRounds;
+        await taskRepo.SaveAsync(ct);
+
+        // Discord embed + 3 buttons + BossInteraction
+        if (kickoffTaskId != Guid.Empty)
+        {
+            await CreateKickoffConfirmationAsync(freshGroup, loopResult, kickoffTaskId, taskRepo, pushService, ct);
+        }
+        else
+        {
+            logger.LogWarning(
+                "[Stage51] FinishKickoffAsync: KickoffTaskId 未取得，跳過 task done log + Discord confirmation 開卡（資料完整性風險，請排查）");
+        }
+
+        // cleanup workspace + clear marker（對齊 sync path finally）
+        if (!string.IsNullOrEmpty(workingDir))
+        {
+            try { gitHubService.CleanupLocalRepo(workingDir); }
+            catch (Exception ex) { logger.LogWarning(ex, "[Stage51] FinishKickoffAsync: cleanup workingDir 失敗"); }
+        }
+        await db.TaskGroups.Where(g => g.Id == groupId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                .SetProperty(g => g.KickoffFrameworkStateJson, (string?)null),
+                CancellationToken.None);
+
+        logger.LogInformation(
+            "[Stage51] FinishKickoffAsync 完成（Group={Id}，decision={Decision}，rounds={Rounds}）",
+            groupId, loopResult.Decision, loopResult.TotalRounds);
+    }
+
+    private async Task<TaskGroup?> GetFreshGroupAsync(Guid groupId, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        return await taskRepo.GetGroupByIdAsync(groupId, ct);
+    }
+
+    private static Guid ScanForGuidProperty(JsonElement element, string propertyName)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.NameEquals(propertyName)
+                        && prop.Value.ValueKind == JsonValueKind.String
+                        && Guid.TryParse(prop.Value.GetString(), out var g))
+                    {
+                        return g;
+                    }
+                    var nested = ScanForGuidProperty(prop.Value, propertyName);
+                    if (nested != Guid.Empty) return nested;
+                }
+                return Guid.Empty;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var nested = ScanForGuidProperty(item, propertyName);
+                    if (nested != Guid.Empty) return nested;
+                }
+                return Guid.Empty;
+            default:
+                return Guid.Empty;
+        }
+    }
+
+    private static string? ScanForStringProperty(JsonElement element, string propertyName)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.NameEquals(propertyName)
+                        && prop.Value.ValueKind == JsonValueKind.String)
+                    {
+                        return prop.Value.GetString();
+                    }
+                    var nested = ScanForStringProperty(prop.Value, propertyName);
+                    if (nested is not null) return nested;
+                }
+                return null;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var nested = ScanForStringProperty(item, propertyName);
+                    if (nested is not null) return nested;
+                }
+                return null;
+            default:
+                return null;
+        }
     }
 
     /// <summary>

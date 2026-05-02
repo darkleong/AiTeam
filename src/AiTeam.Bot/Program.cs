@@ -142,6 +142,12 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Appeal.FrameworkAppealRou
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Kickoff.KickoffCheckpointStore>();
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Kickoff.KickoffWorkflowFactory>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkKickoffRouter>();
+// Stage 51：framework HITL 試點 ↔ BossInteraction 橋接（v4 漸進遷移第三步）
+// KickoffMidInterruptTriggerStore：in-memory trigger flag store（Bot Internal API set / MidInterruptCheckExecutor consume）
+// FrameworkHitlBridge：對齊 Stage 49/50 router Singleton 慣例（service locator 解 router 循環依賴）
+// feature flag 預設 false（Workflow:UseFrameworkKickoffMidInterrupt AppSettings key），需與 UseFrameworkKickoff 雙 flag 同開才有意義
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Hitl.KickoffMidInterruptTriggerStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();

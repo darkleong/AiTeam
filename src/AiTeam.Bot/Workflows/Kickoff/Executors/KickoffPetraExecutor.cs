@@ -45,8 +45,10 @@ internal sealed class KickoffPetraExecutor : Executor<KickoffRoundCollected, Kic
 
         var apiKey = config["AITEAM_ANTHROPIC_KEY"] ?? config["Anthropic:ApiKey"] ?? "";
         var model  = config["Agents:PM:Model"] ?? config["Anthropic:DefaultModel"] ?? "claude-sonnet-4-6";
+        // Stage 51：HITL 中途介入指引也注入 Petra prompt（讓 Petra 整理時也優先考量 Christ 修改方向）
         var prompt = KickoffPrompts.BuildPetraRoundPrompt(
-            collected.Rosa, collected.Demi, collected.Cody, collected.Quinn, collected.Round);
+            collected.Rosa, collected.Demi, collected.Cody, collected.Quinn, collected.Round,
+            state.MidInterruptResponse);
 
         var petraOutput = await commons.RunAgentTurnAsync(
             "Petra", state.PetraSessionId, prompt, model, apiKey,

@@ -31,6 +31,15 @@ public class BossInteractionRepository(AppDbContext db)
             .OrderBy(x => x.RespondedAt)
             .ToListAsync(ct);
 
+    /// <summary>Stage 51：依 TaskGroupId + InteractionType 取最近一筆（FrameworkHitlBridge resume 時用以
+    /// 從 ContextJson 取回原 RequestId）。為純讀取，不限定 status。</summary>
+    public Task<BossInteraction?> GetLatestForGroupByTypeAsync(
+        Guid taskGroupId, string interactionType, CancellationToken ct = default)
+        => db.BossInteractions
+            .Where(x => x.TaskGroupId == taskGroupId && x.InteractionType == interactionType)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     /// <summary>查詢最近已處理的互動（Dashboard 歷史區）。</summary>
     public Task<List<BossInteraction>> GetRecentRespondedAsync(int count = 10, CancellationToken ct = default)
         => db.BossInteractions

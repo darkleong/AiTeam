@@ -69,7 +69,46 @@ public sealed class KickoffState
     /// <summary>final TaskPlan（Petra 產出後寫入；router 用此寫進 group.TaskPlan）。null = 尚未產出。</summary>
     [JsonPropertyName("taskPlan")]
     public string? TaskPlan { get; set; }
+
+    // ── Stage 51：HITL 試點 3 欄位（皆隨 KickoffCheckpointStore 序列化進 KickoffFrameworkStateJson，不加 DB 欄位）──
+    //
+    // 設計變更紀錄：原計劃含 4 個欄位含 MidInterruptTriggered。實作時改用獨立 in-memory Singleton
+    // KickoffMidInterruptTriggerStore（避免在 framework state JSON 上做 mutation 的 brittle 解析），
+    // trigger flag 不寫進 KickoffState；其餘 3 欄位仍透過 framework state 序列化。
+    // 此變更不影響 Crash Recovery：trigger 在 HITL 等待前就已被 MidInterruptCheckExecutor 消耗，
+    // 重啟後讀取 MidInterruptRequestPending=true 即可正確識別「等待人類回應」狀態。
+
+    /// <summary>Stage 51：workflow 已 emit RequestInfoEvent 等待 Christ 回應的旗標。
+    /// Recovery 啟動時讀此 flag 區分「等待人類回應」（不算 stuck）vs「真正卡住」。
+    /// FrameworkHitlBridge.HandleMidInterruptResponseAsync 開頭讀此 flag 防重入冪等。</summary>
+    [JsonPropertyName("midInterruptRequestPending")]
+    public bool MidInterruptRequestPending { get; set; }
+
+    /// <summary>Stage 51：Christ 回應的修改指引內容（apply 時為文字 / cancel 時為 null）。
+    /// 拍板：持續保留 prompt 注入（對齊 ModifyTaskPlanAsync「Petra 永遠記得」精神）；
+    /// Cancel 語意 = 丟棄所有累積指引回到正常對話（每次介入是獨立 trigger-response cycle）。</summary>
+    [JsonPropertyName("midInterruptResponse")]
+    public string? MidInterruptResponse { get; set; }
+
+    /// <summary>Stage 51：router 開頭建立的 kickoffTask.Id — 隨 state 序列化，
+    /// FrameworkHitlBridge.HandleMidInterruptResponseAsync resume 完成後從此撈 task entity mark done。</summary>
+    [JsonPropertyName("kickoffTaskId")]
+    public Guid KickoffTaskId { get; set; }
 }
+
+// ── Stage 51：HITL RequestPort 的 request / response payload record ──
+
+/// <summary>Stage 51：MidInterruptCheckExecutor → RequestPort 送出的請求 payload（Christ 端會看到 Round + Petra 摘要）。</summary>
+public sealed record MidInterruptRequest(
+    [property: JsonPropertyName("groupId")]      Guid   GroupId,
+    [property: JsonPropertyName("round")]        int    Round,
+    [property: JsonPropertyName("petraSummary")] string PetraSummary);
+
+/// <summary>Stage 51：Christ 回應後（apply / cancel）由 FrameworkHitlBridge 構造的 response payload，
+/// 透過 ExternalResponse 送回 RequestPort，再由 MidInterruptCheckExecutor.HandleResponseAsync 套用到 state。</summary>
+public sealed record MidInterruptResponseData(
+    [property: JsonPropertyName("apply")]   bool    Apply,
+    [property: JsonPropertyName("content")] string? Content);
 
 /// <summary>4 Agent 各自 Executor 回傳給 Aggregator 的單一 Agent 輸出。</summary>
 public sealed record KickoffAgentOutput(

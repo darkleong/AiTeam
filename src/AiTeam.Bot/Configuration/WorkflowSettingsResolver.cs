@@ -14,6 +14,7 @@ namespace AiTeam.Bot.Configuration;
 ///   Workflow:DesignMeetingMaxRounds
 ///   Workflow:UseFrameworkAppealLoop  (Stage 49 v4 漸進遷移)
 ///   Workflow:UseFrameworkKickoff     (Stage 50 v4 漸進遷移第二步)
+///   Workflow:UseFrameworkKickoffMidInterrupt  (Stage 51 v4 漸進遷移第三步 HITL 試點)
 ///
 /// AppSettings 無值或解析失敗 / 非正整數時，fallback 到 IOptions&lt;WorkflowSettings&gt;（讀 appsettings.json）。
 /// </summary>
@@ -45,6 +46,11 @@ public class WorkflowSettingsResolver(
     /// <summary>Stage 50：v4 漸進遷移第二步 feature flag。預設 false（走 legacy KickoffMeetingService）。</summary>
     public Task<bool> GetUseFrameworkKickoffAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseFrameworkKickoff", Defaults.UseFrameworkKickoff, ct);
+
+    /// <summary>Stage 51：v4 漸進遷移第三步 HITL 試點 feature flag。預設 false（不影響 Stage 50 framework Kickoff 行為）。
+    /// 雙 flag 連動規則：本 flag 只在 UseFrameworkKickoff = true 時有意義（caller 自行檢查兩 flag）。</summary>
+    public Task<bool> GetUseFrameworkKickoffMidInterruptAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseFrameworkKickoffMidInterrupt", Defaults.UseFrameworkKickoffMidInterrupt, ct);
 
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
