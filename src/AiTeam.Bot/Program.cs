@@ -119,6 +119,8 @@ builder.Services.AddSingleton<WorkflowEngine>();
 // Stage 34：MeetingService 拆解（FF 二十-C）— MeetingCommons 先，Kickoff/Design 後（兩者依賴 Commons）
 builder.Services.AddSingleton<MeetingCommons>();
 builder.Services.AddSingleton<KickoffMeetingService>();
+// Stage 52：DesignSplitProposalEvaluator 抽出（feature flag legacy + framework 共用 SoT，對齊 DesignMeetingService Singleton lifecycle）
+builder.Services.AddSingleton<DesignSplitProposalEvaluator>();
 builder.Services.AddSingleton<DesignMeetingService>();
 // Stage 36：TaskGroupService 拆解（FF 二十-A/B 合併）— 4 子 Orchestration service 先註冊
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.MeetingOrchestrationService>();
@@ -148,6 +150,12 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkKickoffR
 // feature flag 預設 false（Workflow:UseFrameworkKickoffMidInterrupt AppSettings key），需與 UseFrameworkKickoff 雙 flag 同開才有意義
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Hitl.KickoffMidInterruptTriggerStore>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
+// Stage 52：framework Design Workflow（v4 漸進遷移第四步） — fan-out/fan-in + 條件式 Demi + needs_adjustment B2 wrapper
+// DesignCheckpointStore Singleton（process 生命週期 in-memory cache + 同步寫 task_groups.DesignFrameworkStateJson）
+// DesignWorkflowFactory Singleton；FrameworkDesignRouter 對齊 Stage 49/50 Singleton 慣例（Session B 註冊）
+// feature flag 預設 false（Workflow:UseFrameworkDesign AppSettings key），與 Stage 49/50/51 三 flag 完全獨立
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Design.DesignCheckpointStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Design.DesignWorkflowFactory>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();

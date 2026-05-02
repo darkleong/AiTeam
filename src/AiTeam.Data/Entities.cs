@@ -150,6 +150,14 @@ public class TaskGroup
     /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.KickoffFrameworkStateJson == null
     /// 避免 legacy/framework 雙系統 collision（Stage 50 風險點 R2 緩解擴充）。</summary>
     public string? KickoffFrameworkStateJson { get; set; }
+    /// <summary>Stage 52：MS Agent Framework Design Meeting Workflow Checkpointing 序列化 state（JSON）。
+    /// null = 走 legacy DesignMeetingService path（feature flag false）；
+    /// 有值 = framework Workflow 進行中或已完成，superstep 結束時自動同步寫 DB。
+    /// 走 framework path 時搭配 ActiveOrchestration = "FrameworkDesign"。
+    /// 與 Stage 49 / 50 兩個 framework state JSON 完全獨立（pipeline 上 Design 跟 Kickoff 是兩個獨立節點）。
+    /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.DesignFrameworkStateJson == null
+    /// 避免 legacy/framework 雙系統 collision（Stage 52 風險點 R5 緩解）。</summary>
+    public string? DesignFrameworkStateJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

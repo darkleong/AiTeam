@@ -40,4 +40,12 @@ public class WorkflowSettings
     /// AppSettings 表 key = "Workflow:UseFrameworkKickoffMidInterrupt"，DB 優先，appsettings.json fallback。
     /// 雙 flag 連動：本 flag 只在 UseFrameworkKickoff = true 時有意義（試點是 framework Kickoff path 的擴充，legacy 不適用）。</summary>
     public bool UseFrameworkKickoffMidInterrupt { get; set; } = false;
+
+    /// <summary>Stage 52：v4 漸進遷移第四步 — 是否啟用 MS Agent Framework Design Meeting Workflow
+    /// （fan-out/fan-in + 條件式 Demi + needs_adjustment 子流程 + 拆 task 提案後置）。
+    /// 預設 false（保留 legacy DesignMeetingService 路徑），Dashboard SystemSettings → v4 漸進遷移控制 切換為 true 後
+    /// framework path 接管 Design Meeting 完整流程（前置作業 + 主迴圈 round loop + B2 needs_adjustment Executor）。
+    /// AppSettings 表 key = "Workflow:UseFrameworkDesign"，DB 優先，appsettings.json fallback。
+    /// 與 Stage 49 / 50 / 51 三 flag 完全獨立（pipeline 上 Design 跟 Kickoff 是兩個獨立節點）。</summary>
+    public bool UseFrameworkDesign { get; set; } = false;
 }

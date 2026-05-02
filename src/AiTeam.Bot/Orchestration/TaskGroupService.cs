@@ -1121,7 +1121,7 @@ public class TaskGroupService(
         {
             case "split_accept":
             {
-                var proposal = DesignMeetingService.TryParseSplitProposal(splitProposalJson);
+                var proposal = DesignSplitProposalEvaluator.TryParseSplitProposal(splitProposalJson);
                 if (proposal is null || !proposal.ShouldSplit || proposal.Phases is { Count: 0 })
                 {
                     logger.LogWarning("split_accept：原始 splitProposalJson 解析失敗，fallback 到 split_reject");
@@ -1135,7 +1135,7 @@ public class TaskGroupService(
             {
                 // v1.1 Aria 回饋 #2：Christ 從 TextInputDialog 改的 phases JSON 不一定合 schema，需防呆
                 SplitProposal? modified = null;
-                try { modified = DesignMeetingService.TryParseSplitProposal(responseContent ?? ""); }
+                try { modified = DesignSplitProposalEvaluator.TryParseSplitProposal(responseContent ?? ""); }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "split_modify：Christ 改寫的 phases JSON 解析失敗，fallback 到 split_reject");

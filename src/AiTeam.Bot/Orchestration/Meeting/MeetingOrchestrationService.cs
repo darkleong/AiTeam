@@ -461,10 +461,13 @@ public class MeetingOrchestrationService(
         // 自己 recovery，legacy 路徑必須排除避免雙系統 collision
         // Stage 50 R2 緩解擴充：framework Kickoff path（KickoffFrameworkStateJson != null）由 FrameworkKickoffRouter
         // 自己 recovery，legacy 路徑同樣必須排除
+        // Stage 52 R5 緩解擴充：framework Design path（DesignFrameworkStateJson != null）由 FrameworkDesignRouter
+        // 自己 recovery，legacy 路徑同樣必須排除
         var stuckGroups = await db.TaskGroups
             .Where(g => g.ActiveOrchestration != null && !g.IsPaused
                      && g.FrameworkAppealStateJson == null
-                     && g.KickoffFrameworkStateJson == null)
+                     && g.KickoffFrameworkStateJson == null
+                     && g.DesignFrameworkStateJson == null)
             .ToListAsync(ct);
 
         // Stage 45：log 跳過的 paused 數量（驗收期 docker logs 觀察用）
@@ -487,6 +490,13 @@ public class MeetingOrchestrationService(
         if (frameworkKickoffSkippedCount > 0)
             logger.LogInformation("[Stage50-CrashRecoveryFrameworkKickoff] Crash Recovery：legacy path 跳過 {N} 個 framework Kickoff path TaskGroup（由 FrameworkKickoffRouter 接管）",
                 frameworkKickoffSkippedCount);
+
+        // Stage 52：log 跳過的 framework Design path 數量（FrameworkDesignRouter 自己 recovery）
+        var frameworkDesignSkippedCount = await db.TaskGroups
+            .CountAsync(g => g.ActiveOrchestration != null && !g.IsPaused && g.DesignFrameworkStateJson != null, ct);
+        if (frameworkDesignSkippedCount > 0)
+            logger.LogInformation("[Stage52-CrashRecoveryFrameworkDesign] Crash Recovery：legacy path 跳過 {N} 個 framework Design path TaskGroup（由 FrameworkDesignRouter 接管）",
+                frameworkDesignSkippedCount);
 
         if (stuckGroups.Count == 0) return;
 
