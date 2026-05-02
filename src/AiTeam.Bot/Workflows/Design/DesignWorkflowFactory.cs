@@ -100,6 +100,10 @@ public sealed class DesignWorkflowFactory
             _scopeFactory, _loggerFactory.CreateLogger<DesignAdjustmentExecutor>());
         var plan   = new DesignPlanExecutor(
             _scopeFactory, _loggerFactory.CreateLogger<DesignPlanExecutor>());
+        // 驗收期 follow-up #2：拆 adjustment_approved 路徑成獨立 Executor，避免 framework AddEdge type-based dispatch
+        // 把 adjust needs_meeting 路徑送的 DesignPetraVerdict 誤觸發 plan（造成 plan 跑 LLM + state 同 superstep 衝突）
+        var adjPlan = new DesignAdjustmentPlanExecutor(
+            _scopeFactory, _loggerFactory.CreateLogger<DesignAdjustmentPlanExecutor>());
         var esc    = new DesignEscalateExecutor(
             _scopeFactory, _loggerFactory.CreateLogger<DesignEscalateExecutor>());
 
@@ -130,12 +134,13 @@ public sealed class DesignWorkflowFactory
                 .AddCase<DesignPetraVerdict>(
                     v => v?.Decision == "escalate",
                     esc))
-            // adjust 兩出口（議題 6+7 必修）
-            .AddEdge(adjust, plan)         // approved → DesignAdjustmentApproved → DesignPlanExecutor.HandleAdjustmentApprovedAsync
+            // adjust 兩出口（議題 6+7 必修；驗收期 follow-up #2：拆 plan 後 type filter 自然分流）
+            .AddEdge(adjust, adjPlan)      // approved → DesignAdjustmentApproved → DesignAdjustmentPlanExecutor（type filter 自然分流，不會誤觸發 plan）
             // needs_meeting 路徑：DesignAdjustmentExecutor 送 DesignPetraVerdict
             //   - escalate（state.Round >= MaxRounds 邊界）→ DesignEscalateExecutor
             //   - needs_discussion < max → DesignRoundStartExecutor loop back
-            // 透過 AddSwitch 既有 case 類型自動分流（framework type-based routing）
+            // 驗收期 follow-up #2：plan 已拆只接 DesignPetraVerdict（main loop），但 adjust 也送 DesignPetraVerdict —
+            // AddEdge(adjust, adjPlan) 不會誤觸發 plan（adjPlan 沒 DesignPetraVerdict handler），但 AddSwitch case 必須完整路由
             .AddSwitch(adjust, sw => sw
                 .AddCase<DesignPetraVerdict>(
                     v => v?.Decision == "escalate",
@@ -143,7 +148,7 @@ public sealed class DesignWorkflowFactory
                 .AddCase<DesignPetraVerdict>(
                     v => v?.Decision == "needs_discussion" && v.Round < v.MaxRounds,
                     roundStart))
-            .WithOutputFrom(plan, esc)
+            .WithOutputFrom(plan, adjPlan, esc)
             .Build();
     }
 

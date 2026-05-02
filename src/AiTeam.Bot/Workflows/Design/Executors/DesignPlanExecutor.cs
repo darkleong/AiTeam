@@ -7,21 +7,22 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AiTeam.Bot.Workflows.Design.Executors;
 
 /// <summary>
-/// Stage 52：Design Workflow consensus / max_iter / adjustment_approved 三入口共用 Executor（v4 漸進遷移第四步）。
+/// Stage 52：Design Workflow consensus / max_iter 入口 Executor（v4 漸進遷移第四步）。
 ///
-/// 雙 [MessageHandler] 處理邏輯不對稱（議題 7 必修）：
-///   - HandleVerdictAsync(DesignPetraVerdict)：consensus / max_iter 入口（依 verdict.Decision + Round vs MaxRounds 判別）
-///       → 內部 RunAgentTurnAsync Petra session 跑 BuildDesignPetraPlanPrompt 產 plan → YieldOutputAsync(DesignLoopResult)
-///   - HandleAdjustmentApprovedAsync(DesignAdjustmentApproved)：adjustment_approved 入口
-///       → DesignAdjustmentApproved record 已帶 non-null DesignPlan（DesignAdjustmentExecutor 內保證）
-///       → Executor 內**直接** wrap DesignLoopResult，**不再 call BuildDesignPetraPlanPrompt** 避免重複 LLM call
-///
-/// 兩 handler 共用 [YieldsOutput(typeof(DesignLoopResult))] 一次標即可。
+/// 設計演進（驗收期 follow-up #2 修正）：
+///   - 原計畫單一 Executor 雙 [MessageHandler] 接 DesignPetraVerdict + DesignAdjustmentApproved（Aria 議題 7 必修）
+///   - 驗收期實證 framework 1.3.0 AddEdge type-based dispatch 不 source-aware：
+///     `AddEdge(adjust, plan)` 把 adjust needs_meeting 路徑送的 DesignPetraVerdict 也 dispatch 給 plan，
+///     造成 plan 跑 LLM + 跟 adjust SaveAsync state 同 superstep 衝突（WorkflowErrorEvent: Expected exactly one update for key 'singleton'）
+///   - 修法：拆 plan 成兩個 Executor，type-explicit 自然分流：
+///     · DesignPlanExecutor 只接 DesignPetraVerdict（main loop consensus / max_iter 入口）
+///     · DesignAdjustmentPlanExecutor 只接 DesignAdjustmentApproved（adjust approved 入口直接 wrap）
+///   - framework AddEdge type filter 對 plan 沒 DesignAdjustmentApproved handler → adjust 送 DesignPetraVerdict 不會誤觸發 plan
 ///
 /// 對齊 Stage 50 KickoffPlanExecutor pattern + 議題 6+7 Aria 必修。
 /// </summary>
 [YieldsOutput(typeof(DesignLoopResult))]
-internal sealed partial class DesignPlanExecutor : Executor
+internal sealed partial class DesignPlanExecutor : Executor<DesignPetraVerdict>
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DesignPlanExecutor> _logger;
@@ -35,8 +36,8 @@ internal sealed partial class DesignPlanExecutor : Executor
         _logger = logger;
     }
 
-    [MessageHandler]
-    private async ValueTask HandleVerdictAsync(DesignPetraVerdict verdict, IWorkflowContext context)
+    public override async ValueTask HandleAsync(
+        DesignPetraVerdict verdict, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
         var state = await DesignStateHelpers.ReadAsync(context);
 
@@ -56,7 +57,7 @@ internal sealed partial class DesignPlanExecutor : Executor
             isFirstMessage: false,        // Petra session 已建立（PetraJudge 階段 isFirstMessage=true）
             workingDir: state.WorkingDir,
             allowedTools: MeetingCommons.ReadOnlyTools,
-            ct: default,
+            ct: cancellationToken,
             meetingType: "Design",
             round: verdict.Round,
             tokenLogService: tokenLog);
@@ -82,40 +83,6 @@ internal sealed partial class DesignPlanExecutor : Executor
         _logger.LogInformation(
             "[Stage52] Plan executor 完成（decision={Decision}，rounds={Rounds}，GroupId={Id}）",
             result.Decision, result.TotalRounds, state.GroupId);
-
-        await context.YieldOutputAsync(result);
-    }
-
-    [MessageHandler]
-    private async ValueTask HandleAdjustmentApprovedAsync(DesignAdjustmentApproved approved, IWorkflowContext context)
-    {
-        var state = await DesignStateHelpers.ReadAsync(context);
-
-        // approved record 已帶 non-null DesignPlan（DesignAdjustmentExecutor 內保證）→ 直接 wrap，不再 call LLM
-        var meetingLog = approved.MeetingLog;
-        if (!meetingLog.EndsWith("\n## 設計規劃書\n", StringComparison.Ordinal))
-            meetingLog += $"## 設計規劃書\n{approved.DesignPlan}\n\n";
-
-        state.DesignPlan = approved.DesignPlan;
-        state.MeetingLog = meetingLog;
-        state.TotalRounds = approved.Round;
-        await DesignStateHelpers.SaveAsync(context, state);
-
-        var result = new DesignLoopResult
-        {
-            Decision       = "consensus",
-            MeetingLog     = meetingLog,
-            DesignPlan     = approved.DesignPlan,
-            IssuesJson     = state.IssuesJson,
-            IssueUrls      = state.IssueUrls,
-            UiSpecContent  = state.UiSpecContent,
-            TotalRounds    = approved.Round,
-            PetraSessionId = state.PetraSessionId,
-        };
-
-        _logger.LogInformation(
-            "[Stage52] Plan executor adjustment_approved 直接 wrap（GroupId={Id}，round={Round}）",
-            state.GroupId, approved.Round);
 
         await context.YieldOutputAsync(result);
     }
