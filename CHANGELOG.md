@@ -11,15 +11,37 @@
 
 ## [Unreleased]
 
-- **🎉 Stage 49 v4 漸進遷移首發完成 ⭐**：[Stage 49](docs/planning/Stage_49_Roadmap.md) Cody-Vera-Petra Appeal loop 切 MS Agent Framework + feature flag 並行雙系統 — **0 follow-up commits + production 真實任務驗證 fallback 防呆生效**。v4 漸進遷移路線正式啟動，6 Stage 遷移 1/6 達成。
-- **下個動作候選**：① **Stage 50 = RunMeetingSession → Group Chat orchestration**（v4 漸進遷移第 2 步，估 2-3 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
-- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** → Stage 50 RunMeetingSession → Group Chat / 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
+- **🎉 Stage 50 v4 漸進遷移第二步完成**：[Stage 50](docs/planning/Stage_50_Roadmap.md) Kickoff Meeting 切 MS Agent Framework Group Chat（A2 fan-out/fan-in 路線） + feature flag 並行雙系統 — **3 follow-up fix 揭露 framework 1.3.0 fan-out 拓撲首次 production 整合的 streaming dispatch + type validation 兩層額外要求**。v4 漸進遷移路線 6 Stage 遷移 **2/6 達成**。
+- **下個動作候選**：① **Stage 51 = BossInteraction → Human-in-the-Loop**（v4 漸進遷移第 3 步，估 1-2 週）/ ② FF 四十三（token_logs.TotalCostUsd 99.7% NULL）/ ③ FF 四十二（TryParseDesignIssues Stage 25b 既有 bug）
+- **6 Stage 遷移路線進度**（spike 報告節 7）：✅ **Stage 49 Appeal loop** ✅ **Stage 50 Kickoff Meeting** → Stage 51 BossInteraction → Human-in-the-Loop / 52 WorkflowEngine + Design Meeting → Workflow Builder（最大遷移點）/ 53 Crash Recovery → Checkpointing / 54 收尾 + production 切換
 - **FF 三十六 Phase B 動態流程架構**：Phase A 採用解鎖 Phase B 啟動條件，但 Christ 路線 = **Stage 52 漸進遷移過半再評估 Phase B**
-- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅**
+- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 - **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
 
 ---
+
+## [3.36.0] — 2026-05-02 — [Stage 50](docs/planning/Stage_50_Roadmap.md) v4 漸進遷移第二步
+
+v4 漸進遷移 6 Stage 路線第二步完成 — Kickoff Meeting 5 Agent 會議切 MS Agent Framework Workflow Builder fan-out/fan-in（A2 路線）+ feature flag 並行雙系統。**3 follow-up fix commits**（驗收期揭露 framework 1.3.0 對 fan-out/fan-in 拓撲 vs Stage 49 線性串聯的不同要求）。
+
+「換引擎不換車身」第二步實踐：5 個 Kickoff Agent prompt 完全不動（抽到 `KickoffPrompts.cs` 共用，legacy + framework 兩條路徑同 SoT）+ DB schema 加 1 nullable 欄位（`task_groups.KickoffFrameworkStateJson`，與 Stage 49 `FrameworkAppealStateJson` 完全獨立）+ Discord/Dashboard/ClaudeCodeService 包裝層保留 + 換 Kickoff Meeting 編排層用 framework Workflow Builder。
+
+**Spike 第一步驗證結論驅動路線拍板**：① E1 ❌ — framework Group Chat custom manager 不允許「multi-speaker per round」（star topology + single-speaker turn-by-turn 設計，與「Rosa/Demi/Cody/Quinn 4 個獨立並行視角」相反）→ **走 A2 fallback：`WorkflowBuilder` + `AddFanOutEdge` + `AddFanInBarrierEdge` + `AddSwitch` + loop back**（對齊 MapReduce + Loop sample）② E2 ✅ `ICheckpointStore<JsonElement>` 通用（Stage 49 pattern 100% 複用）③ E3 ✅ 5 個並行 Claude Code subprocess 不被 framework 限制（OS-level subprocess 並行）。
+
+**核心拍板**（Christ 2026-05-02）：① A4：spike 第一步驗 A1 不可行 → A2 fallback ② B2：只遷 Kickoff，Design 留 legacy 給 Stage 52 走 B3 漸進 ③ C2：Petra session 沿用 Claude Code `--resume` 機制（Modify 流程不動）④ D2：獨立 `Workflow:UseFrameworkKickoff` flag（與 Stage 49 `UseFrameworkAppealLoop` 完全獨立）⑤ E：spike 第一步三項全驗。
+
+**驗收期 3 follow-up fix（戰略級 framework 1.3.0 踩坑揭露）**：① `a50059c` `RunAsync` → `RunStreamingAsync` + `WatchStreamAsync` foreach（fan-out + fan-in barrier 拓撲必須 streaming dispatch，Stage 49 線性串聯沒踩到）② `cd6d61a` 4 個顯式 `SendMessageAsync`/`YieldOutputAsync` 的 Executor 加 `[SendsMessage(typeof(T))]`/`[YieldsOutput(typeof(T))]` attribute + 3 個 class 加 `partial` 修飾子（framework 1.3.0 type validation MAFGENWF003，Stage 49 用 `[MessageHandler] ValueTask<T>` generic return 模式 generator 自動推導沒踩此坑）③ `1023104` Mock Petra 角色識別補 "Kick-off 會議已結束" 特徵字串（抽 prompt builders 共用後 BuildPetraPlanPrompt 沒「你是 Petra」字樣）。
+
+**Forge 自驗 6 場景全綠 + 2 bonus 子場景**：A flag false → legacy 不變 / B flag true → framework 完整跑通（4 Agent 並行 + Aggregator 收齊 + Petra consensus + Plan + WorkflowOutputEvent + DB 寫入）/ C Recovery 雙系統隔離 + 降級策略 marker **100% cleared**（vs Stage 49 case study「30% 殘留」更乾淨）/ D escalate → KickoffEscalateExecutor / E flag 切回 → framework 重新接管 / F MockMode token 0 行（預期）/ Bonus consensus_round2 Switch loop back + max_iter Switch case round>=max。
+
+**Forge 自驗能力擴張第二次完整實踐**（Stage 49 case study 後）：跑全 6 場景揭露 3 個真實 production bug + 自己診斷修根因 + 對齊 framework canonical sample 補佐證 + 寫踩坑紀錄 + 戰略洞察段；Christ 線下補驗縮減到只剩 3 項（Discord embed 視覺 + 真實 LLM token_logs + Modify resume 對話）；**結案 Forge 自做 Roadmap v2.0**（forge-end skill 升級 — Stage 49 是 Aria 做 v2.0，Stage 50 Forge 自做）。
+
+**Aria 校準錨：×1.09**（500K 實際 vs Charter 中位 460K，混合型 Stage 第 2 個資料點，比 Stage 49 ×1.25 更接近 mid 中心；混合型 Stage 倍率穩定在 ×1.0-1.3 區間，Stage 49 + Stage 50 兩資料點驗證不到 ×1.4 上界）。
+
+**新建 11 檔 ~1100 LoC**：`src/AiTeam.Bot/Workflows/Kickoff/`（KickoffState / KickoffPrompts / KickoffWorkflowFactory / KickoffCheckpointStore + 6 個 Executor）+ `Orchestration/Meeting/FrameworkKickoffRouter.cs` 499 LoC + `Migration Stage50TaskGroupKickoffFrameworkState`；改檔 11 個（含 KickoffMeetingService 淨刪 213 行 prompt builders 全委派 KickoffPrompts、ClaudeCodeAgentExecutor [Obsolete] message 更新、Program.cs 3 Singleton DI、Dashboard SystemSettings 第二 toggle）。
+
+**踩坑紀錄 11 條**（Forge 結案第一段補完）給 Stage 51+ v4 遷移預警，含 3 條驗收期戰略級踩坑（🔴 #9 fan-out 拓撲 streaming dispatch / 🔴 #10 顯式 send/yield 三件套 / 🟡 #11 Mock 角色識別覆蓋）；新增「戰略洞察：Stage 49 vs Stage 50 整合層級差異」段對 Stage 52 Design Meeting B3 路線是否複用 Stage 50 pattern 給出明確指引。
 
 ## [3.35.0] — 2026-05-02 — [Stage 49](docs/planning/Stage_49_Roadmap.md) ⭐ v4 漸進遷移首發
 

@@ -666,9 +666,36 @@ Stage 55+（評估）：FF 三十六 Phase B 動態流程架構（依 Stage 52 �
 > Stage 50 fan-out/fan-in 拓撲 3 follow-up — 揭露 framework 1.3.0 對「拓撲 dispatch 模式 + 顯式 send/yield type validation」兩層額外要求。
 > Stage 52 Design Meeting B3 路線（主迴圈遷移）若沿用 Stage 50 fan-out/fan-in pattern 可直接複用此 3 條踩坑紀錄；若改走更動態的拓撲（FF 三十六 Phase B 動態流程架構）則需重做 spike。
 
-### Aria 校準錨候選（Aria 結案第二段填）
+### Aria 校準錨（Aria 結案第二段補完）
 
-> 預估 ×1.0-1.5（混合型 Stage，spike 第一步 + production 整合）— 實際 Forge 自評：Session A + Session B 全程 ~155K context（spike + 11 新檔 + 7 改檔 + Mock 場景 + 結案文件 + 0 build/runtime fix follow-up），對齊「混合型 ×1.0-1.4 區間」中段。Aria 結案第二段補實際倍率。
+**預估 vs 實際**：
+- Aria Charter 預估：340-580K（中位 460K）— 混合型（spike 第一步 + production 整合 + 11 新檔 + 11 改檔 + 5 Mock 場景 + 6 場景自驗）
+- Aria 預測倍率：×1.0-1.5 範圍（對齊 Stage 49 校準錨教訓「混合型 ×1.0-1.4 區間」）
+- 實際 Forge context 累積路徑：
+  - Plan Mode 計劃書完成 → **220K**（spike 第一步 3 項驗證 + 子項拆分 + 完整 Executor 設計範例）
+  - 計劃書修正完成（Aria 後台檢查 10 點修正）→ **253K（+33K）**
+  - Session A 完成 → **313K（+60K，spike + 子項 1-5：DB + State + Prompts 抽出 + 6 Executors + WorkflowFactory + CheckpointStore）**
+  - Session B 完成（dotnet build 0 errors）→ **387K（+74K，子項 6-9：feature flag + Router + 入口分流 + Recovery 雙系統 + Dashboard + Mock 場景 + Version bump）**
+  - 驗收完畢（**3 follow-up fix commits**：streaming dispatch / [SendsMessage] type validation / Mock Petra 識別 + Forge 自驗 6 場景 + 2 bonus 子場景）→ **495K（+108K）**
+  - 結案完畢（Roadmap 實作紀錄 + v2.0 結案版 forge-end SOP）→ **500K（+5K）**
+- 倍率 = 500 / 460（中位）= **×1.09**（落 Charter 預期 ×1.0-1.5 mid 帶下緣，比 Stage 49 ×1.25 更接近 mid 中心）
+
+**戰略意義（混合型 Stage 第 2 個資料點）**：
+
+| 維度 | Stage 49（×1.25）| **Stage 50（×1.09）** |
+|---|---|---|
+| 性質 | 混合型（POC integration + production 整合）| 混合型（spike 第一步 + production 整合）|
+| Plan Mode unknown→known | ✅（路線 B + DI factory + F3 scope 3 拍板）| ✅（spike 結論 A2 fallback + 11 新檔架構拍板）|
+| production 整合 noise | ✅（DB + DI + Recovery + Discord）| ✅（同上 + Dashboard SystemSettings 第二 toggle）|
+| follow-up 修正期 | 0 commits（驗收期 0 行修正）| **3 commits**（framework 1.3.0 fan-out 拓撲首次踩坑揭露）|
+| 結果倍率 | ×1.25 | **×1.09** |
+
+→ **混合型 Stage 倍率穩定在 ×1.0-1.3 區間**（Stage 49 + Stage 50 兩資料點驗證），不到 ×1.4 上界。
+
+**Forge 工作品質 v4 遷移基準持續進化**：
+- Stage 49：Forge 自評 0 follow-up + 結案分 Roadmap v1.2 + Aria 補 v2.0
+- **Stage 50**：Forge 自驗 3 follow-up（揭露 framework 1.3.0 fan-out vs 線性串聯不同要求）+ 結案 Forge 自做 v2.0（**forge-end skill 升級**）+ 11 條踩坑紀錄含戰略洞察「Stage 49 vs Stage 50 整合層級差異」段
+- 對 Stage 52 Design Meeting B3 路線預警價值極高（fan-out/fan-in 拓撲 router 一律走 streaming + 顯式 send/yield 三件套）
 
 ---
 
