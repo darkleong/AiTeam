@@ -13,23 +13,21 @@ namespace AiTeam.Bot.Workflows.Appeal.Executors;
 /// Stage 49：把 ClaudeCodeService.RunMeetingSessionAsync 包成 framework Executor，
 /// 對齊既有 ReviewAppealService / DevPlanAppealService 的 Cody/Vera/Petra appeal 對話模式。
 ///
-/// **Stage 49 路線 B 拍板（2026-05-02）**：本通用 wrapper **不直接被 Stage 49 Workflow 引用**。
+/// **Stage 49 路線 B + Stage 50 service-call 路線拍板（2026-05-02）**：本通用 wrapper **不直接被 production Workflow 引用**。
 ///
-/// 路線 B 採「framework Executor 直接調用既有 service method」（statefule prompt SoT 統一），詳見：
-///   - Forge 計劃書 line 94 F2 探索期發現
-///   - Stage 49 結案實作紀錄段「framework Executor 整合層級拍板」
+/// Stage 49 路線 B 採「framework Executor 直接調用既有 service method」（stateful prompt SoT 統一），
+/// Stage 50 5 Agent Executor（Rosa/Demi/Cody/Quinn/Petra Kickoff）直接 call MeetingCommons.RunAgentTurnAsync — wrapper 仍未 production wire。
 ///
-/// 本檔案保留作為 **Stage 50+ Group Chat orchestration 預留通用 wrapper**：
-///   - Stage 50 RunMeetingSession → Group Chat 遷移時：會議內多 Agent 互相 talk，
-///     需 Executor → IClaudeCodeService 直連，沒有 service 上層可包，會直接用此 wrapper
-///   - Stage 54 收尾若決定 framework Executor 從 service 切回直連時也會用上
+/// 本檔案保留作為 **Stage 54+ 收尾或 Stage 55+ 動態流程架構真正 wire 時的預留**：
+///   - Stage 54 收尾若決定 framework Executor 從 service 切回直連 IClaudeCodeService 時用
+///   - Stage 55+ 動態流程架構（FF 三十六 Phase B）若需 multi-Agent 互相 talk Executor 直連時用
 ///
 /// DI 模式（驗證 B 結論，Stage 49 適用 + Stage 50+ 適用）：
 ///   - framework Executor 不註冊到 DI（factory 模式）
 ///   - 透過 IServiceScopeFactory 在 HandleAsync 內取 scoped services
 ///   - 避免 Singleton 持有 Scoped DbContext 跨 superstep 失效
 /// </summary>
-[Obsolete("Stage 49 路線 B 不直接引用本 Executor。預留 Stage 50+ Group Chat orchestration（會議多 Agent 直連 IClaudeCodeService）+ Stage 54 收尾決定切回直連時用。詳見 Stage 49 Roadmap 實作紀錄段「framework Executor 整合層級拍板」。", error: false)]
+[Obsolete("Stage 49 路線 B + Stage 50 5 Agent Executor 走直接 call MeetingCommons / ReviewAppealService 模式（service 包裝路線），本 wrapper 仍預留 Stage 54+ 收尾若決定切回 Executor 直連 IClaudeCodeService 或 Stage 55+ 動態流程架構真正 wire 用。", error: false)]
 public sealed class ClaudeCodeAgentExecutor : Executor<string, string>
 {
     private readonly IServiceScopeFactory _scopeFactory;

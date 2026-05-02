@@ -3,6 +3,7 @@ using System.Text.Json;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
+using AiTeam.Bot.Workflows.Kickoff;
 using AiTeam.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;

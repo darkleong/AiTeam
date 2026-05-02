@@ -142,6 +142,14 @@ public class TaskGroup
     /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.FrameworkAppealStateJson == null
     /// 避免 legacy/framework 雙系統 collision（Stage 49 風險點 R2 緩解）。</summary>
     public string? FrameworkAppealStateJson { get; set; }
+    /// <summary>Stage 50：MS Agent Framework Kickoff Meeting Group Chat orchestration Checkpointing 序列化 state（JSON）。
+    /// null = 走 legacy KickoffMeetingService path（feature flag false）；
+    /// 有值 = framework Workflow 進行中或已完成，superstep 結束時自動同步寫 DB。
+    /// 走 framework path 時搭配 ActiveOrchestration = "FrameworkKickoff"。
+    /// 與 Stage 49 FrameworkAppealStateJson 完全獨立（不同 framework Workflow / 不同 sessionId 概念）。
+    /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.KickoffFrameworkStateJson == null
+    /// 避免 legacy/framework 雙系統 collision（Stage 50 風險點 R2 緩解擴充）。</summary>
+    public string? KickoffFrameworkStateJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];
