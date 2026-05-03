@@ -83,6 +83,11 @@ public class AgentQueueProcessor(
         // 風險點 R5 緩解：legacy 排除 DesignFrameworkStateJson != null，framework 排除 == null
         var frameworkDesignRouter = serviceProvider.GetRequiredService<AiTeam.Bot.Orchestration.Meeting.FrameworkDesignRouter>();
         await frameworkDesignRouter.RecoverStuckFrameworkDesignAsync(stoppingToken);
+        // Stage 53A：啟動掃描 framework path 卡住的 Pipeline Workflow（macro-orchestration 外層）
+        // F-α 配套：4 個既有 framework Recovery 都加 PipelineFrameworkStateJson == null 排除（避免雙層 collision）
+        // 議題 12 升級：Pipeline Recovery 採 ResumeStreamingAsync rehydrate（不採降級重跑），等下次 Agent callback 自然推進
+        var frameworkPipelineRouter = serviceProvider.GetRequiredService<AiTeam.Bot.Orchestration.Meeting.FrameworkPipelineRouter>();
+        await frameworkPipelineRouter.RecoverStuckFrameworkPipelineAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {

@@ -122,6 +122,16 @@ public class MockScenarioService(
                           or "framework_design_no_demi"
                           or "framework_design_crash_recovery_during_round")
             MockClaudeCodeService.FailScenario = scenario;
+        // Stage 53A v4 漸進遷移第五步：framework Pipeline 6 場景（Aria 方案 C 拍板：Pipeline 從 Dev_plan 階段啟動）
+        // 機制：scenario key 透過 MockClaudeCodeService.FailScenario 傳遞 — Kickoff/Design 階段 Mock 走 default consensus（legacy path），
+        // Dev_plan 起進 Pipeline framework path（feature flag UseFrameworkPipeline=true 時 FireOneStepAsync line 461 第三條分流接管）
+        else if (scenario is "framework_pipeline_happy_path"
+                          or "framework_pipeline_dev_plan_resume"
+                          or "framework_pipeline_dev_resume"
+                          or "framework_pipeline_qa_no_tests"
+                          or "framework_pipeline_reviewer_fallback"
+                          or "framework_pipeline_dev_plan_failed_escalate")
+            MockClaudeCodeService.FailScenario = scenario;
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -168,6 +178,13 @@ public class MockScenarioService(
             "framework_design_needs_adjustment_needs_meeting"    => (WorkflowType.NewFeature, "FrameworkDesign-AdjustmentNeedsMeeting",     "Kickoff"),
             "framework_design_no_demi"                           => (WorkflowType.NewFeature, "FrameworkDesign-NoDemi",                     "Kickoff"),
             "framework_design_crash_recovery_during_round"       => (WorkflowType.NewFeature, "FrameworkDesign-CrashRecovery",              "Kickoff"),
+            // Stage 53A：framework Pipeline 6 場景（Aria 方案 C 拍板：從 Kickoff 起跑，Kickoff/Design 走 legacy/framework，Dev_plan 起進 Pipeline framework path）
+            "framework_pipeline_happy_path"        => (WorkflowType.NewFeature, "FrameworkPipeline-HappyPath",       "Kickoff"),
+            "framework_pipeline_dev_plan_resume"   => (WorkflowType.NewFeature, "FrameworkPipeline-DevPlanResume",   "Kickoff"),
+            "framework_pipeline_dev_resume"        => (WorkflowType.NewFeature, "FrameworkPipeline-DevResume",       "Kickoff"),
+            "framework_pipeline_qa_no_tests"       => (WorkflowType.NewFeature, "FrameworkPipeline-QaNoTests",       "Kickoff"),
+            "framework_pipeline_reviewer_fallback" => (WorkflowType.NewFeature, "FrameworkPipeline-ReviewerFallback","Kickoff"),
+            "framework_pipeline_dev_plan_failed_escalate"  => (WorkflowType.NewFeature, "FrameworkPipeline-DevPlanFailedEscalate", "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

@@ -295,6 +295,29 @@
     </div>
 </div>
 
+<div class="system-config-card system-config-card--warning" style="margin-top: 16px;">
+    <div class="system-config-header">
+        <div>
+            <strong>使用 MS Agent Framework Pipeline</strong>
+            <p class="text-muted" style="font-size:0.85rem; margin:4px 0 0">
+                啟用後 NewFeature 主路徑從 <strong>Dev_plan 階段起</strong>（Dev_plan → Dev → Reviewer → QA → Doc → NotifyBossMerge）改走 MS Agent Framework Workflow path
+                — macro-orchestration（5 Agent stage yield-resume + Checkpointing + ResumeStreamingAsync 跨 process restart），
+                替換 legacy <code>WorkflowEngine.GetDecision</code> + <code>TaskGroupService.HandleAgentCompletedAsync</code> 散落 hooks（v4 漸進遷移第五步 Stage 53A）。<br/>
+                <MudText Color="Color.Warning" Typo="Typo.body2" Inline="true">
+                    ⚠️ 實驗性功能。啟用前請確認 ① ANTHROPIC_API_KEY 設定 ② 跑過 Mock 驗收（場景 framework_pipeline_*）③ <strong>Stage 50 UseFrameworkKickoff + Stage 52 UseFrameworkDesign 兩 flag 已通過驗收</strong>（三 flag 連動 — Kickoff/Design 留 legacy 由 Christ confirm BossInteraction 接 Pipeline 啟動）。
+                    Aria 方案 C 拍板：53A 範圍縮小，Stage 55 收尾再整合 Kickoff/Design + sub-task 進 Pipeline framework。修改後 5 分鐘內自動生效。
+                </MudText>
+            </p>
+        </div>
+        <MudSwitch T="bool"
+                   Value="@_useFrameworkPipeline"
+                   ValueChanged="@OnUseFrameworkPipelineChanged"
+                   Color="Color.Warning"
+                   Disabled="@(!_useFrameworkKickoff || !_useFrameworkDesign)"
+                   Label="@(_useFrameworkPipeline ? "啟用" : "停用")" />
+    </div>
+</div>
+
 <MudDivider Style="margin: 32px 0" />
 
 <h3 style="margin-bottom:16px">Token 守門設定</h3>

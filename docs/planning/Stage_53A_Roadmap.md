@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 7 Stage 路線第五步（議題 A 拆 Stage 後 Stage 53 進一步拆 53A/53B，v4 路線 7→8 Stage）— 不對應特定 active FF
 > 對應版本：**v3.39.0**（v4 漸進遷移第五個產生版本變動的 Stage）
 > 建立日期：2026-05-03
-> 狀態：📋 計劃書建立完成，待 Forge 開工
-> 文件版本：v1.0
+> 狀態：✅ **Forge 實作完成 + Build 0 Error**（2026-05-03，3 session 連跑 + Aria 議題 G3 修正方案 C 拍板）
+> 文件版本：v2.0（Forge 結案第一段）
 
 ---
 
@@ -618,7 +618,72 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 
 ## 實作紀錄
 
-> 由 Forge 結案第一段填（Roadmap 章節對齊 Stage 51/52 v2.0 結構：子項完成度對照 / Session A/B/C 結案 / 驗收結果 / 驗收後修正 / 關鍵設計決策 / 踩坑紀錄彙整 / Aria 校準錨候選）
+### 子項完成度對照（10/10 ✅）
+
+| # | 子項 | 狀態 | commit |
+|---|---|---|---|
+| 0 | Spike F1 / F2（讀已存在 framework router code 完成，無需新建 spike 程式片段）| ✅ | plan v1.0/v1.1 內紀錄 |
+| 1 | feature flag UseFrameworkPipeline + Resolver | ✅ | 296d44e |
+| 2 | DB schema PipelineFrameworkStateJson + Migration `Stage53ATaskGroupPipelineFrameworkState` | ✅ | 296d44e |
+| 3 | F-α 4 處 +1 行排除條件（MeetingOrchestrationService / FrameworkAppealRouter / FrameworkKickoffRouter / FrameworkDesignRouter）| ✅ | 296d44e |
+| 4 | PipelineState（含 7 Bridge records + 5 stage-distinct request/response types + state helpers）| ✅ | 296d44e |
+| 5 | 8 Executor + PipelineWorkflowFactory + DI 註冊（PipelineCheckpointStore / PipelineWorkflowFactory Singleton）| ✅ | b23b760 |
+| 6 | PipelineCheckpointStore | ✅ | 296d44e |
+| 7 | FrameworkPipelineRouter 4 method（HandlePipelineAsync / ResumeAfterAgentAsync / RecoverStuckFrameworkPipelineAsync ResumeStreamingAsync 議題 12 升級 / FinalizePipelineAsync 5 fallback dispatch 議題 9 修法）+ DI 註冊啟用 | ✅ | 4ec7a35 |
+| 8 | 入口分流兩處（FireOneStepAsync line 461 加 Dev_plan 第三條分流 + sub-task ParentGroupId == null 排除 + HandleAgentCompletedAsync 8A line 168 後 callback resume 分流）| ✅ | Session C |
+| 9 | AgentQueueProcessor Recovery hook line 85 後 + Dashboard SystemSettings 第五 toggle（三 flag 連動 disabled）+ 6 個 framework_pipeline_* Mock 場景 | ✅ | Session C |
+| 10 | Directory.Build.props v3.38.0 → v3.39.0 + Roadmap header v1.0 → v2.0 結案紀錄 | ✅ | Session C |
+
+### Session A/B/C 結案
+
+**Session A（2 commit）**：
+- 296d44e — 子項 1/2/3/4/6 完成（揭露議題 G3 假設失誤）
+- b23b760 — 子項 5（8 Executor + Factory）
+
+**Session B（1 commit）**：
+- 4ec7a35 — 子項 7（FrameworkPipelineRouter 4 method）
+
+**Session C**：本 commit — 子項 8/9/10 + 結案文件
+
+### 關鍵設計決策（跨 Stage 預警價值高的）
+
+1. **Aria 議題 G3 修正方案 C**（2026-05-03 Session A 揭露）：
+   - 原 G3「framework-in-framework」假設不成立 — inner FrameworkKickoffRouter.CreateKickoffConfirmationAsync / FrameworkDesignRouter.FinalizeDesignAsync 的 post-meeting actions（Christ confirm BossInteraction / fire Dev_plan / split proposal）跟 Pipeline 主迴圈推進職責衝突
+   - **方案 C 拍板**：53A 範圍縮小，Pipeline 主 Workflow 從 Dev_plan 階段啟動（Kickoff/Design 留 legacy；Stage 55 收尾統一整合 Kickoff/Design + sub-task 進 Pipeline framework）— 規模 -40% 守 A2 ×0.96-1.25 區間 + 戰略價值 ~70% 保留
+   - **教訓**：framework-in-framework 假設前必須 grep inner router post-meeting actions 完整 caller flow，不能只看 Handle*Async signature
+
+2. **Aria 議題 9 修法（5 fallback 點主動 call legacy）**：
+   - 原設計「不主動 call legacy；等下次 callback 落回 legacy 路徑」假設錯誤 — callback 已被 framework path 接管走完，不會二次觸發
+   - 修法：FinalizePipelineAsync 主動 call 對應 legacy method（reviewer_critical → FireStepsAsync(Dev, IsFixLoop:true) / dev_plan_failed_escalate → HandleDevPlanCompletedAsync / dev_blocker → HandleDevBlockerAsync / qa_fix_loop → 已由 HandleQaCompletedAsync 內 fire 無需 call / qa_failed/intervention → NotifyBossInterventionAsync / dev_failed/doc_failed → NotifyBoss intervention）
+   - **避免遞迴關鍵**：fallback 主動 call legacy 時 PipelineFrameworkStateJson 已 null（Executor ClearMarkerAndFallbackAsync 先清 marker） → HandleAgentCompletedAsync 8A 分流條件失敗 → 走 legacy（不會遞迴回 framework path）
+
+3. **Aria 議題 12 升級 Recovery 採 ResumeStreamingAsync**：
+   - Stage 49/50/52 既有「降級策略清 marker 重觸發 entry」對 macro pipeline 不適用 — 重跑會丟失 inner Kickoff/Design 已產出 state（GitHub Issue / DB 寫入 / Christ Discord 確認）+ 重複 LLM token 浪費
+   - 修法：沿用 Stage 51 試點 know-how — LoadFromDbAsync + ResumeStreamingAsync rehydrate state（Recovery 階段無 callback signal，不 SendResponseAsync）→ 等下次 Agent callback 自然推進
+
+4. **Aria 議題 3 RequestPort 5 個獨立 PortId + 5 distinct Request/Response 型別**：
+   - Stage 52 fix#2 教訓延續 — framework AddEdge type-based dispatch 不 source-aware
+   - 5 個 Agent 型 stage 共用同一 record type 會 routing 到全部 5 個 ports（collision）
+   - 5 distinct types 自然分流（type-explicit Bridge record 紀律延續）
+
+5. **Aria 時序紀律**：5 fallback 點 Executor 統一 ClearMarkerAndFallbackAsync helper（先 ExecuteUpdateAsync 同步 await 清 marker → 再 SendMessageAsync(PipelineFallbackBridge)）— 避免 Dev_fix / 重產 callback race condition
+
+### 踩坑紀錄彙整
+
+#### 議題 G3 假設失誤揭露（戰略級，跨 Stage 53B/55 預警）
+Forge Session A 子項 5 實作期 grep 真實 inner code 揭露 inner router post-meeting actions 跟 Pipeline 衝突。**Aria 規劃前期 grep 不夠深**（只看 Handle*Async signature 沒看 finalize 段）。Aria 結案第二段已加自省點 — Forge Plan Mode 第一步建議對「inner 同步 await」假設先 grep inner finalize 段確認無 post-meeting side effects。
+
+#### TaskStatus 模糊參考（Stage 53A Session B/C 共 4 處踩到）
+`AiTeam.Shared.Constants.TaskStatus` vs `System.Threading.Tasks.TaskStatus` 衝突 — using 兩個 namespace 同時時編譯誤判。修法：specific case 直接用 fully qualified `AiTeam.Shared.Constants.TaskStatus.NeedsIntervention`。Stage 53B+ 預警：寫新 Pipeline / Workflow code 用到 TaskStatus 時主動 fully qualified。
+
+#### InProcessExecution.RunStreamingAsync 5-arg signature
+Forge Session B 第一次 build 報 `cannot convert from 'CheckpointManager' to 'string?'` — 實際 signature `(workflow, initialState, manager, sessionId, ct)` 含 sessionId（不是 4 args）。對齊 FrameworkKickoffRouter L409 / FrameworkDesignRouter L382 既有 pattern。
+
+### Aria 校準錨候選（Aria 第二段填）
+
+> Forge 預估 ×（待 Aria 校準）— 本次特殊：Session A 子項 5 實作期揭露 Aria 規劃前期假設失誤（議題 G3）+ 即時跨 session 拍板修正方案 C，是混合型 Stage 首次出現「規劃 → 實作 → Aria 拍板修正 → 範圍縮小 -40%」流程。
+
+3 session 連跑 + Build 0 Error + 0 follow-up（驗收期視 Christ 線下實跑可能補）。
 
 ---
 
@@ -627,3 +692,4 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-03 | 初版規劃書建立（Aria）—— v4 漸進遷移第五步 Stage 53A：macro pipeline NewFeature 主路徑切 framework Workflow（happy path 限定）（A2 拆 Stage 53A/53B + B 拆 53B + C2 QaStage Executor 內 call 既有 service + D2 兩項 spike + E1 三 flag 連動 + F-α 層級隔離跨 Stage 修改既有 router + G3 framework-in-framework + H-mid 6 Mock 場景 + I2 + 5 fallback to legacy + J1 混合 lifecycle yield-resume）|
+| v2.0 | 2026-05-03 | Forge 結案第一段（3 session 連跑：Session A 296d44e + b23b760 / Session B 4ec7a35 / Session C 含本 commit）。**議題 G3 修正方案 C 拍板**：53A 範圍縮小到 5 Agent stage（DevPlan/Dev/Reviewer/QA/Doc），Kickoff/Design 留 legacy（Stage 55 收尾整合）；規模 -40% 守 A2 ×0.96-1.25 區間 + 戰略價值 ~70% 保留。**Pipeline 主入口分流位置改 FireOneStepAsync line 461 加 Dev_plan 第三條 single point of entry**（Forge 觀察 6 處 fire Dev_plan 散點全經過 FireOneStepAsync 統一節流）+ sub-task ParentGroupId == null 排除（Stage 46 機制 Stage 55 收尾整合）+ Aria 時序紀律（fallback 5 點先清 marker 再 SendMessage 避免 Dev_fix race）+ 議題 12 升級 ResumeStreamingAsync rehydrate（不採降級重跑） + 議題 9 修法（5 fallback 點主動 call legacy method 接管）+ 議題 3 RequestPort 5 獨立 PortId + 5 distinct Request/Response 型別。Build 0 Error / Migration scaffold 完成（Bot 啟動 MigrateAsync 自動套用）。|

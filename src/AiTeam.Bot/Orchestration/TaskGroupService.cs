@@ -167,6 +167,24 @@ public class TaskGroupService(
         if (needsSave)
             await taskRepo.SaveAsync(cancellationToken);
 
+        // Stage 53A：framework Pipeline path 接管 callback resume（Aria 方案 C 拍板，2026-05-03）
+        // 議題 10 修法：分流位置在 line 168 needsSave/SaveAsync 之後（既有 hooks 之前）— framework path 也需要 DevPrUrl/LastReviewBody/ImplementationNote/TestReport DB 欄位寫入
+        // 議題 9 修法：fallback 路徑由 Pipeline Executor ClearMarkerAndFallbackAsync 已清 marker → callback resume 條件 (PipelineFrameworkStateJson != null) 自然失敗 → 走 legacy（避免遞迴）
+        if (group.PipelineFrameworkStateJson != null)
+        {
+            await using var pipelineScope = serviceProvider.CreateAsyncScope();
+            var workflowResolver = pipelineScope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkPipelineAsync(cancellationToken))
+            {
+                logger.LogInformation(
+                    "[Stage53A] HandleAgentCompletedAsync framework path 接管（Group={Id}, completedAgent={Agent}）",
+                    groupId, completedAgent);
+                var router = pipelineScope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+                await router.ResumeAfterAgentAsync(group, completedAgent, result, cancellationToken);
+                return;
+            }
+        }
+
         // ── Dev_plan 完成 → Petra 審核 + Appeal（Stage 37：搬至 AppealOrchestrationService.HandleDevPlanCompletedAsync）──
         if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
         {
@@ -457,6 +475,32 @@ public class TaskGroupService(
         WorkflowStep step,
         CancellationToken cancellationToken)
     {
+        // Stage 53A：framework Pipeline 從 Dev_plan 階段啟動（Aria 方案 C 拍板，2026-05-03）
+        // single point of entry — 6 處 fire Dev_plan 散點全經過 FireOneStepAsync 統一節流
+        // 排除條件：① WorkflowType=NewFeature 主路徑 ② sub-task 排除（ParentGroupId == null，Stage 46 機制 Stage 55 收尾整合）
+        //          ③ PipelineFrameworkStateJson == null（entry guard，避免遞迴：Pipeline 啟動後 marker != null，下游 FireStepsAsync 自然走 legacy）
+        //          ④ AgentName == Dev_plan ⑤ feature flag UseFrameworkPipeline=true
+        if (group.WorkflowType == "new_feature"
+            && group.ParentGroupId == null
+            && group.PipelineFrameworkStateJson == null
+            && step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
+        {
+            await using var flagScope = serviceProvider.CreateAsyncScope();
+            var workflowResolver = flagScope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkPipelineAsync(cancellationToken))
+            {
+                logger.LogInformation("[Stage53A] Pipeline framework path 從 Dev_plan 啟動（Group={Id}）", group.Id);
+                var router = flagScope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+                // Aria 議題 11 修法：fire-and-forget 一行 ContinueWith pattern（避免 Task.Run + appLifetime 兩層包裝）
+                _ = router.HandlePipelineAsync(group, appLifetime.ApplicationStopping)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsFaulted) logger.LogError(t.Exception, "[Stage53A] HandlePipelineAsync 異常");
+                    }, TaskContinuationOptions.OnlyOnFaulted);
+                return;
+            }
+        }
+
         // Kickoff / Design 步驟交由 MeetingOrchestrationService
         if (step.AgentName.Equals(AgentNames.Kickoff, StringComparison.OrdinalIgnoreCase))
         {
