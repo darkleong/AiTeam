@@ -70,7 +70,7 @@
 | 議題 | 拍板 | 替代方案 |
 |---|---|---|
 | **議題 A：Stage 54 範圍** | **A1：4 件事一起做**（升級 + 抽 base class + idempotency + 53B follow-up 搭車）— Stage 49-53B 平均 540K 校準錨支持規模可控；4 件性質契合（Recovery 機制 + 重構性債務 + idempotency + follow-up 都跟 Crash Recovery 性質相關）| A2 純 base class 抽象（升級留 Stage 55 — Stage 55 戰略級子工作已夠多）/ A3 只升級不抽 base class（債務累積到 Stage 55）|
-| **議題 B：idempotency 機制** | **B1：🥇 用會議 state 自帶紀錄 check**（0 schema 變更，99% 防重複，毫秒級 race window 機率極低不踩）| B2 🥈 加 group-level marker DB column（100% 防重複，1 新欄位 + Migration）/ B3 🥉 加 idempotency_log table（重，可審計但 Stage 54 範圍超出）|
+| **議題 B：idempotency 機制** | **B2：🥈 加 round-aware marker DB column**（100% 防重複跨 Recovery + 多輪業務 — TaskGroups 加 `LastIssueCreatedRound` int? 欄位 + Migration）。**B1 已推翻**（Forge gate1 揭露 R5：DesignAdjustmentExecutor 加 IssueUrls check 會破壞 needs_adjustment 多輪業務 — Christ 重新評估後拍「Adjustment 觸發都會踩，不是機率問題」推翻 B1）| B1 用會議 state 自帶紀錄 check（已推翻 — needs_adjustment 多輪場景非罕見）/ B3 加 idempotency_log table（重，Stage 54 範圍超出）|
 
 ### Aria 拿捏（已決，純內部實作不對外議題）
 
@@ -82,7 +82,7 @@
 | 4 | base class 位置 | `src/AiTeam.Bot/Workflows/Common/`（新 Common 資料夾）或既有 namespace（Forge Plan Mode 拍板）|
 | 5 | 3 router 升級 ResumeStreamingAsync 對齊參照 | `FrameworkPipelineRouter.RecoverStuckFrameworkPipelineAsync` 既有實作（line 275-380）— LoadFromDbAsync + GetLatestCheckpoint + ResumeStreamingAsync rehydrate + WatchStreamAsync 等第一個 RequestInfoEvent / WorkflowOutputEvent |
 | 6 | Kickoff Stage 51 試點 know-how 保留紀律 | `ScanForBoolProperty(ckptValue, "midInterruptRequestPending")` 既有 check（FrameworkKickoffRouter line 332）必須保留在升級後的 ResumeStreamingAsync 流程內 — 等 Christ 回應狀態不算 stuck，不清 marker / 不 ResumeStreamingAsync rehydrate 重跑 |
-| 7 | idempotency check 具體機制（議題 B1 拍板細節）| **DesignRosaPreWorkExecutor + DesignAdjustmentExecutor**：執行前 check `state.IssueUrls != null && state.IssueUrls != ""` → log + 跳過 GitHub Issue 創建。**FrameworkKickoffRouter.CreateKickoffConfirmationAsync + FrameworkDesignRouter.FinalizeDesignAsync**：執行前 query `BossInteraction` table 看是否已有 `(GroupId, InteractionType)` matching pending interaction → 有則 log + 跳過 CreateInteractionAsync（具體 InteractionService method 由 Forge Plan Mode 拍板，可能需新加 `GetPendingInteractionAsync(groupId, type)` 公開 method 或 inline DB query）|
+| 7 | idempotency check 具體機制（議題 **B2** 拍板細節）| **DesignRosaPreWorkExecutor + DesignAdjustmentExecutor**：用 `TaskGroups.LastIssueCreatedRound` (int?) round-aware marker — RosaPreWork (Round 0) `if group.LastIssueCreatedRound != 0 → 創 + set 0`；Adjustment (Round N) `if group.LastIssueCreatedRound != N → 創 + set N`（多輪正常業務行為保留 + Recovery 重跑同 round 100% 防重複）。**FrameworkKickoffRouter + FrameworkDesignRouter CreateInteractionAsync**：用既有 `BossInteractionRepository.GetLatestForGroupByTypeAsync(groupId, type)` lookup（既有 method，不新加 API；type 字串 `"kickoff"` / `"design"` — Forge gate1 揭露 Aria 計劃書原寫 `"kickoff_confirmation"` 錯誤，校準為實際既有字串）|
 | 8 | Stage 53B follow-up #1 修法（Pipeline DevStage [BLOCKED] retry idempotency） | `MarkGroupDoneOrInterventionAsync` 內判斷 failed task 時，**忽略 IsFixLoop=true 後續有 newer success task 的舊 failed task**（DevStage [BLOCKED] retry 場景：Round 1 failed task 已被 Round 2 success task 取代，不該誤判 needs_intervention）— 對齊 Stage 53B follow-up FF 候選 #1「建議方向 ②」拍板 |
 | 9 | Stage 53B follow-up #2 修法（MockMode auto-approve BossInteraction）| MockMode flag = true 時，BossInteraction 創建後自動 set status=approved（避免 Christ/Forge 每次手動 DB approve）— 修在 InteractionService.CreateInteractionAsync 內或新加 MockMode hook，由 Forge Plan Mode 拍板 |
 | 10 | Stage 53B follow-up #4 修法（MockClaudeCodeService dead code 清理） | RunReviewAsync / RunAsync / RunQaAsync 三 method 在 Mock arch 下被 3 agent service early return bypass — 直接刪除 method body（保留 throw NotImplementedException 給未來警示），或加 `[Obsolete]` attribute |
@@ -97,7 +97,7 @@
 | **0** | **Spike 第一步：read 對齊範圍**（Forge Plan Mode 第一步）— read FrameworkPipelineRouter.RecoverStuckFrameworkPipelineAsync line 275-380 既有 ResumeStreamingAsync 完整實作（rehydrate + Agent task requeue 機制） + 4 個 CheckpointStore 99% 重複結構 + KickoffMidInterruptTriggerStore Stage 51 試點 know-how + state.IssueUrls / BossInteraction(group_id, type) lookup pattern | XS |
 | **1** | 抽 4 CheckpointStore base class（`FrameworkCheckpointStoreBase` + 4 子類各自實作 abstract `ReadJsonFromDbAsync` / `WriteJsonToDbAsync`） | M |
 | **2** | 3 router RecoverStuck*Async 升級 ResumeStreamingAsync — Appeal / Kickoff / Design 對齊 Pipeline pattern；Kickoff 升級時保留 Stage 51 試點 `MidInterruptRequestPending` check（等人類回應不算 stuck）| M |
-| **3** | 4 處 side effect idempotency check 加固（用 state.IssueUrls / BossInteraction (group_id, type) lookup） | S |
+| **3** | 4 處 side effect idempotency check 加固 — TaskGroups 加 `LastIssueCreatedRound` (int?) 欄位 + Migration（B2 拍板） + DesignRosaPreWork / DesignAdjustment 用 round-aware marker check + Kickoff/Design CreateInteractionAsync 用既有 BossInteractionRepository lookup | M |
 | **4** | Stage 53B follow-up #1 搭車：MarkGroupDoneOrInterventionAsync 改忽略 IsFixLoop=true 後續有 newer success task 的舊 failed task | S |
 | **5** | Stage 53B follow-up #2 + #4 順手：MockMode auto-approve BossInteraction + MockClaudeCodeService dead code 清理 | XS |
 | **6** | Mock 場景擴充 + Forge 自驗（4 個 framework Recovery 場景含 idempotency check 觸發 + 1 場景 Stage 53B follow-up #1 retry 場景）| M |
@@ -161,16 +161,20 @@ Stage 53A know-how 全複用，無新 framework 機制需驗。若實作期揭�
 
 **Kickoff 特殊紀律**（Stage 51 試點 know-how 保留）：升級後流程 LoadFromDbAsync 之後**先檢查** `ScanForBoolProperty(ckptValue, "midInterruptRequestPending")` — true 則保留 marker 不 ResumeStreamingAsync rehydrate（等 BossInteraction 觸發 resume）；false 才走 ResumeStreamingAsync 流程。
 
-### 子項 3：4 處 side effect idempotency 加固
+### 子項 3：4 處 side effect idempotency 加固（B2 拍板）
+
+新加 DB 欄位：`TaskGroups.LastIssueCreatedRound` (int?)，Migration `Stage54TaskGroupIssueCreatedMarker`。
 
 | 點位 | check 條件 | 行為 |
 |---|---|---|
-| `DesignRosaPreWorkExecutor.cs:75` | `!string.IsNullOrEmpty(state.IssueUrls)` | log「Recovery 重跑偵測到 IssueUrls 已 set，跳過 GitHub Issue 創建」+ continue |
-| `DesignAdjustmentExecutor.cs:108` | `!string.IsNullOrEmpty(state.IssueUrls)` | 同上 |
-| `FrameworkKickoffRouter.cs:672` CreateKickoffConfirmationAsync | `BossInteraction` table 查 `(GroupId == group.Id, InteractionType == "kickoff_confirmation", Status == "pending")` 是否已存在 | 有則 log「Recovery 重跑偵測到 pending kickoff_confirmation，跳過 CreateInteractionAsync」+ return |
-| `FrameworkDesignRouter.cs:518` FinalizeDesignAsync | 同上 type 改 "design_confirmation" | 同上 |
+| `DesignRosaPreWorkExecutor.cs:75`（Round 0）| `group.LastIssueCreatedRound != 0` | 創 Issue + set `LastIssueCreatedRound = 0`；否則 log「Recovery 重跑同 Round 偵測 marker 已 set，跳過」+ continue |
+| `DesignAdjustmentExecutor.cs:108`（Round N）| `group.LastIssueCreatedRound != N` | 創 Issue + set `LastIssueCreatedRound = N`；否則同上跳過。**保留多輪正常業務行為**（不同 round 觸發都會創新 Issue）|
+| `FrameworkKickoffRouter.cs:672` CreateKickoffConfirmationAsync | `BossInteractionRepository.GetLatestForGroupByTypeAsync(groupId, "kickoff")` 回傳非 null 且 `Status == "pending"` | 有則 log「Recovery 重跑偵測 pending kickoff，跳過 CreateInteractionAsync」+ return |
+| `FrameworkDesignRouter.cs:518` FinalizeDesignAsync | 同上 type 改 `"design"` | 同上 |
 
-具體 InteractionService API（既有 method 或新加 `GetPendingInteractionAsync(groupId, type)`）由 Forge Plan Mode 拍板。
+**B2 vs B1 trade-off 說明**：B1（用 state.IssueUrls check）會破壞 needs_adjustment 多輪業務（Adjustment Round N 看到 IssueUrls != null 跳過 → Round 2 不創新 Issue）。B2 用 round-aware marker — Recovery 重跑同 round 100% 防重複 + 多 round 推進保留正常業務行為，trade-off 完全解。
+
+BossInteraction 部分用既有 `BossInteractionRepository.GetLatestForGroupByTypeAsync` 既有 method（不需新加 API），type 字串 `"kickoff"` / `"design"`（**校準**：原計劃書議題 7 寫 `"kickoff_confirmation"` 是錯誤，Forge gate1 揭露既有字串為 `"kickoff"`）。
 
 ### 子項 4：Stage 53B follow-up #1 搭車
 
@@ -343,14 +347,12 @@ Stage 53A know-how 全複用，無新 framework 機制需驗。若實作期揭�
 - 子項 0 read F3 對齊 Stage 51 既有 line 329-339 + 365-379 check 邏輯
 - 場景 E 專門驗證 MidInterruptRequestPending Recovery 不破壞
 
-### 3. idempotency check 邊界 race window（極低）
+### 3. idempotency check race window（已解 — B2 拍板後）
 
-**風險**：B1 拍板「用會議 state 自帶紀錄 check」99% 防重複，但毫秒級 race window（crash 在「創 Issue」與「state.IssueUrls 寫入」之間）仍會重複。
-
-**緩解**：
-- B1 拍板已接受 99% trade-off（毫秒級 window 在 production 幾乎不會踩，100% 防重複的 schema 變更成本不對等）
+**原 B1 拍板已推翻**（Forge gate1 揭露 R5 + Christ 重新拍板 B2）：
+- 原 B1 用 `state.IssueUrls` check 99% 防重複，但漏估非罕見場景 — DesignAdjustmentExecutor 多輪 needs_adjustment 業務行為（Adjustment 觸發都會踩，不是機率問題）
+- 改 B2 加 round-aware marker DB 欄位（`TaskGroups.LastIssueCreatedRound` int?）— 100% 防重複跨 Recovery 重跑 + 保留多輪正常業務
 - log 加 idempotency check 觸發 / 跳過記錄（debug 用）
-- 若 production 真踩到（極低機率）→ Stage 55+ 評估升級為 B2 加 DB marker
 
 ### 4. Stage 53B follow-up #1 修法影響 legacy 路徑（低）
 
@@ -473,3 +475,4 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-03 | 初版規劃書建立（Aria）—— v4 漸進遷移第七步 Stage 54：Crash Recovery 全切 framework Checkpointing + 4 CheckpointStore 抽 base class + side effect idempotency 加固 + Stage 53B follow-up 搭車（A1 4 件事一起做 + B1 🥇 用會議 state 自帶紀錄 check + Aria 拿捏 abstract method base class + 不抽 mapping helper + 5 Mock 場景含 Crash Recovery 4 個 framework path + idempotency check + 53B follow-up #1 retry 場景）。**規劃前期已 grep**：4 個 RecoverStuck*Async method body + 4 個 CheckpointStore 完整結構 + side effect 散落點（CreateIssueAsync / CreateInteractionAsync）+ MidInterruptRequestPending 機制（Stage 51 試點）+ MarkGroupDoneOrInterventionAsync caller 結構 + DesignState.IssueUrls 欄位 — 對齊自省點 #23 規劃前期 grep 紀律。|
+| v1.1 | 2026-05-03 | Forge gate1 揭露 R5 + Christ 重新拍板 — **議題 B 從 B1 改 B2**（用 `state.IssueUrls` check 會破壞 needs_adjustment 多輪業務 → 改加 `TaskGroups.LastIssueCreatedRound` (int?) round-aware marker DB 欄位 + Migration `Stage54TaskGroupIssueCreatedMarker`）。子項 3 規模 S → M（含 DB 欄位 + Migration）。風險點 R5 標「已解」。BossInteraction idempotency type 字串校準為 `"kickoff"` / `"design"`（原計劃書 `"kickoff_confirmation"` 錯誤）。caller 對齊更新：MarkGroupDoneOrInterventionAsync 7 處 caller（3 處 TaskGroupService + 1 處 NotifyMergeStageExecutor + 3 處 QaCoordinationService — Forge gate1 grep 比 Aria 預掃完整）。**Aria gate1 教訓**：B1 拍板時漏估「多輪業務行為差異」非罕見場景，Forge 揭露 R5 是 Aria 預掃 grep 紀律（自省點 #23）的反例 — 應在 grep 「side effect 散落點」時同步 grep 「Executor 多輪呼叫場景」確認 idempotency check 不破壞既有業務。|
