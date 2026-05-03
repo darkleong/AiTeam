@@ -63,6 +63,13 @@
                 @* Stage 46：FF 三十五 自動拆任務 2 場景 *@
                 <MudSelectItem Value="@("split_task_propose_accept")">🪓 Stage46 — 拆 task 採納成功（拆 3 sub-task → Sequential 全跑通）</MudSelectItem>
                 <MudSelectItem Value="@("split_task_subtask_fail_intervention")">🛑 Stage46 — 拆 task Phase 2 失敗（epic 部分暫停）</MudSelectItem>
+                @* Stage 53B：4 子流程 framework 化 6 場景（v4 漸進遷移第六步驗收）*@
+                <MudSelectItem Value="@("framework_pipeline_fix_loop_recover_round1")">🔧 Stage53B — fix loop Round 1 fail → Round 2 pass</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_fix_loop_max_iter")">🛑 Stage53B — fix loop max 3 輪 → intervention</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_dev_blocker_appeal")">🚧 Stage53B — Dev [BLOCKED] → Petra continue → Round 2 pass</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_qa_no_tests_dynamic")">🧪 Stage53B — QA no_tests → Petra approve → Doc</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_reviewer_fallback_dynamic")">🔁 Stage53B — Reviewer Critical + Petra revise → fix loop</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_fix_loop_crash_recovery")">💥 Stage53B — fix loop Crash Recovery（DevFix yield 期間 docker restart）</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">
