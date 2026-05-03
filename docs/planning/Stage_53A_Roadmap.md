@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 7 Stage 路線第五步（議題 A 拆 Stage 後 Stage 53 進一步拆 53A/53B，v4 路線 7→8 Stage）— 不對應特定 active FF
 > 對應版本：**v3.39.0**（v4 漸進遷移第五個產生版本變動的 Stage）
 > 建立日期：2026-05-03
-> 狀態：✅ **Forge 實作完成 + Build 0 Error**（2026-05-03，3 session 連跑 + Aria 議題 G3 修正方案 C 拍板）
-> 文件版本：v2.0（Forge 結案第一段）
+> 狀態：✅ **完成**（2026-05-03，3 session 連跑 + 議題 G3 修正方案 C 拍板 + 驗收期 4 follow-up 修畢 + 6 場景驗收通過）
+> 文件版本：v2.1（Forge 結案第一段含驗收期紀錄）
 
 ---
 
@@ -668,6 +668,64 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 
 5. **Aria 時序紀律**：5 fallback 點 Executor 統一 ClearMarkerAndFallbackAsync helper（先 ExecuteUpdateAsync 同步 await 清 marker → 再 SendMessageAsync(PipelineFallbackBridge)）— 避免 Dev_fix / 重產 callback race condition
 
+### 驗收結果（6 場景）
+
+驗收期 Forge 自驗（Christ 給 Forge full 權限 + docker 控制 + mock delay 拉長 60s 自驗 SIGTERM Recovery）：
+
+| # | 場景 | 驗證方式 | 結果 |
+|---|---|---|---|
+| **A** | UseFrameworkPipeline=false legacy 行為不變 | log query 驗證 4 Recovery hook query `PipelineFrameworkStateJson IS NULL` 排除條件 + UseFrameworkPipeline 預設 fallback false | ✅ |
+| **B** | happy_path 完整跑通 | `framework_pipeline_happy_path` Mock：Pipeline 5 stage（DevPlan→Dev→Reviewer→QA→Doc→NotifyMerge）+ J1 yield-resume + 5 PortId routing 全綠；group.Status=done + 1 merge_notify + 1 task/agent | ✅（修 follow-up #1+#2 後二次驗證）|
+| **C** | dev_plan_resume Bot restart 自動 Recovery | Mock delay 60s + DevPlanStage yield 後 1 秒 `docker compose restart aiteam-bot` → 自動 Recovery rehydrate + follow-up #4 自動 requeue Dev_plan task → Pipeline 自動跑通至 done | ✅（修 follow-up #4 後二次驗證）|
+| **D** | dev_resume Bot restart 自動 Recovery | 同 C 但 timing 在 Dev stage → 自動 Recovery + follow-up #4 自動 requeue Dev task → 自動跑通 | ✅ |
+| **E** | qa_no_tests routing（C2 整合）| 程式碼路徑審視（QaStageExecutor 第二 handler call HandleQaCompletedAsync 同步 await + follow-up #1 修法 line 119-135 加 PipelineFrameworkStateJson != null skip fire next 判斷）| ✅ 路徑審視通過（follow-up #3 留 Stage 53B 一併實作 Mock 特殊行為動態驗證）|
+| **F** | reviewer_fallback 53A→53B fallback | 程式碼路徑審視（ReviewerStageExecutor 三種 routing：Skipped 放行 / Vera 失敗放行 / 成功觸發 RunPetraGateAsync 同步 await → fail → fallback reviewer_critical → FinalizePipelineAsync FireStepsAsync(Dev, IsFixLoop:true)）| ✅ 路徑審視通過（同 E）|
+
+### 驗收後修正（4 條 follow-up）
+
+#### follow-up #1（commit 7a100e7）：QaCoordinationService Pipeline path skip fire next（議題 G3 同類問題在 QA 重演）
+
+**問題**：場景 B 揭露 Doc task 被 enqueue 2 次 → 第 2 次 callback 走 legacy 開第 2 個 merge_notify。
+
+**根因**：`QaCoordinationService.HandleQaCompletedAsync` line 93-108 happy path（status=passed）內 `tgs.FireStepsAsync(decision.NextSteps)` 自動 fire Doc。同時 Pipeline QaStageExecutor 第二 handler `SendMessageAsync(DocStageBridge)` → DocStageExecutor 又 fire Doc → race。
+
+**根因屬性**：**議題 G3 同類問題在 QA 重演** — Aria 規劃前期 grep 不夠深（既有方案 C 拍板含 inner FrameworkKickoffRouter / FrameworkDesignRouter 衝突，但漏 grep QaCoordinationService.HandleQaCompletedAsync passed 路徑內部 fire 行為）。
+
+**修法**：HandleQaCompletedAsync passed + no_applicable_tests approve 兩處加 `if (group.PipelineFrameworkStateJson != null) → log + return` 跳過 legacy GetDecision/FireStepsAsync/MarkDone（由 Pipeline NotifyMergeStageExecutor 接管）。
+
+#### follow-up #2（commit 7a100e7）：Pipeline NotifyMergeStage 補 MarkGroupDoneOrInterventionAsync
+
+**問題**：原 NotifyMergeStageExecutor 只 call NotifyBossMergeAsync（發 Discord embed + 開 BossInteraction），沒 call MarkGroupDoneOrInterventionAsync。場景 B group.Status=done 是靠 Bug #1 第二次 legacy fall through side effect 完成的。修 #1 後 group.Status 不會 mark Done → 必須補上。
+
+**修法**：NotifyMergeStageExecutor.HandleAsync 改為「MarkGroupDoneOrInterventionAsync → if Status=Done call NotifyBossMergeAsync else NotifyBossInterventionAsync」對齊 legacy QaCoordinationService L99-103 寫法。
+
+#### follow-up #4（commit dc5ff37）：Pipeline Recovery 接管 Bot restart 邊界 failed Agent task requeue
+
+**問題**：場景 C 自驗 docker compose restart aiteam-bot 在 Pipeline yield 期間 → Doc task 跑到一半被 OperationCanceledException 標 `Status="failed"` + Step="The operation was canceled." → AgentQueueProcessor.RecoverStuckTasksAsync 篩選只 requeue `QueueStatus="processing"` → failed task 不被處理 → Pipeline 永遠卡在對應 PortId 等永遠不來的 Agent callback → group.Status 永遠卡在 running + PipelineFrameworkStateJson 永遠 set。
+
+**根因屬性**：**Pipeline framework + AgentQueueService 整合在 Bot restart 邊界 unknown** — Aria 議題 12 升級 Recovery ResumeStreamingAsync rehydrate 已驗 framework state 層完整，但漏掉 Agent task 層 failed→requeue 整合。
+
+**修法**：FrameworkPipelineRouter.RecoverStuckFrameworkPipelineAsync 內 rehydrate 完成偵測 pending PortId 後，依 PortId → AgentName mapping（5 個獨立 PortId 對應 Dev_plan/Dev/Reviewer/QA/Doc）→ 找該 group 內對應 AssignedAgent + Status=failed task → ExecuteUpdateAsync 設 Status=queued/QueueStatus=queued → AgentQueueProcessor 主迴圈自然 pick up 重跑 → 跑完 callback 觸發 ResumeAfterAgentAsync 推進 Pipeline。
+
+新 helper：`RequeueFailedAgentTaskAsync(groupId, agentName, ct)` — Pipeline 自己接管整體 Recovery 完整性（不只 framework state rehydrate，也補 Agent task requeue）。
+
+#### follow-up #3 留 Stage 53B 範圍
+
+`framework_pipeline_qa_no_tests` / `framework_pipeline_reviewer_fallback` 場景 Mock 特殊行為（QA 回 Status=no_applicable_tests / Vera 回 CriticalReviewCount > 0）— MockClaudeCodeService 沒對應 if 分支，預設走 default happy path 不能 dynamic 驗證。Christ 拍板 2 同意延 Stage 53B 一併做（fix loop / appeal / QA fix loop / intervention 子流程一起實作 Mock 特殊行為更乾淨）。
+
+### Mock 覆蓋情況
+
+| 6 場景 | 動態驗證 | 靜態路徑審視 |
+|---|---|---|
+| A legacy 不變 | ✅ | — |
+| B happy_path | ✅（含 follow-up #1+#2 二次驗證）| — |
+| C dev_plan_resume | ✅（含 follow-up #4 二次驗證）| — |
+| D dev_resume | ✅（含 follow-up #4 mapping 驗）| — |
+| E qa_no_tests | ⏸️（Stage 53B follow-up #3）| ✅ |
+| F reviewer_fallback | ⏸️（Stage 53B follow-up #3）| ✅ |
+
+**4 場景 dynamic 驗證 + 2 場景靜態審視通過**（超出 plan 預期 5 靜態 + 1 線下 SIGTERM 慣例）。Forge 用 docker compose restart aiteam-bot 直接驗 Recovery（Christ 拍板 Stage 49 放寬 docker process restart 給 Forge）。
+
 ### 踩坑紀錄彙整
 
 #### 議題 G3 假設失誤揭露（戰略級，跨 Stage 53B/55 預警）
@@ -679,11 +737,32 @@ Forge Session A 子項 5 實作期 grep 真實 inner code 揭露 inner router po
 #### InProcessExecution.RunStreamingAsync 5-arg signature
 Forge Session B 第一次 build 報 `cannot convert from 'CheckpointManager' to 'string?'` — 實際 signature `(workflow, initialState, manager, sessionId, ct)` 含 sessionId（不是 4 args）。對齊 FrameworkKickoffRouter L409 / FrameworkDesignRouter L382 既有 pattern。
 
+#### 議題 G3 同類問題在 QA 重演（驗收期戰略級揭露 — follow-up #1）
+Aria 議題 G3 Session A 修正方案 C 時只 grep inner FrameworkKickoffRouter / FrameworkDesignRouter 的 post-meeting actions，**漏 grep `QaCoordinationService.HandleQaCompletedAsync` passed 路徑內部 `tgs.FireStepsAsync(decision.NextSteps)` 自動 fire Doc** — 場景 B 驗收揭露 Doc 重複 enqueue 2 次 race。**Stage 53B+ 預警**：framework Workflow 同步 await call 既有 service method 時，必須 grep 該 method 內部所有 fire next/MarkDone/NotifyBoss side effects，每處都需 `if (group.PipelineFrameworkStateJson != null) skip` 判斷。Pipeline 主迴圈職責 = 完整接管推進 + mark Done + Notify。
+
+#### Pipeline NotifyMergeStage 沒 mark group.Status=Done（驗收期 follow-up #2）
+原 NotifyMergeStageExecutor 只 call NotifyBossMergeAsync（發 Discord embed + 開 BossInteraction），沒 call MarkGroupDoneOrInterventionAsync。場景 B 第一次驗收 group.Status=done 是靠 follow-up #1 race 第二次 legacy fall through side effect 完成 — 修 follow-up #1 後 group.Status 永遠卡 running。修法：對齊 legacy QaCoordinationService L99-103 寫法（MarkDone → if Status=Done NotifyBossMerge else NotifyBossIntervention）。**Stage 53B+ 預警**：Pipeline 終結 Executor（NotifyMergeStage / Fallback）必須完整對齊 legacy「MarkDone + NotifyBoss」整合慣例，不能只做一半。
+
+#### Bot restart 邊界 Agent task failed→requeue（驗收期 follow-up #4）
+Pipeline framework + AgentQueueService 在 Bot restart 邊界踩雷：`OperationCanceledException` 標 task `Status="failed"` 不是「跑到一半中斷」，AgentQueueProcessor.RecoverStuckTasksAsync 只 requeue `QueueStatus="processing"` → failed task 不被處理 → Pipeline 卡在 PortId 等永遠不來 callback。修法：Pipeline Recovery 自己接管 Agent task requeue（5 PortId → AgentName mapping helper）。**Stage 53B+ 預警**：framework Workflow 內 enqueue legacy AgentQueueService 整合 idempotency 風險（Aria 提醒 #3 議題 15 警告的反面）— 不只重複 enqueue 風險，也有 failed→requeue 缺口。
+
+#### Mock delay AppSettings cache TTL 邊界（驗收期工具坑）
+場景 C/D 自驗時設 `Mock:DelayMinMs=60000` 想拉長 mock delay 給 SIGTERM timing 充裕，但 `/internal/cache/invalidate?scope=agents` reload 後 5 stage 仍在 ~10 秒跑完（cache 未生效或部分生效）。最終靠**精準 timing**（grep DevPlanStage yield log 後 1 秒 docker restart）解決。**Stage 53B+ 預警**：AppSettings cache 動態調整可能有延遲 — 自驗時準備好「精準 timing 等 log 觸發」備案，不要全靠 mock delay 拉長。
+
 ### Aria 校準錨候選（Aria 第二段填）
 
-> Forge 預估 ×（待 Aria 校準）— 本次特殊：Session A 子項 5 實作期揭露 Aria 規劃前期假設失誤（議題 G3）+ 即時跨 session 拍板修正方案 C，是混合型 Stage 首次出現「規劃 → 實作 → Aria 拍板修正 → 範圍縮小 -40%」流程。
+> Forge 預估 ×（待 Aria 校準）— 本次特殊複合：
+> 1. **Session A 子項 5 實作期揭露 Aria 規劃前期假設失誤（議題 G3）**+ 即時跨 session 拍板修正方案 C，是混合型 Stage 首次出現「規劃 → 實作 → Aria 拍板修正 → 範圍縮小 -40%」流程
+> 2. **驗收期 4 follow-up（戰略級含 #1 議題 G3 同類問題在 QA 重演 + #4 Bot restart 邊界 Pipeline 自接 Recovery 完整性）** — 揭露「framework Workflow 同步 await call 既有 service method」整合 idempotency 議題的兩個維度（fire next 衝突 / failed→requeue 缺口）
+> 3. **Forge 自驗超出 plan 預期**（4 dynamic + 2 靜態 vs plan 5 靜態 + 1 線下慣例）— Christ 給 docker compose restart 權限 + 60s mock delay 拉長自驗 SIGTERM Recovery，**首次 Forge 自己跑通 Crash Recovery 完整循環**
 
-3 session 連跑 + Build 0 Error + 0 follow-up（驗收期視 Christ 線下實跑可能補）。
+3 session 連跑 + 4 follow-up commit + 6 場景驗收 + Build 0 Error。
+
+### Christ 拍板紀錄（forge-end 結案時）
+
+- **拍板 1（production 保留）**：v3.39.0 上線狀態 `Workflow:UseFrameworkPipeline = true` 留著（Pipeline framework path 全自動恢復機制已驗）+ Mock delay 還原 1000-3000ms 預設值。Christ 真實任務 NewFeature 主路徑會走 Pipeline framework path
+- **拍板 2（Stage 53B 延 + Aria 補 caveat）**：follow-up #3 場景 E/F Mock 特殊行為動態驗證留 Stage 53B 一併實作（fix loop / appeal / QA fix loop / intervention 子流程一起做更乾淨）— Aria 結案第二段補 caveat 紀錄
+- **拍板 3（Aria 處理 CHANGELOG / Future_Feature）**：v3.39.0 CHANGELOG entry + Future_Feature 同步交 Aria 結案第二段
 
 ---
 
@@ -693,3 +772,4 @@ Forge Session B 第一次 build 報 `cannot convert from 'CheckpointManager' to 
 |---|---|---|
 | v1.0 | 2026-05-03 | 初版規劃書建立（Aria）—— v4 漸進遷移第五步 Stage 53A：macro pipeline NewFeature 主路徑切 framework Workflow（happy path 限定）（A2 拆 Stage 53A/53B + B 拆 53B + C2 QaStage Executor 內 call 既有 service + D2 兩項 spike + E1 三 flag 連動 + F-α 層級隔離跨 Stage 修改既有 router + G3 framework-in-framework + H-mid 6 Mock 場景 + I2 + 5 fallback to legacy + J1 混合 lifecycle yield-resume）|
 | v2.0 | 2026-05-03 | Forge 結案第一段（3 session 連跑：Session A 296d44e + b23b760 / Session B 4ec7a35 / Session C 含本 commit）。**議題 G3 修正方案 C 拍板**：53A 範圍縮小到 5 Agent stage（DevPlan/Dev/Reviewer/QA/Doc），Kickoff/Design 留 legacy（Stage 55 收尾整合）；規模 -40% 守 A2 ×0.96-1.25 區間 + 戰略價值 ~70% 保留。**Pipeline 主入口分流位置改 FireOneStepAsync line 461 加 Dev_plan 第三條 single point of entry**（Forge 觀察 6 處 fire Dev_plan 散點全經過 FireOneStepAsync 統一節流）+ sub-task ParentGroupId == null 排除（Stage 46 機制 Stage 55 收尾整合）+ Aria 時序紀律（fallback 5 點先清 marker 再 SendMessage 避免 Dev_fix race）+ 議題 12 升級 ResumeStreamingAsync rehydrate（不採降級重跑） + 議題 9 修法（5 fallback 點主動 call legacy method 接管）+ 議題 3 RequestPort 5 獨立 PortId + 5 distinct Request/Response 型別。Build 0 Error / Migration scaffold 完成（Bot 啟動 MigrateAsync 自動套用）。|
+| v2.1 | 2026-05-03 | Forge 結案第一段含驗收期紀錄。**驗收期 4 follow-up commit**：① #1 7a100e7 — QaCoordinationService Pipeline path skip fire next（**議題 G3 同類問題在 QA 重演** — Aria 規劃前期 grep 不夠深，方案 C 修正只覆蓋 Kickoff/Design 漏 QaCoordination passed 路徑 fire Doc 衝突）② #2 7a100e7 — NotifyMergeStage 補 MarkGroupDoneOrInterventionAsync（修 #1 後 group.Status 不會 mark Done 必須補）③ #3 留 Stage 53B（Mock 場景 E/F 特殊行為跟 fix loop / appeal 子流程一起實作）④ #4 dc5ff37 — Pipeline Recovery 接管 Bot restart 邊界 failed Agent task requeue（**Pipeline framework + AgentQueueService 整合 unknown** — Bot restart OperationCanceledException 標 task failed，AgentQueueProcessor.RecoverStuckTasksAsync 只 requeue processing 不 requeue failed → Pipeline 卡 PortId 等永遠不來 callback；修法 5 PortId → AgentName mapping helper requeue）。**6 場景驗收**：A/B/C/D 4 場景 dynamic 驗證（Christ 給 docker restart 權限 + 60s mock delay 拉長自驗 SIGTERM Recovery，**首次 Forge 自跑 Crash Recovery 完整循環**）+ E/F 2 場景靜態路徑審視通過。**Christ 拍板**：① production 保留 UseFrameworkPipeline=true ② Stage 53B 延後處理 follow-up #3 + Aria 補 caveat ③ CHANGELOG / Future_Feature 同步交 Aria 第二段。|
