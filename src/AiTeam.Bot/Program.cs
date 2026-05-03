@@ -157,6 +157,13 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Design.DesignCheckpointStore>();
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Design.DesignWorkflowFactory>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkDesignRouter>();
+// Stage 53A：framework Pipeline Workflow（v4 漸進遷移第五步） — macro-orchestration 5 Agent stage（Aria 方案 C 拍板：Kickoff/Design 留 legacy，Stage 55 收尾整合）
+// PipelineCheckpointStore Singleton（process 生命週期 in-memory cache + 同步寫 task_groups.PipelineFrameworkStateJson）
+// PipelineWorkflowFactory Singleton；FrameworkPipelineRouter 子項 7 寫，預留註冊位置
+// feature flag 預設 false（Workflow:UseFrameworkPipeline AppSettings key），三 flag 連動：UseFrameworkKickoff + UseFrameworkDesign 都 true 才有意義
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Pipeline.PipelineCheckpointStore>();
+builder.Services.AddSingleton<AiTeam.Bot.Workflows.Pipeline.PipelineWorkflowFactory>();
+// builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkPipelineRouter>();  // 子項 7 完成後啟用
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();
