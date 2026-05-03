@@ -120,17 +120,29 @@ public class InteractionService(
 
             // Stage 54 follow-up #2：MockMode auto-approve（避免 Christ/Forge 每次手動 DB approve）
             // 對齊 Stage 53B 驗收期 docker exec psql 手動 update 的工具增強
+            // 注意：source 必須用 "dashboard" 對齊 InteractionProcessor.GetDashboardResponsesAsync 消費路徑
+            // （source="mock" 不會被 InteractionProcessor 輪詢消費，導致 responded interaction 無人處理 → 流程卡死）
             try
             {
                 var appSettings = scope.ServiceProvider.GetRequiredService<AppSettingsService>();
                 if (await appSettings.GetBoolAsync("MockMode", false))
                 {
-                    var approved = await repo.RespondAsync(interaction.Id, "auto_approved", "mock");
+                    // ResponseAction 對齊 InteractionType 的 Continue / Ack action key
+                    // InteractionProcessor 會 ProcessBossResponseAsync(type, action, ...) → 推進流程
+                    var autoAction = interactionType switch
+                    {
+                        "kickoff"  => "kickoff_continue",
+                        "design"   => "design_continue",
+                        "proposal" => "propose_yes",
+                        // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
+                        _          => "ack",
+                    };
+                    var approved = await repo.RespondAsync(interaction.Id, autoAction, "dashboard");
                     if (approved)
                     {
                         logger.LogInformation(
-                            "[Stage54] MockMode auto-approve interaction (Id={Id}, Type={Type})",
-                            interaction.Id, interactionType);
+                            "[Stage54] MockMode auto-approve interaction (Id={Id}, Type={Type}, Action={Action})",
+                            interaction.Id, interactionType, autoAction);
                         _ = pushService.PushInteractionUpdateAsync();
                     }
                 }
