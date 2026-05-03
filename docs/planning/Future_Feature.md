@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.69
+> 版本：v7.70
 > 建立日期：2026-04-01
 > 最後更新：2026-05-03
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -11,6 +11,7 @@
 > **2026-05-02 v7.67**：Stage 50 v4 漸進遷移第二步完成（v3.36.0）— Kickoff Meeting 切 framework Group Chat（A2 fan-out/fan-in 路線）+ feature flag + 3 follow-up 揭露 framework 1.3.0 fan-out 拓撲首次 production 整合的 streaming dispatch + type validation 兩層額外要求。6 Stage 遷移 **2/6** 達成。
 > **2026-05-02 v7.68**：Stage 51 ⭐ v4 漸進遷移第三步完成（v3.37.0）— framework HITL pattern 試點（Kickoff Workflow 中途介入）+ feature flag。**6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過**（含跨 process restart requestId stable 證據鏈，requestId `0daeccaa72714604812add3427ba4d9d` 在 yield emit + Bridge resume + Recovery 跨重啟全程 stable）。6 Stage 遷移 **3/6** 達成。
 > **2026-05-03 v7.69**：Stage 52 v4 漸進遷移第四步完成（v3.38.0）— Design Meeting B3 路線（fan-out/fan-in + 條件式 Demi + needs_adjustment B2 子流程 + 拆 task 提案後置）。議題 A 拆 Stage：原 v4 路線 Stage 52 含 WorkflowEngine pipeline 拆出獨立 Stage 53，**v4 路線 6→7 Stage**。6 場景全綠 + 2 follow-up（戰略級 framework AddEdge type filter 不 source-aware 揭露，修法拆 plan executor）。Aria 校準錨 **×1.05**（混合型第 4 資料點 mid 中段，×0.96-1.25 四資料點穩定）。7 Stage 遷移 **4/7** 達成。
+> **2026-05-03 v7.70**：Stage 53A ⭐ v4 漸進遷移第五步完成（v3.39.0）— macro pipeline NewFeature 主路徑切 framework Workflow（**Aria 方案 C** Pipeline 從 Dev_plan 階段啟動，Kickoff/Design 留 legacy）。**Aria Session A 子項 5 實作期揭露議題 G3 假設失誤**（inner Meeting router post-meeting actions 衝突）→ 即時拍板方案 C 範圍 -40%；**驗收期 4 follow-up 戰略級含 #1 議題 G3 在 QA 重演 + #4 Pipeline Recovery 自接 Agent task requeue**（Aria 規劃前期 grep 紀律必升級為「對所有既有 service finalize/post-completion actions 都 grep」+ Stage 53B/54 必補 Agent task 層 Recovery 設計）。6 場景驗收（4 dynamic + 2 靜態，**首次 Forge 自跑 SIGTERM/SIGKILL Crash Recovery 完整循環**）。Aria 校準錨 **×0.73**（混合型第 5 資料點 mid 帶下半，區間擴展為 ×0.73-1.25 — 方案 C 拆 Stage + Stage 51 know-how 複用 + 0 Aria gate1 揭露三因素疊加）。**v4 路線 7→8 Stage**（53 拆 53A/53B），8 Stage 遷移 **5/8** 達成。Christ 拍板 production 保留 UseFrameworkPipeline=true。
 
 ---
 

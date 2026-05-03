@@ -749,14 +749,31 @@ Pipeline framework + AgentQueueService 在 Bot restart 邊界踩雷：`Operation
 #### Mock delay AppSettings cache TTL 邊界（驗收期工具坑）
 場景 C/D 自驗時設 `Mock:DelayMinMs=60000` 想拉長 mock delay 給 SIGTERM timing 充裕，但 `/internal/cache/invalidate?scope=agents` reload 後 5 stage 仍在 ~10 秒跑完（cache 未生效或部分生效）。最終靠**精準 timing**（grep DevPlanStage yield log 後 1 秒 docker restart）解決。**Stage 53B+ 預警**：AppSettings cache 動態調整可能有延遲 — 自驗時準備好「精準 timing 等 log 觸發」備案，不要全靠 mock delay 拉長。
 
-### Aria 校準錨候選（Aria 第二段填）
+### Aria 校準錨（混合型第 5 資料點 ×0.73）
 
-> Forge 預估 ×（待 Aria 校準）— 本次特殊複合：
-> 1. **Session A 子項 5 實作期揭露 Aria 規劃前期假設失誤（議題 G3）**+ 即時跨 session 拍板修正方案 C，是混合型 Stage 首次出現「規劃 → 實作 → Aria 拍板修正 → 範圍縮小 -40%」流程
-> 2. **驗收期 4 follow-up（戰略級含 #1 議題 G3 同類問題在 QA 重演 + #4 Bot restart 邊界 Pipeline 自接 Recovery 完整性）** — 揭露「framework Workflow 同步 await call 既有 service method」整合 idempotency 議題的兩個維度（fire next 衝突 / failed→requeue 缺口）
-> 3. **Forge 自驗超出 plan 預期**（4 dynamic + 2 靜態 vs plan 5 靜態 + 1 線下慣例）— Christ 給 docker compose restart 權限 + 60s mock delay 拉長自驗 SIGTERM Recovery，**首次 Forge 自己跑通 Crash Recovery 完整循環**
+**精確計算**：
+- Aria Charter 預估範圍 540-1000K（Roadmap Model 段七項公式），中位 **770K**
+- Forge 實際 context（Christ 紀錄）：Plan 186K → 修正 202K → Session A 393K → Session B 422K → Session C 456K → 驗收 540K → 結案 **562K**
+- 倍率 = 562 / 770 = **×0.73**（mid 帶下半，比 Stage 51 ×0.96 更低 — 混合型 5 資料點區間擴展為 ×0.73-1.25）
 
-3 session 連跑 + 4 follow-up commit + 6 場景驗收 + Build 0 Error。
+**為什麼比預期低 ~27%**：
+1. **方案 C 拆 Stage 後規模 -40%**（議題 A2 拆 53A/53B + Aria Session A 子項 5 拍板方案 C 範圍再縮）— Charter 沒重算，×0.73 反映方案 C 縮減效果
+2. **Stage 51 既有 know-how 直接複用**（ResumeStreamingAsync + RequestPort dual-handler + 跨 HTTP scope rehydrate）— 沒新機制驗證
+3. **Forge 全程一個 session 跑**（沒拆 Session — context 一路累積 562K vs plan 預估「拆 2-3 段」）— Opus 1M 56% 仍充裕
+4. **0 Aria gate1 揭露問題**（Session A/B/C 三輪 gate1 全綠 + 4 follow-up 是 Forge 自驗階段發現，含 #1 議題 G3 在 QA 重演 + #4 Pipeline Recovery 邊界）
+
+**戰略意義**：
+- 混合型 Stage 5 資料點區間 ×0.73-1.25（拉寬下界）— **方案 C 拆 Stage 戰術成功**：揭露假設失誤 → 即時拍板縮範圍 → 規模降 + 倍率降，守區間精神驗證
+- **議題 G3 同類問題在 QA 重演（戰略級 Aria 規劃失誤紀錄）**：Aria 規劃前期 grep 紀律應升級為「**對所有既有 service 的 finalize / post-completion actions 都 grep**」— 不只 inner FrameworkRouter，也含 QaCoordinationService / AppealOrchestrationService 等所有 framework Workflow 同步 await call 的 service method 內部 fire next/MarkDone/NotifyBoss 行為。Stage 53B/55 規劃時必先做此 grep
+- **議題 12 ResumeStreamingAsync rehydrate 升級已驗 framework state 層完整**，但 follow-up #4 揭露 **Agent task 層 failed→requeue 整合缺口**（Pipeline framework + AgentQueueService 整合在 Bot restart 邊界 unknown）— Stage 53B/54 規劃時必補 Agent task 層 Recovery 設計
+
+**Forge 自驗範圍超出 plan 預期**：4 dynamic + 2 靜態 vs plan 5 靜態 + 1 線下慣例（Christ 給 docker compose restart 權限 + 60s mock delay 拉長 SIGTERM Recovery 自驗）— **首次 Forge 自跑 Crash Recovery 完整循環**，Forge 自驗能力擴張持續驗證。
+
+**Christ 拍板 2 caveat（場景 E/F 實質驗證程度）**：
+- A baseline / B happy_path / C dev_plan_resume / D dev_resume — **4 場景 dynamic 驗證通過**
+- E qa_no_tests / F reviewer_fallback — Mock 特殊行為（QaCoordinationService 內部 no_tests routing / Vera Critical + Petra fail）留 Stage 53B 一併實作，**Stage 53A 路徑邏輯靜態審視通過 + dynamic 驗證留 Stage 53B 補**
+
+3 session 連跑 + 4 follow-up commit + 6 場景驗收（4 dynamic + 2 靜態）+ Build 0 Error。
 
 ### Christ 拍板紀錄（forge-end 結案時）
 
