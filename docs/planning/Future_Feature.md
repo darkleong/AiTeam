@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.70
+> 版本：v7.71
 > 建立日期：2026-04-01
 > 最後更新：2026-05-03
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -12,6 +12,7 @@
 > **2026-05-02 v7.68**：Stage 51 ⭐ v4 漸進遷移第三步完成（v3.37.0）— framework HITL pattern 試點（Kickoff Workflow 中途介入）+ feature flag。**6 場景全綠 + 0 follow-up + Aria spike 三項關注點實證通過**（含跨 process restart requestId stable 證據鏈，requestId `0daeccaa72714604812add3427ba4d9d` 在 yield emit + Bridge resume + Recovery 跨重啟全程 stable）。6 Stage 遷移 **3/6** 達成。
 > **2026-05-03 v7.69**：Stage 52 v4 漸進遷移第四步完成（v3.38.0）— Design Meeting B3 路線（fan-out/fan-in + 條件式 Demi + needs_adjustment B2 子流程 + 拆 task 提案後置）。議題 A 拆 Stage：原 v4 路線 Stage 52 含 WorkflowEngine pipeline 拆出獨立 Stage 53，**v4 路線 6→7 Stage**。6 場景全綠 + 2 follow-up（戰略級 framework AddEdge type filter 不 source-aware 揭露，修法拆 plan executor）。Aria 校準錨 **×1.05**（混合型第 4 資料點 mid 中段，×0.96-1.25 四資料點穩定）。7 Stage 遷移 **4/7** 達成。
 > **2026-05-03 v7.70**：Stage 53A ⭐ v4 漸進遷移第五步完成（v3.39.0）— macro pipeline NewFeature 主路徑切 framework Workflow（**Aria 方案 C** Pipeline 從 Dev_plan 階段啟動，Kickoff/Design 留 legacy）。**Aria Session A 子項 5 實作期揭露議題 G3 假設失誤**（inner Meeting router post-meeting actions 衝突）→ 即時拍板方案 C 範圍 -40%；**驗收期 4 follow-up 戰略級含 #1 議題 G3 在 QA 重演 + #4 Pipeline Recovery 自接 Agent task requeue**（Aria 規劃前期 grep 紀律必升級為「對所有既有 service finalize/post-completion actions 都 grep」+ Stage 53B/54 必補 Agent task 層 Recovery 設計）。6 場景驗收（4 dynamic + 2 靜態，**首次 Forge 自跑 SIGTERM/SIGKILL Crash Recovery 完整循環**）。Aria 校準錨 **×0.73**（混合型第 5 資料點 mid 帶下半，區間擴展為 ×0.73-1.25 — 方案 C 拆 Stage + Stage 51 know-how 複用 + 0 Aria gate1 揭露三因素疊加）。**v4 路線 7→8 Stage**（53 拆 53A/53B），8 Stage 遷移 **5/8** 達成。Christ 拍板 production 保留 UseFrameworkPipeline=true。
+> **2026-05-03 v7.71**：Stage 53B ⭐ v4 漸進遷移第六步完成（v3.40.0）— fix loop / appeal / QA fix loop / intervention 4 子流程切 framework + 5 fallback to legacy 點移除 + Stage 53A follow-up #3 場景 E/F 補 dynamic。**NewFeature 主路徑 + 子流程完整 Pipeline framework 化**達成。**議題 F-1 規劃前期 grep 紀律升級成功**（Aria 揭露 10+ 處 → Forge 第一手補強至 16 處 skip 修正 — AppealOrchestrationService 11 + QaCoordinationService 5）+ HandleDevBlockerAsync signature `Task` → `Task<BlockerDecision>` 升級給 Pipeline 自接管 routing。6 場景全綠 + 2 follow-up + **Forge 自驗能力突破**（/internal/mock/scenario HTTP API + auto-approver 全 6 場景含 Crash Recovery — Christ 線下實跑模式從「必要」轉「選擇性」）。Aria 校準錨 **×0.88**（混合型第 6 資料點 mid 帶中段；6 資料點區間穩定 ×0.73-1.25）。8 Stage 遷移 **6/8** 達成。
 
 ---
 

@@ -470,9 +470,24 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 
 1. **既有 service method signature 升級給 Pipeline path 用**（跨 Stage 預警）：Pipeline 內 call legacy service void method 時，可能無法分辨內部 routing 結果 → 議題 F-1 修正期主動評估 method signature 升級（`Task` → `Task<TDecision>`）給 Pipeline 用，比加 transient marker DB 欄位乾淨。Stage 55 收尾移除 5 fallback / J1 6 hooks 時可考慮回退 signature（若 legacy caller 全消除）
 
-### Aria 校準錨候選
+### Aria 校準錨（混合型第 6 資料點 ×0.68）
 
-待 Aria 結案第二段填（context 預估 470-840K，實際 ~500-600K Session A+B + 驗收期 ~250K = 總 ~750-850K，規模對齊「混合型第 6 資料點」中-上半範圍）
+**精確計算**：
+- Aria Charter 預估範圍 470-840K，中位 **655K**
+- Forge 實際 context（Christ 紀錄）：Plan 199K → 修正 214K → Session A 326K → Session B 401K → 驗收 571K → 結案 **578K**
+- 倍率 = 578 / 655 = **×0.88**（mid 帶中段，介於 Stage 53A ×0.73 與 Stage 51 ×0.96 之間）
+- *若用 Charter 上界 850K 算 = ×0.68（規模回升 vs Stage 53A 實證但仍守混合型 ×0.73-1.25 區間）*
+
+**為什麼比 Stage 53A ×0.73 略高**：
+1. **議題 F-1 多處 skip 修正規模較大**（16 處 vs Stage 53A 1 處）+ HandleDevBlockerAsync signature 升級 `Task<BlockerDecision>` 範圍變更
+2. **拓撲擴展**（+1 Executor + +1 PortId + 5 新 edge + WithOutputFrom 7 終結點 + DevPlanRetryBridge / DevRetryBridge self-loop）
+3. **Mock 場景 6 dynamic + 驗收能力突破**（/internal/mock/scenario HTTP API + BossInteraction auto-approver Forge 自驗全 6 場景含 Crash Recovery）
+
+**戰略意義**：
+- 混合型 Stage 6 資料點區間穩定 **×0.73-1.25**（49 ×1.25 / 50 ×1.09 / 51 ×0.96 / 52 ×1.05 / 53A ×0.73 / **53B ×0.88**）— 拆 Stage 守區間精神持續驗證
+- **議題 F-1 規劃前期 grep 紀律升級成功**（Stage 53A 議題 G3 在 QA 重演教訓 → 53B 規劃前期已揭露 10+ 處 + 實作期 grep 補強到 16 處）— Aria 規劃紀律進化
+- **Forge 自驗能力突破**（/internal/mock/scenario HTTP API + auto-approver）— Christ 線下實跑模式從「必要」轉「選擇性」，Stage 54+ 驗收期效率大幅提升
+- **Pipeline framework 完整化**達成 — NewFeature 主路徑 + 4 子流程 + 5 fallback 全移除 + J1 6 hooks 保留 legacy safety net
 
 ---
 
