@@ -163,7 +163,7 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkDesignRo
 // feature flag 預設 false（Workflow:UseFrameworkPipeline AppSettings key），三 flag 連動：UseFrameworkKickoff + UseFrameworkDesign 都 true 才有意義
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Pipeline.PipelineCheckpointStore>();
 builder.Services.AddSingleton<AiTeam.Bot.Workflows.Pipeline.PipelineWorkflowFactory>();
-// builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkPipelineRouter>();  // 子項 7 完成後啟用
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.FrameworkPipelineRouter>();
 // Stage 27a：Agent 佇列機制（AgentQueueProcessor 同時以 Singleton + HostedService 兩種方式註冊，共用同一實例）
 builder.Services.AddSingleton<AgentQueueService>();
 builder.Services.AddSingleton<AgentQueueProcessor>();
