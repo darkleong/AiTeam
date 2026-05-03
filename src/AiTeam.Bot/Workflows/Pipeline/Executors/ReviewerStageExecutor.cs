@@ -6,6 +6,7 @@ using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 
 namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 
@@ -30,8 +31,10 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 /// 紀律：fallback 時序 + type-explicit Bridge record + Stage 50 三件套。
 /// </summary>
 [SendsMessage(typeof(QaStageBridge))]
+[SendsMessage(typeof(DevFixStageBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(ReviewerCompletionRequest))]
+[YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class ReviewerStageExecutor : Executor
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -59,7 +62,7 @@ internal sealed partial class ReviewerStageExecutor : Executor
         if (group is null)
         {
             _logger.LogError("[Stage53A] ReviewerStage：找不到 Group={Id}，fallback", bridge.GroupId);
-            await ClearMarkerAndFallbackAsync(context, bridge.GroupId, "group_not_found", null);
+            await context.SendMessageAsync(new PipelineFallbackBridge(bridge.GroupId, "group_not_found", null));
             return;
         }
 
@@ -111,7 +114,7 @@ internal sealed partial class ReviewerStageExecutor : Executor
         if (group is null)
         {
             _logger.LogError("[Stage53A] ReviewerStage：Petra 閘門前找不到 Group={Id}，fallback", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "group_not_found", result);
+            await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
             return;
         }
 
@@ -122,15 +125,15 @@ internal sealed partial class ReviewerStageExecutor : Executor
         var appealOrchestration = scope.ServiceProvider.GetRequiredService<AppealOrchestrationService>();
         var petraResult = await appealOrchestration.RunPetraGateAsync(group, result, taskRepo, projectId, default);
 
-        // null = escalate（group 已標 failed + NotifyBossInterventionAsync 已 call）
+        // null = escalate（Pipeline path 下 RunPetraGateAsync 已 skip side effects — 議題 F-1 修正 6-a）
         if (petraResult is null)
         {
-            _logger.LogInformation("[Stage53A] ReviewerStage：Petra escalate → fallback reviewer_critical（Group={Id}）", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "reviewer_critical", result);
+            _logger.LogInformation("[Stage53B] ReviewerStage：Petra escalate → SetInterventionAndYieldAsync（Group={Id}）", state.GroupId);
+            await SetInterventionAndYieldAsync(context, state.GroupId, "Petra escalate（Reviewer 仲裁失敗）", result);
             return;
         }
 
-        // CriticalReviewCount=0 = approve / =1 = revise
+        // CriticalReviewCount=0 = approve / >0 = revise
         if (petraResult.CriticalReviewCount == 0)
         {
             _logger.LogInformation("[Stage53A] ReviewerStage：Petra approve → QaStageBridge（Group={Id}）", state.GroupId);
@@ -142,19 +145,54 @@ internal sealed partial class ReviewerStageExecutor : Executor
             return;
         }
 
-        _logger.LogInformation("[Stage53A] ReviewerStage：Petra revise (CriticalReviewCount={Count}) → fallback reviewer_critical（Group={Id}）", petraResult.CriticalReviewCount, state.GroupId);
-        await ClearMarkerAndFallbackAsync(context, state.GroupId, "reviewer_critical", petraResult);
+        // 53B：Petra revise → fix loop（max 3 輪，對齊 WorkflowEngine.MaxFixIterations=3 既有 const）
+        if (group.FixIteration >= 3)
+        {
+            _logger.LogWarning("[Stage53B] ReviewerStage：FixIteration={N} >= 3 達上限 → SetInterventionAndYieldAsync（Group={Id}）",
+                group.FixIteration, state.GroupId);
+            await SetInterventionAndYieldAsync(context, state.GroupId,
+                $"Vera fix loop 超 {group.FixIteration} 次仍有問題", petraResult);
+            return;
+        }
+
+        // fix loop 觸發：FixIteration++ + SendMessage(DevFixStageBridge)
+        group.FixIteration++;
+        await taskRepo.SaveAsync(default);
+        _logger.LogInformation("[Stage53B] ReviewerStage：Petra revise (CriticalReviewCount={Count}) → fix loop Round {N} → DevFixStageBridge（Group={Id}）",
+            petraResult.CriticalReviewCount, group.FixIteration, state.GroupId);
+        state.LastAgentResult = petraResult;
+        state.LastAgentName = "Reviewer";
+        await PipelineStateHelpers.SaveAsync(context, state);
+        await context.SendMessageAsync(new DevFixStageBridge(state.GroupId));
     }
 
-    private async ValueTask ClearMarkerAndFallbackAsync(
-        IWorkflowContext context, Guid groupId, string reason, AgentExecutionResult? result)
+    /// <summary>Stage 53B：intervention 統一 helper（fix loop max_iter / Petra escalate）。
+    /// DB set group.Status=NeedsIntervention + InterventionReason → call NotifyBossInterventionAsync → YieldOutput Completed=true 結束 Workflow。
+    /// PipelineLoopResult.Completed=true 語義：Pipeline Workflow 完整跑完（含 intervention），FinalizePipelineAsync 只 ClearMarkersAsync。</summary>
+    private async ValueTask SetInterventionAndYieldAsync(
+        IWorkflowContext context, Guid groupId, string interventionReason, AgentExecutionResult? lastResult)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.TaskGroups.Where(g => g.Id == groupId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(g => g.PipelineFrameworkStateJson, (string?)null)
-                .SetProperty(g => g.ActiveOrchestration, (string?)null), default);
-        await context.SendMessageAsync(new PipelineFallbackBridge(groupId, reason, result));
+                .SetProperty(g => g.Status, TaskStatus.NeedsIntervention)
+                .SetProperty(g => g.InterventionReason, interventionReason), default);
+
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
+        if (freshGroup is not null)
+        {
+            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+        }
+
+        await context.YieldOutputAsync(new PipelineLoopResult
+        {
+            GroupId = groupId,
+            Completed = true,
+            FallbackReason = null,
+            LastResult = lastResult,
+        });
     }
 }

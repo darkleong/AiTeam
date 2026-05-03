@@ -178,6 +178,12 @@ public class AppealOrchestrationService(
                 return result;
 
             default: // escalate
+                // Stage 53B 議題 F-1 修正 6-a：Pipeline path 接管 intervention，skip legacy UpdateStatus + NotifyBoss
+                if (group.PipelineFrameworkStateJson != null)
+                {
+                    logger.LogInformation("[Stage53B] RunPetraGateAsync escalate Pipeline path skip side effects（Group={Id}）", group.Id);
+                    return null;
+                }
                 taskRepo.UpdateGroupStatus(group, "failed");
                 await taskRepo.SaveAsync(cancellationToken);
                 var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
@@ -214,14 +220,18 @@ public class AppealOrchestrationService(
         return await RunPetraGateAsync(group, result, taskRepo, projectId, cancellationToken);
     }
 
-    /// <summary>Dev / Dev_fix 回報阻礙（[BLOCKED] 格式）時，由 Petra 評估路由。</summary>
-    public async Task HandleDevBlockerAsync(
+    /// <summary>Dev / Dev_fix 回報阻礙（[BLOCKED] 格式）時，由 Petra 評估路由。
+    /// Stage 53B 議題 F-1 修正 6-c：signature 改 `Task` → `Task<BlockerDecision>` 回傳 Petra 評估給 Pipeline path 自接管 routing。
+    /// Pipeline path 下 fire/UpdateStatus/Discord side effects 全 skip（return decision 給 Pipeline DevStage 用）。</summary>
+    public async Task<BlockerDecision> HandleDevBlockerAsync(
         TaskGroup group,
         AgentExecutionResult result,
         TaskRepository taskRepo,
         Guid? projectId,
         CancellationToken cancellationToken)
     {
+        var isPipelinePath = group.PipelineFrameworkStateJson != null;
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var pmService  = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
@@ -236,6 +246,13 @@ public class AppealOrchestrationService(
         {
             logger.LogWarning(ex, "HandleDevBlockerAsync Petra 評估失敗，fallback escalate_boss");
             decision = new BlockerDecision("escalate_boss", "Blocker 評估失敗，升級給老闆");
+        }
+
+        // 53B 議題 F-1 修正 6-c：Pipeline path 接管 routing，skip 全部 side effects（fire/UpdateStatus/Discord）
+        if (isPipelinePath)
+        {
+            logger.LogInformation("[Stage53B] HandleDevBlockerAsync Pipeline path 接管，skip side effects（Group={Id}, routing={Routing}）", group.Id, decision.Routing);
+            return decision;
         }
 
         var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
@@ -271,6 +288,8 @@ public class AppealOrchestrationService(
                         $"阻礙詳情：{result.Summary}\nPetra 分析：{decision.Instructions}");
                 break;
         }
+
+        return decision;
     }
 
     // ============================================================
@@ -293,8 +312,12 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
-        // Stage 49：v4 漸進遷移 feature flag 分流（路線 B service 包裝）— framework Workflow 接管 Cody-Petra Dev_plan Appeal loop
-        if (await workflowResolver.GetUseFrameworkAppealLoopAsync(cancellationToken))
+        // Stage 53B 議題 F-1 修正 6-b：Pipeline path 接管 — bypass Stage 49 framework path（避免 framework-in-framework）
+        // 內部 fire/NotifyBoss side effects 仍逐處 skip 以保證 single source of truth（UpdateStatus + InterventionReason + Save 保留供 Pipeline 重讀）
+        var isPipelinePath = group.PipelineFrameworkStateJson != null;
+
+        // Stage 49：v4 漸進遷移 feature flag 分流（Pipeline path 不走，避免 framework-in-framework 雙層接管）
+        if (!isPipelinePath && await workflowResolver.GetUseFrameworkAppealLoopAsync(cancellationToken))
         {
             logger.LogInformation("[Stage49] HandleDevPlanCompletedAsync framework path 接管（Group={Id}）", group.Id);
             return await frameworkRouter.HandleDevPlanCompletedAsync(group, result, taskRepo, projectId, cancellationToken);
@@ -320,7 +343,8 @@ public class AppealOrchestrationService(
                 taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                 group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{planFailReason}";
                 await taskRepo.SaveAsync(cancellationToken);
-                await NotifyBossDevPlanUnableAsync(group, planFailReason ?? "", cancellationToken);
+                if (!isPipelinePath)
+                    await NotifyBossDevPlanUnableAsync(group, planFailReason ?? "", cancellationToken);
                 return false;
             }
 
@@ -340,7 +364,8 @@ public class AppealOrchestrationService(
                             taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                             group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{approveStillFailReason}";
                             await taskRepo.SaveAsync(cancellationToken);
-                            await NotifyBossDevPlanUnableAsync(group, approveStillFailReason ?? "", cancellationToken);
+                            if (!isPipelinePath)
+                                await NotifyBossDevPlanUnableAsync(group, approveStillFailReason ?? "", cancellationToken);
                             return false;
                         }
                         group.DevPlanRevision++;
@@ -348,11 +373,14 @@ public class AppealOrchestrationService(
                         await taskRepo.SaveAsync(cancellationToken);
                         logger.LogInformation("DevPlan approve 但失敗，觸發重產第 {N} 輪（Group={Id}）",
                             group.DevPlanRevision, group.Id);
-                        var tgsApprove = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                        await tgsApprove.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
-                        return false;
+                        if (!isPipelinePath)
+                        {
+                            var tgsApprove = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                            await tgsApprove.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                        }
+                        return false; // Pipeline path 由 DevPlanStage 看 return false + status normal → SendMessage(DevPlanRetryBridge)
                     }
-                    return true; // 繼續走後續 dispatcher → 觸發 Dev
+                    return true; // 繼續走後續 dispatcher → 觸發 Dev（Pipeline path 看 return true → SendMessage(DevStageBridge)）
 
                 case "revise":
                     var appealApproved = await RunDevPlanAppealLoopAsync(
@@ -371,7 +399,8 @@ public class AppealOrchestrationService(
                                 taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                                 group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{stillFailReason}";
                                 await taskRepo.SaveAsync(cancellationToken);
-                                await NotifyBossDevPlanUnableAsync(group, stillFailReason ?? "", cancellationToken);
+                                if (!isPipelinePath)
+                                    await NotifyBossDevPlanUnableAsync(group, stillFailReason ?? "", cancellationToken);
                             }
                             else
                             {
@@ -380,15 +409,24 @@ public class AppealOrchestrationService(
                                 await taskRepo.SaveAsync(cancellationToken);
                                 logger.LogInformation("DevPlan accept 但失敗，觸發重產第 {N} 輪（Group={Id}，原因：{Reason}）",
                                     group.DevPlanRevision, group.Id, stillFailReason);
-                                var tgsRetry = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                                await tgsRetry.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                                if (!isPipelinePath)
+                                {
+                                    var tgsRetry = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                                    await tgsRetry.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
+                                }
                             }
                         }
                         else
                         {
                             logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
-                            var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                            await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                            if (!isPipelinePath)
+                            {
+                                var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                                await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
+                            }
+                            // ⚠️ Pipeline path：appeal 成功 + plan ok → 應 return true 讓 DevPlanStage 推進 Dev（與 line 374 happy path 統一行為）
+                            if (isPipelinePath)
+                                return true;
                         }
                     }
                     else
@@ -396,14 +434,16 @@ public class AppealOrchestrationService(
                         logger.LogWarning("Dev_plan Appeal 耗盡，升級老闆（Group={Id}）", group.Id);
                         taskRepo.UpdateGroupStatus(group, "failed");
                         await taskRepo.SaveAsync(cancellationToken);
-                        await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                        if (!isPipelinePath)
+                            await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
                     }
                     return false;
 
                 default: // escalate
                     taskRepo.UpdateGroupStatus(group, "failed");
                     await taskRepo.SaveAsync(cancellationToken);
-                    await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                    if (!isPipelinePath)
+                        await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
                     return false;
             }
         }

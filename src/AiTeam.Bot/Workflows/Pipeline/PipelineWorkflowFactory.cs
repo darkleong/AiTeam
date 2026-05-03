@@ -69,46 +69,56 @@ public sealed class PipelineWorkflowFactory
         var reviewerStage = new ReviewerStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<ReviewerStageExecutor>());
         var qaStage       = new QaStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<QaStageExecutor>());
         var docStage      = new DocStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<DocStageExecutor>());
+        var devFixStage   = new DevFixStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<DevFixStageExecutor>());  // Stage 53B 新加
         var notifyMerge   = new NotifyMergeStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<NotifyMergeStageExecutor>());
         var fallback      = new PipelineFallbackExecutor(_loggerFactory.CreateLogger<PipelineFallbackExecutor>());
 
-        // 5 個 RequestPort（每 Agent 型 stage 獨立 PortId + 獨立 Request/Response 型別）
+        // 6 個 RequestPort（53B 新加 DevFixCompletionPortId — K1 拍板擴 5 → 6 entry）
         var devPlanPort  = RequestPort.Create<DevPlanCompletionRequest,  DevPlanCompletionResponse> (DevPlanCompletionPortId);
         var devPort      = RequestPort.Create<DevCompletionRequest,      DevCompletionResponse>     (DevCompletionPortId);
         var reviewerPort = RequestPort.Create<ReviewerCompletionRequest, ReviewerCompletionResponse>(ReviewerCompletionPortId);
         var qaPort       = RequestPort.Create<QaCompletionRequest,       QaCompletionResponse>      (QaCompletionPortId);
         var docPort      = RequestPort.Create<DocCompletionRequest,      DocCompletionResponse>     (DocCompletionPortId);
+        var devFixPort   = RequestPort.Create<DevFixCompletionRequest,   DevFixCompletionResponse>  (DevFixCompletionPortId);  // Stage 53B 新加
 
         return new WorkflowBuilder(start)
             // Start → DevPlan
             .AddEdge(start, devPlanStage)
-            // DevPlan stage RequestPort 雙向 + 兩出口
+            // DevPlan stage RequestPort 雙向 + 兩出口 + Stage 53B 新加 self-loop（DevPlanRetryBridge）
             .AddEdge(devPlanStage, devPlanPort)            // DevPlanCompletionRequest → port
             .AddEdge(devPlanPort, devPlanStage)            // DevPlanCompletionResponse → DevPlanStageExecutor.HandleResponseAsync
             .AddEdge(devPlanStage, devStage)               // DevStageBridge passes through
             .AddEdge(devPlanStage, fallback)               // PipelineFallbackBridge passes through
-            // Dev stage RequestPort 雙向 + 兩出口
+            .AddEdge(devPlanStage, devPlanStage)           // Stage 53B：DevPlanRetryBridge self-loop（appeal 重產 Dev_plan）
+            // Dev stage RequestPort 雙向 + 兩出口 + Stage 53B 新加 self-loop（DevRetryBridge）
             .AddEdge(devStage, devPort)
             .AddEdge(devPort, devStage)
             .AddEdge(devStage, reviewerStage)              // ReviewerStageBridge
             .AddEdge(devStage, fallback)                   // PipelineFallbackBridge
-            // Reviewer stage RequestPort 雙向 + 兩出口
+            .AddEdge(devStage, devStage)                   // Stage 53B：DevRetryBridge self-loop（[BLOCKED] continue 重試 Dev）
+            // Reviewer stage RequestPort 雙向 + 三出口（53B 加 DevFixStageBridge fix loop 觸發）
             .AddEdge(reviewerStage, reviewerPort)
             .AddEdge(reviewerPort, reviewerStage)
             .AddEdge(reviewerStage, qaStage)               // QaStageBridge
             .AddEdge(reviewerStage, fallback)              // PipelineFallbackBridge
-            // QA stage RequestPort 雙向 + 兩出口
+            .AddEdge(reviewerStage, devFixStage)           // Stage 53B：DevFixStageBridge fix loop 觸發（Petra revise）
+            // QA stage RequestPort 雙向 + 三出口（53B 加 DevFixStageBridge QA fix loop）
             .AddEdge(qaStage, qaPort)
             .AddEdge(qaPort, qaStage)
             .AddEdge(qaStage, docStage)                    // DocStageBridge
             .AddEdge(qaStage, fallback)                    // PipelineFallbackBridge
+            .AddEdge(qaStage, devFixStage)                 // Stage 53B：DevFixStageBridge QA fix loop（QaFixRound > 0）
             // Doc stage RequestPort 雙向 + 兩出口
             .AddEdge(docStage, docPort)
             .AddEdge(docPort, docStage)
             .AddEdge(docStage, notifyMerge)                // NotifyMergeStageBridge
             .AddEdge(docStage, fallback)                   // PipelineFallbackBridge
-            // 終結 — NotifyMerge（happy path）和 fallback 都 YieldOutput PipelineLoopResult
-            .WithOutputFrom(notifyMerge, fallback)
+            // Stage 53B 新加：DevFix stage RequestPort 雙向 + 一出口（loop back 到 Reviewer）
+            .AddEdge(devFixStage, devFixPort)
+            .AddEdge(devFixPort, devFixStage)
+            .AddEdge(devFixStage, reviewerStage)           // Stage 53B：DevFix passed → ReviewerStageBridge loop back（fix loop 主路徑）
+            // 終結 — NotifyMerge（happy path）/ fallback / 53B：4 stage Executor 都可 YieldOutput PipelineLoopResult intervention
+            .WithOutputFrom(notifyMerge, fallback, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
     }
 
@@ -119,6 +129,8 @@ public sealed class PipelineWorkflowFactory
     public const string ReviewerCompletionPortId = "Pipeline-ReviewerCompletion";
     public const string QaCompletionPortId       = "Pipeline-QaCompletion";
     public const string DocCompletionPortId      = "Pipeline-DocCompletion";
+    /// <summary>Stage 53B：DevFix stage RequestPort PortId 常數（K1 拍板 5 → 6 entry）。</summary>
+    public const string DevFixCompletionPortId   = "Pipeline-DevFixCompletion";
 
     /// <summary>建立 framework CheckpointManager（綁 PipelineCheckpointStore）。
     /// FrameworkPipelineRouter 用此 manager 跑 InProcessExecution.RunStreamingAsync(...) / ResumeStreamingAsync(...)。

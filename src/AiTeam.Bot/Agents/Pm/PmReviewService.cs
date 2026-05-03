@@ -57,6 +57,25 @@ public class PmReviewService(
         string reviewBody,
         CancellationToken ct = default)
     {
+        // Stage 53B：fix loop / reviewer fallback dynamic 場景 — Petra Vera review 回 revise 觸發 fix loop（Pipeline ReviewerStage 看 CriticalReviewCount > 0）
+        // max_iter 場景 — Petra 持續 revise，逼 ReviewerStage 判 FixIteration>=3 intervention
+        if (MockClaudeCodeService.FailScenario is "framework_pipeline_fix_loop_recover_round1"
+                                                or "framework_pipeline_reviewer_fallback_dynamic"
+                                                or "framework_pipeline_fix_loop_max_iter"
+                                                or "framework_pipeline_fix_loop_crash_recovery")
+        {
+            // reviewBody 含 "Round 2+ passed" 表示 Vera 已回 pass，Petra 也跟著 approve（避免 fix loop 場景 Round 2 後仍卡死）
+            if (reviewBody.Contains("Round 2+ passed"))
+            {
+                logger.LogInformation("[MockMode/Stage53B] Petra Vera review approve（Vera Round 2+ passed）");
+                return new PetraReview("approve", "[MOCK-53B] Vera Round 2+ passed，Petra 同意放行", [], null);
+            }
+            logger.LogInformation("[MockMode/Stage53B] Petra Vera review revise（觸發 fix loop / max_iter）");
+            return new PetraReview("revise", "[MOCK-53B] Petra 維持 Critical，觸發 fix loop",
+                [new PetraIssue("blocking", "[MOCK-53B] Critical 仍需修復")],
+                "[MOCK-53B] 請依 Critical 修復後重審");
+        }
+
         var prompt = BuildVeraReviewPrompt(taskTitle, reviewBody);
         return await RunLlmDirectAsync(prompt, ct);
     }

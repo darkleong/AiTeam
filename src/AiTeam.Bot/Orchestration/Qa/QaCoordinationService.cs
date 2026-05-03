@@ -64,6 +64,9 @@ public class QaCoordinationService(
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
+        // Stage 53B 議題 F-1 修正 6-e：Pipeline path 接管 — failed 路徑 5 處 side effects 全 skip（QaFixRound++/FixIteration++/Save 保留供 Pipeline 重讀）
+        var isPipelinePath = group.PipelineFrameworkStateJson != null;
+
         var workflowType = group.WorkflowType switch
         {
             "new_feature"      => WorkflowType.NewFeature,
@@ -172,7 +175,9 @@ public class QaCoordinationService(
             taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
             group.InterventionReason = $"QA 修復連 {group.QaFixRound} 輪失敗（上限 {qaFixMaxRounds}）";
             await taskRepo.SaveAsync(cancellationToken);
-            await NotifyBossQaFailedInterventionAsync(group, $"QA 修復連 {group.QaFixRound} 輪失敗", cancellationToken);
+            // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 自接管 intervention，skip legacy NotifyBoss
+            if (!isPipelinePath)
+                await NotifyBossQaFailedInterventionAsync(group, $"QA 修復連 {group.QaFixRound} 輪失敗", cancellationToken);
             return;
         }
 
@@ -189,17 +194,31 @@ public class QaCoordinationService(
                 case "code_bug":
                     group.QaFixRound++;
                     await taskRepo.SaveAsync(cancellationToken);
-                    await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix")], cancellationToken);
+                    // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 重讀 group 看 QaFixRound > 0 → 自 SendMessage(DevFixStageBridge)
+                    if (!isPipelinePath)
+                        await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix")], cancellationToken);
+                    else
+                        logger.LogInformation("[Stage53B] code_bug Pipeline path skip FireStepsAsync（Pipeline 自 SendMessage DevFixStageBridge）");
                     break;
 
                 case "back_to_reviewer":
                     group.QaFixRound = 0;
                     group.FixIteration++;
                     await taskRepo.SaveAsync(cancellationToken);
-                    await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix", IsFixLoop: true)], cancellationToken);
+                    if (!isPipelinePath)
+                        await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix", IsFixLoop: true)], cancellationToken);
+                    else
+                        logger.LogInformation("[Stage53B] back_to_reviewer Pipeline path skip FireStepsAsync");
                     break;
 
                 case "env_or_test_issue":
+                    // Stage 53B 議題 F-1 修正 6-e（Forge 主動拍板）：Pipeline path 下 env_or_test_issue 視為 passed
+                    // → skip 全部 side effects（GetDecision/Mark/NotifyBoss/FireSteps），return 後 Pipeline QaStage 重讀 group 看 QaFixRound==0 + Status normal → SendMessage DocStageBridge
+                    if (isPipelinePath)
+                    {
+                        logger.LogInformation("[Stage53B] env_or_test_issue Pipeline path skip GetDecision（Pipeline 自接管 推進 Doc）");
+                        break;
+                    }
                     var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
                     if (decision.Action == NextAction.NotifyBossMerge)
                     {
@@ -221,7 +240,9 @@ public class QaCoordinationService(
                     taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                     group.InterventionReason = $"QA 失敗 Petra 判斷 escalate_boss：{failureDecision.Instructions}";
                     await taskRepo.SaveAsync(cancellationToken);
-                    await NotifyBossQaFailedInterventionAsync(group, failureDecision.Instructions ?? "Petra escalate_boss", cancellationToken);
+                    // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 自接管 intervention，skip legacy NotifyBoss
+                    if (!isPipelinePath)
+                        await NotifyBossQaFailedInterventionAsync(group, failureDecision.Instructions ?? "Petra escalate_boss", cancellationToken);
                     break;
             }
         }

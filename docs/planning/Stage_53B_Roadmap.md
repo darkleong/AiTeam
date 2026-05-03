@@ -433,7 +433,46 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 
 ## 實作紀錄
 
-> 由 Forge 結案第一段填（Roadmap 章節對齊 Stage 51/52/53A v2.0 結構：子項完成度對照 / Session A/B 結案 / 驗收結果 / 驗收後修正 / 關鍵設計決策 / 踩坑紀錄彙整 / Aria 校準錨候選）
+### 子項完成度對照（Forge 結案第一段填，2026-05-03）
+
+| # | 子項 | 狀態 | 動的檔案 |
+|---|---|---|---|
+| 0 | Spike F1-F4 read 範圍 | ✅ | 無新建（純 read 對齊） |
+| 1 | DevFixStageExecutor + 新 PortId + 新 record types（含 DevPlanRetryBridge / DevRetryBridge） | ✅ | 新建 [DevFixStageExecutor.cs](../../src/AiTeam.Bot/Workflows/Pipeline/Executors/DevFixStageExecutor.cs) / 改 [PipelineState.cs](../../src/AiTeam.Bot/Workflows/Pipeline/PipelineState.cs)（5 record + Loop 語義 comment 補強）/ 改 [PipelineWorkflowFactory.cs](../../src/AiTeam.Bot/Workflows/Pipeline/PipelineWorkflowFactory.cs)（PortId const）|
+| 2 | ReviewerStageExecutor 加 fix loop routing + SetInterventionAndYieldAsync helper | ✅ | 改 [ReviewerStageExecutor.cs](../../src/AiTeam.Bot/Workflows/Pipeline/Executors/ReviewerStageExecutor.cs) |
+| 3 | DevPlanStageExecutor 加 appeal routing + 第二 [MessageHandler] DevPlanRetryBridge | ✅ | 改 [DevPlanStageExecutor.cs](../../src/AiTeam.Bot/Workflows/Pipeline/Executors/DevPlanStageExecutor.cs) |
+| 4 | DevStageExecutor 加 appeal + intervention routing + 第二 [MessageHandler] DevRetryBridge | ✅ | 改 [DevStageExecutor.cs](../../src/AiTeam.Bot/Workflows/Pipeline/Executors/DevStageExecutor.cs) |
+| 5 | QaStageExecutor 加 QA fix loop routing | ✅ | 改 [QaStageExecutor.cs](../../src/AiTeam.Bot/Workflows/Pipeline/Executors/QaStageExecutor.cs) |
+| 6 | 議題 F-1 多處 skip 修正（**16 處**：Appeal 11 + QaCoord 5）+ HandleDevBlocker signature `Task` → `Task<BlockerDecision>` | ✅ | 改 [AppealOrchestrationService.cs](../../src/AiTeam.Bot/Orchestration/Appeal/AppealOrchestrationService.cs)（RunPetraGate 1 + HandleDevBlocker 入口判斷 + 3 處 skip + signature 改 + HandleDevPlanCompleted 入口 + 8 處 skip）+ 改 [QaCoordinationService.cs](../../src/AiTeam.Bot/Orchestration/Qa/QaCoordinationService.cs)（QaFixRound 超限 + 4 case skip）|
+| 7 | PipelineWorkflowFactory 拓撲擴展（DevFixStage edges + 2 self-loop edges） | ✅ | 改 [PipelineWorkflowFactory.cs](../../src/AiTeam.Bot/Workflows/Pipeline/PipelineWorkflowFactory.cs)（+1 RequestPort + 1 Executor + 5 新 edge + WithOutputFrom 擴 7 終結點）|
+| 8 | FrameworkPipelineRouter 修改（BuildAgentCompletionResponse +1 entry / RecoverStuck mapping +1 entry / FinalizePipelineAsync 移除 5 fallback dispatch） | ✅ | 改 [FrameworkPipelineRouter.cs](../../src/AiTeam.Bot/Orchestration/Meeting/FrameworkPipelineRouter.cs) |
+| 9 | 4 stage Executor ClearMarkerAndFallbackAsync helper 移除（保留 group_not_found inline SendMessage） | ✅ | 改 4 stage Executor（移除 helper + group_not_found 改 inline）|
+| 10 | Mock 場景擴充 6 個 framework_pipeline_* + scenario round counter 機制 | ✅ | 改 [MockScenarioService.cs](../../src/AiTeam.Bot/Services/MockScenarioService.cs)（6 entries）/ 改 [MockClaudeCodeService.cs](../../src/AiTeam.Bot/Agents/MockClaudeCodeService.cs)（round counter dict + Reviewer/Dev/QA mock 分支）/ 改 [PmReviewService.cs](../../src/AiTeam.Bot/Agents/Pm/PmReviewService.cs)（Petra Vera revise 分支）/ 改 [PmRoutingService.cs](../../src/AiTeam.Bot/Agents/Pm/PmRoutingService.cs)（Blocker continue + NoTests approve 分支）|
+| 11 | Version bump v3.40.0 + Roadmap 結案紀錄 | ✅ | [Directory.Build.props](../../src/Directory.Build.props) v3.40.0 |
+
+### Session 結案
+
+**Session A**（spike + 子項 1-7）：context ~500-600K，dotnet build 0 Error 87 Warning（warning 全是既有 NU1902 + MUD0002）。
+
+**Session B**（子項 8-11，同 session 跑）：Christ 拍板 context 充裕繼續同 session，5 fallback dispatch 移除 + 4 helper 移除 + Mock 6 場景 + Version bump，dotnet build 0 Error 依舊。
+
+### 關鍵設計決策（Session 期間 Forge 主動拍板）
+
+1. **HandleDevBlockerAsync signature 改 `Task` → `Task<BlockerDecision>`**（子項 4 設計衝突揭露）：原設計 void return Pipeline 無法分辨 Petra continue/escalate；改 return BlockerDecision 給 Pipeline DevStage 自接管 routing，3 caller backward compat（legacy `await` 忽略 return）
+2. **QaCoordinationService Pipeline path 下 env_or_test_issue 視為 passed**（子項 6-e Forge 主動拍板）：Pipeline path skip 全部 side effects（GetDecision/Mark/NotifyBoss/FireSteps），return 後 Pipeline QaStage 重讀 group 看 QaFixRound==0 + Status normal → SendMessage DocStageBridge
+3. **PipelineLoopResult.Completed 語義變更**（建議補強 2）：Stage 53B 起 Completed=true 包含「intervention 完成」（不只 happy path），FinalizePipelineAsync 只 ClearMarkersAsync（不重複 call NotifyBoss）。Comment 加在 PipelineState.cs class doc
+4. **DevPlanRetryBridge / DevRetryBridge type-explicit Bridge record**（建議補強 3）：避免 framework AddEdge self-loop 不支援的實作期切換，直接走 type-explicit 設計 + 第二 [MessageHandler]
+5. **scenario round counter 機制**（子項 10）：MockClaudeCodeService 加 static `Dictionary<string, int> _scenarioRoundCounters` + `ResetScenarioRoundCounters()` / `GetAndIncrementRound(agentKey)` helper，per-scenario per-agent round 計數動態切換 Mock 行為（fix loop Round 1 Critical / Round 2+ pass）
+
+### 踩坑紀錄彙整
+
+> 53B 屬「同 pattern 不同子流程」擴展，Stage 53A know-how 全複用 — 無新 framework 機制踩坑。實作期主要的設計衝突（HandleDevBlockerAsync signature）由議題 F-1 修正範圍涵蓋。簡潔紀律：跨 Stage 預警價值高的紀錄保留如下。
+
+1. **既有 service method signature 升級給 Pipeline path 用**（跨 Stage 預警）：Pipeline 內 call legacy service void method 時，可能無法分辨內部 routing 結果 → 議題 F-1 修正期主動評估 method signature 升級（`Task` → `Task<TDecision>`）給 Pipeline 用，比加 transient marker DB 欄位乾淨。Stage 55 收尾移除 5 fallback / J1 6 hooks 時可考慮回退 signature（若 legacy caller 全消除）
+
+### Aria 校準錨候選
+
+待 Aria 結案第二段填（context 預估 470-840K，實際 ~500-600K（Session A 結束報告時粗估），規模對齊「混合型第 6 資料點」上半範圍）
 
 ---
 

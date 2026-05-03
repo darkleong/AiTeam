@@ -132,6 +132,19 @@ public class MockScenarioService(
                           or "framework_pipeline_reviewer_fallback"
                           or "framework_pipeline_dev_plan_failed_escalate")
             MockClaudeCodeService.FailScenario = scenario;
+        // ── Stage 53B v4 漸進遷移第六步：framework Pipeline 4 子流程 + 5 fallback 移除 6 場景 ──
+        // 對應 53B 子項 10 — fix loop / appeal / QA fix loop / intervention 真跑通
+        // 機制：scenario key 透過 FailScenario 傳遞 + MockClaudeCodeService 內 round counter 控制動態 routing
+        else if (scenario is "framework_pipeline_fix_loop_recover_round1"
+                          or "framework_pipeline_fix_loop_max_iter"
+                          or "framework_pipeline_dev_blocker_appeal"
+                          or "framework_pipeline_qa_no_tests_dynamic"
+                          or "framework_pipeline_reviewer_fallback_dynamic"
+                          or "framework_pipeline_fix_loop_crash_recovery")
+        {
+            MockClaudeCodeService.FailScenario = scenario;
+            MockClaudeCodeService.ResetScenarioRoundCounters();  // Stage 53B：清 round counter 確保新 run 從 Round 1 開始
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -185,6 +198,13 @@ public class MockScenarioService(
             "framework_pipeline_qa_no_tests"       => (WorkflowType.NewFeature, "FrameworkPipeline-QaNoTests",       "Kickoff"),
             "framework_pipeline_reviewer_fallback" => (WorkflowType.NewFeature, "FrameworkPipeline-ReviewerFallback","Kickoff"),
             "framework_pipeline_dev_plan_failed_escalate"  => (WorkflowType.NewFeature, "FrameworkPipeline-DevPlanFailedEscalate", "Kickoff"),
+            // Stage 53B：4 子流程 framework 化 6 場景（initialStep="Kickoff" 完整跑流程）
+            "framework_pipeline_fix_loop_recover_round1"  => (WorkflowType.NewFeature, "FrameworkPipeline-FixLoopRecoverR1",     "Kickoff"),
+            "framework_pipeline_fix_loop_max_iter"        => (WorkflowType.NewFeature, "FrameworkPipeline-FixLoopMaxIter",       "Kickoff"),
+            "framework_pipeline_dev_blocker_appeal"       => (WorkflowType.NewFeature, "FrameworkPipeline-DevBlockerAppeal",     "Kickoff"),
+            "framework_pipeline_qa_no_tests_dynamic"      => (WorkflowType.NewFeature, "FrameworkPipeline-QaNoTestsDynamic",     "Kickoff"),
+            "framework_pipeline_reviewer_fallback_dynamic"=> (WorkflowType.NewFeature, "FrameworkPipeline-ReviewerFallbackDyn",  "Kickoff"),
+            "framework_pipeline_fix_loop_crash_recovery"  => (WorkflowType.NewFeature, "FrameworkPipeline-FixLoopCrashRecovery", "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

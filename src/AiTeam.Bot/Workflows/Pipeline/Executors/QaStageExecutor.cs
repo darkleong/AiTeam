@@ -7,6 +7,7 @@ using AiTeam.Shared.Constants;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 
 namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 
@@ -28,8 +29,10 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 /// 紀律：fallback 時序（先清 marker → 再 SendMessage）+ type-explicit Bridge record + Stage 50 三件套。
 /// </summary>
 [SendsMessage(typeof(DocStageBridge))]
+[SendsMessage(typeof(DevFixStageBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(QaCompletionRequest))]
+[YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class QaStageExecutor : Executor
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -57,7 +60,7 @@ internal sealed partial class QaStageExecutor : Executor
         if (group is null)
         {
             _logger.LogError("[Stage53A] QaStage：找不到 Group={Id}，fallback", bridge.GroupId);
-            await ClearMarkerAndFallbackAsync(context, bridge.GroupId, "group_not_found", null);
+            await context.SendMessageAsync(new PipelineFallbackBridge(bridge.GroupId, "group_not_found", null));
             return;
         }
 
@@ -76,8 +79,8 @@ internal sealed partial class QaStageExecutor : Executor
 
         if (!result.Success)
         {
-            _logger.LogInformation("[Stage53A] QaStage：result.Success=false → fallback qa_failed（Group={Id}）", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "qa_failed", result);
+            _logger.LogInformation("[Stage53B] QaStage：result.Success=false → SetInterventionAndYieldAsync（Group={Id}）", state.GroupId);
+            await SetInterventionAndYieldAsync(context, state.GroupId, $"QA 失敗：{result.Summary}", result);
             return;
         }
 
@@ -88,7 +91,7 @@ internal sealed partial class QaStageExecutor : Executor
         if (group is null)
         {
             _logger.LogError("[Stage53A] QaStage：HandleQaCompletedAsync 前找不到 Group={Id}，fallback", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "group_not_found", result);
+            await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
             return;
         }
 
@@ -100,25 +103,31 @@ internal sealed partial class QaStageExecutor : Executor
         if (refreshedGroup is null)
         {
             _logger.LogError("[Stage53A] QaStage：HandleQaCompletedAsync 後 Group={Id} 消失，fallback", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "group_not_found", result);
+            await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
             return;
         }
 
-        // QA fix loop 觸發（Petra 判 code_bug → fire Dev_fix + QaFixRound++）→ fallback qa_fix_loop
+        // 53B：QA fix loop 觸發（Petra 判 code_bug / back_to_reviewer → QaFixRound++）
+        // QaCoordinationService 內 fire Dev_fix 已議題 F-1 修正 6-e Pipeline path skip
+        // Pipeline 自 SendMessage(DevFixStageBridge) 觸發 framework fix loop
         if (refreshedGroup.QaFixRound > 0)
         {
-            _logger.LogInformation("[Stage53A] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound={Round}) → fallback qa_fix_loop（Group={Id}，Dev_fix 已 fire 由 legacy 接管）",
+            _logger.LogInformation("[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound={Round}) → DevFixStageBridge（Group={Id}）",
                 refreshedGroup.QaFixRound, state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "qa_fix_loop", result);
+            state.LastAgentResult = result;
+            state.LastAgentName = "QA";
+            await PipelineStateHelpers.SaveAsync(context, state);
+            await context.SendMessageAsync(new DevFixStageBridge(state.GroupId));
             return;
         }
 
-        // group.Status 變化（needs_intervention / failed）→ fallback qa_intervention
+        // group.Status 變化（needs_intervention / failed）→ 53B：SetInterventionAndYieldAsync 結束 Workflow
         if (refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.NeedsIntervention || refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.Failed)
         {
-            _logger.LogInformation("[Stage53A] QaStage：HandleQaCompletedAsync 後 group.Status={Status} → fallback qa_intervention（Group={Id}）",
+            _logger.LogInformation("[Stage53B] QaStage：HandleQaCompletedAsync 後 group.Status={Status} → SetInterventionAndYieldAsync（Group={Id}）",
                 refreshedGroup.Status, state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "qa_intervention", result);
+            await SetInterventionAndYieldAsync(context, state.GroupId,
+                refreshedGroup.InterventionReason ?? "QA failed/intervention", result);
             return;
         }
 
@@ -131,15 +140,31 @@ internal sealed partial class QaStageExecutor : Executor
         await context.SendMessageAsync(new DocStageBridge(state.GroupId));
     }
 
-    private async ValueTask ClearMarkerAndFallbackAsync(
-        IWorkflowContext context, Guid groupId, string reason, AgentExecutionResult? result)
+    /// <summary>Stage 53B：intervention 統一 helper（qa_failed / qa_intervention）。</summary>
+    private async ValueTask SetInterventionAndYieldAsync(
+        IWorkflowContext context, Guid groupId, string interventionReason, AgentExecutionResult? lastResult)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.TaskGroups.Where(g => g.Id == groupId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(g => g.PipelineFrameworkStateJson, (string?)null)
-                .SetProperty(g => g.ActiveOrchestration, (string?)null), default);
-        await context.SendMessageAsync(new PipelineFallbackBridge(groupId, reason, result));
+                .SetProperty(g => g.Status, TaskStatus.NeedsIntervention)
+                .SetProperty(g => g.InterventionReason, interventionReason), default);
+
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
+        if (freshGroup is not null)
+        {
+            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+        }
+
+        await context.YieldOutputAsync(new PipelineLoopResult
+        {
+            GroupId = groupId,
+            Completed = true,
+            FallbackReason = null,
+            LastResult = lastResult,
+        });
     }
 }

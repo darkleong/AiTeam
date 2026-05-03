@@ -24,6 +24,13 @@ public class PmRoutingService(
         string taskTitle,
         CancellationToken ct = default)
     {
+        // Stage 53B：dev_blocker_appeal 場景 — Petra 回 continue（讓 Pipeline DevStage retry Dev）
+        if (MockClaudeCodeService.FailScenario == "framework_pipeline_dev_blocker_appeal")
+        {
+            logger.LogInformation("[MockMode/Stage53B] Petra Blocker 評估 continue（dev_blocker_appeal scenario）");
+            return new BlockerDecision("continue", "[MOCK-53B] Petra 判定可重試 Dev");
+        }
+
         var prompt = BuildBlockerAssessPrompt(blockerJson, taskTitle);
         return await RunBlockerLlmAsync(prompt, ct);
     }
@@ -152,6 +159,13 @@ public class PmRoutingService(
         string? noTestReason,
         CancellationToken ct = default)
     {
+        // Stage 53B：qa_no_tests_dynamic 場景 — Petra approve 放行（讓 Pipeline QaStage 推進 Doc）
+        if (MockClaudeCodeService.FailScenario == "framework_pipeline_qa_no_tests_dynamic")
+        {
+            logger.LogInformation("[MockMode/Stage53B] Petra 無測試評估 approve（qa_no_tests_dynamic scenario）");
+            return new QaNoTestDecision("approve", "[MOCK-53B] Petra 同意放行純文件變更");
+        }
+
         var prompt       = BuildNoTestAssessPrompt(group, noTestReason);
         var provider     = providerFactory.Create(AgentName);
         var systemPrompt = BuildQaAssessSystemPrompt();

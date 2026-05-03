@@ -85,8 +85,22 @@ public sealed record PipelineStartBridge(
 public sealed record DevPlanStageBridge(
     [property: JsonPropertyName("groupId")] Guid GroupId);
 
+/// <summary>Stage 53B：DevPlan retry bridge — DevPlan 重產（DevPlanRevision++ 後重跑 Dev_plan）self-loop 用。
+/// type-explicit Bridge record 紀律延續（Stage 52 fix#2）— 與 DevPlanStageBridge 獨立型別避免 framework type-based dispatch collision。</summary>
+public sealed record DevPlanRetryBridge(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
 /// <summary>Stage 53A：DevStage 入口 bridge。</summary>
 public sealed record DevStageBridge(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 53B：Dev retry bridge — Dev [BLOCKED] Petra continue 後重試 Dev self-loop 用。
+/// type-explicit Bridge record 紀律延續（Stage 52 fix#2）— 與 DevStageBridge 獨立型別避免 framework type-based dispatch collision。</summary>
+public sealed record DevRetryBridge(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 53B：DevFixStage 入口 bridge — fix loop 觸發（Reviewer 🔴 → Petra revise / QA fix loop QaFixRound > 0）。</summary>
+public sealed record DevFixStageBridge(
     [property: JsonPropertyName("groupId")] Guid GroupId);
 
 /// <summary>Stage 53A：ReviewerStage 入口 bridge。</summary>
@@ -153,6 +167,14 @@ public sealed record DocCompletionRequest(
 public sealed record DocCompletionResponse(
     [property: JsonPropertyName("result")] AgentExecutionResult Result);
 
+/// <summary>Stage 53B：DevFix stage J1 yield-resume RequestPort 請求 payload。</summary>
+public sealed record DevFixCompletionRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 53B：DevFix stage J1 yield-resume RequestPort 回傳 payload。</summary>
+public sealed record DevFixCompletionResponse(
+    [property: JsonPropertyName("result")] AgentExecutionResult Result);
+
 /// <summary>Stage 53A：5 fallback 點觸發時送出的 bridge — 由 PipelineFallbackExecutor 收到後 YieldOutputAsync 結束 Workflow。
 /// 帶 LastResult 給 FinalizePipelineAsync 主動 call legacy method 接手（議題 9 修法）。</summary>
 public sealed record PipelineFallbackBridge(
@@ -161,7 +183,14 @@ public sealed record PipelineFallbackBridge(
     [property: JsonPropertyName("lastResult")] AgentExecutionResult? LastResult);
 
 /// <summary>Stage 53A：Workflow 最終 output（router watch loop 收到後 call FinalizePipelineAsync）。
-/// Completed=true → happy path 完成 / Completed=false → fallback to legacy（FallbackReason 不為 null）。</summary>
+/// ⚠️ Stage 53B 起 Completed 語義變更：
+///   - Completed=true 表示 **Pipeline Workflow 完整跑完**（含 intervention 狀態 — Executor 內 SetInterventionAndYieldAsync
+///     已 set group.Status=NeedsIntervention + 已 call NotifyBossInterventionAsync），**不是「任務 happy path 完成」語義**。
+///     FinalizePipelineAsync Completed=true 路徑只 ClearMarkersAsync（不重複 call NotifyBoss）。
+///   - Completed=false 表示邊界 fallback（dev_failed / qa_failed / qa_intervention / doc_failed / group_not_found），
+///     由 FinalizePipelineAsync 收尾發 Discord notify。Stage 53A 5 fallback to legacy 點（reviewer_critical / dev_plan_failed_escalate /
+///     dev_blocker / arbitration_skip_reviewer / qa_fix_loop）已於 Stage 53B 子項 8 移除（4 子流程 framework 化全接管）。
+/// </summary>
 public sealed class PipelineLoopResult
 {
     [JsonPropertyName("groupId")]

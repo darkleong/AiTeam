@@ -27,16 +27,15 @@ namespace AiTeam.Bot.Orchestration.Meeting;
 ///   - RecoverStuckFrameworkPipelineAsync(ct)：Crash Recovery — 議題 12 升級 ResumeStreamingAsync（沿用 Stage 51 試點 know-how，不採降級重跑）；rehydrate state 後等下次 Agent callback 自然推進
 ///   - FinalizePipelineAsync(group, result, ct)：收尾 — Completed=true 清 marker / Completed=false（fallback）已由 Executor ClearMarkerAndFallbackAsync 清 marker，主動 call legacy method 對應 reason 接管（議題 9 修法）
 ///
-/// fallback reason → legacy method dispatch（議題 9 + 邊界）：
-///   - reviewer_critical             → group.FixIteration++ + tgs.FireStepsAsync([WorkflowStep("Dev", IsFixLoop:true)])
-///   - dev_plan_failed_escalate      → appealOrchestration.HandleDevPlanCompletedAsync
-///   - dev_blocker                   → appealOrchestration.HandleDevBlockerAsync
-///   - dev_failed                    → tgs.NotifyBossDevFailedInterventionAsync + group.Status=NeedsIntervention
-///   - qa_fix_loop                   → 已 fire Dev_fix（HandleQaCompletedAsync 內），無需 call（純清 marker）
-///   - qa_failed / qa_intervention   → tgs.NotifyBossInterventionAsync（依 group.Status 已 set）
+/// fallback reason（Stage 53B 移除 5 fallback to legacy dispatch — 4 子流程 framework 化全接管）：
+///   - dev_failed                    → tgs.NotifyBossDevFailedInterventionAsync + group.Status=NeedsIntervention（極端邊界）
+///   - qa_failed / qa_intervention   → tgs.NotifyBossInterventionAsync（Pipeline QaStage 已 set group.Status）
 ///   - doc_failed                    → tgs.NotifyBossInterventionAsync + group.Status=NeedsIntervention
 ///   - group_not_found               → log error 即可（邊界）
-///   - arbitration_skip_reviewer     → 預留 Stage 53B（53A happy path 不會觸發）
+///
+/// Stage 53B 移除（4 子流程 framework 化全接管）：
+///   - reviewer_critical / dev_plan_failed_escalate / dev_blocker / arbitration_skip_reviewer / qa_fix_loop
+///   - 對應 legacy dispatch 全刪 — Pipeline Executor 內 SetInterventionAndYieldAsync 自接管 intervention（Completed=true）
 /// </summary>
 public sealed class FrameworkPipelineRouter
 {
@@ -360,6 +359,7 @@ public sealed class FrameworkPipelineRouter
                     {
                         PipelineWorkflowFactory.DevPlanCompletionPortId  => "Dev_plan",
                         PipelineWorkflowFactory.DevCompletionPortId      => "Dev",
+                        PipelineWorkflowFactory.DevFixCompletionPortId   => "Dev_fix",  // Stage 53B 新加（議題 12 升級對齊 K1 mapping helper）
                         PipelineWorkflowFactory.ReviewerCompletionPortId => "Reviewer",
                         PipelineWorkflowFactory.QaCompletionPortId       => "QA",
                         PipelineWorkflowFactory.DocCompletionPortId      => "Doc",
@@ -384,32 +384,35 @@ public sealed class FrameworkPipelineRouter
     // ============================================================
 
     /// <summary>
-    /// Stage 53A：Pipeline 收尾。
-    ///   - Completed=true → 清 marker（成功完成）
-    ///   - Completed=false（fallback）→ 執行 Executor ClearMarkerAndFallbackAsync 已清的 marker 確保（idempotent）+ 主動 call legacy method 對應 reason 接管（議題 9 修法）
+    /// Stage 53B：Pipeline 收尾。
+    ///   - Completed=true → 清 marker（happy path 完成 / intervention 完成 — Executor 內 SetInterventionAndYieldAsync 已 call NotifyBoss）
+    ///   - Completed=false → 邊界 fallback case（Pipeline 4 子流程 framework 化後僅剩 group_not_found / dev_failed / qa_failed / qa_intervention / doc_failed 邊界）
     ///
-    /// 避免遞迴關鍵：fallback 主動 call legacy 時 PipelineFrameworkStateJson 已 null →
-    /// HandleAgentCompletedAsync 8A 分流條件失敗 → 走 legacy 路徑（不會遞迴回 framework path）。
+    /// Stage 53B 移除 5 fallback to legacy dispatch case：reviewer_critical / dev_plan_failed_escalate / dev_blocker / arbitration_skip_reviewer / qa_fix_loop
+    /// （4 子流程 framework 化全接管 — Pipeline 不再 fallback 給 legacy 推進）
     /// </summary>
     public async Task FinalizePipelineAsync(TaskGroup group, PipelineLoopResult result, CancellationToken ct)
     {
         if (result.Completed)
         {
-            // happy path：NotifyMergeStageExecutor 已 call NotifyBossMergeAsync，這裡只需清 marker
+            // Stage 53B：Completed=true 包含兩種語義：
+            //   ① happy path（NotifyMergeStageExecutor 已 call NotifyBossMergeAsync）
+            //   ② intervention 完成（Executor SetInterventionAndYieldAsync 已 set group.Status + call NotifyBossInterventionAsync）
+            // 兩者都只需清 marker（不重複 call NotifyBoss）
             await ClearMarkersAsync(group.Id, ct);
             _logger.LogInformation(
-                "[Stage53A] FinalizePipelineAsync happy path 完成 — marker 已清（Group={Id}）",
+                "[Stage53B] FinalizePipelineAsync Completed=true 完成 — marker 已清（Group={Id}）",
                 group.Id);
             return;
         }
 
-        // fallback path（Completed=false）— ClearMarkerAndFallbackAsync 已清 marker（議題 9 + Aria 時序紀律），這裡 idempotent 再清一次確保
+        // fallback path（Completed=false）— Stage 53B 4 子流程 framework 化後僅邊界場景（group_not_found 等）
         await ClearMarkersAsync(group.Id, ct);
 
         var reason = result.FallbackReason ?? "unknown";
         var lastResult = result.LastResult;
         _logger.LogInformation(
-            "[Stage53A-FallbackToLegacy] FinalizePipelineAsync fallback dispatch（Group={Id}，reason={Reason}）",
+            "[Stage53B] FinalizePipelineAsync 邊界 fallback（Group={Id}，reason={Reason}）",
             group.Id, reason);
 
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -417,82 +420,33 @@ public sealed class FrameworkPipelineRouter
         var freshGroup = await taskRepo.GetGroupByIdAsync(group.Id, ct);
         if (freshGroup is null)
         {
-            _logger.LogError("[Stage53A-FallbackToLegacy] FinalizePipelineAsync 找不到 Group={Id}，無法 dispatch", group.Id);
+            _logger.LogError("[Stage53B] FinalizePipelineAsync 找不到 Group={Id}（group_not_found 邊界）", group.Id);
             return;
         }
 
         switch (reason)
         {
-            case "reviewer_critical":
-                // 模擬 legacy WorkflowEngine Reviewer fail routing：FixIteration++ + FireStepsAsync(Dev, IsFixLoop:true)
-                freshGroup.FixIteration++;
-                await taskRepo.SaveAsync(ct);
-                _logger.LogInformation(
-                    "[Stage53A-FallbackToLegacy] reviewer_critical → FixIteration={Iter} + FireStepsAsync(Dev, IsFixLoop:true)（Group={Id}）",
-                    freshGroup.FixIteration, group.Id);
-                {
-                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.FireStepsAsync(freshGroup, [new WorkflowStep("Dev", IsFixLoop: true)], ct);
-                }
-                break;
-
-            case "dev_plan_failed_escalate":
-                if (lastResult is null)
-                {
-                    _logger.LogWarning("[Stage53A-FallbackToLegacy] dev_plan_failed_escalate 無 lastResult，無法 call HandleDevPlanCompletedAsync（Group={Id}）", group.Id);
-                    break;
-                }
-                {
-                    var appealOrch = scope.ServiceProvider.GetRequiredService<AppealOrchestrationService>();
-                    var projectId = string.IsNullOrWhiteSpace(freshGroup.Project)
-                        ? (Guid?)null
-                        : await taskRepo.GetProjectIdByNameAsync(freshGroup.Project, ct);
-                    await appealOrch.HandleDevPlanCompletedAsync(freshGroup, lastResult, taskRepo, projectId, ct);
-                    _logger.LogInformation("[Stage53A-FallbackToLegacy] dev_plan_failed_escalate → HandleDevPlanCompletedAsync 接管（Group={Id}）", group.Id);
-                }
-                break;
-
-            case "dev_blocker":
-                if (lastResult is null)
-                {
-                    _logger.LogWarning("[Stage53A-FallbackToLegacy] dev_blocker 無 lastResult，無法 call HandleDevBlockerAsync（Group={Id}）", group.Id);
-                    break;
-                }
-                {
-                    var appealOrch = scope.ServiceProvider.GetRequiredService<AppealOrchestrationService>();
-                    var projectId = string.IsNullOrWhiteSpace(freshGroup.Project)
-                        ? (Guid?)null
-                        : await taskRepo.GetProjectIdByNameAsync(freshGroup.Project, ct);
-                    await appealOrch.HandleDevBlockerAsync(freshGroup, lastResult, taskRepo, projectId, ct);
-                    _logger.LogInformation("[Stage53A-FallbackToLegacy] dev_blocker → HandleDevBlockerAsync 接管（Group={Id}）", group.Id);
-                }
-                break;
-
             case "dev_failed":
                 {
+                    // Pipeline DevStage 已 set group.Status=NeedsIntervention（intervention helper），這裡發 Discord notify
+                    // 注意：此 case 在 53B 設計改為由 SetInterventionAndYieldAsync 統一處理（YieldOutput Completed=true）
+                    // 保留作為極端邊界 — Executor 走 fallback 路徑（如 group_not_found 後又遞迴觸發 dev_failed）
                     var failSummary = lastResult?.Summary ?? "Dev 執行失敗（無詳細訊息）";
                     taskRepo.UpdateGroupStatus(freshGroup, AiTeam.Shared.Constants.TaskStatus.NeedsIntervention);
                     freshGroup.InterventionReason = $"Dev 失敗（Pipeline framework path）：{failSummary}";
                     await taskRepo.SaveAsync(ct);
                     var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
                     await tgs.NotifyBossDevFailedInterventionAsync(freshGroup, isFixLoop: false, failSummary, ct);
-                    _logger.LogInformation("[Stage53A-FallbackToLegacy] dev_failed → NotifyBossDevFailedInterventionAsync（Group={Id}）", group.Id);
+                    _logger.LogInformation("[Stage53B] dev_failed → NotifyBossDevFailedInterventionAsync（Group={Id}）", group.Id);
                 }
-                break;
-
-            case "qa_fix_loop":
-                // HandleQaCompletedAsync 內已 fire Dev_fix（QaFixRound > 0），無需主動 call legacy
-                // Pipeline marker 已清 → Dev_fix callback 觸發時 HandleAgentCompletedAsync 8A 分流自然失敗 → 走 legacy ✅
-                _logger.LogInformation("[Stage53A-FallbackToLegacy] qa_fix_loop → 已由 HandleQaCompletedAsync 內 fire Dev_fix，無需主動 call（Group={Id}）", group.Id);
                 break;
 
             case "qa_failed":
             case "qa_intervention":
                 {
-                    // group.Status 已由 HandleQaCompletedAsync 內 set（NeedsIntervention/failed），這裡 NotifyBossInterventionAsync
                     var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
                     await tgs.NotifyBossInterventionAsync(freshGroup, ct);
-                    _logger.LogInformation("[Stage53A-FallbackToLegacy] {Reason} → NotifyBossInterventionAsync（Group={Id}）", reason, group.Id);
+                    _logger.LogInformation("[Stage53B] {Reason} → NotifyBossInterventionAsync（Group={Id}）", reason, group.Id);
                 }
                 break;
 
@@ -504,21 +458,16 @@ public sealed class FrameworkPipelineRouter
                     await taskRepo.SaveAsync(ct);
                     var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
                     await tgs.NotifyBossInterventionAsync(freshGroup, ct);
-                    _logger.LogInformation("[Stage53A-FallbackToLegacy] doc_failed → NotifyBossInterventionAsync（Group={Id}）", group.Id);
+                    _logger.LogInformation("[Stage53B] doc_failed → NotifyBossInterventionAsync（Group={Id}）", group.Id);
                 }
                 break;
 
             case "group_not_found":
-                _logger.LogError("[Stage53A-FallbackToLegacy] group_not_found 邊界（Group={Id}）— marker 已清，無法接管", group.Id);
-                break;
-
-            case "arbitration_skip_reviewer":
-                // Stage 53B 範圍預留 — 53A happy path 不會觸發
-                _logger.LogWarning("[Stage53A-FallbackToLegacy] arbitration_skip_reviewer 預留 Stage 53B 範圍（Group={Id}）", group.Id);
+                _logger.LogError("[Stage53B] group_not_found 邊界（Group={Id}）— marker 已清，無法接管", group.Id);
                 break;
 
             default:
-                _logger.LogError("[Stage53A-FallbackToLegacy] 未識別 reason={Reason}（Group={Id}）— marker 已清", reason, group.Id);
+                _logger.LogWarning("[Stage53B] 未識別 reason={Reason}（Group={Id}）— Pipeline 應已涵蓋全 path（4 子流程 framework 化後）", reason, group.Id);
                 break;
         }
     }
@@ -527,7 +476,7 @@ public sealed class FrameworkPipelineRouter
     //  Helpers
     // ============================================================
 
-    /// <summary>解析 completedAgent → 對應 PortId + Response 物件（5 stage-distinct request/response 型別）。</summary>
+    /// <summary>解析 completedAgent → 對應 PortId + Response 物件（Stage 53B：6 stage-distinct request/response 型別，K1 拍板擴 5 → 6 entry）。</summary>
     private static (string? PortId, object? ResponseObj) BuildAgentCompletionResponse(
         string completedAgent, AgentExecutionResult result)
     {
@@ -535,10 +484,11 @@ public sealed class FrameworkPipelineRouter
         {
             "Dev_plan" => (PipelineWorkflowFactory.DevPlanCompletionPortId,  new DevPlanCompletionResponse(result)),
             "Dev"      => (PipelineWorkflowFactory.DevCompletionPortId,      new DevCompletionResponse(result)),
+            "Dev_fix"  => (PipelineWorkflowFactory.DevFixCompletionPortId,   new DevFixCompletionResponse(result)),  // Stage 53B 新加
             "Reviewer" => (PipelineWorkflowFactory.ReviewerCompletionPortId, new ReviewerCompletionResponse(result)),
             "QA"       => (PipelineWorkflowFactory.QaCompletionPortId,       new QaCompletionResponse(result)),
             "Doc"      => (PipelineWorkflowFactory.DocCompletionPortId,      new DocCompletionResponse(result)),
-            _          => (null, null),  // Dev_fix / 其他不在 Pipeline 範圍
+            _          => (null, null),  // 其他不在 Pipeline 範圍
         };
     }
 

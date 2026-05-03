@@ -1,10 +1,12 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
+using AiTeam.Bot.Orchestration.Appeal;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 
 namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 
@@ -25,8 +27,10 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 /// 紀律：fallback 時序（先清 marker → 再 SendMessage）+ type-explicit Bridge record（DevCompletionRequest/Response）+ Stage 50 三件套。
 /// </summary>
 [SendsMessage(typeof(ReviewerStageBridge))]
+[SendsMessage(typeof(DevRetryBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(DevCompletionRequest))]
+[YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class DevStageExecutor : Executor
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -43,6 +47,19 @@ internal sealed partial class DevStageExecutor : Executor
 
     [MessageHandler]
     private async ValueTask HandleEntryAsync(DevStageBridge bridge, IWorkflowContext context)
+        => await EnqueueDevAndYieldAsync(bridge.GroupId, context);
+
+    /// <summary>Stage 53B：Dev retry handler — [BLOCKED] Petra continue 後重試 Dev（self-loop via DevRetryBridge）。
+    /// reuse EnqueueDevAndYieldAsync 共用邏輯。</summary>
+    [MessageHandler]
+    private async ValueTask HandleRetryAsync(DevRetryBridge bridge, IWorkflowContext context)
+    {
+        _logger.LogInformation("[Stage53B] DevStage：retry handler 觸發（DevRetryBridge, Group={Id}）", bridge.GroupId);
+        await EnqueueDevAndYieldAsync(bridge.GroupId, context);
+    }
+
+    /// <summary>共用 enqueue + yield 邏輯。</summary>
+    private async ValueTask EnqueueDevAndYieldAsync(Guid groupId, IWorkflowContext context)
     {
         var state = await PipelineStateHelpers.ReadAsync(context);
         state.CurrentStage = "Dev";
@@ -50,19 +67,19 @@ internal sealed partial class DevStageExecutor : Executor
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var group = await taskRepo.GetGroupByIdAsync(bridge.GroupId, default);
+        var group = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (group is null)
         {
-            _logger.LogError("[Stage53A] DevStage：找不到 Group={Id}，fallback", bridge.GroupId);
-            await ClearMarkerAndFallbackAsync(context, bridge.GroupId, "group_not_found", null);
+            _logger.LogError("[Stage53A] DevStage：找不到 Group={Id}，fallback", groupId);
+            await context.SendMessageAsync(new PipelineFallbackBridge(groupId, "group_not_found", null));
             return;
         }
 
         var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
         await tgs.FireStepsAsync(group, [new WorkflowStep("Dev")], default);
-        _logger.LogInformation("[Stage53A] DevStage：enqueue Dev + emit RequestPort yield（Group={Id}）", bridge.GroupId);
+        _logger.LogInformation("[Stage53A] DevStage：enqueue Dev + emit RequestPort yield（Group={Id}）", groupId);
 
-        await context.SendMessageAsync(new DevCompletionRequest(bridge.GroupId));
+        await context.SendMessageAsync(new DevCompletionRequest(groupId));
     }
 
     [MessageHandler]
@@ -73,17 +90,49 @@ internal sealed partial class DevStageExecutor : Executor
 
         if (!result.Success)
         {
-            // [BLOCKED] 阻礙 → dev_blocker fallback
+            // [BLOCKED] 阻礙 → 53B：內 call HandleDevBlockerAsync（Pipeline path skip 內部 fire/UpdateStatus/Discord — 議題 F-1 修正 6-c）
             if (result.Summary.StartsWith("[BLOCKED]", StringComparison.Ordinal)
                 && !string.IsNullOrWhiteSpace(result.OutputContent))
             {
-                _logger.LogInformation("[Stage53A] DevStage：[BLOCKED] → fallback dev_blocker（Group={Id}）", state.GroupId);
-                await ClearMarkerAndFallbackAsync(context, state.GroupId, "dev_blocker", result);
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+                var group = await taskRepo.GetGroupByIdAsync(state.GroupId, default);
+                if (group is null)
+                {
+                    _logger.LogError("[Stage53B] DevStage：blocker 前找不到 Group={Id}，fallback", state.GroupId);
+                    await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
+                    return;
+                }
+
+                var projectId = string.IsNullOrWhiteSpace(group.Project)
+                    ? (Guid?)null
+                    : await taskRepo.GetProjectIdByNameAsync(group.Project, default);
+                var appealOrchestration = scope.ServiceProvider.GetRequiredService<AppealOrchestrationService>();
+
+                // 子項 6-c 議題 F-1 修正：HandleDevBlockerAsync signature `Task` → `Task<BlockerDecision>` 回傳 Petra 評估
+                // Pipeline path 下 fire + UpdateStatus + Discord 全 skip，Pipeline 用 decision.Routing 自接管 routing
+                var decision = await appealOrchestration.HandleDevBlockerAsync(group, result, taskRepo, projectId, default);
+
+                if (decision.Routing is "escalate_victoria" or "escalate_boss")
+                {
+                    _logger.LogInformation("[Stage53B] DevStage：[BLOCKED] Petra {Routing} → SetInterventionAndYieldAsync（Group={Id}）",
+                        decision.Routing, state.GroupId);
+                    await SetInterventionAndYieldAsync(context, state.GroupId,
+                        $"Dev blocker {decision.Routing}：{decision.Instructions}", result);
+                    return;
+                }
+
+                // Petra continue → DevRetryBridge 重試（HandleDevBlockerAsync 內 FireStepsAsync(Dev) 已 Pipeline path skip）
+                _logger.LogInformation("[Stage53B] DevStage：[BLOCKED] Petra continue → DevRetryBridge 重試（Group={Id}）", state.GroupId);
+                state.LastAgentResult = result;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DevRetryBridge(state.GroupId));
                 return;
             }
-            // 其他失敗 → dev_failed fallback
-            _logger.LogInformation("[Stage53A] DevStage：result.Success=false → fallback dev_failed（Group={Id}）", state.GroupId);
-            await ClearMarkerAndFallbackAsync(context, state.GroupId, "dev_failed", result);
+
+            // 其他失敗 → 53B：intervention（保留 dev_failed 邊界 reason 給 FinalizePipelineAsync notify）
+            _logger.LogInformation("[Stage53B] DevStage：result.Success=false → SetInterventionAndYieldAsync（Group={Id}）", state.GroupId);
+            await SetInterventionAndYieldAsync(context, state.GroupId, $"Dev 失敗：{result.Summary}", result);
             return;
         }
 
@@ -95,15 +144,31 @@ internal sealed partial class DevStageExecutor : Executor
         await context.SendMessageAsync(new ReviewerStageBridge(state.GroupId));
     }
 
-    private async ValueTask ClearMarkerAndFallbackAsync(
-        IWorkflowContext context, Guid groupId, string reason, AgentExecutionResult? result)
+    /// <summary>Stage 53B：intervention 統一 helper（dev_failed / blocker escalate）。</summary>
+    private async ValueTask SetInterventionAndYieldAsync(
+        IWorkflowContext context, Guid groupId, string interventionReason, AgentExecutionResult? lastResult)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.TaskGroups.Where(g => g.Id == groupId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(g => g.PipelineFrameworkStateJson, (string?)null)
-                .SetProperty(g => g.ActiveOrchestration, (string?)null), default);
-        await context.SendMessageAsync(new PipelineFallbackBridge(groupId, reason, result));
+                .SetProperty(g => g.Status, TaskStatus.NeedsIntervention)
+                .SetProperty(g => g.InterventionReason, interventionReason), default);
+
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
+        if (freshGroup is not null)
+        {
+            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+        }
+
+        await context.YieldOutputAsync(new PipelineLoopResult
+        {
+            GroupId = groupId,
+            Completed = true,
+            FallbackReason = null,
+            LastResult = lastResult,
+        });
     }
 }
