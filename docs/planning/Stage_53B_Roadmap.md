@@ -472,9 +472,47 @@ Stage 55：收尾 + token middleware + production 切換 + 老 framework code �
 
 ### Aria 校準錨候選
 
-待 Aria 結案第二段填（context 預估 470-840K，實際 ~500-600K（Session A 結束報告時粗估），規模對齊「混合型第 6 資料點」上半範圍）
+待 Aria 結案第二段填（context 預估 470-840K，實際 ~500-600K Session A+B + 驗收期 ~250K = 總 ~750-850K，規模對齊「混合型第 6 資料點」中-上半範圍）
 
 ---
+
+## 驗收期紀錄（2026-05-03，Forge 自驗 6 場景全綠 + 2 follow-up + 1 既有議題揭露）
+
+### 驗收能力突破：/internal/mock/scenario HTTP API + BossInteraction auto-approver
+
+Forge 自驗期發現：Stage 32 既有 `POST /internal/mock/scenario` HTTP API 可從 host curl 直接觸發 Mock 場景（不需 Discord/Dashboard），加上 docker exec psql 直接 update boss_interactions auto-approve kickoff/design pending interactions，Forge 可**完整自驗 6 場景**（不需 Christ 動手）。
+
+→ Christ 拍板「Forge 權限完整可控 docker」配合 API 探索能力 → Stage 53B 起 Forge 自驗範圍可涵蓋全 6 場景（含 Crash Recovery docker compose restart）。
+
+### Follow-up #1（[7fbac77](https://github.com/darkleong/AiTeam/commit/7fbac77)）：Mock 53B 場景搬到 3 agent service MockMode early return
+
+**根因**：3 agent service（ReviewerAgentService / DevAgentService / QaAgentService）在 MockMode 下 early return 直接 hard-code 回傳，**完全 bypass** MockClaudeCodeService 的 RunReviewAsync/RunAsync/RunQaAsync。Stage 53B 主 commit 把 53B Mock branches 寫在 MockClaudeCodeService 內 — 設計失誤，agent 根本沒 call 它。
+
+**修法**：53B Mock branches 搬到 3 agent service 內 + MockClaudeCodeService.GetAndIncrementRound 改 public + MockClaudeCodeService 內 53B branches 移除（避免冗餘 + 加 Mock arch 註解）。
+
+**跨 Stage 預警**：MockMode early return pattern 必須在 Agent service 內處理 Mock 場景，不能假設 MockClaudeCodeService 是 Mock 唯一入口。Stage 54+ 加新 Mock 場景時必先 grep 對應 agent service 的 MockMode early return path。
+
+### Follow-up #0（[49f4d5a](https://github.com/darkleong/AiTeam/commit/49f4d5a)）：Dashboard MockScenarioCard 補 53B 6 場景
+
+Dashboard MockScenarioCard 漏 Stage 49-53B 全部 framework_* 場景（53A 也漏，是長期 follow-up gap）。53B 範圍補 6 場景進 Dashboard 讓 Christ 從 Dashboard 觸發更方便（Discord `/mock framework_pipeline_*` 仍可用）。Stage 49-53A 缺的 framework 場景**沒補**（守 53B 簡潔紀律）— 留 follow-up FF 紀錄。
+
+### 6 場景驗收結果
+
+| 場景 | TaskGroup | Status | FixIteration | 驗證 |
+|---|---|---|---|---|
+| **B** fix_loop_recover_round1 | v3 | ✅ done | 1 | log 證據鏈完整：Vera Round 1 Critical → Petra revise → ReviewerStage SendMessage(DevFixStageBridge) → DevFixStage enqueue Dev_fix (IsFixLoop:true) → DevFixStage passed → ReviewerStageBridge loop back → Vera Round 2 passed → FinalizePipelineAsync Completed=true |
+| **C** fix_loop_max_iter | v4 | ✅ needs_intervention | 3 | InterventionReason="Vera fix loop 超 3 次仍有問題"（53B SetInterventionAndYieldAsync 設） |
+| **D** dev_blocker_appeal | v4 | ⚠️ needs_intervention | 0 | 53B framework path 完整跑通（log 證實 Dev Round 1 [BLOCKED] → Petra continue → Dev Round 2 passed），但 NotifyMergeStage MarkGroupDoneOrInterventionAsync 看到 Round 1 殘留 failed task → 標 needs_intervention（**production 既有議題不是 53B 引入**，legacy 路徑同樣會這樣，立 follow-up FF）|
+| **E** qa_no_tests_dynamic | v4 | ✅ done | 0 | qa_no_tests routing → Petra approve → Pipeline 自接管推進 Doc → NotifyMerge |
+| **F** reviewer_fallback_dynamic | v4 | ✅ done | 1 | 同 B 機制（Vera Round 1 Critical + Petra revise → fix loop） |
+| **G** fix_loop_crash_recovery | v7 | ✅ done | 1 | Forge 代勞 docker compose restart 在 DevFix yield 期間 + Recovery 完整證據鏈：`stuck framework pipeline rehydrate（議題 12 ResumeStreamingAsync）` + `pending PortId=Pipeline-DevFixCompletion`（**53B K1 mapping helper +1 entry 真實生效**）+ `requeue failed Agent task（agent=Dev_fix）`（**53A follow-up #4 + 53B Dev_fix 整合驗證**）|
+
+### Follow-up FF 候選（未在本 Stage 修，留紀錄）
+
+1. **Pipeline DevStage [BLOCKED] retry 後 Round 1 failed task 殘留 → MarkGroupDoneOrInterventionAsync 誤判 needs_intervention**：production 既有議題（legacy 也會這樣）。建議方向：① DevStage retry 時把舊 failed task 標 superseded / ② MarkGroupDone 忽略 IsFixLoop=true 後續有 newer success task 的舊 failed task。Stage 54+ 評估
+2. **Mock 場景跨 Stage（Kickoff/Design）需要手動 DB approve BossInteraction 才能推進**：Stage 49-53B 既有議題（不是 53B 引入），Forge 自驗期靠 BossInteraction auto-approver Monitor 解。建議方向：MockMode 模式下 BossInteraction 自動 approve（避免 Christ/Forge 每次手動 DB approve）
+3. **Dashboard MockScenarioCard 補 Stage 49-53A framework_* 場景**：53B 只補 53B 6 場景，Stage 49-53A 共 22+ 個 framework_* 場景仍缺
+4. **MockClaudeCodeService 內 RunReviewAsync/RunAsync/RunQaAsync 在 Mock arch 下 dead code**（被 3 agent service early return bypass）：3 個 method 內留註解說明，但實際邏輯永不執行 — Stage 54+ 評估清理
 
 ## 版本歷史
 
