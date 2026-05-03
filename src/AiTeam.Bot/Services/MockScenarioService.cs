@@ -145,6 +145,19 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = scenario;
             MockClaudeCodeService.ResetScenarioRoundCounters();  // Stage 53B：清 round counter 確保新 run 從 Round 1 開始
         }
+        // ── Stage 54 v4 漸進遷移第七步：framework Recovery 升級 + idempotency 驗證 2 新 scenario alias ──
+        // 觸發既有 Mock 邏輯 + 提供驗收明確命名（plan 對應場景 D / G）
+        // - framework_design_crash_recovery_issue_idempotency ⭐：對齊 framework_design_consensus_round1 邏輯，
+        //   Forge 線下可手動 docker restart 並驗 LastIssueCreatedRound marker + GitHub Issue 數量不重複
+        // - pipeline_dev_blocker_retry_idempotency ⭐：對齊 framework_pipeline_dev_blocker_appeal 邏輯，
+        //   驗 MarkGroupDoneOrIntervention 修法後 Round 2 success → group.Status=done 不誤判 needs_intervention
+        else if (scenario == "framework_design_crash_recovery_issue_idempotency")
+            MockClaudeCodeService.FailScenario = "framework_design_consensus_round1";
+        else if (scenario == "pipeline_dev_blocker_retry_idempotency")
+        {
+            MockClaudeCodeService.FailScenario = "framework_pipeline_dev_blocker_appeal";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -205,6 +218,9 @@ public class MockScenarioService(
             "framework_pipeline_qa_no_tests_dynamic"      => (WorkflowType.NewFeature, "FrameworkPipeline-QaNoTestsDynamic",     "Kickoff"),
             "framework_pipeline_reviewer_fallback_dynamic"=> (WorkflowType.NewFeature, "FrameworkPipeline-ReviewerFallbackDyn",  "Kickoff"),
             "framework_pipeline_fix_loop_crash_recovery"  => (WorkflowType.NewFeature, "FrameworkPipeline-FixLoopCrashRecovery", "Kickoff"),
+            // Stage 54：framework Recovery 升級 + idempotency 驗證 alias
+            "framework_design_crash_recovery_issue_idempotency" => (WorkflowType.NewFeature, "Stage54-DesignIssueIdempotency", "Kickoff"),
+            "pipeline_dev_blocker_retry_idempotency"            => (WorkflowType.NewFeature, "Stage54-DevBlockerRetryIdempotency", "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

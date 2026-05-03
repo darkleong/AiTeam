@@ -468,6 +468,63 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 
 > Forge 結案第一段填（子項完成度對照 / Session 結案 / 關鍵設計決策 / 踩坑紀錄 / 驗收結果 / Aria 校準錨候選 — Aria 第二段填）
 
+### 子項完成度對照
+
+| # | 子項 | 狀態 | LoC 實際 vs 預估 |
+|---|---|---|---|
+| 1 | 抽 4 CheckpointStore base class | ✅ | 新建 base 220 行 / 4 子類各 ~35 行 = 360 行（vs 既有 833 行，淨減 ~470 行）— 預估 ~250 + 4×~50 = 450 行，實際略小 |
+| 2 | 3 router RecoverStuck*Async 升級 ResumeStreamingAsync | ✅ | ~200 行（含 ScanForIntProperty helper / ClearMarker helper / R6 保守 OutputEvent 處理） |
+| 3 | B2 idempotency — DB 欄位 + Migration + 4 check 點 | ✅ | Entity 8 行 / Migration 1 (auto-gen) / 2 Executor + 2 Router check ~70 行 |
+| 4 | MarkGroupDoneOrInterventionAsync 修法（53B follow-up #1） | ✅ | ~25 行（廣義判斷「同 AssignedAgent 後續 newer success task」，**不限 IsFixLoop=true**：plan 條件對 dev_blocker 場景無效，廣義條件覆蓋 fix loop + dev_blocker retry 兩個場景） |
+| 5 | MockMode auto-approve + dead code Obsolete | ✅ | InteractionService ~22 行 hook / MockClaudeCodeService 3 method 加 [Obsolete] attribute（caller 已搬到 agent service early return，Obsolete 不破壞 build） |
+| 6 | Mock 場景擴充（2 alias）+ dotnet test 127 passed | ✅ | MockScenarioService 2 alias key（framework_design_crash_recovery_issue_idempotency / pipeline_dev_blocker_retry_idempotency）；實跑場景驗收待 deploy 後跑 |
+| 7 | Version bump v3.41.0 + Roadmap 結案 + commit + push | 🔄 | 進行中 |
+
+### 關鍵設計決策
+
+**plan B2 拍板修正（議題 B B1 → B2）**：Plan v1.0 採 B1 用 `state.IssueUrls` 做 idempotency check，Forge Plan Mode 揭露 R5「DesignAdjustmentExecutor 多輪 needs_adjustment 業務每輪覆寫 IssueUrls，加 check 後第 N 輪 Adjustment 不再創新 Issue」會破壞 production 業務。Christ 重拍板原話「Adjustment 觸發都會踩，不是機率問題」，改 B2 加 round-aware DB marker `LastIssueCreatedRound`：
+- RosaPreWork (Round 0)：`!= 0` 才創 → 設 0
+- Adjustment (Round N)：`!= state.Round` 才創 → 設 N
+
+100% 防重複 + 多輪業務正確覆蓋（marker N != N+1）。原 R5 標已解。
+
+**plan IsFixLoop 條件廣義化（子項 4 揭露）**：plan 議題 8 拍板「對 group.Tasks 內 failed task，若同 AssignedAgent + IsFixLoop=true + 後續有 CreatedAt > 該 failed task 的 success task → 忽略」— 但 Dev blocker retry 場景的 Round 2 task 走 DevRetryBridge self-loop（`FireStepsAsync(new WorkflowStep("Dev"))` 不帶 IsFixLoop:true 旗標），WorkflowAgentKey 仍為 "Dev"。嚴格按 plan IsFixLoop=true 條件 dev_blocker 修不了。改採廣義條件：「同 AssignedAgent 有 CreatedAt 較晚的 done task 即視為被取代」— Reviewer fix loop（Dev_fix）+ Dev blocker retry（Dev）兩場景同時覆蓋。
+
+**plan R6 保守 OutputEvent 處理（3 router 升級）**：Pipeline 既有 ResumeStreamingAsync line 275-380 設計適用「有 yield 點」場景（90% 收 RequestInfoEvent break）。Appeal/Kickoff/Design 沒有 yield 點 → Recovery rehydrate 後必然 emit WorkflowOutputEvent。Plan R6 拍板「emit OutputEvent → log + 清 marker（不主動 finalize）」— 由後續 entry method trigger 重新走，避免 Recovery 期間誤觸發 Discord 通知。idempotency 4 處 check 守住「重新 entry 不重複 side effect」。
+
+**Appeal 兩種 workflow 區分**：升級時必須先 RetrieveCheckpointAsync 取 latest JsonElement，掃 `"kind"` property（int 0=ReviewAppeal, 1=DevPlanAppeal）→ 建對應 workflow factory method。新加 ScanForIntProperty helper 對齊既有 ScanForBoolProperty / ScanForGuidProperty / ScanForStringProperty pattern。
+
+**Kickoff Stage 51 試點 know-how 保留**：升級流程 LoadFromDb 之後**第一步**做 `ScanForBoolProperty(midInterruptRequestPending)` check — true 則保留 marker 不 ResumeStreamingAsync rehydrate（等 BossInteraction trigger）。對齊 Aria 拿捏 #6 紀律。
+
+**MockMode auto-approve hook 位置**：放 InteractionService.CreateInteractionAsync 內（建 interaction 後立刻 try auto-approve），不新加 method。利用既有 try-catch 包裝確保 auto-approve 失敗不影響 main flow（log warning + non-critical）。注意：MockMode auto-approve 後 BossInteraction 立即 status=responded，會影響場景 C 的 idempotency check 驗收（lookup pending interaction 會找不到）— 場景 C 改驗 BossInteraction.GetLatestForGroupByTypeAsync count（不論 status）達同等 idempotency 證據。
+
+### 踩坑紀錄
+
+1. **DesignAdjustmentExecutor.cs 內 lambda 對 state.Round 的 closure**：原本寫 `s.SetProperty(g => g.LastIssueCreatedRound, state.Round)` 編譯器抱怨「Cannot access value of type int? in expression tree」。改用 local variable `var thisRound = state.Round;` + `(int?)thisRound` cast 解。
+
+2. **InteractionService MockMode auto-approve scope reuse**：原本想用 `serviceProvider.CreateAsyncScope()` 開新 scope query AppSettingsService，但既有 scope `await using var scope = serviceProvider.CreateAsyncScope();` 已建。直接 `scope.ServiceProvider.GetRequiredService<AppSettingsService>()` reuse，避免兩個 scope 同時開。
+
+### 驗收結果（待 deploy 後 Forge 自驗 + Christ 線下選擇性）
+
+- ✅ dotnet build AiTeam.slnx：0 Error / 0 Stage 54 引入的 Warning（既有 87 個 NU1902 / MSTEST0037 / MUD0002 警告與 Stage 54 無關）
+- ✅ dotnet test：127 unit tests passed
+- 🔄 Mock 場景實跑驗收（8 場景）：待 push + CI/CD 部署 + Forge 透過 `/internal/mock/scenario` HTTP API 自跑：
+  - 場景 A 4 framework path baseline regression
+  - 場景 B Appeal Crash Recovery（ResumeStreamingAsync 升級）
+  - 場景 C Kickoff Crash Recovery + idempotency
+  - 場景 D Design Crash Recovery + Issue idempotency ⭐（**Forge 自驗用 GitHub API 數 issue 數量**：跑場景觸發前後 `curl https://api.github.com/repos/{owner}/{repo}/issues?state=all&per_page=100` 比對；驗 `LastIssueCreatedRound` marker check 觸發；Christ 線下視覺確認加碼保險）
+  - 場景 E Kickoff MidInterrupt Recovery（Stage 51 know-how 保留）
+  - 場景 F Pipeline Crash Recovery regression
+  - 場景 G Pipeline DevStage [BLOCKED] retry idempotency ⭐
+  - 場景 H MockMode auto-approve
+
+### Aria 校準錨候選（Aria 第二段填）
+
+> 預估 Forge 提案 ~×0.9-1.1（混合型 mid 中段下半，第 7 個資料點）— 純機制升級 + 重構 + idempotency 加固，Stage 49-53B know-how 全複用。
+> 子項間每次 dotnet build 0 Error + dotnet test 127 passed，無實作期重大踩坑（僅 2 個小編譯 nuance）。
+> Forge 在 Plan Mode 主動揭露 R5（B1 → B2 戰略級改動）+ R6（保守 OutputEvent 處理）2 項 plan 邊界 — Christ 重拍板議題 B B1 → B2 為 Stage 54 戰略級設計修正。
+> 子項 4 進一步揭露 plan IsFixLoop=true 條件對 dev_blocker 場景無效，廣義化判斷 — 自省點 #23 grep 紀律對 plan 條件 cross-check 議題候選。
+
 ---
 
 ## 版本歷史

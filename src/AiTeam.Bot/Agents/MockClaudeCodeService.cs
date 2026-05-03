@@ -67,6 +67,7 @@ public class MockClaudeCodeService(
     /// 模擬 Dev Agent 完整開發（RunAsync）。
     /// Output 包含 /pull/999，讓 DevAgentService.ExtractPrNumberFromText 可解析 PR 編號。
     /// </summary>
+    [Obsolete("Stage 53B+：Mock 已搬到 DevAgentService MockMode early return（含 dev_blocker_appeal scenario）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunAsync(
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
@@ -116,6 +117,7 @@ public class MockClaudeCodeService(
     /// 模擬 QA 測試產生（RunQaAsync）。
     /// Output 為 QaReport JSON，供 QaAgentService.TryParseQaReport 解析。
     /// </summary>
+    [Obsolete("Stage 53B+：Mock 已搬到 QaAgentService MockMode early return（含 qa_no_tests_dynamic scenario）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunQaAsync(
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {
@@ -132,6 +134,7 @@ public class MockClaudeCodeService(
     /// 模擬 Code Review（RunReviewAsync）。
     /// Output 為 ReviewReport JSON，供 ReviewerAgentService.TryParseReviewReport 解析。
     /// </summary>
+    [Obsolete("Stage 53B+：Mock 已搬到 ReviewerAgentService MockMode early return（含 fix loop / reviewer_fallback / max_iter / crash_recovery scenarios）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunReviewAsync(
         string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
     {

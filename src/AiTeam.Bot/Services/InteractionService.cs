@@ -117,6 +117,29 @@ public class InteractionService(
             _ = pushService.PushInteractionUpdateAsync();
 
             logger.LogInformation("BossInteraction 已寫入（Id={Id}，Type={Type}）", interaction.Id, interactionType);
+
+            // Stage 54 follow-up #2：MockMode auto-approve（避免 Christ/Forge 每次手動 DB approve）
+            // 對齊 Stage 53B 驗收期 docker exec psql 手動 update 的工具增強
+            try
+            {
+                var appSettings = scope.ServiceProvider.GetRequiredService<AppSettingsService>();
+                if (await appSettings.GetBoolAsync("MockMode", false))
+                {
+                    var approved = await repo.RespondAsync(interaction.Id, "auto_approved", "mock");
+                    if (approved)
+                    {
+                        logger.LogInformation(
+                            "[Stage54] MockMode auto-approve interaction (Id={Id}, Type={Type})",
+                            interaction.Id, interactionType);
+                        _ = pushService.PushInteractionUpdateAsync();
+                    }
+                }
+            }
+            catch (Exception autoEx)
+            {
+                logger.LogWarning(autoEx, "[Stage54] MockMode auto-approve 失敗，略過（non-critical）");
+            }
+
             return interaction.Id;
         }
         catch (Exception ex)

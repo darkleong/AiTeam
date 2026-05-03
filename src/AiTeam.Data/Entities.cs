@@ -168,6 +168,12 @@ public class TaskGroup
     /// F-α 排除條件（避免 4 marker 共存的 Recovery 篩選優先級 collision）：4 個既有 Recovery method 全加 g.PipelineFrameworkStateJson == null。
     /// I2 反向設計（5 fallback 點主動 call legacy method）：Stage 53B 還沒做必須留 fallback to legacy 路徑（Reviewer 🔴 / Dev_plan 失敗 / Dev 阻礙 / 仲裁後 Dev_fix / QA 修復），Stage 55 收尾統一移除。</summary>
     public string? PipelineFrameworkStateJson { get; set; }
+    /// <summary>Stage 54（B2 拍板）：framework Design Workflow 內 GitHub Issue idempotency marker（Crash Recovery 防重複創 Issue）。
+    /// null = 從未創過；0 = RosaPreWork 已創；N (≥1) = Round N Adjustment 已創。
+    /// DesignRosaPreWorkExecutor (Round 0) check `!= 0` 才創；DesignAdjustmentExecutor (Round N) check `!= state.Round` 才創。
+    /// 設計理由：B1（用 state.IssueUrls）會破壞 Adjustment 多輪業務（每輪都會踩 IssueUrls 已 set 而 skip）。
+    /// B2 round-aware marker 100% 防重複 + 多輪業務正常覆蓋（marker N != N+1）。</summary>
+    public int? LastIssueCreatedRound { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

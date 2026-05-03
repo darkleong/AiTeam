@@ -324,7 +324,7 @@ public class FrameworkDesignRouter(
         }
 
         logger.LogWarning(
-            "[FrameworkDesignRouter] 啟動：發現 {Count} 個 stuck framework design，採降級策略重啟",
+            "[FrameworkDesignRouter] 啟動：發現 {Count} 個 stuck framework design，採 ResumeStreamingAsync 升級策略 rehydrate（Stage 54 升級）",
             stuckGroupIds.Count);
 
         foreach (var groupId in stuckGroupIds)
@@ -337,35 +337,80 @@ public class FrameworkDesignRouter(
                 if (latest is null)
                 {
                     logger.LogWarning(
-                        "[FrameworkDesignRouter] Recovery Group={Id}：DesignFrameworkStateJson 有值但 latest checkpoint 不存在，跳過",
+                        "[FrameworkDesignRouter] Recovery Group={Id}：DesignFrameworkStateJson 有值但 latest checkpoint 不存在，清 marker",
                         groupId);
+                    await ClearDesignMarkersAsync(db, groupId, ct);
                     continue;
                 }
 
+                // ── Stage 54：升級 ResumeStreamingAsync（對齊 Pipeline 既有 pattern line 275-380）──
+                var workflow = workflowFactory.CreateDesignWorkflow();
+                var manager = workflowFactory.CreateCheckpointManager();
+
                 logger.LogInformation(
-                    "[FrameworkDesignRouter] Recovery Group={Id}：framework Checkpointing 還原 superstep（latest={Ckpt}）",
+                    "[FrameworkDesignRouter] Recovery Group={Id}：ResumeStreamingAsync rehydrate（latest={Ckpt}）",
                     groupId, latest.CheckpointId);
 
-                // 對齊 Stage 49/50 case study 降級策略：清掉 DesignFrameworkStateJson + ActiveOrchestration，
-                // 讓既有 dispatcher 重新觸發 entry method（從前置作業 Round 0 重來）。
-                // 此降級策略確保 Bot 重啟不卡死；Stage 54 framework Checkpointing 真切 ResumeStreamingAsync 時再升級。
-                await db.TaskGroups.Where(g => g.Id == groupId)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(g => g.ActiveOrchestration, (string?)null)
-                        .SetProperty(g => g.DesignFrameworkStateJson, (string?)null),
-                        ct);
+                await using var run = await InProcessExecution.ResumeStreamingAsync(workflow, latest, manager, ct);
 
-                logger.LogWarning(
-                    "[FrameworkDesignRouter] Recovery Group={Id}：暫採降級策略（清 marker），Stage 54 升級 ResumeStreamingAsync",
-                    groupId);
+                // 收第一個事件決定後續行為（對齊 Pipeline pattern + R6 保守處理）
+                var seenOutput = false;
+                var seenPendingRequest = false;
+                await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
+                {
+                    if (ev is RequestInfoEvent)
+                    {
+                        // Design 既有設計無 yield 點，極罕見走到此分支 — 保留 marker 等下次 trigger
+                        seenPendingRequest = true;
+                        logger.LogInformation(
+                            "[FrameworkDesignRouter] Recovery Group={Id}：rehydrate 收 RequestInfoEvent（罕見），保留 marker 等下次 trigger",
+                            groupId);
+                        break;
+                    }
+                    if (ev is WorkflowOutputEvent)
+                    {
+                        // Design 多數 Recovery 場景：rehydrate 直接走完剩餘 superstep → emit OutputEvent
+                        // R6 保守處理：清 marker（Recovery rehydrate 完成），不主動 finalize
+                        // idempotency 已守：① RosaPreWork/Adjustment 用 LastIssueCreatedRound 防 GitHub Issue 重複；② FinalizeDesign CreateInteraction 用 BossInteraction lookup 防確認卡重複
+                        seenOutput = true;
+                        logger.LogInformation(
+                            "[FrameworkDesignRouter] Recovery Group={Id}：rehydrate 直接 emit WorkflowOutputEvent → 清 marker（不主動 finalize）",
+                            groupId);
+                        break;
+                    }
+                }
+
+                if (!seenPendingRequest && !seenOutput)
+                {
+                    logger.LogWarning(
+                        "[FrameworkDesignRouter] Recovery Group={Id}：rehydrate 未見預期 event，清 marker（避免無人推進）",
+                        groupId);
+                    await ClearDesignMarkersAsync(db, groupId, ct);
+                    continue;
+                }
+
+                if (seenOutput)
+                {
+                    await ClearDesignMarkersAsync(db, groupId, ct);
+                }
+                // seenPendingRequest=true 不清 marker — 等 trigger 重觸發
             }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "[FrameworkDesignRouter] Recovery Group={Id} 失敗，跳過此 group", groupId);
+                    "[FrameworkDesignRouter] Recovery Group={Id} 失敗 — 清 marker", groupId);
+                try { await ClearDesignMarkersAsync(db, groupId, CancellationToken.None); } catch { /* swallow */ }
             }
         }
     }
+
+    /// <summary>Stage 54：清 framework design marker（Recovery 異常 / 完成後清）。</summary>
+    private static Task ClearDesignMarkersAsync(AppDbContext db, Guid groupId, CancellationToken ct)
+        => db.TaskGroups.Where(g => g.Id == groupId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                .SetProperty(g => g.DesignFrameworkStateJson, (string?)null),
+                ct);
 
     // ============================================================
     //  Workflow run + finalize flow
@@ -515,21 +560,33 @@ public class FrameworkDesignRouter(
         var commandHandler = serviceProvider.GetRequiredService<CommandHandler>();
         commandHandler.RegisterDesignConfirmation(msg.Id, freshGroup.Id, loopResult.PetraSessionId, loopResult.EscalateReason);
 
-        _ = interactionService.CreateInteractionAsync(
-            "design",
-            title:                $"設計確認：{freshGroup.Title}",
-            description:          planPreview,
-            project:              freshGroup.Project,
-            agentName:            AgentNames.Pm,
-            availableActionsJson: InteractionService.DesignActionsJson,
-            contextJson:          JsonSerializer.Serialize(new
-            {
-                channelId      = ceoChannel.Id.ToString(),
-                groupId        = freshGroup.Id.ToString(),
-                petraSessionId = loopResult.PetraSessionId
-            }),
-            discordMessageId: (decimal)msg.Id,
-            taskGroupId:      freshGroup.Id);
+        // Stage 54 idempotency check：Crash Recovery 重跑時若 (groupId, "design") 已有 pending interaction → 跳過
+        var interactionRepo = serviceProvider.GetRequiredService<BossInteractionRepository>();
+        var existingInteraction = await interactionRepo.GetLatestForGroupByTypeAsync(freshGroup.Id, "design", ct);
+        if (existingInteraction is { Status: "pending" })
+        {
+            logger.LogInformation(
+                "[Stage54] Recovery 重跑偵測 pending design interaction（Id={Id}），跳過 CreateInteractionAsync（GroupId={GroupId}）",
+                existingInteraction.Id, freshGroup.Id);
+        }
+        else
+        {
+            _ = interactionService.CreateInteractionAsync(
+                "design",
+                title:                $"設計確認：{freshGroup.Title}",
+                description:          planPreview,
+                project:              freshGroup.Project,
+                agentName:            AgentNames.Pm,
+                availableActionsJson: InteractionService.DesignActionsJson,
+                contextJson:          JsonSerializer.Serialize(new
+                {
+                    channelId      = ceoChannel.Id.ToString(),
+                    groupId        = freshGroup.Id.ToString(),
+                    petraSessionId = loopResult.PetraSessionId
+                }),
+                discordMessageId: (decimal)msg.Id,
+                taskGroupId:      freshGroup.Id);
+        }
 
         logger.LogInformation(
             "[Stage52] escalate confirmation 已建立（Group={Id}，PetraSessionId={Sid}）",

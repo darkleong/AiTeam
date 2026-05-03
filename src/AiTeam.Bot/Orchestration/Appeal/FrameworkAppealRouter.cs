@@ -269,7 +269,7 @@ public class FrameworkAppealRouter(
         }
 
         logger.LogWarning(
-            "[FrameworkAppealRouter] 啟動：發現 {Count} 個 stuck framework appeal，重啟 Workflow",
+            "[FrameworkAppealRouter] 啟動：發現 {Count} 個 stuck framework appeal，採 ResumeStreamingAsync 升級策略 rehydrate（Stage 54 升級）",
             stuckGroupIds.Count);
 
         foreach (var groupId in stuckGroupIds)
@@ -282,36 +282,111 @@ public class FrameworkAppealRouter(
                 if (latest is null)
                 {
                     logger.LogWarning(
-                        "[FrameworkAppealRouter] Recovery Group={Id}：FrameworkAppealStateJson 有值但 latest checkpoint 不存在，跳過",
+                        "[FrameworkAppealRouter] Recovery Group={Id}：FrameworkAppealStateJson 有值但 latest checkpoint 不存在，清 marker",
                         groupId);
+                    await ClearAppealMarkersAsync(db, groupId, ct);
                     continue;
                 }
 
-                // ── Recovery：依 AppealState.Kind 判 ReviewAppeal 或 DevPlanAppeal Workflow ──
-                // 注意：framework 1.3.0 ResumeAsync 自己接 fromCheckpoint，內部會還原 state
-                // 詳細 recovery flow 由 framework 處理；router 只負責建 Workflow + ResumeAsync
+                // ── Stage 54：升級 ResumeStreamingAsync（對齊 Pipeline 既有 pattern line 275-380）──
+                // Appeal 兩種 workflow：先 RetrieveCheckpoint 取 JsonElement 掃 "kind"（int 0=ReviewAppeal, 1=DevPlanAppeal）
+                var ckptValue = await checkpointStore.RetrieveCheckpointAsync(sessionId, latest);
+                var kind = ScanForIntProperty(ckptValue, "kind") ?? 0;
+                var workflow = kind == (int)AppealLoopKind.DevPlanAppeal
+                    ? workflowFactory.CreateDevPlanAppealWorkflow()
+                    : workflowFactory.CreateReviewAppealWorkflow();
+                var manager = workflowFactory.CreateCheckpointManager();
+
                 logger.LogInformation(
-                    "[FrameworkAppealRouter] Recovery Group={Id}：framework Checkpointing 還原 superstep（latest={Ckpt}）",
-                    groupId, latest.CheckpointId);
+                    "[FrameworkAppealRouter] Recovery Group={Id}：ResumeStreamingAsync rehydrate（kind={Kind}，latest={Ckpt}）",
+                    groupId, (AppealLoopKind)kind, latest.CheckpointId);
 
-                // TODO Stage 49 後續驗收：實際 ResumeAsync 路徑由 Mock 場景 C 線下驗收驅動完整實作
-                // 暫時策略：清掉 FrameworkAppealStateJson + ActiveOrchestration，讓既有 dispatcher 重新觸發 entry method
-                // 此降級策略確保 Bot 重啟不卡死；Mock 場景 C 驗收後升級為真實 ResumeAsync
-                await db.TaskGroups.Where(g => g.Id == groupId)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(g => g.ActiveOrchestration, (string?)null)
-                        .SetProperty(g => g.FrameworkAppealStateJson, (string?)null),
-                        ct);
+                await using var run = await InProcessExecution.ResumeStreamingAsync(workflow, latest, manager, ct);
 
-                logger.LogWarning(
-                    "[FrameworkAppealRouter] Recovery Group={Id}：暫採降級策略（清 marker），Mock 場景 C 驗收後升級 ResumeAsync",
-                    groupId);
+                // 收第一個事件決定後續行為（對齊 Pipeline pattern line 320-340 + R6 保守處理）
+                var seenOutput = false;
+                var seenPendingRequest = false;
+                await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
+                {
+                    if (ev is RequestInfoEvent)
+                    {
+                        // Appeal 既有設計無 yield 點，極罕見走到此分支 — 保留 marker 等下次 trigger
+                        seenPendingRequest = true;
+                        logger.LogInformation(
+                            "[FrameworkAppealRouter] Recovery Group={Id}：rehydrate 收 RequestInfoEvent（罕見），保留 marker 等下次 trigger",
+                            groupId);
+                        break;
+                    }
+                    if (ev is WorkflowOutputEvent)
+                    {
+                        // Appeal 多數 Recovery 場景：rehydrate 直接走完剩餘 superstep → emit OutputEvent
+                        // R6 保守處理：清 marker（Recovery rehydrate 完成），不主動 finalize（避免誤觸發 Discord 通知）
+                        // 由後續 entry method 重新走（result 已寫進 framework state，下次 caller 自然取用）
+                        seenOutput = true;
+                        logger.LogInformation(
+                            "[FrameworkAppealRouter] Recovery Group={Id}：rehydrate 直接 emit WorkflowOutputEvent → 清 marker（不主動 finalize）",
+                            groupId);
+                        break;
+                    }
+                }
+
+                if (!seenPendingRequest && !seenOutput)
+                {
+                    logger.LogWarning(
+                        "[FrameworkAppealRouter] Recovery Group={Id}：rehydrate 未見預期 event，清 marker（避免無人推進）",
+                        groupId);
+                    await ClearAppealMarkersAsync(db, groupId, ct);
+                    continue;
+                }
+
+                if (seenOutput)
+                {
+                    await ClearAppealMarkersAsync(db, groupId, ct);
+                }
+                // seenPendingRequest=true 不清 marker — 等 trigger 重觸發
             }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "[FrameworkAppealRouter] Recovery Group={Id} 失敗，跳過此 group", groupId);
+                    "[FrameworkAppealRouter] Recovery Group={Id} 失敗 — 清 marker", groupId);
+                try { await ClearAppealMarkersAsync(db, groupId, CancellationToken.None); } catch { /* swallow */ }
             }
+        }
+    }
+
+    /// <summary>Stage 54：清 framework appeal marker（Recovery 異常 / 完成後清）。</summary>
+    private static Task ClearAppealMarkersAsync(AppDbContext db, Guid groupId, CancellationToken ct)
+        => db.TaskGroups.Where(g => g.Id == groupId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                .SetProperty(g => g.FrameworkAppealStateJson, (string?)null),
+                ct);
+
+    /// <summary>Stage 54：掃 JsonElement 找指定 int property（沿用 KickoffRouter ScanForBoolProperty pattern）。</summary>
+    private static int? ScanForIntProperty(System.Text.Json.JsonElement element, string propertyName)
+    {
+        switch (element.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Object:
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.NameEquals(propertyName) && prop.Value.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        if (prop.Value.TryGetInt32(out var n)) return n;
+                    }
+                    var nested = ScanForIntProperty(prop.Value, propertyName);
+                    if (nested is not null) return nested;
+                }
+                return null;
+            case System.Text.Json.JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var nested = ScanForIntProperty(item, propertyName);
+                    if (nested is not null) return nested;
+                }
+                return null;
+            default:
+                return null;
         }
     }
 

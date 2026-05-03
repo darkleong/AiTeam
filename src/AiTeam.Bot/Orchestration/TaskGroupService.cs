@@ -657,7 +657,26 @@ public class TaskGroupService(
             .FirstOrDefaultAsync(g => g.Id == group.Id, ct);
 
         var tasks = fresh?.Tasks ?? group.Tasks;
-        var anyBad = tasks.Any(t => t.Status is "failed" or "needs_intervention");
+
+        // Stage 54 follow-up #1：忽略「同 AssignedAgent 後續有 newer success task」的舊 failed task。
+        // 場景：① Reviewer fix loop Round N Dev_fix failed + Round N+1 success；② Dev [BLOCKED] retry Round N Dev failed + Round N+1 Dev success。
+        // 既有判斷會誤判 needs_intervention（Round 1 failed task 殘留）→ Pipeline + legacy 路徑都受惠。
+        // 註：判斷條件不限 IsFixLoop=true（dev_blocker retry 後 task 也是 IsFixLoop=false），改用「同 AssignedAgent newer success task」廣義判斷。
+        var bad = tasks.Where(t => t.Status is "failed" or "needs_intervention").ToList();
+        var unresolved = bad
+            .Where(b => !tasks.Any(t => t.Status == "done"
+                                     && t.AssignedAgent == b.AssignedAgent
+                                     && t.CreatedAt > b.CreatedAt))
+            .ToList();
+        var anyBad = unresolved.Any();
+
+        var supersededCount = bad.Count - unresolved.Count;
+        if (supersededCount > 0)
+        {
+            logger.LogInformation(
+                "[Stage54] MarkGroupDoneOrIntervention：group {Id} 跳過 {Count} 個被 newer success task 取代的舊 failed task（修法跳過 Round N 失敗 task）",
+                group.Id, supersededCount);
+        }
 
         if (anyBad)
         {

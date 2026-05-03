@@ -2,7 +2,9 @@ using System.Text.Json;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Orchestration.Meeting;
 using AiTeam.Bot.Services;
+using AiTeam.Data;
 using Microsoft.Agents.AI.Workflows;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -67,21 +69,43 @@ internal sealed partial class DesignRosaPreWorkExecutor : Executor
         if (parsedIssues is { Count: > 0 })
         {
             state.IssuesJson = JsonSerializer.Serialize(parsedIssues);
-            var issueUrlList = new List<string>();
-            foreach (var issue in parsedIssues)
+
+            // Stage 54 B2 idempotency check：Crash Recovery 重跑時若 LastIssueCreatedRound == 0 表示前置作業已創過 → 跳過
+            var db = sp.GetRequiredService<AppDbContext>();
+            var lastCreatedRound = await db.TaskGroups
+                .Where(g => g.Id == state.GroupId)
+                .Select(g => g.LastIssueCreatedRound)
+                .FirstOrDefaultAsync();
+
+            if (lastCreatedRound == 0)
             {
-                try
+                _logger.LogInformation(
+                    "[Stage54] Recovery 重跑偵測 LastIssueCreatedRound == 0，跳過 Rosa GitHub Issue 創建（GroupId={Id}）",
+                    state.GroupId);
+            }
+            else
+            {
+                var issueUrlList = new List<string>();
+                foreach (var issue in parsedIssues)
                 {
-                    var url = await ghService.CreateIssueAsync(state.Owner, state.Repo, issue.Title, issue.Body, issue.Labels);
-                    issueUrlList.Add(url);
+                    try
+                    {
+                        var url = await ghService.CreateIssueAsync(state.Owner, state.Repo, issue.Title, issue.Body, issue.Labels);
+                        issueUrlList.Add(url);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[Stage52] Rosa 建立 GitHub Issue 失敗：{Title}", issue.Title);
+                    }
                 }
-                catch (Exception ex)
+                if (issueUrlList.Count > 0)
                 {
-                    _logger.LogWarning(ex, "[Stage52] Rosa 建立 GitHub Issue 失敗：{Title}", issue.Title);
+                    state.IssueUrls = JsonSerializer.Serialize(issueUrlList);
+                    // Stage 54 B2：set marker = 0（RosaPreWork 已創）
+                    await db.TaskGroups.Where(g => g.Id == state.GroupId)
+                        .ExecuteUpdateAsync(s => s.SetProperty(g => g.LastIssueCreatedRound, (int?)0));
                 }
             }
-            if (issueUrlList.Count > 0)
-                state.IssueUrls = JsonSerializer.Serialize(issueUrlList);
         }
         else
         {
