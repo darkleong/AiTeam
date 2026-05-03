@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 8 Stage 路線第七步
 > 對應版本：**v3.41.0**（v4 漸進遷移第七個產生版本變動的 Stage）
 > 建立日期：2026-05-03
-> 狀態：📋 計劃書建立完成，待 Forge 開工
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-04 Forge 結案第一段；待 Aria 結案第二段做 CHANGELOG + Future_Feature 同步）
+> 文件版本：v2.0
 
 ---
 
@@ -551,3 +551,4 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 |---|---|---|
 | v1.0 | 2026-05-03 | 初版規劃書建立（Aria）—— v4 漸進遷移第七步 Stage 54：Crash Recovery 全切 framework Checkpointing + 4 CheckpointStore 抽 base class + side effect idempotency 加固 + Stage 53B follow-up 搭車（A1 4 件事一起做 + B1 🥇 用會議 state 自帶紀錄 check + Aria 拿捏 abstract method base class + 不抽 mapping helper + 5 Mock 場景含 Crash Recovery 4 個 framework path + idempotency check + 53B follow-up #1 retry 場景）。**規劃前期已 grep**：4 個 RecoverStuck*Async method body + 4 個 CheckpointStore 完整結構 + side effect 散落點（CreateIssueAsync / CreateInteractionAsync）+ MidInterruptRequestPending 機制（Stage 51 試點）+ MarkGroupDoneOrInterventionAsync caller 結構 + DesignState.IssueUrls 欄位 — 對齊自省點 #23 規劃前期 grep 紀律。|
 | v1.1 | 2026-05-03 | Forge gate1 揭露 R5 + Christ 重新拍板 — **議題 B 從 B1 改 B2**（用 `state.IssueUrls` check 會破壞 needs_adjustment 多輪業務 → 改加 `TaskGroups.LastIssueCreatedRound` (int?) round-aware marker DB 欄位 + Migration `Stage54TaskGroupIssueCreatedMarker`）。子項 3 規模 S → M（含 DB 欄位 + Migration）。風險點 R5 標「已解」。BossInteraction idempotency type 字串校準為 `"kickoff"` / `"design"`（原計劃書 `"kickoff_confirmation"` 錯誤）。caller 對齊更新：MarkGroupDoneOrInterventionAsync 7 處 caller（3 處 TaskGroupService + 1 處 NotifyMergeStageExecutor + 3 處 QaCoordinationService — Forge gate1 grep 比 Aria 預掃完整）。**Aria gate1 教訓**：B1 拍板時漏估「多輪業務行為差異」非罕見場景，Forge 揭露 R5 是 Aria 預掃 grep 紀律（自省點 #23）的反例 — 應在 grep 「side effect 散落點」時同步 grep 「Executor 多輪呼叫場景」確認 idempotency check 不破壞既有業務。|
+| v2.0 | 2026-05-04 | **Forge 結案第一段（實作完成 + 8 場景驗收全綠）** — 7 子項全完成 + 3 個 commits push（[`36033f0`](https://github.com/darkleong/AiTeam/commit/36033f0) feat 主實作 / [`84bd874`](https://github.com/darkleong/AiTeam/commit/84bd874) fix MockMode auto-approve source bug / [`3c192e3`](https://github.com/darkleong/AiTeam/commit/3c192e3) docs 驗收結果）。**驗收 8 場景全綠 🎉**：A1-A4 baseline regression（4 framework path 不破壞）/ B Appeal Recovery（ResumeStreamingAsync 升級 + R6 保守處理）/ C Kickoff Recovery / D Design Issue idempotency（B2 marker `LastIssueCreatedRound` + 真實 GitHub Issue #195/196/197 沒重複）/ E Stage 51 know-how（jq + psql heredoc inject 驗 `MidInterruptRequestPending=true` Recovery 路徑）/ F Pipeline regression（base class 重構不影響）/ G dev_blocker retry idempotency（子項 4 修法 production 真實生效，Bot log `[Stage54] 跳過 1 個被 newer success task 取代`）/ H MockMode auto-approve（修 source bug 後流程推進）。**驗收期 1 個 follow-up bug** 即時揭露 + 修 + redeploy 重跑。**新工具創新**：場景 E 在 MockMode auto-approve 干擾下無法 catch 自然時序 → SQL inject `midInterruptRequestPending=true` 到 checkpoint JSON 驗 Recovery 路徑可達性。**v4 漸進遷移進度 7/8 ✅**。|
