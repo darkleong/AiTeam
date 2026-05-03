@@ -320,14 +320,16 @@ public sealed class FrameworkPipelineRouter
 
                 // 收第一個 RequestInfoEvent 確認 Pipeline 在 yield 等 callback → break 保留 marker
                 var seenPendingRequest = false;
+                string? pendingPortId = null;
                 await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
                 {
                     if (ev is RequestInfoEvent requestEvt)
                     {
                         seenPendingRequest = true;
+                        pendingPortId = requestEvt.Request.PortInfo.PortId;
                         _logger.LogInformation(
                             "[FrameworkPipelineRouter] Recovery Group={Id}：rehydrate 完成（pending PortId={Port}），等下次 Agent callback 觸發 ResumeAfterAgentAsync",
-                            groupId, requestEvt.Request.PortInfo.PortId);
+                            groupId, pendingPortId);
                         break;
                     }
                     if (ev is WorkflowOutputEvent)
@@ -344,6 +346,29 @@ public sealed class FrameworkPipelineRouter
                         "[FrameworkPipelineRouter] Recovery Group={Id}：rehydrate 未見 pending RequestInfoEvent — 異常狀況，清 marker（避免無人推進）",
                         groupId);
                     await ClearMarkersAsync(groupId, ct);
+                    continue;
+                }
+
+                // Stage 53A 驗收期 follow-up #4：Pipeline 接管 failed Agent task requeue
+                // 場景：Bot restart 期間 Agent task 跑到一半被 OperationCanceledException 標 failed →
+                // RecoverStuckTasksAsync 只 requeue QueueStatus=processing 不處理 failed task →
+                // Pipeline 永遠卡在對應 PortId 等永遠不來的 callback。
+                // 修法：Recovery 偵測 pending PortId 後，找該 stage 對應 Agent 的 failed task 重 requeue（Pipeline 自己接管整體 Recovery 完整性）
+                if (pendingPortId is not null)
+                {
+                    var pendingAgent = pendingPortId switch
+                    {
+                        PipelineWorkflowFactory.DevPlanCompletionPortId  => "Dev_plan",
+                        PipelineWorkflowFactory.DevCompletionPortId      => "Dev",
+                        PipelineWorkflowFactory.ReviewerCompletionPortId => "Reviewer",
+                        PipelineWorkflowFactory.QaCompletionPortId       => "QA",
+                        PipelineWorkflowFactory.DocCompletionPortId      => "Doc",
+                        _                                                => null,
+                    };
+                    if (pendingAgent is not null)
+                    {
+                        await RequeueFailedAgentTaskAsync(groupId, pendingAgent, ct);
+                    }
                 }
             }
             catch (Exception ex)
@@ -515,6 +540,44 @@ public sealed class FrameworkPipelineRouter
             "Doc"      => (PipelineWorkflowFactory.DocCompletionPortId,      new DocCompletionResponse(result)),
             _          => (null, null),  // Dev_fix / 其他不在 Pipeline 範圍
         };
+    }
+
+    /// <summary>Stage 53A 驗收期 follow-up #4：Recovery 期間找對應 stage 的 failed Agent task 重 requeue。
+    /// Bot restart 期間 Agent task 跑到一半被 OperationCanceledException 標 Status="failed"，
+    /// AgentQueueProcessor.RecoverStuckTasksAsync 只 requeue QueueStatus="processing" 不處理 failed task →
+    /// Pipeline 卡在對應 PortId 等永遠不來的 callback。本 helper 補上 Pipeline 接管的 requeue。
+    /// 篩選邏輯：群組內 AssignedAgent 對應 + Status="failed" + QueueStatus 任意 → 設成 queued/queued。
+    /// 取最近一個（同 stage 多次 fix loop 場景，Stage 53A happy path 限定不會發生但保留紀律）。</summary>
+    private async Task RequeueFailedAgentTaskAsync(Guid groupId, string agentName, CancellationToken ct)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var failedTask = await db.Set<TaskItem>()
+            .Where(t => t.GroupId == groupId && t.AssignedAgent == agentName && t.Status == "failed")
+            .OrderByDescending(t => t.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (failedTask is null)
+        {
+            _logger.LogInformation(
+                "[FrameworkPipelineRouter] Recovery Group={Id}：pending agent={Agent} 無 failed task 待 requeue（task 可能已正常完成 callback 跑到一半）",
+                groupId, agentName);
+            return;
+        }
+
+        var rows = await db.Set<TaskItem>()
+            .Where(t => t.Id == failedTask.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.Status, "queued")
+                .SetProperty(t => t.QueueStatus, "queued"), ct);
+
+        if (rows > 0)
+        {
+            _logger.LogWarning(
+                "[FrameworkPipelineRouter] Recovery Group={Id}：requeue failed Agent task（agent={Agent}, taskId={TaskId}）— follow-up #4 修法（Pipeline 接管 Bot restart 邊界 task 中斷邊界）",
+                groupId, agentName, failedTask.Id);
+        }
     }
 
     /// <summary>清雙 marker（PipelineFrameworkStateJson + ActiveOrchestration = null）— idempotent。</summary>
