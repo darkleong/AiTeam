@@ -86,6 +86,53 @@ public class ReviewerAgentService(
                     ReviewBody: failBody, CriticalReviewCount: 1);
             }
 
+            // Stage 53B 驗收期 follow-up #1：fix loop 4 個 Pipeline 場景 — 用 round counter 動態切換 Round1 Critical / Round2+ pass / max_iter 持續 Critical
+            // （MockClaudeCodeService.RunReviewAsync 內 53B branch 被本 method 的 early return bypass，必須改在這裡）
+            var fs = MockClaudeCodeService.FailScenario;
+            if (fs is "framework_pipeline_fix_loop_recover_round1"
+                   or "framework_pipeline_reviewer_fallback_dynamic"
+                   or "framework_pipeline_fix_loop_crash_recovery")
+            {
+                AddLog(task, "[MOCK-53B] Vera 模擬審查中...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Id, task.Title);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                var round = MockClaudeCodeService.GetAndIncrementRound($"{fs}::Vera");
+                if (round == 1)
+                {
+                    AddLog(task, "[MOCK-53B] Vera Round 1 — Critical 觸發 fix loop", "revision");
+                    taskRepository.UpdateStatus(task, "revision");
+                    await taskRepository.SaveAsync(cancellationToken);
+                    const string body =
+                        "## 🔍 PR #999 程式碼審查報告\n\n" +
+                        "### 🔴 必須修改（Critical）\n" +
+                        "- [#1] **`MockFile.cs`** (line ~42): [MOCK-53B] Round 1 模擬 Critical 觸發 fix loop\n\n" +
+                        "**摘要**：[MOCK-53B] Round 1 Critical";
+                    logger.LogInformation("[MockMode/Stage53B] Vera Round 1 → Critical（scenario={Sc}）", fs);
+                    return new AgentExecutionResult(true, "[MOCK-53B] Round 1 Critical",
+                        ReviewBody: body, CriticalReviewCount: 1);
+                }
+                // Round 2+ 回 pass（fix loop 修好）
+                logger.LogInformation("[MockMode/Stage53B] Vera Round {N} → passed（scenario={Sc}）", round, fs);
+                return new AgentExecutionResult(true, "[MOCK-53B] Round 2+ passed",
+                    ReviewBody: "[MOCK-53B] Round 2+ passed — fix loop 完成");
+            }
+            if (fs == "framework_pipeline_fix_loop_max_iter")
+            {
+                AddLog(task, "[MOCK-53B] Vera 模擬審查中（max_iter 場景）...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Id, task.Title);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                logger.LogInformation("[MockMode/Stage53B] Vera 持續 Critical（max_iter 場景）");
+                const string body =
+                    "## 🔍 PR #999 程式碼審查報告\n\n" +
+                    "### 🔴 必須修改（Critical）\n" +
+                    "- [#1] **`MockFile.cs`**: [MOCK-53B] 持續 Critical 逼到 max_iter\n\n" +
+                    "**摘要**：[MOCK-53B] persistent Critical";
+                return new AgentExecutionResult(true, "[MOCK-53B] persistent Critical",
+                    ReviewBody: body, CriticalReviewCount: 1);
+            }
+
             logger.LogInformation("[MockMode] ReviewerAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Vera 模擬審查中...", "running");
             await taskRepository.SaveAsync(cancellationToken);

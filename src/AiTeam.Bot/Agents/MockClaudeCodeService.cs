@@ -51,8 +51,9 @@ public class MockClaudeCodeService(
         lock (_counterLock) _scenarioRoundCounters.Clear();
     }
 
-    /// <summary>Stage 53B：取對應 agent 的 round counter（並 increment 給下次用）— 從 1 開始。</summary>
-    private static int GetAndIncrementRound(string agentKey)
+    /// <summary>Stage 53B：取對應 agent 的 round counter（並 increment 給下次用）— 從 1 開始。
+    /// 驗收期 follow-up #1：改 public，給 ReviewerAgentService / DevAgentService / QaAgentService 的 MockMode early return 用。</summary>
+    public static int GetAndIncrementRound(string agentKey)
     {
         lock (_counterLock)
         {
@@ -71,20 +72,8 @@ public class MockClaudeCodeService(
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
-
-        // Stage 53B：Dev blocker appeal 場景 — Round 1 [BLOCKED] / Round 2+ passed（Petra continue 後 retry）
-        if (FailScenario == "framework_pipeline_dev_blocker_appeal")
-        {
-            var round = GetAndIncrementRound("framework_pipeline_dev_blocker_appeal::Cody");
-            if (round == 1)
-                return new ClaudeCodeResult(true,
-                    "[BLOCKED] [MOCK-53B] 模擬阻礙 — 缺少必要套件，需要 Petra 評估後重試\n" +
-                    "(模擬阻礙詳細 OutputContent 用於觸發 [BLOCKED] dev_blocker 路徑)", 0, "");
-            // Round 2+ retry passed
-            return new ClaudeCodeResult(true,
-                "[MOCK-53B] Dev Round 2 完成，阻礙已解決\nhttps://github.com/mock/repo/pull/999", 0, "");
-        }
-
+        // Stage 53B follow-up #1：dev_blocker_appeal Mock branch 已搬到 DevAgentService.cs MockMode early return 內
+        // （DevAgentService 的 MockMode 不會 call 本 method）
         const string output = "[MOCK] 開發完成，程式碼已實作並通過 build\nhttps://github.com/mock/repo/pull/999";
         return new ClaudeCodeResult(true, output, 0, "");
     }
@@ -132,15 +121,7 @@ public class MockClaudeCodeService(
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunQaAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
-
-        // Stage 53B：QA no_tests dynamic 場景 — TestReport.status = no_applicable_tests，觸發 Petra 評估 routing
-        if (FailScenario == "framework_pipeline_qa_no_tests_dynamic")
-        {
-            return new ClaudeCodeResult(true,
-                "[MOCK-53B] QA 無適用測試\n" +
-                "{\"generated\":[],\"summary\":\"[MOCK-53B] QA 無適用測試，等 Petra 評估\",\"status\":\"no_applicable_tests\",\"no_test_reason\":\"[MOCK-53B] 純文件變更無 code\"}", 0, "");
-        }
-
+        // Stage 53B follow-up #1：qa_no_tests_dynamic Mock branch 已搬到 QaAgentService.cs MockMode early return 內
         const string output =
             "[MOCK] QA 完成\n" +
             "{\"generated\":[\"[MOCK] MockFeatureTest.cs\"],\"summary\":\"[MOCK] QA 測試通過，0 個失敗\"}";
@@ -156,30 +137,7 @@ public class MockClaudeCodeService(
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReviewAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
-
-        // Stage 53B：fix loop / reviewer fallback dynamic 場景 — Vera 第一次回 Critical，後續回 pass（fix_loop_recover）/ 持續 Critical（max_iter）
-        if (FailScenario is "framework_pipeline_fix_loop_recover_round1"
-                          or "framework_pipeline_reviewer_fallback_dynamic"
-                          or "framework_pipeline_fix_loop_crash_recovery")
-        {
-            var round = GetAndIncrementRound($"{FailScenario}::Vera");
-            if (round == 1)
-                return new ClaudeCodeResult(true,
-                    "[MOCK] 審查完成（53B fix loop Round 1 — Critical 觸發）\n" +
-                    "{\"critical\":[{\"id\":1,\"description\":\"[MOCK-53B] 模擬 Critical 觸發 fix loop\"}],\"warning\":[],\"info\":[],\"summary\":\"[MOCK-53B] Round 1 Critical\",\"impact\":\"[MOCK]\"}", 0, "");
-            // Round 2+ 回 pass（fix loop 修好）
-            return new ClaudeCodeResult(true,
-                "[MOCK] 審查完成（53B fix loop Round 2+ — passed）\n" +
-                "{\"critical\":[],\"warning\":[],\"info\":[],\"summary\":\"[MOCK-53B] Round 2+ passed\",\"impact\":\"[MOCK]\"}", 0, "");
-        }
-        // Stage 53B：max_iter 場景 — Vera 持續回 Critical，逼到 ReviewerStage 判 FixIteration>=3 intervention
-        if (FailScenario == "framework_pipeline_fix_loop_max_iter")
-        {
-            return new ClaudeCodeResult(true,
-                "[MOCK] 審查完成（53B max_iter — 持續 Critical）\n" +
-                "{\"critical\":[{\"id\":1,\"description\":\"[MOCK-53B] 持續 Critical 逼到 max_iter\"}],\"warning\":[],\"info\":[],\"summary\":\"[MOCK-53B] persistent Critical\",\"impact\":\"[MOCK]\"}", 0, "");
-        }
-
+        // Stage 53B follow-up #1：fix loop / reviewer_fallback / max_iter / crash_recovery Mock branch 已搬到 ReviewerAgentService.cs MockMode early return 內
         const string output =
             "[MOCK] 審查完成\n" +
             "{\"critical\":[],\"warning\":[],\"info\":[],\"summary\":\"[MOCK] 模擬審查通過，程式碼品質符合要求\",\"impact\":\"[MOCK] 無影響範圍\"}";

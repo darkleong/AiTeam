@@ -94,6 +94,24 @@ public class QaAgentService(
                     TestReport: JsonSerializer.Serialize(failReport, JsonOptions));
             }
 
+            // Stage 53B 驗收期 follow-up #1：qa_no_tests_dynamic scenario — TestReport.status=no_applicable_tests，觸發 Petra AssessNoApplicableTestsAsync 評估 routing
+            if (MockClaudeCodeService.FailScenario == "framework_pipeline_qa_no_tests_dynamic")
+            {
+                AddLog(task, "[MOCK-53B] Quinn 模擬 QA（no_applicable_tests 場景）...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await PushStatus("running", task.Title);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                var noTestsReport = new QaReport
+                {
+                    Status = "no_applicable_tests",
+                    Summary = "[MOCK-53B] QA 無適用測試，等 Petra 評估",
+                    NoTestReason = "[MOCK-53B] 純文件變更無 code，無對應測試"
+                };
+                logger.LogInformation("[MockMode/Stage53B] QA 無適用測試，回傳 no_applicable_tests 報告");
+                return new AgentExecutionResult(true, "[MOCK-53B] QA 無適用測試",
+                    TestReport: JsonSerializer.Serialize(noTestsReport, JsonOptions));
+            }
+
             logger.LogInformation("[MockMode] QaAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Quinn 模擬 QA 執行中...", "running");
             await taskRepository.SaveAsync(cancellationToken);

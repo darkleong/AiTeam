@@ -729,6 +729,26 @@ public class DevAgentService(
                 return new AgentExecutionResult(false, "[MOCK-FAIL] Dev 失敗：模擬 Token 守門擋下");
             }
 
+            // Stage 53B 驗收期 follow-up #1：dev_blocker_appeal scenario — Round 1 [BLOCKED] / Round 2+ passed（Petra continue 後 retry）
+            // 注意：判斷 Dev (非 Dev_plan)：本 method 後段若 IsDevPlanMode → 走 ExecutePlanModeAsync，所以本 mock branch 只 cover Dev / Dev_fix 階段
+            if (MockClaudeCodeService.FailScenario == "framework_pipeline_dev_blocker_appeal" && !IsDevPlanMode(task.Description))
+            {
+                AddLog(task, "[MOCK-53B] Dev 模擬執行中（dev_blocker_appeal 場景）...", "running");
+                await taskRepository.SaveAsync(cancellationToken);
+                await Task.Delay(await appSettings.GetMockDelayMsAsync(cancellationToken), cancellationToken);
+                var devRound = MockClaudeCodeService.GetAndIncrementRound("framework_pipeline_dev_blocker_appeal::Cody");
+                if (devRound == 1)
+                {
+                    logger.LogInformation("[MockMode/Stage53B] Dev Round 1 → [BLOCKED] 觸發 appeal");
+                    return new AgentExecutionResult(false,
+                        "[BLOCKED] [MOCK-53B] 模擬阻礙 — 缺少必要套件，需要 Petra 評估後重試",
+                        OutputContent: "{\"reason\":\"[MOCK-53B] 模擬 Dev blocker\",\"resolution\":\"請評估\"}");
+                }
+                logger.LogInformation("[MockMode/Stage53B] Dev Round {N} → passed（阻礙已解決）", devRound);
+                const string retryPrUrl = "https://github.com/mock/repo/pull/999";
+                return new AgentExecutionResult(true, $"[MOCK-53B] Dev Round {devRound} 完成，阻礙已解決：{retryPrUrl}", retryPrUrl);
+            }
+
             const string mockPrUrl = "https://github.com/mock/repo/pull/999";
             logger.LogInformation("[MockMode] DevAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Dev Agent 模擬執行中...", "running");
