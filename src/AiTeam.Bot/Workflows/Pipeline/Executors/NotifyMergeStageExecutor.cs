@@ -53,8 +53,14 @@ internal sealed partial class NotifyMergeStageExecutor : Executor<NotifyMergeSta
         }
 
         var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-        await tgs.NotifyBossMergeAsync(group, cancellationToken);
-        _logger.LogInformation("[Stage53A] NotifyMergeStage：NotifyBossMergeAsync 完成 → YieldOutput Completed=true（Group={Id}）", bridge.GroupId);
+        // Stage 53A 驗收期 follow-up #2：對齊 legacy QaCoordinationService L99-103 寫法 — 先 MarkGroupDoneOrInterventionAsync 設 group.Status=Done，再決定 NotifyBossMerge / NotifyBossIntervention。
+        // 原 Pipeline NotifyMergeStage 只 call NotifyBossMergeAsync 沒 mark Done，場景 B group.Status=done 是靠 Bug #1 第二次 legacy fall through side effect 完成（修 Bug #1 後此 mark Done 必須補上）。
+        await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
+        if (group.Status == AiTeam.Shared.Constants.TaskStatus.Done)
+            await tgs.NotifyBossMergeAsync(group, cancellationToken);
+        else
+            await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+        _logger.LogInformation("[Stage53A] NotifyMergeStage：MarkDone + NotifyBossMergeAsync 完成 (status={Status}) → YieldOutput Completed=true（Group={Id}）", group.Status, bridge.GroupId);
 
         await context.YieldOutputAsync(new PipelineLoopResult
         {

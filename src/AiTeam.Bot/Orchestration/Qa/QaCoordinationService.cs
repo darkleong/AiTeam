@@ -90,6 +90,17 @@ public class QaCoordinationService(
 
         var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
 
+        // Stage 53A 驗收期 follow-up #1（Aria 議題 G3 同類問題在 QA 重演）：
+        // Pipeline QaStageExecutor 第二 handler 內 sync await call 本 method 後再 SendMessageAsync(DocStageBridge)。
+        // 若本 method 內部 happy path 自動 FireStepsAsync(Doc) → Doc 重複 enqueue 2 次 +
+        // 第 2 次 callback 進來時 PipelineFrameworkStateJson 已被 FinalizePipelineAsync 清 null → 走 legacy → 開第 2 個 merge_notify。
+        // 修法：Pipeline path 下跳過 legacy GetDecision + FireStepsAsync + Mark Done + NotifyBoss（由 Pipeline NotifyMergeStageExecutor 接管）。
+        if (status == "passed" && group.PipelineFrameworkStateJson != null)
+        {
+            logger.LogInformation("[Stage53A] HandleQaCompletedAsync passed：Pipeline path 接管推進，跳過 legacy GetDecision/FireStepsAsync/MarkDone（Group={Id}）", group.Id);
+            return;
+        }
+
         if (status == "passed")
         {
             var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
@@ -118,6 +129,13 @@ public class QaCoordinationService(
 
             if (noTestDecision.Routing == "approve")
             {
+                // Stage 53A 驗收期 follow-up #1：Pipeline path 跳過 legacy fire next（同 passed 路徑修法）
+                if (group.PipelineFrameworkStateJson != null)
+                {
+                    logger.LogInformation("[Stage53A] HandleQaCompletedAsync no_applicable_tests + approve：Pipeline path 接管推進，跳過 legacy GetDecision/FireStepsAsync/MarkDone（Group={Id}）", group.Id);
+                    return;
+                }
+
                 var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
                 if (decision.Action == NextAction.NotifyBossMerge)
                 {
