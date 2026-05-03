@@ -11,15 +11,19 @@
 
 ## [Unreleased]
 
-- **🎉 Stage 53B v4 漸進遷移第六步完成 ⭐**：[Stage 53B](docs/planning/Stage_53B_Roadmap.md) fix loop / appeal / QA fix loop / intervention 4 子流程切 framework + 5 fallback to legacy 點移除 + Stage 53A follow-up #3 場景 E/F 補 dynamic — **6 場景驗收全綠 + 2 follow-up + 1 既有議題揭露 + 4 follow-up FF 候選 + Forge 自驗能力突破（/internal/mock/scenario HTTP API + BossInteraction auto-approver 全 6 場景含 SIGTERM/SIGKILL Crash Recovery）**。NewFeature 主路徑 + 子流程**完整 Pipeline framework 化**達成。**6/8 達成**。
-- **下個動作候選**：① **Stage 54 = Crash Recovery 全面切 framework Checkpointing**（含 4 CheckpointStore + Agent task 層 mapping helper 抽 base class 評估）/ ② FF 四十三 / ③ FF 四十二 / ④ Stage 53B 4 follow-up FF 候選整理立 FF
-- **8 Stage 遷移路線進度**：✅ **49 Appeal loop** ✅ **50 Kickoff Meeting** ✅ **51 framework HITL 試點** ✅ **52 Design Meeting** ✅ **53A NewFeature happy path** ✅ **53B 子流程 + 5 fallback 移除** → 54 Crash Recovery 全切 / 55 收尾 + production 切換 + Kickoff/Design + sub-task 整合 + 真切 BossInteraction 到 framework HITL + 移除 J1 6 hooks legacy safety net
-- **FF 三十六 Phase B 動態流程架構**：路線 = **Stage 54/55 後再評估**（macro pipeline 6/8 達成，動態拓撲表達極限資料點足）
-- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐** / **Stage 52 v4 第四步 ✅** / **Stage 53A v4 第五步 ✅ ⭐** / **Stage 53B v4 第六步 ✅ ⭐**
+- **🎉 Stage 54 v4 漸進遷移第七步完成**：[Stage 54](docs/planning/Stage_54_Roadmap.md) Crash Recovery 全切 framework Checkpointing + 4 CheckpointStore 抽 base class + B2 round-aware idempotency + Stage 53B follow-up 搭車 — **8 場景驗收全綠 + 1 follow-up bug 修復（Forge 自驗時自抓自修）**。**7/8 達成**。
+- **下個動作候選**：① **Stage 55 戰略級收尾**（Kickoff/Design + sub-task 整合 + BossInteraction 切 framework HITL + 移除 J1 6 hooks）/ ② FF 四十三 / ③ FF 四十二 / ④ Stage 53B follow-up #3 立 FF（Dashboard MockScenarioCard 補 Stage 49-53A framework_* 場景）
+- **8 Stage 遷移路線進度**：✅ **49 Appeal loop** ✅ **50 Kickoff Meeting** ✅ **51 framework HITL 試點** ✅ **52 Design Meeting** ✅ **53A NewFeature happy path** ✅ **53B 子流程 + 5 fallback 移除** ✅ **54 Crash Recovery 全切 + base class + idempotency** → 55 戰略級收尾
+- **FF 三十六 Phase B 動態流程架構**：路線 = **Stage 55 後再評估**（macro pipeline 7/8 達成）
+- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐** / **Stage 52 v4 第四步 ✅** / **Stage 53A v4 第五步 ✅ ⭐** / **Stage 53B v4 第六步 ✅ ⭐** / **Stage 54 v4 第七步 ✅**
 - **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
 - **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
 
 ---
+
+## [3.41.0] — 2026-05-04 — [Stage 54](docs/planning/Stage_54_Roadmap.md) v4 漸進遷移第七步 Crash Recovery 全切 + 4 CheckpointStore base class + idempotency
+
+純機制升級 + 重構 + idempotency 加固，無新功能。4 件事一氣呵成：① **抽 4 CheckpointStore base class**（833 → 360 行 **-473 淨減**，`FrameworkCheckpointStoreBase<TStore>` generic 對齊既有 logger category 不破壞 production logging）② **3 router RecoverStuck*Async 升級 ResumeStreamingAsync**（對齊 Stage 53A Pipeline 議題 12 既有 know-how — Appeal 兩種 workflow 用 ScanForIntProperty `kind` 切換 / Kickoff 保留 Stage 51 試點 MidInterruptRequestPending check / Design 直接對齊 + R6 保守 OutputEvent 處理避免 Recovery 期間誤觸發 Discord 通知）③ **B2 round-aware idempotency 戰略級修正**（B1 → B2：Forge gate1 揭露 B1 用 `state.IssueUrls` check 會破壞 needs_adjustment 多輪業務 → Christ 重拍板「Adjustment 觸發都會踩，不是機率問題」→ TaskGroups 加 `LastIssueCreatedRound` int? + Migration `Stage54TaskGroupIssueCreatedMarker` + 4 處 check：DesignRosaPreWork Round 0 / DesignAdjustment Round N round-aware + Kickoff/Design CreateInteractionAsync 用既有 `BossInteractionRepository.GetLatestForGroupByTypeAsync` lookup）④ **Stage 53B follow-up 搭車**：#1 `MarkGroupDoneOrInterventionAsync` 廣義化「同 AssignedAgent newer success task 取代的舊 failed task」覆蓋 fix loop + dev_blocker 兩場景（Forge 揭露原 plan IsFixLoop=true 嚴格條件對 dev_blocker 場景無效）/ #2 `InteractionService` MockMode auto-approve hook（驗收期 fix `84bd874` source='dashboard' 對齊 InteractionProcessor 消費路徑）/ #4 `MockClaudeCodeService` 三 method [Obsolete] attribute（caller 已搬到 agent service early return）。**驗收 8 場景全綠**（A baseline / B Appeal Recovery / C Kickoff Recovery + idempotency / D ⭐ Design Recovery + Issue idempotency / E Stage 51 know-how 保留 / F Pipeline regression / G ⭐ DevStage [BLOCKED] retry idempotency / H MockMode auto-approve）+ Forge 自驗能力首次處理 follow-up bug（自跑場景 H 揭露 source 字串對齊問題自修）。**8 Stage 遷移 7/8 達成**，剩 Stage 55 戰略級收尾。詳見 Stage 54 Roadmap。commits：`36033f0`(主) + `84bd874`(fix) + `3c192e3`(驗收) + `82317cd`(v2.0)。
 
 ## [3.40.0] — 2026-05-03 — [Stage 53B](docs/planning/Stage_53B_Roadmap.md) ⭐ v4 漸進遷移第六步 子流程 + 5 fallback 移除
 
