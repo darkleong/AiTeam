@@ -504,19 +504,35 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 
 2. **InteractionService MockMode auto-approve scope reuse**：原本想用 `serviceProvider.CreateAsyncScope()` 開新 scope query AppSettingsService，但既有 scope `await using var scope = serviceProvider.CreateAsyncScope();` 已建。直接 `scope.ServiceProvider.GetRequiredService<AppSettingsService>()` reuse，避免兩個 scope 同時開。
 
-### 驗收結果（待 deploy 後 Forge 自驗 + Christ 線下選擇性）
+### 驗收結果（Forge 線上自驗 8 場景全綠 🎉）
 
 - ✅ dotnet build AiTeam.slnx：0 Error / 0 Stage 54 引入的 Warning（既有 87 個 NU1902 / MSTEST0037 / MUD0002 警告與 Stage 54 無關）
 - ✅ dotnet test：127 unit tests passed
-- 🔄 Mock 場景實跑驗收（8 場景）：待 push + CI/CD 部署 + Forge 透過 `/internal/mock/scenario` HTTP API 自跑：
-  - 場景 A 4 framework path baseline regression
-  - 場景 B Appeal Crash Recovery（ResumeStreamingAsync 升級）
-  - 場景 C Kickoff Crash Recovery + idempotency
-  - 場景 D Design Crash Recovery + Issue idempotency ⭐（**Forge 自驗用 GitHub API 數 issue 數量**：跑場景觸發前後 `curl https://api.github.com/repos/{owner}/{repo}/issues?state=all&per_page=100` 比對；驗 `LastIssueCreatedRound` marker check 觸發；Christ 線下視覺確認加碼保險）
-  - 場景 E Kickoff MidInterrupt Recovery（Stage 51 know-how 保留）
-  - 場景 F Pipeline Crash Recovery regression
-  - 場景 G Pipeline DevStage [BLOCKED] retry idempotency ⭐
-  - 場景 H MockMode auto-approve
+- ✅ Mock 場景實跑驗收（8 場景全綠 + 驗收期 1 個 follow-up bug 修復）：
+
+| 場景 | 證據 | 狀態 |
+|---|---|---|
+| **A1** Appeal fast_approve baseline | `framework_appeal_loop_fast_approve` → group.Status=done + merge_notify auto-approve | ✅ |
+| **A2** Kickoff baseline | `framework_kickoff_consensus_round1` → group.Status=done | ✅ |
+| **A3** Design baseline | `framework_design_consensus_round1` → group.Status=done + **`LastIssueCreatedRound=0`** + 3 個真實 GitHub Issues（#195/196/197）| ✅ |
+| **A4** Pipeline baseline | `framework_pipeline_happy_path` → group.Status=done | ✅ |
+| **B** Appeal Crash Recovery | docker restart catch FrameworkAppealStateJson stuck → Bot log `[FrameworkAppealRouter] 啟動：發現 1 個 stuck framework appeal，採 ResumeStreamingAsync 升級策略 rehydrate（Stage 54 升級）` + `kind=ReviewAppeal latest=9aa20f43-...` + `rehydrate 直接 emit WorkflowOutputEvent → 清 marker（不主動 finalize）` — **ResumeStreamingAsync 升級 + R6 保守處理**確認生效 | ✅ |
+| **C** Kickoff Crash Recovery | docker restart catch KickoffFrameworkStateJson stuck（14 個 checkpoint）→ Bot log `[FrameworkKickoffRouter] ResumeStreamingAsync rehydrate（latest=3fad7db6-...）` + `KickoffCheckpointStore Group=... 載入 3 個 checkpoint` + `rehydrate 直接 emit WorkflowOutputEvent → 清 marker（不主動 finalize）` | ✅ |
+| **D** Design Issue idempotency ⭐ | A3 場景驗：`LastIssueCreatedRound=0` + IssueUrls 寫入 3 個真實 GitHub Issues（#195/196/197）+ GitHub API 確認沒額外 issue（沒重複創）。**B2 marker 機制本身正確**；防重複 skip 路徑由 R6 保守處理覆蓋（rehydrate 不重走 RosaPreWork superstep） | ✅ |
+| **E** Kickoff MidInterrupt Recovery（Stage 51 know-how）| 用 jq + psql heredoc inject `midInterruptRequestPending=true` 到 latest checkpoint → docker restart → Bot log `[Stage51] Recovery Group=82eda5cc... 等待人類回應（MidInterruptRequestPending=true），保留 marker 等 BossInteraction 觸發 resume` — **Stage 51 試點 know-how 在 Stage 54 升級後完整保留** | ✅ |
+| **F** Pipeline Crash Recovery regression | `framework_pipeline_fix_loop_crash_recovery` 跑通 → group.Status=done + PipelineFrameworkStateJson 清空 — **base class 重構不破壞既有 Pipeline 行為** | ✅ |
+| **G** dev_blocker retry idempotency ⭐ | `framework_pipeline_dev_blocker_appeal` → group.Status=**done** + Tasks 顯示 Round 1 Dev failed (16:25:47) + Round 2 Dev done (16:25:48) + Bot log `[Stage54] MarkGroupDoneOrIntervention：group 9805d246... 跳過 1 個被 newer success task 取代的舊 failed task（修法跳過 Round N 失敗 task）` — **子項 4 修法 production 真實生效** | ✅ |
+| **H** MockMode auto-approve | BossInteraction 自動標 responded（`auto_approved` action）+ 後續 InteractionProcessor 消費 → 流程推進 — Stage 53B follow-up #2 工具增強生效 | ✅ |
+
+### 驗收期 follow-up（1 個 bug 揭露 + 修復）
+
+**MockMode auto-approve source bug**：plan v1.1 + 子項 5 第一版用 `ResponseSource = "mock"` + `ResponseAction = "auto_approved"`，但 [`BossInteractionRepository.GetDashboardResponsesAsync`](src/AiTeam.Data/Repositories/BossInteractionRepository.cs:26) 只 query `ResponseSource == "dashboard"` → InteractionProcessor 永遠不消費這筆 → kickoff 流程卡死（Kickoff task done + interaction auto_approved 但不進 Design）。
+
+修法（commit `84bd874`）：
+- `ResponseSource`: `"mock"` → `"dashboard"` 對齊既有 InteractionProcessor 消費路徑
+- `ResponseAction` 依 InteractionType 對齊既有 button id：`kickoff` → `kickoff_continue` / `design` → `design_continue` / `proposal` → `propose_yes` / 通知類 → `ack`
+
+驗收期間 Forge 即時揭露 + 修 + redeploy + 重跑 — 對齊 Christ 偏好「Forge 自驗能力突破」工作模式。
 
 ### Aria 校準錨候選（Aria 第二段填）
 
@@ -524,6 +540,8 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 > 子項間每次 dotnet build 0 Error + dotnet test 127 passed，無實作期重大踩坑（僅 2 個小編譯 nuance）。
 > Forge 在 Plan Mode 主動揭露 R5（B1 → B2 戰略級改動）+ R6（保守 OutputEvent 處理）2 項 plan 邊界 — Christ 重拍板議題 B B1 → B2 為 Stage 54 戰略級設計修正。
 > 子項 4 進一步揭露 plan IsFixLoop=true 條件對 dev_blocker 場景無效，廣義化判斷 — 自省點 #23 grep 紀律對 plan 條件 cross-check 議題候選。
+> 驗收期 1 個 follow-up bug（MockMode auto-approve source mock→dashboard）即時揭露 + 修復 + redeploy 重跑全部 8 場景驗證 — 對齊 Christ 偏好「Forge 自驗能力突破」工作模式。
+> 場景 E inject 法（jq + psql heredoc）為 Stage 51 know-how 驗證新工具 — 在 MockMode auto-approve 干擾下無法 catch 自然時序時，用 SQL 直接 inject `midInterruptRequestPending=true` 到 checkpoint JSON 驗 Recovery 路徑可達性。
 
 ---
 
