@@ -48,4 +48,17 @@ public class WorkflowSettings
     /// AppSettings 表 key = "Workflow:UseFrameworkDesign"，DB 優先，appsettings.json fallback。
     /// 與 Stage 49 / 50 / 51 三 flag 完全獨立（pipeline 上 Design 跟 Kickoff 是兩個獨立節點）。</summary>
     public bool UseFrameworkDesign { get; set; } = false;
+
+    /// <summary>Stage 53A：v4 漸進遷移第五步 — 是否啟用 MS Agent Framework Pipeline Workflow
+    /// （macro-orchestration framework-in-framework，NewFeature 主路徑 happy path 限定）。
+    /// 預設 false（保留 legacy WorkflowEngine.GetDecision + TaskGroupService.HandleAgentCompletedAsync 路徑），
+    /// Dashboard SystemSettings → v4 漸進遷移控制 切換為 true 後 framework path 接管整個任務 pipeline
+    /// （proposal_approved → Kickoff → Design → Dev_plan → Dev → Reviewer → QA → Doc → NotifyBossMerge）。
+    /// AppSettings 表 key = "Workflow:UseFrameworkPipeline"，DB 優先，appsettings.json fallback。
+    /// 三 flag 連動規則：本 flag 只在 UseFrameworkKickoff = true AND UseFrameworkDesign = true 時有意義
+    /// （pipeline 主 Workflow 內 KickoffStage / DesignStage Executor 同步 await 既有 framework router，
+    /// 路徑必須 framework 才通）。Dashboard UI 上顯示 disabled 狀態當任一前置 flag = false。
+    /// fix loop / appeal / QA fix loop / intervention 子流程留 Stage 53B 範圍 — 53A 5 個 fallback 點主動 call legacy method
+    /// 接手（I2 反向設計，Stage 55 收尾統一移除）。</summary>
+    public bool UseFrameworkPipeline { get; set; } = false;
 }

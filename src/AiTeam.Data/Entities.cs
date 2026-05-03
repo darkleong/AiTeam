@@ -158,6 +158,16 @@ public class TaskGroup
     /// legacy RecoverStuckOrchestrationsAsync 必須加排除條件 g.DesignFrameworkStateJson == null
     /// 避免 legacy/framework 雙系統 collision（Stage 52 風險點 R5 緩解）。</summary>
     public string? DesignFrameworkStateJson { get; set; }
+    /// <summary>Stage 53A：MS Agent Framework Pipeline Workflow Checkpointing 序列化 state（JSON，macro-orchestration）。
+    /// null = 走 legacy WorkflowEngine.GetDecision + TaskGroupService.HandleAgentCompletedAsync path（feature flag false）；
+    /// 有值 = framework Pipeline Workflow 進行中或已完成，superstep 結束時自動同步寫 DB。
+    /// 走 framework path 時搭配 ActiveOrchestration = "FrameworkPipeline"。
+    /// 與 Stage 49 / 50 / 52 三個 framework state JSON 完全獨立（macro 外層 vs micro 內層）。
+    /// framework-in-framework：當 PipelineFrameworkStateJson != null 時，Stage Executor 同步 await inner FrameworkKickoffRouter / FrameworkDesignRouter，
+    /// 內層 KickoffFrameworkStateJson / DesignFrameworkStateJson 期間並存，inner 完成後清回 null（外層保留）。
+    /// F-α 排除條件（避免 4 marker 共存的 Recovery 篩選優先級 collision）：4 個既有 Recovery method 全加 g.PipelineFrameworkStateJson == null。
+    /// I2 反向設計（5 fallback 點主動 call legacy method）：Stage 53B 還沒做必須留 fallback to legacy 路徑（Reviewer 🔴 / Dev_plan 失敗 / Dev 阻礙 / 仲裁後 Dev_fix / QA 修復），Stage 55 收尾統一移除。</summary>
+    public string? PipelineFrameworkStateJson { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TaskItem> Tasks { get; set; } = [];

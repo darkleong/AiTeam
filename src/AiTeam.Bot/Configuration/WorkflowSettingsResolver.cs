@@ -16,6 +16,7 @@ namespace AiTeam.Bot.Configuration;
 ///   Workflow:UseFrameworkKickoff     (Stage 50 v4 漸進遷移第二步)
 ///   Workflow:UseFrameworkKickoffMidInterrupt  (Stage 51 v4 漸進遷移第三步 HITL 試點)
 ///   Workflow:UseFrameworkDesign               (Stage 52 v4 漸進遷移第四步 Design Meeting)
+///   Workflow:UseFrameworkPipeline             (Stage 53A v4 漸進遷移第五步 macro-orchestration)
 ///
 /// AppSettings 無值或解析失敗 / 非正整數時，fallback 到 IOptions&lt;WorkflowSettings&gt;（讀 appsettings.json）。
 /// </summary>
@@ -57,6 +58,11 @@ public class WorkflowSettingsResolver(
     /// 與 Stage 49/50/51 三 flag 完全獨立（pipeline 上 Design 跟 Kickoff 是兩個獨立節點）。</summary>
     public Task<bool> GetUseFrameworkDesignAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseFrameworkDesign", Defaults.UseFrameworkDesign, ct);
+
+    /// <summary>Stage 53A：v4 漸進遷移第五步 macro-orchestration feature flag。預設 false（走 legacy WorkflowEngine + TaskGroupService 路徑）。
+    /// 三 flag 連動規則：本 flag 只在 UseFrameworkKickoff = true AND UseFrameworkDesign = true 時有意義（caller 自行檢查三 flag）。</summary>
+    public Task<bool> GetUseFrameworkPipelineAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseFrameworkPipeline", Defaults.UseFrameworkPipeline, ct);
 
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {

@@ -293,8 +293,11 @@ public class FrameworkKickoffRouter(
         await using var scope = serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        // Stage 53A F-α 配套：避免 4 marker 共存的 Recovery 篩選優先級 collision
+        // 當外層 PipelineFrameworkStateJson != null（framework-in-framework 場景），由 FrameworkPipelineRouter 接管 Recovery
         var stuckGroupIds = await db.TaskGroups
-            .Where(g => g.KickoffFrameworkStateJson != null && !g.IsPaused)
+            .Where(g => g.KickoffFrameworkStateJson != null && !g.IsPaused
+                     && g.PipelineFrameworkStateJson == null)
             .Select(g => g.Id)
             .ToListAsync(ct);
 

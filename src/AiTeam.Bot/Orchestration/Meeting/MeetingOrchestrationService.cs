@@ -477,11 +477,14 @@ public class MeetingOrchestrationService(
         // 自己 recovery，legacy 路徑同樣必須排除
         // Stage 52 R5 緩解擴充：framework Design path（DesignFrameworkStateJson != null）由 FrameworkDesignRouter
         // 自己 recovery，legacy 路徑同樣必須排除
+        // Stage 53A F-α 配套：framework Pipeline path（PipelineFrameworkStateJson != null）由 FrameworkPipelineRouter
+        // 接管，legacy 路徑必須排除避免 4 marker 共存的 Recovery 篩選優先級 collision
         var stuckGroups = await db.TaskGroups
             .Where(g => g.ActiveOrchestration != null && !g.IsPaused
                      && g.FrameworkAppealStateJson == null
                      && g.KickoffFrameworkStateJson == null
-                     && g.DesignFrameworkStateJson == null)
+                     && g.DesignFrameworkStateJson == null
+                     && g.PipelineFrameworkStateJson == null)
             .ToListAsync(ct);
 
         // Stage 45：log 跳過的 paused 數量（驗收期 docker logs 觀察用）
