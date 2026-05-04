@@ -63,9 +63,9 @@ public class QaCoordinationService(
         TaskRepository taskRepo,
         CancellationToken cancellationToken)
     {
-        // Stage 53B 議題 F-1 修正 6-e：Pipeline path 接管 — failed 路徑 5 處 side effects 全 skip（QaFixRound++/FixIteration++/Save 保留供 Pipeline 重讀）
-        // Stage 55A：legacy fall through GetDecision 段移除（dead code — feature flag false 預期失敗，無 legacy 退路）
-        var isPipelinePath = group.PipelineFrameworkStateJson != null;
+        // Stage 55B：UseFrameworkPipeline=true 唯一 path（Stage 55A 已宣告）— Pipeline QaStageExecutor 自接管 routing
+        // 原 Stage 53B 議題 F-1 守門 5 處（if (!isPipelinePath) doLegacy()）為 dead code 已移除
+        // QaFixRound++/FixIteration++/Save 保留供 Pipeline 重讀 group state
 
         QaReport? report = null;
         if (!string.IsNullOrWhiteSpace(group.TestReport))
@@ -84,20 +84,12 @@ public class QaCoordinationService(
         var status = report?.Status ?? "passed";
         logger.LogInformation("HandleQaCompleted：Group={Id}, Status={Status}", group.Id, status);
 
-        var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-
-        // Stage 53A 驗收期 follow-up #1（Aria 議題 G3 同類問題在 QA 重演）：
-        // Pipeline QaStageExecutor 第二 handler 內 sync await call 本 method 後再 SendMessageAsync(DocStageBridge)。
-        // 若本 method 內部 happy path 自動 FireStepsAsync(Doc) → Doc 重複 enqueue 2 次 +
-        // 第 2 次 callback 進來時 PipelineFrameworkStateJson 已被 FinalizePipelineAsync 清 null → 走 legacy → 開第 2 個 merge_notify。
-        // 修法：Pipeline path 下跳過 legacy GetDecision + FireStepsAsync + Mark Done + NotifyBoss（由 Pipeline NotifyMergeStageExecutor 接管）。
-        if (status == "passed" && group.PipelineFrameworkStateJson != null)
+        // Stage 55B：passed → Pipeline QaStageExecutor 接管推進 DocStageBridge（legacy 條件守門 → 無條件 return）
+        if (status == "passed")
         {
-            logger.LogInformation("[Stage53A] HandleQaCompletedAsync passed：Pipeline path 接管推進，跳過 legacy GetDecision/FireStepsAsync/MarkDone（Group={Id}）", group.Id);
+            logger.LogInformation("[Stage55B] HandleQaCompletedAsync passed：Pipeline 接管，return（Group={Id}）", group.Id);
             return;
         }
-
-        // Stage 55A：legacy passed fall through GetDecision 段移除（dead code — Pipeline path line 101-105 已 early return）
 
         if (status == "no_applicable_tests")
         {
@@ -108,14 +100,9 @@ public class QaCoordinationService(
 
             if (noTestDecision.Routing == "approve")
             {
-                // Stage 53A 驗收期 follow-up #1：Pipeline path 跳過 legacy fire next（同 passed 路徑修法）
-                if (group.PipelineFrameworkStateJson != null)
-                {
-                    logger.LogInformation("[Stage53A] HandleQaCompletedAsync no_applicable_tests + approve：Pipeline path 接管推進，跳過 legacy GetDecision/FireStepsAsync/MarkDone（Group={Id}）", group.Id);
-                    return;
-                }
-
-                // Stage 55A：legacy no_applicable_tests + approve fall through GetDecision 段移除（dead code — Pipeline path 已 early return）
+                // Stage 55B：no_applicable_tests + approve → Pipeline 接管 DocStage（legacy 條件守門 → 無條件 return）
+                logger.LogInformation("[Stage55B] HandleQaCompletedAsync no_applicable_tests + approve：Pipeline 接管，return（Group={Id}）", group.Id);
+                return;
             }
             else
             {
@@ -138,9 +125,7 @@ public class QaCoordinationService(
             taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
             group.InterventionReason = $"QA 修復連 {group.QaFixRound} 輪失敗（上限 {qaFixMaxRounds}）";
             await taskRepo.SaveAsync(cancellationToken);
-            // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 自接管 intervention，skip legacy NotifyBoss
-            if (!isPipelinePath)
-                await NotifyBossQaFailedInterventionAsync(group, $"QA 修復連 {group.QaFixRound} 輪失敗", cancellationToken);
+            // Stage 55B：Pipeline QaStage 接管 intervention（NotifyBossQaFailedInterventionAsync legacy dead）
             return;
         }
 
@@ -157,28 +142,21 @@ public class QaCoordinationService(
                 case "code_bug":
                     group.QaFixRound++;
                     await taskRepo.SaveAsync(cancellationToken);
-                    // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 重讀 group 看 QaFixRound > 0 → 自 SendMessage(DevFixStageBridge)
-                    if (!isPipelinePath)
-                        await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix")], cancellationToken);
-                    else
-                        logger.LogInformation("[Stage53B] code_bug Pipeline path skip FireStepsAsync（Pipeline 自 SendMessage DevFixStageBridge）");
+                    // Stage 55B：Pipeline QaStage 重讀 group 看 QaFixRound > 0 → 自 SendMessage(DevFixStageBridge)（legacy FireSteps dead）
+                    logger.LogInformation("[Stage55B] code_bug：QaFixRound={Round} → Pipeline 自接管 DevFixStageBridge", group.QaFixRound);
                     break;
 
                 case "back_to_reviewer":
                     group.QaFixRound = 0;
                     group.FixIteration++;
                     await taskRepo.SaveAsync(cancellationToken);
-                    if (!isPipelinePath)
-                        await tgs.FireStepsAsync(group, [new WorkflowStep("Dev_fix", IsFixLoop: true)], cancellationToken);
-                    else
-                        logger.LogInformation("[Stage53B] back_to_reviewer Pipeline path skip FireStepsAsync");
+                    // Stage 55B：Pipeline 接管（legacy FireSteps dead）
+                    logger.LogInformation("[Stage55B] back_to_reviewer：FixIteration={N} → Pipeline 自接管", group.FixIteration);
                     break;
 
                 case "env_or_test_issue":
-                    // Stage 53B 議題 F-1 修正 6-e（Forge 主動拍板）：Pipeline path 下 env_or_test_issue 視為 passed
-                    // → skip 全部 side effects（Mark/NotifyBoss/FireSteps），return 後 Pipeline QaStage 重讀 group 看 QaFixRound==0 + Status normal → SendMessage DocStageBridge
-                    // Stage 55A：legacy fall through GetDecision 段移除（dead code — feature flag false 預期失敗）
-                    logger.LogInformation("[Stage55A] env_or_test_issue Pipeline path skip（Pipeline 自接管 推進 Doc）");
+                    // Stage 55B：Pipeline 接管推進 Doc（QaFixRound==0 + Status normal → SendMessage DocStageBridge）
+                    logger.LogInformation("[Stage55B] env_or_test_issue：Pipeline 自接管 推進 Doc");
                     break;
 
                 default: // escalate_boss
@@ -186,9 +164,7 @@ public class QaCoordinationService(
                     taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                     group.InterventionReason = $"QA 失敗 Petra 判斷 escalate_boss：{failureDecision.Instructions}";
                     await taskRepo.SaveAsync(cancellationToken);
-                    // Stage 53B 議題 F-1 修正 6-e：Pipeline QaStage 自接管 intervention，skip legacy NotifyBoss
-                    if (!isPipelinePath)
-                        await NotifyBossQaFailedInterventionAsync(group, failureDecision.Instructions ?? "Petra escalate_boss", cancellationToken);
+                    // Stage 55B：Pipeline QaStage 接管 intervention（NotifyBossQaFailedInterventionAsync legacy dead）
                     break;
             }
         }

@@ -178,16 +178,9 @@ public class AppealOrchestrationService(
                 return result;
 
             default: // escalate
-                // Stage 53B 議題 F-1 修正 6-a：Pipeline path 接管 intervention，skip legacy UpdateStatus + NotifyBoss
-                if (group.PipelineFrameworkStateJson != null)
-                {
-                    logger.LogInformation("[Stage53B] RunPetraGateAsync escalate Pipeline path skip side effects（Group={Id}）", group.Id);
-                    return null;
-                }
-                taskRepo.UpdateGroupStatus(group, "failed");
-                await taskRepo.SaveAsync(cancellationToken);
-                var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-                await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+                // Stage 55B：UseFrameworkPipeline=true 唯一 production path（Stage 55A 已宣告）— Pipeline DevPlanStage / ReviewerStage
+                // 自接管 intervention（SetInterventionAndYieldAsync 自開 BossInteraction + status update + YieldOutput），
+                // legacy UpdateStatus + NotifyBoss 路徑為 dead code（Stage 53B 條件守門 → Stage 55B 直接 return null）
                 return null;
         }
     }
@@ -230,11 +223,8 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
-        var isPipelinePath = group.PipelineFrameworkStateJson != null;
-
         await using var scope = serviceProvider.CreateAsyncScope();
-        var pmService  = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
-        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        var pmService = scope.ServiceProvider.GetRequiredService<PmRoutingService>();
 
         BlockerDecision decision;
         try
@@ -248,47 +238,9 @@ public class AppealOrchestrationService(
             decision = new BlockerDecision("escalate_boss", "Blocker 評估失敗，升級給老闆");
         }
 
-        // 53B 議題 F-1 修正 6-c：Pipeline path 接管 routing，skip 全部 side effects（fire/UpdateStatus/Discord）
-        if (isPipelinePath)
-        {
-            logger.LogInformation("[Stage53B] HandleDevBlockerAsync Pipeline path 接管，skip side effects（Group={Id}, routing={Routing}）", group.Id, decision.Routing);
-            return decision;
-        }
-
-        var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-
-        switch (decision.Routing)
-        {
-            case "continue":
-                logger.LogInformation("Petra 決定重試 Dev：Group={Id}", group.Id);
-                if (ceoChannel is not null)
-                    await ceoChannel.SendMessageAsync(
-                        $"⚠️ **{group.Title}** — Cody 回報阻礙，Petra 判定可重試，自動重新觸發 Dev。\n" +
-                        $"原因：{decision.Instructions}");
-                await tgs.FireStepsAsync(group, [new WorkflowStep("Dev")], cancellationToken);
-                break;
-
-            case "escalate_victoria":
-                logger.LogWarning("Blocker 升級給 Victoria：Group={Id}", group.Id);
-                taskRepo.UpdateGroupStatus(group, "failed");
-                await taskRepo.SaveAsync(cancellationToken);
-                if (ceoChannel is not null)
-                    await ceoChannel.SendMessageAsync(
-                        $"🚫 **{group.Title}** — Cody 開發阻礙，需要 Victoria CEO 決策。\n" +
-                        $"阻礙詳情：{result.Summary}\nPetra 建議：{decision.Instructions}");
-                break;
-
-            default: // escalate_boss
-                logger.LogWarning("Blocker 升級給老闆：Group={Id}", group.Id);
-                taskRepo.UpdateGroupStatus(group, "failed");
-                await taskRepo.SaveAsync(cancellationToken);
-                if (ceoChannel is not null)
-                    await ceoChannel.SendMessageAsync(
-                        $"🚫 **{group.Title}** — Cody 開發阻礙，需要您介入。\n" +
-                        $"阻礙詳情：{result.Summary}\nPetra 分析：{decision.Instructions}");
-                break;
-        }
-
+        // Stage 55B：UseFrameworkPipeline=true 唯一 path — Pipeline DevStageExecutor 接管 routing
+        // （decision.Routing 回傳給 Pipeline 自 SendMessage(DevRetryBridge / SetInterventionAndYieldAsync)，
+        // legacy switch case 含 fire/UpdateStatus/Discord side effects 為 dead code，Stage 53B 議題 F-1 守門 → Stage 55B 全刪）
         return decision;
     }
 
@@ -312,16 +264,10 @@ public class AppealOrchestrationService(
         Guid? projectId,
         CancellationToken cancellationToken)
     {
-        // Stage 53B 議題 F-1 修正 6-b：Pipeline path 接管 — bypass Stage 49 framework path（避免 framework-in-framework）
-        // 內部 fire/NotifyBoss side effects 仍逐處 skip 以保證 single source of truth（UpdateStatus + InterventionReason + Save 保留供 Pipeline 重讀）
-        var isPipelinePath = group.PipelineFrameworkStateJson != null;
-
-        // Stage 49：v4 漸進遷移 feature flag 分流（Pipeline path 不走，避免 framework-in-framework 雙層接管）
-        if (!isPipelinePath && await workflowResolver.GetUseFrameworkAppealLoopAsync(cancellationToken))
-        {
-            logger.LogInformation("[Stage49] HandleDevPlanCompletedAsync framework path 接管（Group={Id}）", group.Id);
-            return await frameworkRouter.HandleDevPlanCompletedAsync(group, result, taskRepo, projectId, cancellationToken);
-        }
+        // Stage 55B：UseFrameworkPipeline=true 唯一 path（Stage 55A 已宣告）— isPipelinePath 必為 true，
+        // 原 Stage 49 framework path bypass（! isPipelinePath && GetUseFrameworkAppealLoopAsync 條件分流）為 dead code 已移除。
+        // 內部 fire/NotifyBoss side effects（原 if (!isPipelinePath) 守門 8 處）一併刪除，
+        // single source of truth：UpdateStatus + InterventionReason + Save 保留供 Pipeline DevPlanStageExecutor 重讀 group state。
 
         await using var dbScope = serviceProvider.CreateAsyncScope();
         var db = dbScope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -343,8 +289,7 @@ public class AppealOrchestrationService(
                 taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                 group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{planFailReason}";
                 await taskRepo.SaveAsync(cancellationToken);
-                if (!isPipelinePath)
-                    await NotifyBossDevPlanUnableAsync(group, planFailReason ?? "", cancellationToken);
+                // Stage 55B：Pipeline DevPlanStage 重讀 group state 自接管 intervention（NotifyBossDevPlanUnableAsync legacy 為 dead code）
                 return false;
             }
 
@@ -364,8 +309,7 @@ public class AppealOrchestrationService(
                             taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                             group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{approveStillFailReason}";
                             await taskRepo.SaveAsync(cancellationToken);
-                            if (!isPipelinePath)
-                                await NotifyBossDevPlanUnableAsync(group, approveStillFailReason ?? "", cancellationToken);
+                            // Stage 55B：Pipeline DevPlanStage 重讀 group state 自接管 intervention（NotifyBossDevPlanUnableAsync legacy 為 dead code）
                             return false;
                         }
                         group.DevPlanRevision++;
@@ -373,12 +317,9 @@ public class AppealOrchestrationService(
                         await taskRepo.SaveAsync(cancellationToken);
                         logger.LogInformation("DevPlan approve 但失敗，觸發重產第 {N} 輪（Group={Id}）",
                             group.DevPlanRevision, group.Id);
-                        if (!isPipelinePath)
-                        {
-                            var tgsApprove = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                            await tgsApprove.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
-                        }
-                        return false; // Pipeline path 由 DevPlanStage 看 return false + status normal → SendMessage(DevPlanRetryBridge)
+                        // Stage 55B：Pipeline DevPlanStage 看 return false + status normal → SendMessage(DevPlanRetryBridge) 自接管重產
+                        // legacy FireStepsAsync(Dev_plan) 為 dead code 已刪
+                        return false;
                     }
                     return true; // 繼續走後續 dispatcher → 觸發 Dev（Pipeline path 看 return true → SendMessage(DevStageBridge)）
 
@@ -399,8 +340,7 @@ public class AppealOrchestrationService(
                                 taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
                                 group.InterventionReason = $"DevPlan 重產 {group.DevPlanRevision} 次仍失敗：{stillFailReason}";
                                 await taskRepo.SaveAsync(cancellationToken);
-                                if (!isPipelinePath)
-                                    await NotifyBossDevPlanUnableAsync(group, stillFailReason ?? "", cancellationToken);
+                                // Stage 55B：Pipeline DevPlanStage 接管 intervention（NotifyBossDevPlanUnableAsync legacy dead）
                             }
                             else
                             {
@@ -409,24 +349,14 @@ public class AppealOrchestrationService(
                                 await taskRepo.SaveAsync(cancellationToken);
                                 logger.LogInformation("DevPlan accept 但失敗，觸發重產第 {N} 輪（Group={Id}，原因：{Reason}）",
                                     group.DevPlanRevision, group.Id, stillFailReason);
-                                if (!isPipelinePath)
-                                {
-                                    var tgsRetry = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                                    await tgsRetry.FireStepsAsync(group, [new WorkflowStep("Dev_plan")], cancellationToken);
-                                }
+                                // Stage 55B：Pipeline DevPlanStage 看 return false + status normal → SendMessage(DevPlanRetryBridge) 自重產
                             }
                         }
                         else
                         {
                             logger.LogInformation("Dev_plan Appeal 說服成功，直接觸發 Dev（Group={Id}）", group.Id);
-                            if (!isPipelinePath)
-                            {
-                                var tgs = dbScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                                await tgs.FireStepsAsync(group, [new WorkflowStep(AgentNames.Dev)], cancellationToken);
-                            }
-                            // ⚠️ Pipeline path：appeal 成功 + plan ok → 應 return true 讓 DevPlanStage 推進 Dev（與 line 374 happy path 統一行為）
-                            if (isPipelinePath)
-                                return true;
+                            // Stage 55B：Pipeline DevPlanStage 看 return true → SendMessage(DevStageBridge)（legacy FireSteps dead）
+                            return true;
                         }
                     }
                     else
@@ -434,16 +364,14 @@ public class AppealOrchestrationService(
                         logger.LogWarning("Dev_plan Appeal 耗盡，升級老闆（Group={Id}）", group.Id);
                         taskRepo.UpdateGroupStatus(group, "failed");
                         await taskRepo.SaveAsync(cancellationToken);
-                        if (!isPipelinePath)
-                            await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                        // Stage 55B：Pipeline DevPlanStage 接管 escalate（NotifyBossDevPlanEscalationAsync legacy dead）
                     }
                     return false;
 
                 default: // escalate
                     taskRepo.UpdateGroupStatus(group, "failed");
                     await taskRepo.SaveAsync(cancellationToken);
-                    if (!isPipelinePath)
-                        await NotifyBossDevPlanEscalationAsync(group, petraDevPlanReview, cancellationToken);
+                    // Stage 55B：Pipeline DevPlanStage 接管 escalate（NotifyBossDevPlanEscalationAsync legacy dead）
                     return false;
             }
         }

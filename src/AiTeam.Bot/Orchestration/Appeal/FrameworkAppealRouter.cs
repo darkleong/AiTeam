@@ -254,11 +254,12 @@ public class FrameworkAppealRouter(
         await using var scope = serviceProvider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Stage 53A F-α 配套：避免 4 marker 共存的 Recovery 篩選優先級 collision
-        // 當外層 PipelineFrameworkStateJson != null（framework-in-framework 場景），由 FrameworkPipelineRouter 接管 Recovery
+        // Stage 55B：F-α 排除條件（PipelineFrameworkStateJson == null）移除 — sub-task TaskGroup 也納入篩選；
+        //   sub-task 從 Dev_plan 啟動 skip Kickoff/Design 階段（Stage 55A 兩入口分流 + IsSubTask 路由）
+        //   → sub-task 不會有 FrameworkAppealStateJson → race condition 風險 0
+        // Stage 53A F-α 配套（4 marker 共存 Recovery 篩選優先級）：UseFrameworkPipeline=true 唯一 path 後 dead code
         var stuckGroupIds = await db.TaskGroups
-            .Where(g => g.FrameworkAppealStateJson != null && !g.IsPaused
-                     && g.PipelineFrameworkStateJson == null)
+            .Where(g => g.FrameworkAppealStateJson != null && !g.IsPaused)
             .Select(g => g.Id)
             .ToListAsync(ct);
 
