@@ -17,8 +17,12 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 ///   - HandleEntryAsync(DevStageBridge)：state.CurrentStage = "Dev" → fetch fresh group → call FireStepsAsync(Dev) enqueue legacy AgentQueueService → SendMessageAsync(DevCompletionRequest) yield
 ///   - HandleResponseAsync(DevCompletionResponse)：收 result → 三分支：
 ///     ① result.Success=true → state.DevDone=true → SendMessageAsync(ReviewerStageBridge)
-///     ② result.Success=false + [BLOCKED] + OutputContent → fallback dev_blocker（FinalizePipelineAsync 主動 call HandleDevBlockerAsync）
-///     ③ result.Success=false 其他 → fallback dev_failed（FinalizePipelineAsync 主動 call NotifyBossDevFailedInterventionAsync）
+///     ② result.Success=false + [BLOCKED] + OutputContent → Stage 55B Session B：dev_failed_intervention HITL yield 等 Christ
+///     ③ result.Success=false 其他 → Stage 55B Session B：dev_failed_intervention HITL yield 等 Christ
+///   - HandleDevInterventionResponseAsync(DevInterventionResponse)（Stage 55B Session B 新加）：Christ button 後 routing：
+///     ① skip  → state.DevDone=true → SendMessageAsync(ReviewerStageBridge)
+///     ② retry → SendMessageAsync(DevRetryBridge)（既有 self-loop）
+///     ③ abort → SetInterventionAndYieldAsync（mark failed end Pipeline）
 ///
 /// Stage 53A 範圍邊界（happy path 限定）：
 ///   - bypass Dev fix loop（屬 Stage 53B「fix loop 子流程」）
@@ -30,6 +34,7 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 [SendsMessage(typeof(DevRetryBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(DevCompletionRequest))]
+[SendsMessage(typeof(DevInterventionRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class DevStageExecutor : Executor
 {
@@ -115,10 +120,18 @@ internal sealed partial class DevStageExecutor : Executor
 
                 if (decision.Routing is "escalate_victoria" or "escalate_boss")
                 {
-                    _logger.LogInformation("[Stage53B] DevStage：[BLOCKED] Petra {Routing} → SetInterventionAndYieldAsync（Group={Id}）",
+                    // Stage 55B Session B：escalate → 開 dev_failed_intervention BossInteraction + yield 等 Christ button routing
+                    _logger.LogInformation("[Stage55B] DevStage：[BLOCKED] Petra {Routing} → dev_failed_intervention HITL yield（Group={Id}）",
                         decision.Routing, state.GroupId);
-                    await SetInterventionAndYieldAsync(context, state.GroupId,
-                        $"Dev blocker {decision.Routing}：{decision.Instructions}", result);
+                    state.LastAgentResult = result;
+                    await PipelineStateHelpers.SaveAsync(context, state);
+
+                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                    var failSummary = $"Dev blocker {decision.Routing}：{decision.Instructions}";
+                    await tgs.NotifyBossDevFailedInterventionAsync(group, isFixLoop: false, failSummary, default);
+                    await PipelineHitlHelper.YieldForChristResponseAsync(
+                        context, new DevInterventionRequest(state.GroupId), _logger,
+                        "dev_failed_intervention", state.GroupId);
                     return;
                 }
 
@@ -130,9 +143,27 @@ internal sealed partial class DevStageExecutor : Executor
                 return;
             }
 
-            // 其他失敗 → 53B：intervention（保留 dev_failed 邊界 reason 給 FinalizePipelineAsync notify）
-            _logger.LogInformation("[Stage53B] DevStage：result.Success=false → SetInterventionAndYieldAsync（Group={Id}）", state.GroupId);
-            await SetInterventionAndYieldAsync(context, state.GroupId, $"Dev 失敗：{result.Summary}", result);
+            // Stage 55B Session B：其他失敗 → 開 dev_failed_intervention BossInteraction + yield 等 Christ button routing
+            _logger.LogInformation("[Stage55B] DevStage：result.Success=false → dev_failed_intervention HITL yield（Group={Id}）", state.GroupId);
+            state.LastAgentResult = result;
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            await using (var scopeDevFail = _scopeFactory.CreateAsyncScope())
+            {
+                var taskRepoFail = scopeDevFail.ServiceProvider.GetRequiredService<TaskRepository>();
+                var groupFail = await taskRepoFail.GetGroupByIdAsync(state.GroupId, default);
+                if (groupFail is null)
+                {
+                    _logger.LogError("[Stage55B] DevStage：dev_failed yield 前找不到 Group={Id}，fallback", state.GroupId);
+                    await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
+                    return;
+                }
+                var tgsFail = scopeDevFail.ServiceProvider.GetRequiredService<TaskGroupService>();
+                await tgsFail.NotifyBossDevFailedInterventionAsync(groupFail, isFixLoop: false, $"Dev 失敗：{result.Summary}", default);
+            }
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new DevInterventionRequest(state.GroupId), _logger,
+                "dev_failed_intervention", state.GroupId);
             return;
         }
 
@@ -142,6 +173,39 @@ internal sealed partial class DevStageExecutor : Executor
         await PipelineStateHelpers.SaveAsync(context, state);
         _logger.LogInformation("[Stage53A] DevStage：passed → ReviewerStageBridge（Group={Id}）", state.GroupId);
         await context.SendMessageAsync(new ReviewerStageBridge(state.GroupId));
+    }
+
+    /// <summary>Stage 55B Session B：dev_failed_intervention HITL 回應 handler — Christ button click 後 routing。
+    /// skip → state.DevDone=true → ReviewerStageBridge / retry → DevRetryBridge（self-loop） / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleDevInterventionResponseAsync(DevInterventionResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "skip":
+                _logger.LogInformation("[Stage55B] DevStage：dev_intervention skip → ReviewerStageBridge（Group={Id}）", state.GroupId);
+                state.DevDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new ReviewerStageBridge(state.GroupId));
+                return;
+
+            case "retry":
+                _logger.LogInformation("[Stage55B] DevStage：dev_intervention retry → DevRetryBridge（Group={Id}）", state.GroupId);
+                await context.SendMessageAsync(new DevRetryBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage55B] DevStage：dev_intervention abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "Dev intervention abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage55B] DevStage：未知 dev_intervention action={Action}（Group={Id}）— SetInterventionAndYieldAsync", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 dev_intervention action: {response.Action}", state.LastAgentResult);
+                return;
+        }
     }
 
     /// <summary>Stage 53B：intervention 統一 helper（dev_failed / blocker escalate）。</summary>
