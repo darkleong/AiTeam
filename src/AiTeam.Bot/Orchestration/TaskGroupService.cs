@@ -730,21 +730,46 @@ public class TaskGroupService(
             }
 
             case "devplan_escalate":
-            case "dev_plan_unable":
-                // Stage 43-A：dev_plan_unable 重用 devplan_escalate 路由（按鈕行為相同）
+            {
+                // Stage 55B Session B：Pipeline path 接管 routing（議題 5 = 5A 加 Pipeline 分支保留 legacy handler）
+                if (contextJson is not null && await TryRoutePipelineDevPlanEscalateAsync(contextJson, action, ct))
+                    break;
+                // Legacy fallback（PipelineFrameworkStateJson IS NULL 殘留 group 走原路）
                 if (contextJson is not null)
                     await appealOrchestration.HandleDevPlanEscalationAsync(contextJson, action, ct);
                 break;
+            }
+
+            case "dev_plan_unable":
+            {
+                // Stage 55B Session B：Pipeline path 接管 routing
+                if (contextJson is not null && await TryRoutePipelineDevPlanUnableAsync(contextJson, action, ct))
+                    break;
+                // Legacy fallback — Stage 43-A 重用 devplan_escalate 路由（EndsWith match）
+                if (contextJson is not null)
+                    await appealOrchestration.HandleDevPlanEscalationAsync(contextJson, action, ct);
+                break;
+            }
 
             case "dev_failed_intervention":
+            {
+                // Stage 55B Session B：Pipeline path 接管 routing
+                if (contextJson is not null && await TryRoutePipelineDevInterventionAsync(contextJson, action, ct))
+                    break;
                 if (contextJson is not null)
                     await HandleDevFailedInterventionAsync(contextJson, action, ct);
                 break;
+            }
 
             case "qa_failed_intervention":
+            {
+                // Stage 55B Session B：Pipeline path 接管 routing
+                if (contextJson is not null && await TryRoutePipelineQaInterventionAsync(contextJson, action, ct))
+                    break;
                 if (contextJson is not null)
                     await HandleQaFailedInterventionAsync(contextJson, action, ct);
                 break;
+            }
 
             case "sage_escalate":
                 if (contextJson is not null)
@@ -753,9 +778,14 @@ public class TaskGroupService(
 
             // Stage 46-FF 三十五：拆 task 提案 + epic 部分暫停
             case "split_task_proposal":
+            {
+                // Stage 55B Session B：Pipeline path 接管 routing（含 BuildEpicSubTasks Pipeline 自接管）
+                if (contextJson is not null && await TryRoutePipelineSplitTaskProposalAsync(contextJson, action, responseContent, ct))
+                    break;
                 if (contextJson is not null)
                     await HandleSplitTaskProposalAsync(contextJson, action, responseContent, ct);
                 break;
+            }
 
             case "epic_partial_paused":
                 if (contextJson is not null)
@@ -1373,5 +1403,118 @@ public class TaskGroupService(
                 : parentIssueUrls;
         }
         catch { return parentIssueUrls; }
+    }
+
+    // ============================================================
+    //  Stage 55B Session B：5 type-specific intervention HITL Pipeline 路由分支
+    //  對齊 Stage 55A kickoff/design 既有 pattern（議題 5 = 5A 加 Pipeline 分支保留 legacy handler）
+    //  return true = Pipeline path 接管完成；false = 走 legacy fallback
+    // ============================================================
+
+    /// <summary>共用 Pipeline 路由前置檢查 — parse contextJson 取 groupId + 確認 group 存在 + Pipeline path active。</summary>
+    private async Task<TaskGroup?> TryGetPipelineGroupAsync(string contextJson, CancellationToken ct)
+    {
+        Guid groupId;
+        try
+        {
+            using var doc = JsonDocument.Parse(contextJson);
+            if (!doc.RootElement.TryGetProperty("groupId", out var g)
+                || !Guid.TryParse(g.GetString(), out groupId))
+                return null;
+        }
+        catch { return null; }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var group = await taskRepo.GetGroupByIdAsync(groupId, ct);
+        if (group?.PipelineFrameworkStateJson is null) return null;
+
+        var workflowResolver = scope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+        if (!await workflowResolver.GetUseFrameworkPipelineAsync(ct)) return null;
+
+        return group;
+    }
+
+    private async Task<bool> TryRoutePipelineDevInterventionAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        var actionShort = action.StartsWith("dev_intervention_") ? action.Substring("dev_intervention_".Length) : action;
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage55B] ProcessBossResponseAsync dev_failed_intervention Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterDevInterventionAsync(group, actionShort, ct);
+        return true;
+    }
+
+    private async Task<bool> TryRoutePipelineQaInterventionAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        var actionShort = action.StartsWith("qa_intervention_") ? action.Substring("qa_intervention_".Length) : action;
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage55B] ProcessBossResponseAsync qa_failed_intervention Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterQaInterventionAsync(group, actionShort, ct);
+        return true;
+    }
+
+    private async Task<bool> TryRoutePipelineDevPlanEscalateAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        // devplan_skip / devplan_abort → skip / abort
+        var actionShort = action.StartsWith("devplan_") ? action.Substring("devplan_".Length) : action;
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage55B] ProcessBossResponseAsync devplan_escalate Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterDevPlanEscalateAsync(group, actionShort, ct);
+        return true;
+    }
+
+    private async Task<bool> TryRoutePipelineDevPlanUnableAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        // devplan_unable_skip / devplan_unable_abort → skip / abort
+        var actionShort = action.StartsWith("devplan_unable_") ? action.Substring("devplan_unable_".Length) : action;
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage55B] ProcessBossResponseAsync dev_plan_unable Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterDevPlanUnableAsync(group, actionShort, ct);
+        return true;
+    }
+
+    private async Task<bool> TryRoutePipelineSplitTaskProposalAsync(string contextJson, string action, string? responseContent, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        // split_accept / split_modify / split_reject / split_abort → accept / modify / reject / abort
+        var actionShort = action.StartsWith("split_") ? action.Substring("split_".Length) : action;
+        var modifyContent = action == "split_modify" ? responseContent : null;
+
+        // accept path 需 splitProposalJson — 從 BossInteraction.contextJson 取
+        string? splitProposalJson = null;
+        if (actionShort == "accept")
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(contextJson);
+                if (doc.RootElement.TryGetProperty("splitProposalJson", out var sp))
+                    splitProposalJson = sp.GetString();
+            }
+            catch { /* ignore parse fail，HandleSplitTaskProposalResponseAsync accept path 會 fallback */ }
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage55B] ProcessBossResponseAsync split_task_proposal Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterSplitTaskProposalAsync(group, actionShort, modifyContent, splitProposalJson, ct);
+        return true;
     }
 }
