@@ -560,9 +560,35 @@ Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 c
 
 5 routing types HITL refactor + 子項 4 InteractionProcessor 路由表 + Mock auto-approve switch + 5 個新 Mock 場景。預估 ~600-900 LOC + 涉及 Pipeline workflow shape 重構（DevStage / QaStage / DevPlanStage / DesignStage failure path 改用 type-specific BossInteraction + yield-resume + routing）。
 
+### Session A 自驗結果（2026-05-04，Christ 觸發 /forge-self-verify 後）
+
+**Phase 1：deployment baseline ✅**
+- CI/CD GitHub Actions run 25325480459 success（5min）
+- Bot container redeploy 成功，啟動 OK 無 error
+- 4 router 啟動 Recovery 全綠：
+  - `[FrameworkAppealRouter] 啟動：無 stuck framework appeal`
+  - `[FrameworkKickoffRouter] 啟動：發現 1 個 stuck framework kickoff，採 ResumeStreamingAsync 升級策略 rehydrate`（既有 stuck mock group 1584e299... F-α 移除後仍正確 picked up + rehydrate）
+  - `[FrameworkDesignRouter] 啟動：無 stuck framework design`
+  - `[FrameworkPipelineRouter] 啟動：無 stuck framework pipeline`
+
+**Phase 2：3 個 regression 場景全綠 ✅**
+
+| 場景 | scenario key | 結果 | 驗證內容 |
+|---|---|---|---|
+| 1 | `framework_pipeline_kickoff_to_merge_full` | ✅ Status=done, no intervention | Pipeline happy path 跑通完整 5+ stages，AppealOrchestrationService + QaCoordinationService skip 移除無破壞 |
+| 2 | `framework_pipeline_subtask_chain` | ✅ Parent + Phase 1/2/3 全 done, 0 intervention | F-α 移除後 sub-task TaskGroup 也納入 4 router 篩選 → race condition 風險 0 確認；Stage 55A 兩入口分流（parent → Kickoff / sub-task → Dev_plan skip）正確生效 |
+| 3 | `framework_pipeline_kickoff_crash_recovery` | ✅ Status=done, no intervention | 4 router Recovery 篩選機制完整（F-α 移除後仍能正確 picked up stuck framework path groups），ResumeAfterAgentAsync framework path 全 stage 觸發 ResumeStreamingAsync |
+
+**證據鏈**：
+- `[Stage55B] HandleQaCompletedAsync passed：Pipeline 接管，return（Group=...）` — 我新加 log 觸發確認 QaCoordinationService skip 移除後 passed early return 行為正常
+- `[Stage55A] Pipeline Workflow 啟動（sub-task）— skip Kickoff/Design 直接進 DevPlanStage` — sub-task 兩入口分流確認
+
+**自驗總結**：Session A 純 dead code 刪除 + F-α 條件移除 + comment 補強 — 行為 100% 一致，無 follow-up bug 揭露。
+
 ### Aria 校準錨候選（Aria 第二段填）
 
-> Forge 預估：Session A 規模 S-M（純 dead code 清理 + 文件補強 + version bump）— 對齊 Stage 41 ×0.84 / Stage 47 ×N/A 失準（純機械化 / 純 prompt 補強類）/ Stage 48 ×0.78（spike 類）區間下半。實際 context 預估 ~300K（接近 Opus 1M 30%）。
+> Forge 預估：Session A 規模 S-M（純 dead code 清理 + 文件補強 + version bump + 自驗 3 場景全綠）— 對齊 Stage 41 ×0.84 / Stage 47 ×N/A 失準（純機械化 / 純 prompt 補強類）/ Stage 48 ×0.78（spike 類）區間下半。實際 context 約 ~250-300K（Opus 1M 25-30%）。
+> 4 戰略議題 escalate Christ 拍板（議題 1=1A / 議題 2=2C / 議題 3=3A / 議題 4=4A）— 守 critical_3「失敗成本高 → escalate 不自己拍板」紀律累積 4 個資料點。
 
 ---
 
