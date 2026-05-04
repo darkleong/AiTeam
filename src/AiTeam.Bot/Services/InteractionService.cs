@@ -137,6 +137,12 @@ public class InteractionService(
                         // Stage 55A 場景 E 揭露：split_task_proposal 需 split_accept 觸發 BuildEpicSubTasksAsync
                         // （Stage 54 修法漏此 type，Stage 55A sub-task chain 場景才暴露 — 沿用 SplitTaskProposalActionsJson line 60 預設「採納」action）
                         "split_task_proposal" => "split_accept",
+                        // Stage 55B Session B：4 個 type-specific intervention HITL 對應的 default approve action
+                        // dev/qa intervention 用「再試一輪 / 重啟」維持 Pipeline 推進；devplan escalate/unable 用 skip 直接開發
+                        "dev_failed_intervention" => "dev_intervention_retry",
+                        "qa_failed_intervention"  => "qa_intervention_continue",
+                        "devplan_escalate"        => "devplan_skip",
+                        "dev_plan_unable"         => "devplan_unable_skip",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
                         _                     => "ack",
                     };
