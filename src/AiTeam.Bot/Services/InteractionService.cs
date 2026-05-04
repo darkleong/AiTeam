@@ -131,11 +131,14 @@ public class InteractionService(
                     // InteractionProcessor 會 ProcessBossResponseAsync(type, action, ...) → 推進流程
                     var autoAction = interactionType switch
                     {
-                        "kickoff"  => "kickoff_continue",
-                        "design"   => "design_continue",
-                        "proposal" => "propose_yes",
+                        "kickoff"             => "kickoff_continue",
+                        "design"              => "design_continue",
+                        "proposal"            => "propose_yes",
+                        // Stage 55A 場景 E 揭露：split_task_proposal 需 split_accept 觸發 BuildEpicSubTasksAsync
+                        // （Stage 54 修法漏此 type，Stage 55A sub-task chain 場景才暴露 — 沿用 SplitTaskProposalActionsJson line 60 預設「採納」action）
+                        "split_task_proposal" => "split_accept",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
-                        _          => "ack",
+                        _                     => "ack",
                     };
                     var approved = await repo.RespondAsync(interaction.Id, autoAction, "dashboard");
                     if (approved)
