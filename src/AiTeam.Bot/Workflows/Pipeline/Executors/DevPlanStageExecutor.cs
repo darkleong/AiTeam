@@ -14,23 +14,24 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 /// <summary>
 /// Stage 53A：DevPlan stage Executor（J1 yield-resume 機制 — Agent 型 stage 第 1 個）。
 ///
-/// 職責（dual handler）：
-///   - HandleEntryAsync(DevPlanStageBridge)：state.CurrentStage = "Dev_plan" → fetch fresh group → call FireStepsAsync(Dev_plan) enqueue legacy AgentQueueService（PipelineFrameworkStateJson != null 時 FireOneStepAsync 分流條件失敗 → 走 legacy）→ SendMessageAsync(DevPlanCompletionRequest) 進 RequestPort yield 等 callback
-///   - HandleResponseAsync(DevPlanCompletionResponse)：收 result → result.Success=false 或 IsDevPlanFailed=true → fallback dev_plan_failed_escalate（先清 marker→ SendMessage Fallback）/ passed → state.DevPlanDone=true + LastAgentResult → SendMessageAsync(DevStageBridge)
+/// 職責（多 handler）：
+///   - HandleEntryAsync(DevPlanStageBridge)：state.CurrentStage = "Dev_plan" → fetch fresh group → FireStepsAsync(Dev_plan) → SendMessageAsync(DevPlanCompletionRequest) yield
+///   - HandleResponseAsync(DevPlanCompletionResponse)：收 result → call HandleDevPlanCompletedAsync → 看 status 區分 escalate vs unable yield
+///   - HandleDevPlanEscalateResponseAsync(DevPlanEscalateResponse)（Stage 55B Session B）：Christ button：skip→Dev / abort→failed end
+///   - HandleDevPlanUnableResponseAsync(DevPlanUnableResponse)（Stage 55B Session B）：同上（unable 與 escalate routing 一致 / button 不同 / type 區分）
 ///
-/// Stage 53A 範圍邊界（happy path 限定）：
-///   - bypass Petra Dev_plan review + appeal loop（屬 Stage 53B「appeal 子流程」）
-///   - dev_plan_failed_escalate fallback 後 FinalizePipelineAsync 主動 call AppealOrchestrationService.HandleDevPlanCompletedAsync 接管 Petra review + appeal + Stage 43-A DevPlanRevision 重產
+/// 區分 escalate vs unable（Stage 55B Session B spike confirm）：
+///   - InterventionReason 開頭含 "DevPlan 重產" → unable（DevPlan 重產上限失敗，Stage 43-A）
+///   - 其他 NeedsIntervention/Failed → escalate（Petra revise/escalate after appeal）
 ///
-/// 紀律：
-///   - 三件套（Stage 50 踩坑 #10）：[SendsMessage] + partial class + 註解
-///   - type-explicit Bridge record（Stage 52 fix#2）：DevPlanCompletionRequest/Response 各自獨立型別
-///   - fallback 時序紀律（Aria 拍板）：先清 marker（同步 await ExecuteUpdateAsync）→ 再 SendMessageAsync(PipelineFallbackBridge)
+/// 紀律：三件套 + type-explicit Bridge record + fallback 時序紀律。
 /// </summary>
 [SendsMessage(typeof(DevStageBridge))]
 [SendsMessage(typeof(DevPlanRetryBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(DevPlanCompletionRequest))]
+[SendsMessage(typeof(DevPlanEscalateRequest))]
+[SendsMessage(typeof(DevPlanUnableRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class DevPlanStageExecutor : Executor
 {
@@ -124,13 +125,31 @@ internal sealed partial class DevPlanStageExecutor : Executor
                 return;
             }
 
-            // Status NeedsIntervention/Failed → intervention 結束（appeal 內部走完仍失敗）
+            // Stage 55B Session B：Status NeedsIntervention/Failed → 區分 escalate vs unable yield 等 Christ button
             if (refreshed.Status == TaskStatus.NeedsIntervention || refreshed.Status == TaskStatus.Failed)
             {
-                _logger.LogInformation("[Stage53B] DevPlanStage：appeal 後 status={Status} → SetInterventionAndYieldAsync（Group={Id}）",
-                    refreshed.Status, state.GroupId);
-                await SetInterventionAndYieldAsync(context, state.GroupId,
-                    refreshed.InterventionReason ?? "Dev_plan appeal escalate", result);
+                state.LastAgentResult = result;
+                state.LastAgentName = "Dev_plan";
+                await PipelineStateHelpers.SaveAsync(context, state);
+
+                var failSummary = refreshed.InterventionReason ?? "Dev_plan appeal escalate";
+                var isUnable = failSummary.StartsWith("DevPlan 重產", StringComparison.Ordinal);
+
+                if (isUnable)
+                {
+                    _logger.LogInformation("[Stage55B] DevPlanStage：appeal 後 unable（DevPlan 重產上限）→ dev_plan_unable HITL yield（Group={Id}）", state.GroupId);
+                    await appealOrchestration.NotifyBossDevPlanUnableAsync(refreshed, failSummary, default);
+                    await PipelineHitlHelper.YieldForChristResponseAsync(
+                        context, new DevPlanUnableRequest(state.GroupId), _logger,
+                        "dev_plan_unable", state.GroupId);
+                    return;
+                }
+
+                _logger.LogInformation("[Stage55B] DevPlanStage：appeal 後 escalate（Petra 審核超限）→ devplan_escalate HITL yield（Group={Id}）", state.GroupId);
+                await appealOrchestration.NotifyBossDevPlanEscalationFromPipelineAsync(refreshed, failSummary, default);
+                await PipelineHitlHelper.YieldForChristResponseAsync(
+                    context, new DevPlanEscalateRequest(state.GroupId), _logger,
+                    "devplan_escalate", state.GroupId);
                 return;
             }
 
@@ -163,6 +182,62 @@ internal sealed partial class DevPlanStageExecutor : Executor
         await PipelineStateHelpers.SaveAsync(context, state);
         _logger.LogInformation("[Stage53A] DevPlanStage：passed → DevStageBridge（Group={Id}）", state.GroupId);
         await context.SendMessageAsync(new DevStageBridge(state.GroupId));
+    }
+
+    /// <summary>Stage 55B Session B：devplan_escalate HITL 回應 handler — Christ button click 後 routing。
+    /// skip → state.DevPlanDone=true → DevStageBridge（直接 coding） / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleDevPlanEscalateResponseAsync(DevPlanEscalateResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "skip":
+                _logger.LogInformation("[Stage55B] DevPlanStage：devplan_escalate skip → DevStageBridge（直接 coding）（Group={Id}）", state.GroupId);
+                state.DevPlanDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DevStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage55B] DevPlanStage：devplan_escalate abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "Dev_plan escalate abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage55B] DevPlanStage：未知 devplan_escalate action={Action}（Group={Id}）— SetIntervention", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 devplan_escalate action: {response.Action}", state.LastAgentResult);
+                return;
+        }
+    }
+
+    /// <summary>Stage 55B Session B：dev_plan_unable HITL 回應 handler — Christ button click 後 routing。
+    /// skip → state.DevPlanDone=true → DevStageBridge（直接 coding） / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleDevPlanUnableResponseAsync(DevPlanUnableResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "skip":
+                _logger.LogInformation("[Stage55B] DevPlanStage：dev_plan_unable skip → DevStageBridge（直接 coding）（Group={Id}）", state.GroupId);
+                state.DevPlanDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DevStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage55B] DevPlanStage：dev_plan_unable abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "Dev_plan unable abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage55B] DevPlanStage：未知 dev_plan_unable action={Action}（Group={Id}）— SetIntervention", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 dev_plan_unable action: {response.Action}", state.LastAgentResult);
+                return;
+        }
     }
 
     /// <summary>Stage 53B：intervention 統一 helper（appeal escalate / 內部 status 變化）。</summary>

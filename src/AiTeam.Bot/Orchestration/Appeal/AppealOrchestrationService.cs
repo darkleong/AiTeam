@@ -574,6 +574,36 @@ public class AppealOrchestrationService(
         return false;
     }
 
+    /// <summary>Stage 55B Session B：Pipeline 友善 overload — escalate 時 Pipeline 已知 group.InterventionReason，不需重組 PetraReview blocking issues。</summary>
+    public async Task NotifyBossDevPlanEscalationFromPipelineAsync(
+        TaskGroup group,
+        string failSummary,
+        CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        await ceoChannel.SendMessageAsync(
+            $"⚠️ **{group.Title}** — Dev_plan 經過 {group.DevPlanRevision} 輪審核仍未通過，需要您介入。\n" +
+            $"原因：{(failSummary.Length > 300 ? failSummary[..300] + "..." : failSummary)}");
+
+        logger.LogWarning("TaskGroup {Id} Dev_plan 審核超限（Pipeline path），升級給老闆", group.Id);
+
+        _ = interactionService.CreateInteractionAsync(
+            "devplan_escalate",
+            title:                $"Dev_plan 升級：{group.Title}",
+            description:          $"Cody 實作計畫書經過 {group.DevPlanRevision} 輪審核仍未通過：{(failSummary.Length > 500 ? failSummary[..500] + "..." : failSummary)}",
+            project:              group.Project,
+            agentName:            AgentNames.Pm,
+            availableActionsJson: InteractionService.DevPlanEscalateActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString()
+            }),
+            taskGroupId: group.Id);
+    }
+
     /// <summary>Dev_plan Petra 審核超限，發帶 Skip/Abort 按鈕的 Embed 給老闆。</summary>
     public async Task NotifyBossDevPlanEscalationAsync(
         TaskGroup group,
