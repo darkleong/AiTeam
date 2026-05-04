@@ -217,6 +217,65 @@ public sealed record DevFixCompletionRequest(
 public sealed record DevFixCompletionResponse(
     [property: JsonPropertyName("result")] AgentExecutionResult Result);
 
+// ── Stage 55B Session B：5 type-specific intervention HITL records ──
+//
+// 議題 2 = 2C 拍板：Pattern A inter-Executor message yield（對齊 Stage 55A KickoffCompletion 模式）
+// 5 type 對應 BossInteraction 既有 type — Pipeline executor failure path 從「SetIntervention end」
+// 改為 yield 等 Christ button click → ResumeAfterXxxAsync → SendResponseAsync → routing 接管下個 stage。
+//
+// 對齊紀律（同 8 stage CompletionRequest/Response）：每 type 獨立 record 避免 type-based dispatch collision。
+
+/// <summary>Stage 55B：Dev stage failure intervention RequestPort 請求 payload。
+/// 對應既有 BossInteraction type "dev_failed_intervention" — buttons: dev_intervention_skip / _retry / _abort。</summary>
+public sealed record DevInterventionRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55B：Dev intervention 回傳 payload。
+/// Action = "skip"（→ Reviewer）/ "retry"（→ Dev self-loop）/ "abort"（→ failed end）。</summary>
+public sealed record DevInterventionResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 55B：QA stage failure intervention RequestPort 請求 payload。
+/// 對應既有 BossInteraction type "qa_failed_intervention" — buttons: qa_intervention_continue / _skip / _abort。</summary>
+public sealed record QaInterventionRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55B：QA intervention 回傳 payload。
+/// Action = "continue"（→ QA self-loop 再試一輪）/ "skip"（→ Doc）/ "abort"（→ failed end）。</summary>
+public sealed record QaInterventionResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 55B：DevPlan escalate RequestPort 請求 payload。
+/// 對應既有 BossInteraction type "devplan_escalate" — buttons: devplan_skip / _abort。</summary>
+public sealed record DevPlanEscalateRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55B：DevPlan escalate 回傳 payload。
+/// Action = "skip"（→ Dev 直接開發）/ "abort"（→ failed end）。</summary>
+public sealed record DevPlanEscalateResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 55B：DevPlan unable RequestPort 請求 payload。
+/// 對應既有 BossInteraction type "dev_plan_unable" — buttons: devplan_unable_skip / _unable_abort。</summary>
+public sealed record DevPlanUnableRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55B：DevPlan unable 回傳 payload。
+/// Action = "skip"（→ Dev 直接開發）/ "abort"（→ failed end）。</summary>
+public sealed record DevPlanUnableResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 55B：Split task proposal RequestPort 請求 payload（Stage 46 Petra 拆 task 機制）。
+/// 對應既有 BossInteraction type "split_task_proposal" — buttons: split_accept / _modify / _reject / _abort。</summary>
+public sealed record SplitTaskProposalRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55B：Split task proposal 回傳 payload。
+/// Action = "accept"（→ BuildEpicSubTasks + sub-task chain）/ "modify"（同 accept 但帶 ModifyContent JSON）/ "reject"（→ Dev_plan 不拆繼續）/ "abort"（→ cancelled）。</summary>
+public sealed record SplitTaskProposalResponse(
+    [property: JsonPropertyName("action")]        string  Action,
+    [property: JsonPropertyName("modifyContent")] string? ModifyContent);
+
 /// <summary>Stage 53A：5 fallback 點觸發時送出的 bridge — 由 PipelineFallbackExecutor 收到後 YieldOutputAsync 結束 Workflow。
 /// 帶 LastResult 給 FinalizePipelineAsync 主動 call legacy method 接手（議題 9 修法）。</summary>
 public sealed record PipelineFallbackBridge(

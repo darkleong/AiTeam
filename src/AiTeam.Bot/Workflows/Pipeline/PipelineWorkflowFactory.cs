@@ -90,6 +90,13 @@ public sealed class PipelineWorkflowFactory
         var docPort      = RequestPort.Create<DocCompletionRequest,      DocCompletionResponse>     (DocCompletionPortId);
         var devFixPort   = RequestPort.Create<DevFixCompletionRequest,   DevFixCompletionResponse>  (DevFixCompletionPortId);  // Stage 53B 新加
 
+        // Stage 55B Session B：5 type-specific intervention HITL RequestPort（議題 2 = 2C Pattern A）
+        var devInterventionPort   = RequestPort.Create<DevInterventionRequest,   DevInterventionResponse>  (DevInterventionPortId);
+        var qaInterventionPort    = RequestPort.Create<QaInterventionRequest,    QaInterventionResponse>   (QaInterventionPortId);
+        var devPlanEscalatePort   = RequestPort.Create<DevPlanEscalateRequest,   DevPlanEscalateResponse>  (DevPlanEscalatePortId);
+        var devPlanUnablePort     = RequestPort.Create<DevPlanUnableRequest,     DevPlanUnableResponse>    (DevPlanUnablePortId);
+        var splitTaskProposalPort = RequestPort.Create<SplitTaskProposalRequest, SplitTaskProposalResponse>(SplitTaskProposalPortId);
+
         return new WorkflowBuilder(start)
             // Stage 55A：Start → KickoffStage（parent group） / DevPlanStage（sub-task）— 兩出口
             .AddEdge(start, kickoffStage)                  // Stage 55A：parent group 入口
@@ -136,6 +143,17 @@ public sealed class PipelineWorkflowFactory
             .AddEdge(devFixStage, devFixPort)
             .AddEdge(devFixPort, devFixStage)
             .AddEdge(devFixStage, reviewerStage)           // Stage 53B：DevFix passed → ReviewerStageBridge loop back（fix loop 主路徑）
+            // Stage 55B Session B：5 type-specific intervention HITL RequestPort 雙向（議題 2 = 2C Pattern A）
+            .AddEdge(devStage, devInterventionPort)        // DevInterventionRequest → port
+            .AddEdge(devInterventionPort, devStage)        // DevInterventionResponse → DevStageExecutor.HandleDevInterventionResponseAsync
+            .AddEdge(qaStage, qaInterventionPort)          // QaInterventionRequest → port
+            .AddEdge(qaInterventionPort, qaStage)          // QaInterventionResponse → QaStageExecutor.HandleQaInterventionResponseAsync
+            .AddEdge(devPlanStage, devPlanEscalatePort)    // DevPlanEscalateRequest → port
+            .AddEdge(devPlanEscalatePort, devPlanStage)    // DevPlanEscalateResponse → DevPlanStageExecutor.HandleDevPlanEscalateResponseAsync
+            .AddEdge(devPlanStage, devPlanUnablePort)      // DevPlanUnableRequest → port
+            .AddEdge(devPlanUnablePort, devPlanStage)      // DevPlanUnableResponse → DevPlanStageExecutor.HandleDevPlanUnableResponseAsync
+            .AddEdge(designStage, splitTaskProposalPort)   // SplitTaskProposalRequest → port
+            .AddEdge(splitTaskProposalPort, designStage)   // SplitTaskProposalResponse → DesignStageExecutor.HandleSplitTaskProposalResponseAsync
             // 終結 — NotifyMerge（happy path）/ fallback / 55A：含 Kickoff/Design Stage Executor 都可 YieldOutput PipelineLoopResult intervention
             .WithOutputFrom(notifyMerge, fallback, kickoffStage, designStage, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
@@ -152,6 +170,13 @@ public sealed class PipelineWorkflowFactory
     public const string DocCompletionPortId      = "Pipeline-DocCompletion";
     /// <summary>Stage 53B：DevFix stage RequestPort PortId 常數（K1 拍板 5 → 6 entry）。</summary>
     public const string DevFixCompletionPortId   = "Pipeline-DevFixCompletion";
+
+    // Stage 55B Session B：5 type-specific intervention HITL PortId 常數
+    public const string DevInterventionPortId      = "Pipeline-DevIntervention";
+    public const string QaInterventionPortId       = "Pipeline-QaIntervention";
+    public const string DevPlanEscalatePortId      = "Pipeline-DevPlanEscalate";
+    public const string DevPlanUnablePortId        = "Pipeline-DevPlanUnable";
+    public const string SplitTaskProposalPortId    = "Pipeline-SplitTaskProposal";
 
     /// <summary>建立 framework CheckpointManager（綁 PipelineCheckpointStore）。
     /// FrameworkPipelineRouter 用此 manager 跑 InProcessExecution.RunStreamingAsync(...) / ResumeStreamingAsync(...)。
