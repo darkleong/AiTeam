@@ -424,6 +424,8 @@ public class ButtonCallbackRouter(
 
             store.RegisterConfirmation(agentConfirmMsg.Id, pending with { TaskId = task.Id });
 
+            // Stage 55B 範圍邊界：exec_confirm 仍 fire-and-forget — Discord button callback 流程（CEO confirm 後執行確認），
+            // 不在 framework Pipeline Workflow 內等回應（ProposalConfirmationService.ProcessExecConfirm 接力 enqueue agent）
             _ = interactionService.CreateInteractionAsync(
                 "exec_confirm",
                 title:                pending.CeoResponse.Task?.Title ?? pending.Description,

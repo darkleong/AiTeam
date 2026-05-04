@@ -147,6 +147,7 @@ public class CommandHandler(
             var replyTitle = ceoResponse.Reply?.Length > 50
                 ? ceoResponse.Reply[..50] + "…"
                 : ceoResponse.Reply ?? userInput;
+            // Stage 55B 範圍邊界：ceo_reply 仍 fire-and-forget — 純通知 ack，不在 framework Workflow 內等回應（Discord 命令層）
             _ = interactionService.CreateInteractionAsync(
                 "ceo_reply",
                 title:                $"Victoria 回覆：{replyTitle}",
@@ -189,6 +190,8 @@ public class CommandHandler(
                 store.RegisterConfirmation(confirmMsg.Id,
                     new PendingConfirmation(ceoResponse, finalProject, userInput));
 
+                // Stage 55B 範圍邊界：ceo_confirm 仍 fire-and-forget — Discord 命令層 CEO 收到命令後請 Christ 確認派工，
+                // 不在 framework Pipeline Workflow 內等回應（ProposalConfirmationService 流程，後續 exec_confirm 接力）
                 _ = interactionService.CreateInteractionAsync(
                     "ceo_confirm",
                     title:                ceoResponse.Task?.Title ?? userInput,

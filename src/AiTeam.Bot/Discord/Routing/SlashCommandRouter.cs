@@ -250,6 +250,7 @@ public class SlashCommandRouter(
                     ? (ceoResponse.Reply ?? description)
                     : $"{ceoResponse.Reply}\n\n---\n\n{ceoResponse.Task.Description}";
 
+                // Stage 55B 範圍邊界：ceo_confirm 仍 fire-and-forget — Discord 命令層 /ceo slash 命令處理路徑（同 CommandHandler）
                 _ = interactionService.CreateInteractionAsync(
                     "ceo_confirm",
                     title:                ceoResponse.Task?.Title ?? description,

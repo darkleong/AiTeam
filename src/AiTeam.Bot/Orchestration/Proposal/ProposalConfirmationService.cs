@@ -74,6 +74,7 @@ public class ProposalConfirmationService(
             Status    = task.Status
         });
 
+        // Stage 55B 範圍邊界：exec_confirm 仍 fire-and-forget — 對齊 ButtonCallbackRouter exec_confirm 處理路徑（Dashboard CEO confirm 入口）
         _ = interactionService.CreateInteractionAsync(
             "exec_confirm",
             title:                ceoResponse.Task?.Title ?? description,
@@ -260,6 +261,9 @@ public class ProposalConfirmationService(
         var cmdHandler = serviceProvider.GetRequiredService<CommandHandler>();
         cmdHandler.RegisterProposalConfirmation(msg.Id, taskId, project, updatedDesc);
 
+        // Stage 55B 議題 1 = 1A 拍板：proposal type 仍 fire-and-forget — Pipeline pre-stage 整合留 Stage 56
+        // 理由：ProposalConfirmationService.ProcessProposalApprovedAsync 流程 group 在 proposal 核准後才 CreateGroupAsync，
+        // Pipeline ProposalStage pre-stage 整合需重構 group lifecycle（規模超出 Stage 55B / Aria spike F6 揭露）
         _ = interactionService.CreateInteractionAsync(
             "proposal",
             title:                task.Title,

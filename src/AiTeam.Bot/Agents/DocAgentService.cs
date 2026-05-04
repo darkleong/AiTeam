@@ -306,6 +306,7 @@ public class DocAgentService(
         var title       = $"Sage 歸檔 escalate（PR #{prNumber}）";
         var description = reason.Length > 1500 ? reason[..1500] + "..." : reason;
 
+        // Stage 55B 範圍邊界：sage_escalate 仍 fire-and-forget — Sage 收尾類純通知 ack（Sage agent 已結束 escalate 後）
         await interactionService.CreateInteractionAsync(
             "sage_escalate",
             title:                title,

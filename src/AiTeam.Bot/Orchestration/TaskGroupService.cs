@@ -504,6 +504,8 @@ public class TaskGroupService(
 
         logger.LogInformation("TaskGroup {Id} 通知老闆可以 merge PR", group.Id);
 
+        // Stage 55B 議題 3 = 3A 拍板：merge_notify 仍 fire-and-forget — 純通知 ack 性質（Christ 確認 PR 可合併），
+        // routing 收益為 0；改 yield-resume 對行為無實質改變但需 NotifyMergeStage dual handler 重構（規模 vs 收益不對等）
         _ = interactionService.CreateInteractionAsync(
             "merge_notify",
             title:                $"全流程完成：{group.Title}",
@@ -633,6 +635,9 @@ public class TaskGroupService(
 
         logger.LogWarning("TaskGroup {Id} 修復次數超限（{Count} 次），升級給老闆", group.Id, group.FixIteration);
 
+        // Stage 55B 議題 3 = 3A 拍板：intervention 仍 fire-and-forget — 純通知 ack 性質，routing 收益為 0；
+        // 改 yield-resume 需 dedicated InterventionAckExecutor + 8 stage AddEdge wiring（規模 vs 收益不對等）。
+        // SetInterventionAndYieldAsync helper（在 8 個 Pipeline Stage Executor 各自實作）：DB UpdateStatus + call 本 method + YieldOutput Completed=true
         _ = interactionService.CreateInteractionAsync(
             "intervention",
             title:                $"需要介入：{group.Title}",
@@ -1318,6 +1323,8 @@ public class TaskGroupService(
             "PauseEpicAndNotify：sub-task Phase {Phase} needs_intervention → epic {Parent} EpicPaused=true",
             subTask.PhaseNumber, parent.Id);
 
+        // Stage 55B 範圍邊界：epic_partial_paused 仍 fire-and-forget — Stage 46 Epic Chain 機制跨 framework boundary
+        // （parent group 在 Pipeline，sub-task pause 是 epic-level 動作，不在 sub-task 自己的 Pipeline Workflow 內）
         _ = interactionService.CreateInteractionAsync(
             "epic_partial_paused",
             title:                $"Epic 部分暫停：{parent.Title}",

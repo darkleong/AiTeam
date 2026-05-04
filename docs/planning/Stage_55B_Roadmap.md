@@ -510,6 +510,60 @@ Trial_v6：v4 動態架構驗證（Petra Magentic Orchestration / per-task sessi
 
 > Forge 結案第一段填（子項完成度對照 / Session 結案 / 關鍵設計決策 / 踩坑紀錄 / 驗收結果 / Aria 校準錨候選 — Aria 第二段填）
 
+### Session A 結案（2026-05-04，Forge）
+
+#### 實作期 4 個戰略議題 escalate Christ 拍板
+
+Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 critical_3「失敗成本高 → escalate 不自己拍板」紀律）：
+
+| 議題 | 拍板 | 理由 |
+|---|---|---|
+| **議題 1：proposal pre-stage 整合** | **1A：留 Stage 56 不做** | Aria 計劃書議題 6 推薦「② Pipeline pre-stage 整合」，Forge spike F6 揭露 ProposalConfirmationService 既有流程 group 在 proposal 核准後才 CreateGroupAsync，整合需重構 group lifecycle（Roadmap 失敗條件第一條）。守失敗條件 → 留 Stage 56|
+| **議題 2：HITL pattern 選擇** | **2C：Pattern A 主 + Stage 51 試點獨立保留** | Stage 55A KickoffStage/DesignStage 已用 Pattern A（×0.88 校準錨已驗），切 Pattern B 是 break-fix risk。Stage 51 試點 mid_interrupt 本質不同（Petra meeting 中途介入 trigger）獨立保留|
+| **議題 3：ack 類型 intervention/merge_notify 切 HITL?** | **3A：留 fire-and-forget** | 純通知 ack 性質，routing 收益為 0；改 yield-resume 需 dedicated InterventionAckExecutor + 8 stage AddEdge wiring（規模 vs 收益不對等）|
+| **議題 4：Session 拆分** | **4A：拆 Session B** | 5 routing types HITL refactor 加總 ~600-900 LOC，spike 揭露 dev_failed_intervention/devplan_escalate/dev_plan_unable Pipeline path 目前都沒開（被 skip）— 切 HITL 含 ① 啟用 type-specific BossInteraction + ② yield-resume + routing。守「每 Session 規模可控」紀律|
+
+#### Session A 完成範圍
+
+- **子項 0**：Spike F1-F7 read 對齊完成（Stage 51 試點 method signature `RequestMidInterruptInteractionAsync(group, request, portRequest, ct)` 確認 / Stage 55A KickoffStage/DesignStage 實際就是 RequestPort pattern / AppealOrchestrationService 16 處 skip 完整 grep 結構）
+- **子項 1**：`PipelineHitlHelper` 共用 logging helper（Pattern A 對齊 / 留 Session B 用）
+- **子項 5**：AppealOrchestrationService 11 + QaCoordinationService 5 處 skip 全清
+  - `HandleDevBlockerAsync` body -65%（switch case 整段 dead code 刪）
+  - `HandleDevPlanCompletedAsync` 8 處 `if (!isPipelinePath) doLegacy` 全刪 + 2 處 conditional unwrap
+  - `HandleQaCompletedInnerAsync` passed/no_applicable_tests early return + 4 處 legacy fire/notify 全刪
+  - `RunPetraGateAsync` escalate dead code 刪
+- **子項 6**：F-α 排除條件 4 處 router 移除（FrameworkAppealRouter / FrameworkDesignRouter / FrameworkKickoffRouter / MeetingOrchestrationService）— sub-task TaskGroup 也納入篩選（race condition 風險 0：sub-task 從 Dev_plan 啟動 skip Kickoff/Design 階段）
+- **子項 8**：8 處 calling site comment 補強
+  - 5 既有不切：CommandHandler.cs (ceo_reply / ceo_confirm) / SlashCommandRouter.cs (ceo_confirm) / ButtonCallbackRouter.cs (exec_confirm) / ProposalConfirmationService.cs (exec_confirm) / DocAgentService.cs (sage_escalate) / TaskGroupService.cs (epic_partial_paused)
+  - 議題 3 = 3A：TaskGroupService.cs (merge_notify / intervention)
+  - 議題 1 = 1A：ProposalConfirmationService.cs (proposal)
+- **子項 9**：Version bump v3.42.0 → v3.43.0
+
+#### Session A 驗收依據（regression 場景沿用既有）
+
+- **AppealOrchestrationService skip 精簡 regression**：跑 Stage 53B 既有 6 場景 + Stage 55A 場景 E（sub-task chain）— 不需新 scenario key，既有場景已涵蓋
+- **F-α 移除 regression**：跑 Stage 49/50/52/53A 既有 4 router Recovery + Stage 55A Pipeline Crash Recovery 場景
+
+#### Session A 程式碼變化統計
+
+- 新增：1 file（`PipelineHitlHelper.cs`，~50 LOC）
+- 修改：~15 files（skip 精簡 / F-α 移除 / 8 處 comment / version bump）
+- 淨變化：**~150 行 dead code 刪除 + ~50 行新增 helper + ~80 行 comment 補強** = 程式碼瘦身 + 文件補強
+
+#### Production DB pre-check
+
+子項 5 實作前執行 `docker exec aiteam-postgres-1 psql -U aiteam -d aiteam` 確認：
+- 96 done + 54 cancelled + 14 failed + **1 stuck mock NewFeature group**（PipelineFrameworkStateJson IS NULL，Mock test 殘留）— 對 skip 移除無干擾
+- Stage 55A 已宣告 `UseFrameworkPipeline=true` 唯一 path → isPipelinePath 必為 true → conditional skip dead code
+
+#### Session B 留作（Christ 4A 拍板）
+
+5 routing types HITL refactor + 子項 4 InteractionProcessor 路由表 + Mock auto-approve switch + 5 個新 Mock 場景。預估 ~600-900 LOC + 涉及 Pipeline workflow shape 重構（DevStage / QaStage / DevPlanStage / DesignStage failure path 改用 type-specific BossInteraction + yield-resume + routing）。
+
+### Aria 校準錨候選（Aria 第二段填）
+
+> Forge 預估：Session A 規模 S-M（純 dead code 清理 + 文件補強 + version bump）— 對齊 Stage 41 ×0.84 / Stage 47 ×N/A 失準（純機械化 / 純 prompt 補強類）/ Stage 48 ×0.78（spike 類）區間下半。實際 context 預估 ~300K（接近 Opus 1M 30%）。
+
 ---
 
 ## 版本歷史
