@@ -48,7 +48,6 @@ public class TaskGroupService(
     IHostApplicationLifetime appLifetime,
     MeetingOrchestrationService meetingOrchestration,
     AppealOrchestrationService appealOrchestration,
-    QaCoordinationService qaCoordination,
     ProposalConfirmationService proposalConfirmation,
     ILogger<TaskGroupService> logger)
 {

@@ -158,6 +158,21 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "framework_pipeline_dev_blocker_appeal";
             MockClaudeCodeService.ResetScenarioRoundCounters();
         }
+        // ── Stage 55A v4 漸進遷移第八步：Kickoff/Design 整合到 Pipeline framework 4 alias ──
+        // 議題 G3 解法 — Pipeline 從 Kickoff 階段啟動，Pipeline KickoffStage / DesignStage Executor 接管 finalize
+        // 對應驗收場景 B/C/D/E（對齊既有 Mock 邏輯 + 提供驗收明確命名）：
+        //   - framework_pipeline_kickoff_to_merge_full ⭐：Pipeline 從 Kickoff 啟動跑通完整 pipeline（場景 B）
+        //   - framework_pipeline_kickoff_crash_recovery ⭐：Kickoff 階段 Crash Recovery（場景 C）
+        //   - framework_pipeline_design_crash_recovery_issue_idempotency_v2 ⭐：Design 階段 Issue idempotency（場景 D）
+        //   - framework_pipeline_subtask_chain ⭐：sub-task 整合 Pipeline framework path（場景 E）
+        else if (scenario == "framework_pipeline_kickoff_to_merge_full")
+            MockClaudeCodeService.FailScenario = "framework_pipeline_happy_path";
+        else if (scenario == "framework_pipeline_kickoff_crash_recovery")
+            MockClaudeCodeService.FailScenario = "framework_pipeline_happy_path";
+        else if (scenario == "framework_pipeline_design_crash_recovery_issue_idempotency_v2")
+            MockClaudeCodeService.FailScenario = "framework_design_consensus_round1";
+        else if (scenario == "framework_pipeline_subtask_chain")
+            MockClaudeCodeService.FailScenario = "split_task_propose_accept";
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -221,6 +236,11 @@ public class MockScenarioService(
             // Stage 54：framework Recovery 升級 + idempotency 驗證 alias
             "framework_design_crash_recovery_issue_idempotency" => (WorkflowType.NewFeature, "Stage54-DesignIssueIdempotency", "Kickoff"),
             "pipeline_dev_blocker_retry_idempotency"            => (WorkflowType.NewFeature, "Stage54-DevBlockerRetryIdempotency", "Kickoff"),
+            // Stage 55A：Pipeline 從 Kickoff 啟動 4 alias（場景 B/C/D/E）— 議題 G3 解法驗證
+            "framework_pipeline_kickoff_to_merge_full"          => (WorkflowType.NewFeature, "Stage55A-KickoffToMergeFull",        "Kickoff"),
+            "framework_pipeline_kickoff_crash_recovery"         => (WorkflowType.NewFeature, "Stage55A-KickoffCrashRecovery",      "Kickoff"),
+            "framework_pipeline_design_crash_recovery_issue_idempotency_v2" => (WorkflowType.NewFeature, "Stage55A-DesignIssueIdempotencyV2", "Kickoff"),
+            "framework_pipeline_subtask_chain"                  => (WorkflowType.NewFeature, "Stage55A-SubtaskChain",              "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

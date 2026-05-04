@@ -70,6 +70,11 @@
                 <MudSelectItem Value="@("framework_pipeline_qa_no_tests_dynamic")">🧪 Stage53B — QA no_tests → Petra approve → Doc</MudSelectItem>
                 <MudSelectItem Value="@("framework_pipeline_reviewer_fallback_dynamic")">🔁 Stage53B — Reviewer Critical + Petra revise → fix loop</MudSelectItem>
                 <MudSelectItem Value="@("framework_pipeline_fix_loop_crash_recovery")">💥 Stage53B — fix loop Crash Recovery（DevFix yield 期間 docker restart）</MudSelectItem>
+                @* Stage 55A：Pipeline 從 Kickoff 啟動 4 alias（v4 漸進遷移第八步驗收 — 議題 G3 解法） *@
+                <MudSelectItem Value="@("framework_pipeline_kickoff_to_merge_full")">⭐ Stage55A — Pipeline 從 Kickoff 跑通完整 pipeline（場景 B）</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_kickoff_crash_recovery")">💥 Stage55A — Kickoff 階段 Crash Recovery（場景 C）</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_design_crash_recovery_issue_idempotency_v2")">🛡️ Stage55A — Design 階段 B2 idempotency（場景 D）</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_subtask_chain")">🔗 Stage55A — sub-task 整合 Pipeline framework path（場景 E）</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">
