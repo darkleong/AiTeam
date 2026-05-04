@@ -34,6 +34,7 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 [SendsMessage(typeof(DevPlanStageBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(DesignCompletionRequest))]
+[SendsMessage(typeof(SplitTaskProposalRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class DesignStageExecutor : Executor
 {
@@ -98,9 +99,12 @@ internal sealed partial class DesignStageExecutor : Executor
         switch (decision)
         {
             case DesignFinalizationDecision.SplitProposalOpened:
-                _logger.LogInformation("[Stage55A] DesignStage：SplitProposalOpened → sub-task chain 接手，parent Pipeline 結束（Group={Id}）", bridge.GroupId);
-                await context.SendMessageAsync(new PipelineFallbackBridge(
-                    bridge.GroupId, "design_split_proposal_opened", null));
+                // Stage 55B Session B：split_task_proposal HITL — BossInteraction 已由 FinalizeDesignAsync 內部 BuildSplitTaskProposalAsync 開
+                // yield 等 Christ button → ResumeAfterSplitTaskProposalAsync → HandleSplitTaskProposalResponseAsync routing
+                _logger.LogInformation("[Stage55B] DesignStage：SplitProposalOpened → split_task_proposal HITL yield 等 Christ（Group={Id}）", bridge.GroupId);
+                await PipelineHitlHelper.YieldForChristResponseAsync(
+                    context, new SplitTaskProposalRequest(bridge.GroupId), _logger,
+                    "split_task_proposal", bridge.GroupId);
                 return;
 
             case DesignFinalizationDecision.ConsensusNoSplit:
@@ -139,6 +143,89 @@ internal sealed partial class DesignStageExecutor : Executor
             default:
                 _logger.LogWarning("[Stage55A] DesignStage：未知 decision={Decision}（Group={Id}）— intervention", response.Decision, state.GroupId);
                 await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 Design decision: {response.Decision}", null);
+                return;
+        }
+    }
+
+    /// <summary>Stage 55B Session B：split_task_proposal HITL 回應 handler — Christ button click 後 routing。
+    /// accept/modify → BuildEpicSubTasksAsync 創 sub-task chain → SendMessage(PipelineFallbackBridge) parent ends（sub-task chain 接手）
+    /// reject → state.DesignDone=true → SendMessage(DevPlanStageBridge)（不拆繼續原 Pipeline）
+    /// abort  → SetCancelledAndYieldAsync。</summary>
+    [MessageHandler]
+    private async ValueTask HandleSplitTaskProposalResponseAsync(SplitTaskProposalResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "accept":
+            {
+                _logger.LogInformation("[Stage55B] DesignStage：split_task_proposal accept → BuildEpicSubTasks + sub-task chain 接手（Group={Id}）", state.GroupId);
+                if (string.IsNullOrWhiteSpace(response.SplitProposalJson))
+                {
+                    _logger.LogWarning("[Stage55B] DesignStage：split_accept 但 SplitProposalJson 缺，fallback to PipelineFallbackBridge（Group={Id}）", state.GroupId);
+                    await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "split_proposal_json_missing", null));
+                    return;
+                }
+                var proposal = DesignSplitProposalEvaluator.TryParseSplitProposal(response.SplitProposalJson);
+                if (proposal is null || !proposal.ShouldSplit || proposal.Phases is { Count: 0 })
+                {
+                    _logger.LogWarning("[Stage55B] DesignStage：split_accept SplitProposalJson 解析失敗，視同 reject → DevPlanStage（Group={Id}）", state.GroupId);
+                    state.DesignDone = true;
+                    await PipelineStateHelpers.SaveAsync(context, state);
+                    await context.SendMessageAsync(new DevPlanStageBridge(state.GroupId));
+                    return;
+                }
+                await using (var scopeAccept = _scopeFactory.CreateAsyncScope())
+                {
+                    var tgs = scopeAccept.ServiceProvider.GetRequiredService<TaskGroupService>();
+                    await tgs.BuildEpicSubTasksAsync(state.GroupId, proposal, default);
+                }
+                await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "split_accepted", null));
+                return;
+            }
+
+            case "modify":
+            {
+                _logger.LogInformation("[Stage55B] DesignStage：split_task_proposal modify → BuildEpicSubTasks(modified) + sub-task chain 接手（Group={Id}）", state.GroupId);
+                SplitProposal? modified = null;
+                try { modified = DesignSplitProposalEvaluator.TryParseSplitProposal(response.ModifyContent ?? ""); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[Stage55B] DesignStage：split_modify Christ 改寫的 phases JSON 解析失敗，fallback 視同 reject（Group={Id}）", state.GroupId);
+                }
+                if (modified is null || !modified.ShouldSplit || modified.Phases is { Count: 0 })
+                {
+                    _logger.LogInformation("[Stage55B] DesignStage：split_modify fallback to reject → DevPlanStage（Group={Id}）", state.GroupId);
+                    state.DesignDone = true;
+                    await PipelineStateHelpers.SaveAsync(context, state);
+                    await context.SendMessageAsync(new DevPlanStageBridge(state.GroupId));
+                    return;
+                }
+                await using (var scopeModify = _scopeFactory.CreateAsyncScope())
+                {
+                    var tgs = scopeModify.ServiceProvider.GetRequiredService<TaskGroupService>();
+                    await tgs.BuildEpicSubTasksAsync(state.GroupId, modified, default);
+                }
+                await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "split_modified", null));
+                return;
+            }
+
+            case "reject":
+                _logger.LogInformation("[Stage55B] DesignStage：split_task_proposal reject → DevPlanStageBridge（不拆繼續原 Pipeline）（Group={Id}）", state.GroupId);
+                state.DesignDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DevPlanStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage55B] DesignStage：split_task_proposal abort → SetCancelledAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetCancelledAndYieldAsync(context, state.GroupId, "Split task proposal abort by Christ");
+                return;
+
+            default:
+                _logger.LogWarning("[Stage55B] DesignStage：未知 split_task_proposal action={Action}（Group={Id}）— SetIntervention", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 split_task_proposal action: {response.Action}", null);
                 return;
         }
     }

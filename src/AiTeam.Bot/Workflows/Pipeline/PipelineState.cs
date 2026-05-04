@@ -271,10 +271,12 @@ public sealed record SplitTaskProposalRequest(
     [property: JsonPropertyName("groupId")] Guid GroupId);
 
 /// <summary>Stage 55B：Split task proposal 回傳 payload。
-/// Action = "accept"（→ BuildEpicSubTasks + sub-task chain）/ "modify"（同 accept 但帶 ModifyContent JSON）/ "reject"（→ Dev_plan 不拆繼續）/ "abort"（→ cancelled）。</summary>
+/// Action = "accept"（→ BuildEpicSubTasks + sub-task chain）/ "modify"（同 accept 但用 ModifyContent JSON）/ "reject"（→ Dev_plan 不拆繼續）/ "abort"（→ cancelled）。
+/// SplitProposalJson 從 BossInteraction.ContextJson 取出，accept path 用以 BuildEpicSubTasksAsync；modify path 用 ModifyContent。</summary>
 public sealed record SplitTaskProposalResponse(
-    [property: JsonPropertyName("action")]        string  Action,
-    [property: JsonPropertyName("modifyContent")] string? ModifyContent);
+    [property: JsonPropertyName("action")]            string  Action,
+    [property: JsonPropertyName("modifyContent")]    string? ModifyContent,
+    [property: JsonPropertyName("splitProposalJson")] string? SplitProposalJson);
 
 /// <summary>Stage 53A：5 fallback 點觸發時送出的 bridge — 由 PipelineFallbackExecutor 收到後 YieldOutputAsync 結束 Workflow。
 /// 帶 LastResult 給 FinalizePipelineAsync 主動 call legacy method 接手（議題 9 修法）。</summary>
