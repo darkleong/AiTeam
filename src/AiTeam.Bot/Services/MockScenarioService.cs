@@ -173,6 +173,33 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "framework_design_consensus_round1";
         else if (scenario == "framework_pipeline_subtask_chain")
             MockClaudeCodeService.FailScenario = "split_task_propose_accept";
+        // ── Stage 55B Session B：5 type-specific intervention HITL alias 場景 ──
+        // 對應 Pipeline 失敗 path 改 yield-resume 後的 5 個 routing type — Mock auto-approve switch 4 case 補（InteractionService.cs L132-142）
+        // 機制：alias 觸發既有 FailScenario 邏輯（Pipeline failure path 開 BossInteraction）+ Pipeline yield 等 Christ
+        //       MockMode auto-approve 自動觸發對應 default action（dev_intervention_retry / qa_intervention_continue / devplan_skip / devplan_unable_skip / split_accept）
+        //       → ResumeAfterXxxAsync routing 推進 Pipeline
+        else if (scenario == "framework_pipeline_dev_intervention_hitl")
+        {
+            MockClaudeCodeService.FailScenario = "dev_failed_after_review";  // Dev failure → Pipeline DevStage yield DevInterventionRequest
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_pipeline_qa_intervention_hitl")
+        {
+            MockClaudeCodeService.FailScenario = "qa_fix_loop_fail";          // QA fix loop 失敗 → Pipeline QaStage yield QaInterventionRequest
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_pipeline_devplan_escalate_hitl")
+        {
+            MockClaudeCodeService.FailScenario = "dev_plan_escalate_loop";    // DevPlanRevision >= 2 → Pipeline DevPlanStage yield DevPlanEscalateRequest
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_pipeline_devplan_unable_hitl")
+        {
+            MockClaudeCodeService.FailScenario = "dev_plan_escalate_loop";    // DevPlan 重產上限 → Pipeline DevPlanStage yield DevPlanUnableRequest（InterventionReason 開頭含 "DevPlan 重產" 區分）
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_pipeline_split_task_proposal_hitl")
+            MockClaudeCodeService.FailScenario = "split_task_propose_accept"; // Petra 拆 task → Pipeline DesignStage yield SplitTaskProposalRequest（同 Stage 55A subtask_chain 但驗 yield-resume）
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -241,6 +268,12 @@ public class MockScenarioService(
             "framework_pipeline_kickoff_crash_recovery"         => (WorkflowType.NewFeature, "Stage55A-KickoffCrashRecovery",      "Kickoff"),
             "framework_pipeline_design_crash_recovery_issue_idempotency_v2" => (WorkflowType.NewFeature, "Stage55A-DesignIssueIdempotencyV2", "Kickoff"),
             "framework_pipeline_subtask_chain"                  => (WorkflowType.NewFeature, "Stage55A-SubtaskChain",              "Kickoff"),
+            // Stage 55B Session B：5 type-specific intervention HITL alias（從 Kickoff 跑完整 Pipeline + 失敗 path yield + auto-approve）
+            "framework_pipeline_dev_intervention_hitl"          => (WorkflowType.NewFeature, "Stage55B-DevInterventionHITL",       "Kickoff"),
+            "framework_pipeline_qa_intervention_hitl"           => (WorkflowType.NewFeature, "Stage55B-QaInterventionHITL",        "Kickoff"),
+            "framework_pipeline_devplan_escalate_hitl"          => (WorkflowType.NewFeature, "Stage55B-DevPlanEscalateHITL",       "Kickoff"),
+            "framework_pipeline_devplan_unable_hitl"            => (WorkflowType.NewFeature, "Stage55B-DevPlanUnableHITL",         "Kickoff"),
+            "framework_pipeline_split_task_proposal_hitl"       => (WorkflowType.NewFeature, "Stage55B-SplitTaskProposalHITL",     "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
