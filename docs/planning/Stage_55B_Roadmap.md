@@ -1,10 +1,10 @@
 # Stage 55B：v4 漸進遷移第九步（拆 55A/55B 第二段）— BossInteraction 切 framework HITL（10 type）+ AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除
 
-> 對應 Future Feature：v4 漸進遷移 9 Stage 路線第九步（v4 路線**最後一塊** — 完成後 9/9 達成）
+> 對應 Future Feature：v4 漸進遷移 9 Stage 路線第九步（v4 路線**最後一塊** — 完成後 9/9 達成 🎉 Session A 部分 — Session B 待開）
 > 對應版本：**v3.43.0**（v4 漸進遷移第九個產生版本變動的 Stage）
 > 建立日期：2026-05-04
-> 狀態：📋 計劃書建立完成，待 Forge 開工
-> 文件版本：v1.0
+> 狀態：✅ Session A 已完成（2026-05-04，Session B 留作 Christ 拍板開工）
+> 文件版本：v2.0
 
 ---
 
@@ -597,3 +597,4 @@ Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 c
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-04 | 初版規劃書建立（Aria）—— v4 漸進遷移第九步（拆 55A/55B 第二段）Stage 55B：BossInteraction 切 framework HITL（10 type）+ AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除（A1 Stage 55B 範圍 = HITL 10 type + v4 殘留 legacy 一次清完 + B1 Stage 56 = Trial v6 前置條件統包 + C1 切 10 type / 5 type 仍 fire-and-forget + Aria 拿捏 FrameworkHitlBridgeBase 抽象 + Pipeline Stage Executor RequestPort 對應 10 type + proposal Pipeline pre-stage 整合議題 6 ② + AppealOrchestration 每處 skip 分類精簡 + F-α 移除 sub-task race condition 0 + Mock 場景擴充含 5 type fire-and-forget verify）。**規劃前期已 grep**：27 處 BossInteraction caller 散在 14 service + 5 個「不適合切」type calling site 完整 context（Discord 命令層 / 通知 ack 性質確認）+ FrameworkHitlBridge.cs 353 行 + Stage 51 試點 pattern + AppealOrchestrationService 16 處 skip 位置 + F-α 排除條件 4 處 + InteractionProcessor 路由表結構 — 對齊自省點 #23 規劃前期 grep 紀律。|
+| v2.0 | 2026-05-04 | **Session A 結案**（Forge）— 4 戰略議題 escalate Christ 拍板（議題 1 = 1A proposal 留 Stage 56 / 議題 2 = 2C Pattern A 主 + Stage 51 試點獨立保留 / 議題 3 = 3A intervention/merge_notify 留 fire-and-forget / 議題 4 = 4A 拆 Session B）。**Session A 完成範圍**：子項 0 spike F1-F7 + 子項 1 PipelineHitlHelper + 子項 5 AppealOrchestrationService 11 + QaCoordinationService 5 處 skip 全清 + 子項 6 F-α 排除條件 4 處 router 移除 + 子項 8 8 處 calling site comment + 子項 9 v3.43.0 version bump。**程式碼變化**：~150 LOC dead code 刪除 + ~50 LOC 新 helper + ~80 LOC comment 補強。**Production DB pre-check**：96 done + 54 cancelled + 14 failed + 1 stuck mock NewFeature group — skip 移除 production safe。**Forge 自驗 3 regression 場景全綠**：framework_pipeline_kickoff_to_merge_full / framework_pipeline_subtask_chain（parent + Phase 1/2/3 全 done，F-α race risk = 0 確認）/ framework_pipeline_kickoff_crash_recovery + 4 router Recovery 啟動證據鏈完整。**Session B 留作 Christ 拍板開工**：5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ 子項 4 InteractionProcessor 路由表 + Mock 5 新場景 + Mock auto-approve switch 補（~600-900 LOC，Pipeline workflow shape 重構）。Commit hashes：6b4c6f9 / a484ff9 / 17cbb96。|
