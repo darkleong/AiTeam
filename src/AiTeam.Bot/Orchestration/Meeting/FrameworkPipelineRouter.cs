@@ -92,9 +92,12 @@ public sealed class FrameworkPipelineRouter
             var manager = _workflowFactory.CreateCheckpointManager();
 
             // 4. RunStreamingAsync 第一次：傳入 PipelineStartBridge 觸發 PipelineStartExecutor
-            //    對齊 FrameworkKickoffRouter L409 / FrameworkDesignRouter L382 5-arg signature（workflow, initialState, manager, sessionId, ct）
+            //    Stage 55A 缺口 2：bridge 帶 IsSubTask = group.ParentGroupId != null（PipelineStart 路由 parent → KickoffStage / sub-task → DevPlanStage）
             var sessionId = group.Id.ToString();
-            var initialBridge = new PipelineStartBridge(group.Id);
+            var isSubTask = group.ParentGroupId != null;
+            var initialBridge = new PipelineStartBridge(group.Id, isSubTask);
+            _logger.LogInformation("[Stage55A] HandlePipelineAsync IsSubTask={IsSubTask}（Group={Id}, ParentGroupId={ParentId}）",
+                isSubTask, group.Id, group.ParentGroupId);
             await using var run = await InProcessExecution.RunStreamingAsync(workflow, initialBridge, manager, sessionId, ct);
 
             // 5. WatchStreamAsync 收 events 直到 yield（RequestInfoEvent）or finalize（WorkflowOutputEvent）
@@ -254,6 +257,117 @@ public sealed class FrameworkPipelineRouter
             _logger.LogWarning(
                 "[Stage53A] ResumeAfterAgentAsync watch loop 結束但無 PipelineLoopResult 也無新 yield（Group={Id}）— 異常狀況，清 marker",
                 group.Id);
+            await ClearMarkersAsync(group.Id, default);
+        }
+    }
+
+    // ============================================================
+    //  Stage 55A：ResumeAfterKickoff / ResumeAfterDesign（議題 G3 解法 — Pipeline 接管 Kickoff/Design button callback）
+    // ============================================================
+
+    /// <summary>
+    /// Stage 55A：Kickoff 按鈕 callback resume（HandleKickoffConfirmedAsync 改後 call 此 method）。
+    /// 對齊 ResumeAfterAgentAsync 機制 — ResumeStreamingAsync from latest checkpoint，找 Pipeline-KickoffCompletion PortId
+    /// → SendResponseAsync(KickoffCompletionResponse(decision, modifyContent)) → 繼續 watch 下個 yield/finalize。
+    ///
+    /// decision = "continue" / "stop" 餵給 KickoffStageExecutor.HandleResponseAsync。
+    /// modify / restart 不走此路（HandleKickoffConfirmedAsync 內既有 legacy 邏輯處理 — Pipeline 仍 yield 等下一輪 button）。
+    /// </summary>
+    public Task ResumeAfterKickoffAsync(TaskGroup group, string decision, string? modifyContent, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.KickoffCompletionPortId,
+            new KickoffCompletionResponse(decision, modifyContent),
+            $"Kickoff(decision={decision})",
+            ct);
+
+    /// <summary>
+    /// Stage 55A：Design 按鈕 callback resume（HandleDesignConfirmedAsync 改後 call 此 method）。
+    /// 對齊 ResumeAfterKickoffAsync 機制。
+    /// </summary>
+    public Task ResumeAfterDesignAsync(TaskGroup group, string decision, string? modifyContent, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DesignCompletionPortId,
+            new DesignCompletionResponse(decision, modifyContent),
+            $"Design(decision={decision})",
+            ct);
+
+    /// <summary>
+    /// Stage 55A：Pipeline ResumeStreamingAsync 共用 helper — ResumeAfterAgentAsync / ResumeAfterKickoff/DesignAsync 共用核心邏輯。
+    /// 流程：LoadFromDb → ResumeStreamingAsync from latest → 找 expectedPortId 的 RequestInfoEvent → SendResponseAsync → 繼續 watch 直到下個 yield/finalize。
+    /// </summary>
+    private async Task ResumeWithResponseAsync(
+        TaskGroup group, string expectedPortId, object responseObj, string contextLabel, CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "[Stage55A] ResumeWithResponseAsync 觸發（Group={Id}, expectedPortId={Port}, context={Ctx}）",
+            group.Id, expectedPortId, contextLabel);
+
+        await _checkpointStore.LoadFromDbAsync(group.Id, ct);
+        var sessionId = group.Id.ToString();
+        var latest = _checkpointStore.GetLatestCheckpoint(sessionId);
+        if (latest is null)
+        {
+            _logger.LogWarning(
+                "[Stage55A] ResumeWithResponseAsync：latest checkpoint 不存在（Group={Id}），略過",
+                group.Id);
+            return;
+        }
+
+        var workflow = _workflowFactory.CreatePipelineWorkflow();
+        var manager = _workflowFactory.CreateCheckpointManager();
+        await using var run = await InProcessExecution.ResumeStreamingAsync(workflow, latest, manager, ct);
+
+        PipelineLoopResult? loopResult = null;
+        var sentResponse = false;
+        await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
+        {
+            if (ev is RequestInfoEvent requestEvt)
+            {
+                if (!sentResponse && requestEvt.Request.PortInfo.PortId == expectedPortId)
+                {
+                    var externalResponse = requestEvt.Request.CreateResponse(responseObj);
+                    await run.SendResponseAsync(externalResponse);
+                    sentResponse = true;
+                    _logger.LogInformation(
+                        "[Stage55A] ResumeWithResponseAsync SendResponseAsync 完成（Group={Id}, PortId={Port}, Ctx={Ctx}）",
+                        group.Id, expectedPortId, contextLabel);
+                    continue;
+                }
+                _logger.LogInformation(
+                    "[Stage55A] ResumeWithResponseAsync 下個 stage yield（Group={Id}, 新 PortId={Port}）— 保留 marker 等下次 callback",
+                    group.Id, requestEvt.Request.PortInfo.PortId);
+                return;
+            }
+            if (ev is WorkflowOutputEvent outputEvt && outputEvt.Is<PipelineLoopResult>(out var r))
+            {
+                loopResult = r;
+                _logger.LogInformation(
+                    "[Stage55A] ResumeWithResponseAsync WorkflowOutputEvent（Group={Id}，completed={Completed}，fallbackReason={Reason}）",
+                    group.Id, r.Completed, r.FallbackReason ?? "(none)");
+            }
+            else if (ev is WorkflowErrorEvent errEvt)
+            {
+                _logger.LogError("[Stage55A] ResumeWithResponseAsync WorkflowErrorEvent（Group={Id}）：{Exception}",
+                    group.Id, errEvt.Exception?.ToString() ?? "(null)");
+            }
+            else if (ev is ExecutorFailedEvent failedEvt)
+            {
+                _logger.LogError("[Stage55A] ResumeWithResponseAsync ExecutorFailedEvent（executorId={ExecutorId}）：{Data}",
+                    failedEvt.ExecutorId, failedEvt.Data?.ToString() ?? "(null)");
+            }
+        }
+
+        if (loopResult is not null)
+        {
+            await FinalizePipelineAsync(group, loopResult, ct);
+        }
+        else if (!sentResponse)
+        {
+            _logger.LogWarning(
+                "[Stage55A] ResumeWithResponseAsync watch loop 結束但未送 response（Group={Id}, expectedPortId={Port}）— 異常狀況，清 marker",
+                group.Id, expectedPortId);
             await ClearMarkersAsync(group.Id, default);
         }
     }

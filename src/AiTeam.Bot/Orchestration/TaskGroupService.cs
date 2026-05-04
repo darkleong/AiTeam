@@ -43,7 +43,6 @@ public class TaskGroupService(
     DiscordSocketClient discordClient,
     IOptions<DiscordSettings> discordSettings,
     IOptions<GitHubSettings> gitHubSettings,
-    WorkflowEngine workflowEngine,
     AgentQueueService agentQueueService,
     InteractionService interactionService,
     IHostApplicationLifetime appLifetime,
@@ -185,146 +184,24 @@ public class TaskGroupService(
             }
         }
 
-        // ── Dev_plan 完成 → Petra 審核 + Appeal（Stage 37：搬至 AppealOrchestrationService.HandleDevPlanCompletedAsync）──
-        if (completedAgent.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
-        {
-            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-            var shouldContinue = await appealOrchestration.HandleDevPlanCompletedAsync(
-                group, result, taskRepo, groupProjectId, cancellationToken);
-            if (!shouldContinue) return;
-        }
+        // ── Stage 55A：6+1 hooks 全部移除（議題 J1 解法 — Pipeline framework 已涵蓋全 NewFeature 主路徑 + 子流程）──
+        //   原 6+1 hooks（Stage 37 既有 + Stage 53A line 173 Pipeline guard 之後 fall through）：
+        //     ① Dev_plan → AppealOrchestrationService.HandleDevPlanCompletedAsync（Pipeline DevPlanStageExecutor 已自接管）
+        //     ② Reviewer → AppealOrchestrationService.HandleReviewerCompletedAsync（Pipeline ReviewerStageExecutor 已自接管）
+        //     ③ Dev/Dev_fix [BLOCKED] → AppealOrchestrationService.HandleDevBlockerAsync（Pipeline DevStageExecutor 已自接管）
+        //     ④ 仲裁後 Dev_fix → AppealOrchestrationService.RunPetraGateAsync（Pipeline DevFixStageExecutor 已自接管）
+        //     ⑤ QA 修復 Dev_fix → FireStepsAsync(QA)（Pipeline DevFixStageExecutor 已自接管）
+        //     ⑥ Dev/Dev_fix 失敗 → NotifyBossDevFailedInterventionAsync + NeedsIntervention（Pipeline DevStageExecutor 已自接管 議題 9 修法）
+        //     ⑦ QA 完成 → QaCoordinationService.HandleQaCompletedAsync（Pipeline QaStageExecutor 已自接管）
+        //   保留：line 173-186 Pipeline guard（Pipeline path 主入口，不動）+ helper method（NotifyBossDevFailedInterventionAsync 等仍供 Pipeline call）
+        //   feature flag UseFrameworkPipeline=true 為唯一 production path（Christ 拍板 2026-05-03，無 legacy 退路）
 
-        // ── Reviewer 完成 → AppealOrchestrationService ──
-        if (completedAgent.Equals("Reviewer", StringComparison.OrdinalIgnoreCase))
-        {
-            // Stage 39：Skipped 結果（Vera 收到無可審檔案）也走「放行」路徑，跳過 Petra 評審
-            if (!result.Success || result.ResultType == AgentResultType.Skipped)
-            {
-                if (result.ResultType == AgentResultType.Skipped)
-                    logger.LogInformation("Vera 略過（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
-                else
-                    logger.LogWarning("Vera 執行失敗（{Summary}），跳過 Petra 審核，直接放行", result.Summary);
-                result = result with { CriticalReviewCount = 0 };
-            }
-            else
-            {
-                var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-                var reviewResult = await appealOrchestration.HandleReviewerCompletedAsync(
-                    group, result, taskRepo, groupProjectId, cancellationToken);
-                if (reviewResult is null) return;
-                result = reviewResult;
-            }
-        }
-
-        // ── Dev / Dev_fix 阻礙 → AppealOrchestrationService ──
-        if ((completedAgent.Equals("Dev", StringComparison.OrdinalIgnoreCase)
-             || completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase))
-            && !result.Success
-            && result.Summary.StartsWith("[BLOCKED]", StringComparison.Ordinal)
-            && !string.IsNullOrWhiteSpace(result.OutputContent))
-        {
-            logger.LogWarning("Dev 回報阻礙，啟動 Petra 評估：Group={Id}", groupId);
-            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-            await appealOrchestration.HandleDevBlockerAsync(group, result, taskRepo, groupProjectId, cancellationToken);
-            return;
-        }
-
-        // ── 仲裁後 Dev_fix 完成 → 跳過 Vera，直接 Petra 閘門 ──
-        if (completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase)
-            && result.Success
-            && group.SkipReviewerAfterArbitration)
-        {
-            logger.LogInformation("仲裁後 Dev_fix 完成，跳過 Vera，直接交 Petra 閘門（Group={Id}）", group.Id);
-            group.SkipReviewerAfterArbitration = false;
-            await taskRepo.SaveAsync(cancellationToken);
-            var groupProjectId = await GetGroupProjectIdAsync(group, taskRepo, cancellationToken);
-            var petraResult = await appealOrchestration.RunPetraGateAsync(
-                group, result, taskRepo, groupProjectId, cancellationToken);
-            if (petraResult is null) return;
-            result = petraResult;
-        }
-
-        // ── QA 修復模式 Dev_fix 完成 → 重新觸發 QA ──
-        if (completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase)
-            && result.Success
-            && group.QaFixRound > 0)
-        {
-            logger.LogInformation("QA 修復後 Dev_fix 完成，重新觸發 QA（Group={Id}, Round={Round}）",
-                group.Id, group.QaFixRound);
-            await FireStepsAsync(group, [new WorkflowStep(AgentNames.Qa)], cancellationToken);
-            return;
-        }
-
-        // ── Stage 43-B：Dev / Dev_fix 失敗 → 中止 fix loop + needs_intervention ──
-        // 既有 line 239 只比對 "Dev"，漏 "Dev_fix"（AgentQueueProcessor.cs:256 傳 task.WorkflowAgentKey
-        // 在 fix loop 時為 "Dev_fix"）。本 Stage 涵蓋兩者，但排除 "Dev_plan"（由 AppealOrchestrationService 處理）。
-        if ((completedAgent.Equals("Dev",     StringComparison.OrdinalIgnoreCase) ||
-             completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase))
-            && !result.Success)
-        {
-            var isFixLoop = completedAgent.Equals("Dev_fix", StringComparison.OrdinalIgnoreCase);
-            logger.LogError("Dev{Phase} 執行失敗，停止工作流程：Group={Id}，原因：{Summary}",
-                isFixLoop ? "_fix" : " 初次", group.Id, result.Summary);
-            taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
-            group.InterventionReason = $"Dev {(isFixLoop ? "fix" : "初次")} 失敗：{result.Summary}";
-            await taskRepo.SaveAsync(cancellationToken);
-            await NotifyBossDevFailedInterventionAsync(group, isFixLoop, result.Summary, cancellationToken);
-            return;
-        }
-
-        // ── QA 完成 → QaCoordinationService ──
-        if (completedAgent.Equals(AgentNames.Qa, StringComparison.OrdinalIgnoreCase) && result.Success)
-        {
-            await qaCoordination.HandleQaCompletedAsync(group, result, taskRepo, cancellationToken);
-            return;
-        }
-
-        // ── 落底 WorkflowEngine.GetDecision ──
-        var workflowType = group.WorkflowType switch
-        {
-            "new_feature"      => WorkflowType.NewFeature,
-            "tech_improvement" => WorkflowType.TechImprovement,
-            _                  => WorkflowType.BugFix
-        };
-
-        var decision = workflowEngine.GetDecision(
-            workflowType, completedAgent, result, group.FixIteration);
-
+        // Stage 55A：落底 WorkflowEngine.GetDecision 段移除（dead code — 6 hooks 移除後 fall through 不可達）
+        //   - feature flag UseFrameworkPipeline=true 時：line 173 Pipeline guard return（Pipeline 接管全 routing）
+        //   - feature flag UseFrameworkPipeline=false 時：predates Stage 55A 預期失敗（無 legacy 退路 — Christ 拍板 production 保留 true）
         logger.LogInformation(
-            "WorkflowEngine 決策：Group={Id}，completedAgent={Agent}，action={Action}",
-            groupId, completedAgent, decision.Action);
-
-        switch (decision.Action)
-        {
-            case NextAction.FireAgents:
-                if (decision.NextSteps.Any(s => s.IsFixLoop))
-                {
-                    group.FixIteration++;
-                    await taskRepo.SaveAsync(cancellationToken);
-                }
-                await FireStepsAsync(group, decision.NextSteps, cancellationToken);
-                break;
-
-            case NextAction.NotifyBossMerge:
-                // Stage 43-E：透過守門 method 統一 mark done（檢查所有 task 無 failed/needs_intervention）
-                await MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
-                if (group.Status == TaskStatus.Done)
-                    await NotifyBossMergeAsync(group, cancellationToken);
-                else
-                    await NotifyBossInterventionAsync(group, cancellationToken);
-                break;
-
-            case NextAction.NotifyBossIntervention:
-                // Stage 43：fix loop 超限 = 介入後可恢復 → needs_intervention（與 failed 語意分離）
-                taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
-                group.InterventionReason ??= $"Vera fix loop 超 {group.FixIteration} 次仍有問題";
-                await taskRepo.SaveAsync(cancellationToken);
-                await NotifyBossInterventionAsync(group, cancellationToken);
-                break;
-
-            case NextAction.Nothing:
-                break;
-        }
+            "[Stage55A] HandleAgentCompletedAsync fall through（legacy fallback 已移除）— Group={Id}, completedAgent={Agent}",
+            groupId, completedAgent);
     }
 
     // ============================================================
@@ -475,27 +352,37 @@ public class TaskGroupService(
         WorkflowStep step,
         CancellationToken cancellationToken)
     {
-        // Stage 53A：framework Pipeline 從 Dev_plan 階段啟動（Aria 方案 C 拍板，2026-05-03）
-        // single point of entry — 6 處 fire Dev_plan 散點全經過 FireOneStepAsync 統一節流
-        // 排除條件：① WorkflowType=NewFeature 主路徑 ② sub-task 排除（ParentGroupId == null，Stage 46 機制 Stage 55 收尾整合）
-        //          ③ PipelineFrameworkStateJson == null（entry guard，避免遞迴：Pipeline 啟動後 marker != null，下游 FireStepsAsync 自然走 legacy）
-        //          ④ AgentName == Dev_plan ⑤ feature flag UseFrameworkPipeline=true
+        // Stage 55A：framework Pipeline 從 Kickoff 階段啟動 + sub-task 走 Pipeline framework path（議題 G3 解法 + 缺口 2 解法）
+        // single point of entry — 全 fire 散點經過 FireOneStepAsync 統一節流
+        // 4 條件 entry guard（Stage 53A 5 條件 → Stage 55A 4 條件，sub-task ParentGroupId 排除移除）：
+        //   ① WorkflowType=NewFeature 主路徑
+        //   ② PipelineFrameworkStateJson == null（entry guard，避免遞迴：Pipeline 啟動後 marker != null，下游 FireStepsAsync 自然走 legacy）
+        //   ③ 兩入口 AgentName：
+        //      - parent group：AgentName == Kickoff（ParentGroupId == null）— Pipeline 從 Kickoff 階段啟動
+        //      - sub-task    ：AgentName == Dev_plan（ParentGroupId != null）— Stage 46 業務語義保留（Petra 已拆好計劃，sub-task 不需要重複 Kickoff/Design）
+        //   ④ feature flag UseFrameworkPipeline=true
+        var isParentKickoffEntry = step.AgentName.Equals(AgentNames.Kickoff, StringComparison.OrdinalIgnoreCase)
+            && group.ParentGroupId == null;
+        var isSubTaskDevPlanEntry = step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase)
+            && group.ParentGroupId != null;
+
         if (group.WorkflowType == "new_feature"
-            && group.ParentGroupId == null
             && group.PipelineFrameworkStateJson == null
-            && step.AgentName.Equals("Dev_plan", StringComparison.OrdinalIgnoreCase))
+            && (isParentKickoffEntry || isSubTaskDevPlanEntry))
         {
             await using var flagScope = serviceProvider.CreateAsyncScope();
             var workflowResolver = flagScope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
             if (await workflowResolver.GetUseFrameworkPipelineAsync(cancellationToken))
             {
-                logger.LogInformation("[Stage53A] Pipeline framework path 從 Dev_plan 啟動（Group={Id}）", group.Id);
+                logger.LogInformation(
+                    "[Stage55A] Pipeline framework path 從 {Entry} 啟動（Group={Id}, ParentGroupId={ParentId}）",
+                    isParentKickoffEntry ? "Kickoff" : "Dev_plan(sub-task)", group.Id, group.ParentGroupId);
                 var router = flagScope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
                 // Aria 議題 11 修法：fire-and-forget 一行 ContinueWith pattern（避免 Task.Run + appLifetime 兩層包裝）
                 _ = router.HandlePipelineAsync(group, appLifetime.ApplicationStopping)
                     .ContinueWith(t =>
                     {
-                        if (t.IsFaulted) logger.LogError(t.Exception, "[Stage53A] HandlePipelineAsync 異常");
+                        if (t.IsFaulted) logger.LogError(t.Exception, "[Stage55A] HandlePipelineAsync 異常");
                     }, TaskContinuationOptions.OnlyOnFaulted);
                 return;
             }

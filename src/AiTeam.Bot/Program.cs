@@ -113,9 +113,9 @@ builder.Services.AddSingleton<MockClaudeCodeService>();
 builder.Services.AddSingleton<IClaudeCodeService, ClaudeCodeProxy>();
 builder.Services.AddControllers();
 
-// Stage 10：CEO Orchestrator（WorkflowEngine 無狀態，TaskGroupService 管理群組流程）
+// Stage 10：CEO Orchestrator（TaskGroupService 管理群組流程）
+// Stage 55A：WorkflowEngine 已刪除（v4 漸進遷移第八步 — Pipeline framework 接管全 routing）
 // TaskGroupService 所有建構子依賴均為 Singleton，可安全設為 Singleton（供 CommandHandler 直接注入）
-builder.Services.AddSingleton<WorkflowEngine>();
 // Stage 34：MeetingService 拆解（FF 二十-C）— MeetingCommons 先，Kickoff/Design 後（兩者依賴 Commons）
 builder.Services.AddSingleton<MeetingCommons>();
 builder.Services.AddSingleton<KickoffMeetingService>();

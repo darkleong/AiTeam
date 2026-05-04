@@ -23,7 +23,6 @@ namespace AiTeam.Bot.Orchestration.Qa;
 public class QaCoordinationService(
     IServiceProvider serviceProvider,
     WorkflowSettingsResolver workflowResolver,
-    WorkflowEngine workflowEngine,
     ILogger<QaCoordinationService> logger)
 {
     /// <summary>
@@ -65,14 +64,8 @@ public class QaCoordinationService(
         CancellationToken cancellationToken)
     {
         // Stage 53B 議題 F-1 修正 6-e：Pipeline path 接管 — failed 路徑 5 處 side effects 全 skip（QaFixRound++/FixIteration++/Save 保留供 Pipeline 重讀）
+        // Stage 55A：legacy fall through GetDecision 段移除（dead code — feature flag false 預期失敗，無 legacy 退路）
         var isPipelinePath = group.PipelineFrameworkStateJson != null;
-
-        var workflowType = group.WorkflowType switch
-        {
-            "new_feature"      => WorkflowType.NewFeature,
-            "tech_improvement" => WorkflowType.TechImprovement,
-            _                  => WorkflowType.BugFix
-        };
 
         QaReport? report = null;
         if (!string.IsNullOrWhiteSpace(group.TestReport))
@@ -104,24 +97,7 @@ public class QaCoordinationService(
             return;
         }
 
-        if (status == "passed")
-        {
-            var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
-            if (decision.Action == NextAction.NotifyBossMerge)
-            {
-                // Stage 43-E：透過守門 method 統一 mark done
-                await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
-                if (group.Status == TaskStatus.Done)
-                    await tgs.NotifyBossMergeAsync(group, cancellationToken);
-                else
-                    await tgs.NotifyBossInterventionAsync(group, cancellationToken);
-            }
-            else if (decision.Action == NextAction.FireAgents)
-            {
-                await tgs.FireStepsAsync(group, decision.NextSteps, cancellationToken);
-            }
-            return;
-        }
+        // Stage 55A：legacy passed fall through GetDecision 段移除（dead code — Pipeline path line 101-105 已 early return）
 
         if (status == "no_applicable_tests")
         {
@@ -139,20 +115,7 @@ public class QaCoordinationService(
                     return;
                 }
 
-                var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
-                if (decision.Action == NextAction.NotifyBossMerge)
-                {
-                    // Stage 43-E：透過守門 method 統一 mark done
-                    await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
-                    if (group.Status == TaskStatus.Done)
-                        await tgs.NotifyBossMergeAsync(group, cancellationToken);
-                    else
-                        await tgs.NotifyBossInterventionAsync(group, cancellationToken);
-                }
-                else if (decision.Action == NextAction.FireAgents)
-                {
-                    await tgs.FireStepsAsync(group, decision.NextSteps, cancellationToken);
-                }
+                // Stage 55A：legacy no_applicable_tests + approve fall through GetDecision 段移除（dead code — Pipeline path 已 early return）
             }
             else
             {
@@ -213,26 +176,9 @@ public class QaCoordinationService(
 
                 case "env_or_test_issue":
                     // Stage 53B 議題 F-1 修正 6-e（Forge 主動拍板）：Pipeline path 下 env_or_test_issue 視為 passed
-                    // → skip 全部 side effects（GetDecision/Mark/NotifyBoss/FireSteps），return 後 Pipeline QaStage 重讀 group 看 QaFixRound==0 + Status normal → SendMessage DocStageBridge
-                    if (isPipelinePath)
-                    {
-                        logger.LogInformation("[Stage53B] env_or_test_issue Pipeline path skip GetDecision（Pipeline 自接管 推進 Doc）");
-                        break;
-                    }
-                    var decision = workflowEngine.GetDecision(workflowType, AgentNames.Qa, result, group.FixIteration);
-                    if (decision.Action == NextAction.NotifyBossMerge)
-                    {
-                        // Stage 43-E：透過守門 method 統一 mark done
-                        await tgs.MarkGroupDoneOrInterventionAsync(group, taskRepo, cancellationToken);
-                        if (group.Status == TaskStatus.Done)
-                            await tgs.NotifyBossMergeAsync(group, cancellationToken);
-                        else
-                            await tgs.NotifyBossInterventionAsync(group, cancellationToken);
-                    }
-                    else if (decision.Action == NextAction.FireAgents)
-                    {
-                        await tgs.FireStepsAsync(group, decision.NextSteps, cancellationToken);
-                    }
+                    // → skip 全部 side effects（Mark/NotifyBoss/FireSteps），return 後 Pipeline QaStage 重讀 group 看 QaFixRound==0 + Status normal → SendMessage DocStageBridge
+                    // Stage 55A：legacy fall through GetDecision 段移除（dead code — feature flag false 預期失敗）
+                    logger.LogInformation("[Stage55A] env_or_test_issue Pipeline path skip（Pipeline 自接管 推進 Doc）");
                     break;
 
                 default: // escalate_boss

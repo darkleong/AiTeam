@@ -56,8 +56,14 @@ public class FrameworkDesignRouter(
     /// <summary>
     /// Stage 52：framework path 對應 MeetingOrchestrationService.RunDesignPhaseAsync。
     /// 由 MeetingOrchestrationService 入口分流（feature flag UseFrameworkDesign=true 時呼叫此 method）。
+    ///
+    /// Stage 55A（議題 G3 解法）：加 skipFinalize 參數 + 改回傳 DesignMeetingOutcome？
+    ///   - skipFinalize=false（預設，legacy 路徑）：跑完 Workflow 後 call FinalizeDesignAsync 含 fire Dev_plan / 開 BossInteraction（行為不變）
+    ///   - skipFinalize=true（Pipeline 路徑）：跑完 Workflow + 寫 DB 但 skip FinalizeDesignAsync — Pipeline DesignStageExecutor 自己 call FinalizeDesignAsync(skipFireDevPlan=true) 接管
+    /// 回傳 DesignMeetingOutcome：success path 含 LoopResult + DesignTaskId + WorkingDir；failure 回 null。
     /// </summary>
-    public async Task HandleDesignMeetingAsync(TaskGroup group, CancellationToken ct)
+    public async Task<DesignMeetingOutcome?> HandleDesignMeetingAsync(
+        TaskGroup group, CancellationToken ct, bool skipFinalize = false)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -198,7 +204,7 @@ public class FrameworkDesignRouter(
                     CurrentTaskTitle = "設計規劃失敗：framework Workflow 未產生結果"
                 });
                 await NotifyDesignFailureAsync(group, "framework Workflow 未產生結果");
-                return;
+                return null;
             }
 
             // ── 寫 DB（對齊 legacy MeetingOrchestrationService line 312-319）──
@@ -206,7 +212,7 @@ public class FrameworkDesignRouter(
             if (freshGroup is null)
             {
                 logger.LogError("[Stage52] Design 完成後找不到 Group={Id}", group.Id);
-                return;
+                return null;
             }
 
             freshGroup.DesignMeetingLog = loopResult.MeetingLog;
@@ -242,7 +248,19 @@ public class FrameworkDesignRouter(
             });
 
             // ── finalize 段（議題 C2 拆 task 提案後置 / Discord 路由分支）──
-            await FinalizeDesignAsync(freshGroup, loopResult, workingDir, ct);
+            // Stage 55A：skipFinalize=true 時 Pipeline DesignStageExecutor 自己接管 FinalizeDesignAsync
+            if (!skipFinalize)
+            {
+                await FinalizeDesignAsync(freshGroup, loopResult, workingDir, ct);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "[Stage55A] HandleDesignMeetingAsync skipFinalize=true — Pipeline 接管 FinalizeDesignAsync（Group={Id}）",
+                    group.Id);
+            }
+
+            return new DesignMeetingOutcome(loopResult, designTask.Id, workingDir);
         }
         catch (Exception ex)
         {
@@ -275,20 +293,30 @@ public class FrameworkDesignRouter(
         }
         finally
         {
-            // workingDir cleanup（對齊 legacy DesignMeetingService line 346-350）
-            if (!string.IsNullOrEmpty(workingDir))
+            // Stage 55A：skipFinalize=true 時保留 workingDir + marker 給 Pipeline DesignStageExecutor 接管 finalize（FinalizeDesignAsync 需 workingDir 給 splitEval）
+            if (skipFinalize)
             {
-                try { gitHubService.CleanupLocalRepo(workingDir); }
-                catch (Exception ex) { logger.LogWarning(ex, "[Stage52] cleanup workingDir 失敗"); }
+                logger.LogInformation(
+                    "[Stage55A] finally：skipFinalize=true，保留 workingDir + marker 等 Pipeline DesignStageExecutor 接管（Group={Id}）",
+                    group.Id);
             }
-            // 清 marker（對齊 Stage 49/50 router pattern）
-            await db.TaskGroups.Where(g => g.Id == group.Id)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(g => g.ActiveOrchestration, (string?)null)
-                    .SetProperty(g => g.DesignFrameworkStateJson, (string?)null),
-                    CancellationToken.None);
+            else
+            {
+                // workingDir cleanup（對齊 legacy DesignMeetingService line 346-350）
+                if (!string.IsNullOrEmpty(workingDir))
+                {
+                    try { gitHubService.CleanupLocalRepo(workingDir); }
+                    catch (Exception ex) { logger.LogWarning(ex, "[Stage52] cleanup workingDir 失敗"); }
+                }
+                // 清 marker（對齊 Stage 49/50 router pattern）
+                await db.TaskGroups.Where(g => g.Id == group.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                        .SetProperty(g => g.DesignFrameworkStateJson, (string?)null),
+                        CancellationToken.None);
+            }
 
-            // PM Agent status idle（對齊 legacy line 431-436）
+            // PM Agent status idle（對齊 legacy line 431-436）— 兩路徑都 push
             await pushService.PushAgentStatusAsync(new AgentStatusViewModel
             {
                 AgentName        = AgentNames.Pm,
@@ -296,6 +324,9 @@ public class FrameworkDesignRouter(
                 CurrentTaskTitle = null
             });
         }
+
+        // Stage 55A：catch path 走到此處（exception 後 finally 已跑），return null 表失敗
+        return null;
     }
 
     /// <summary>
@@ -471,9 +502,15 @@ public class FrameworkDesignRouter(
     /// escalate 路徑：
     ///   - Discord embed (purple 🎨) + 3 buttons + RegisterDesignConfirmation + InteractionService.CreateInteractionAsync
     ///   - Christ 按鈕路由走 legacy MeetingOrchestrationService.HandleDesignConfirmedAsync（議題 H1 沿用）
+    ///
+    /// Stage 55A（議題 G3 解法）：
+    ///   - 改 internal — Pipeline DesignStageExecutor 同 assembly 直接 call 接管 finalize
+    ///   - 加 skipFireDevPlan 參數：true 時 ConsensusNoSplit 路徑不 fire Dev_plan，由 Pipeline 接管 SendMessage(DevPlanStageBridge)
+    ///   - 改回傳 DesignFinalizationDecision enum：Pipeline 看 decision 決定下一步
     /// </summary>
-    private async Task FinalizeDesignAsync(
-        TaskGroup freshGroup, DesignLoopResult loopResult, string workingDir, CancellationToken ct)
+    internal async Task<DesignFinalizationDecision> FinalizeDesignAsync(
+        TaskGroup freshGroup, DesignLoopResult loopResult, string workingDir, CancellationToken ct,
+        bool skipFireDevPlan = false)
     {
         if (loopResult.Decision is "consensus" or "max_iter"
             && !string.IsNullOrWhiteSpace(loopResult.DesignPlan))
@@ -504,18 +541,30 @@ public class FrameworkDesignRouter(
                 // 共用 SoT（Stage 46-FF 三十五 機制不漂移）— call MeetingOrchestrationService.CreateSplitTaskProposalInteractionAsync
                 var orchestrationService = serviceProvider.GetRequiredService<MeetingOrchestrationService>();
                 await orchestrationService.CreateSplitTaskProposalInteractionAsync(freshGroup, sp, ct);
-                return;
+                return DesignFinalizationDecision.SplitProposalOpened;
             }
 
             // should_split=false / null → fall through fire Dev_plan（對齊 legacy line 349-352）
             logger.LogInformation("[Stage52] 設計規劃 consensus，直接進入 Dev_plan（Group={Id}）", freshGroup.Id);
-            var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.FireStepsAsync(freshGroup, [new WorkflowStep("Dev_plan")], ct);
-            return;
+
+            // Stage 55A：skipFireDevPlan=true 時 Pipeline DesignStageExecutor 接管 SendMessage(DevPlanStageBridge)
+            if (!skipFireDevPlan)
+            {
+                var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
+                await tgs.FireStepsAsync(freshGroup, [new WorkflowStep("Dev_plan")], ct);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "[Stage55A] FinalizeDesignAsync skipFireDevPlan=true — Pipeline 接管 fire Dev_plan（Group={Id}）",
+                    freshGroup.Id);
+            }
+            return DesignFinalizationDecision.ConsensusNoSplit;
         }
 
         // ── escalate 路徑：Discord embed + 3 buttons + BossInteraction（對齊 legacy line 356-405）──
         await CreateDesignEscalateConfirmationAsync(freshGroup, loopResult, ct);
+        return DesignFinalizationDecision.EscalateConfirmationOpened;
     }
 
     /// <summary>
@@ -629,4 +678,49 @@ public class FrameworkDesignRouter(
         return discordClient.GetGuild(guildId)
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
+
+    /// <summary>
+    /// Stage 55A：cleanup workspace + clear DesignFrameworkStateJson marker（Pipeline DesignStageExecutor 接管 finalize 後自行 cleanup 用）。
+    /// 對齊 inner finally cleanup 段（line 297-307）。
+    /// </summary>
+    internal async Task CleanupWorkingDirAndMarkerAsync(Guid groupId, string workingDir, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (!string.IsNullOrEmpty(workingDir))
+        {
+            try { gitHubService.CleanupLocalRepo(workingDir); }
+            catch (Exception ex) { logger.LogWarning(ex, "[Stage55A] CleanupWorkingDirAndMarkerAsync cleanup workingDir 失敗"); }
+        }
+
+        await db.TaskGroups.Where(g => g.Id == groupId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.ActiveOrchestration, (string?)null)
+                .SetProperty(g => g.DesignFrameworkStateJson, (string?)null),
+                CancellationToken.None);
+
+        logger.LogInformation(
+            "[Stage55A] CleanupWorkingDirAndMarkerAsync 完成（Group={Id}）", groupId);
+    }
+}
+
+/// <summary>
+/// Stage 55A：HandleDesignMeetingAsync 回傳結構（議題 G3 解法）— Pipeline DesignStageExecutor 收到後接管 finalize：
+/// 自己 call FinalizeDesignAsync(skipFireDevPlan=true) → 看回傳 decision 決定下一步。
+/// LoopResult / DesignTaskId / WorkingDir 為 success path，failure 整個 Outcome 為 null。
+/// </summary>
+public sealed record DesignMeetingOutcome(DesignLoopResult LoopResult, Guid DesignTaskId, string WorkingDir);
+
+/// <summary>
+/// Stage 55A：FinalizeDesignAsync 回傳 — Pipeline DesignStageExecutor 看 decision 決定下一步：
+///   - SplitProposalOpened：sub-task chain 接手，Pipeline 結束此 group DesignStage（SendMessage(PipelineFallbackBridge "design_split_proposal_opened")）
+///   - ConsensusNoSplit：Pipeline SendMessage(DevPlanStageBridge) 進 DevPlanStage
+///   - EscalateConfirmationOpened：Pipeline yield 等 design_continue button → ResumeAfterDesignAsync
+/// </summary>
+public enum DesignFinalizationDecision
+{
+    SplitProposalOpened,
+    ConsensusNoSplit,
+    EscalateConfirmationOpened
 }

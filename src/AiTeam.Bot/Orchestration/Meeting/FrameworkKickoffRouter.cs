@@ -53,8 +53,14 @@ public class FrameworkKickoffRouter(
     /// <summary>
     /// Stage 50：framework path 對應 MeetingOrchestrationService.RunKickoffMeetingAndWaitAsync。
     /// 由 MeetingOrchestrationService 入口分流（feature flag true 時呼叫此 method）。
+    ///
+    /// Stage 55A（議題 G3 解法）：加 skipFinalize 參數 + 改回傳 KickoffMeetingOutcome？
+    ///   - skipFinalize=false（預設，legacy 路徑）：跑完 Workflow 後 call CreateKickoffConfirmationAsync 開 BossInteraction（行為不變）
+    ///   - skipFinalize=true（Pipeline 路徑）：跑完 Workflow + 寫 DB 但 skip CreateKickoffConfirmationAsync — Pipeline KickoffStageExecutor 自己 call CreateKickoffConfirmationAsync 接管 finalize
+    /// 回傳 KickoffMeetingOutcome：success path 含 LoopResult + KickoffTaskId（Pipeline 用）；yield/failure 回 null。
     /// </summary>
-    public async Task HandleKickoffMeetingAsync(TaskGroup group, CancellationToken ct)
+    public async Task<KickoffMeetingOutcome?> HandleKickoffMeetingAsync(
+        TaskGroup group, CancellationToken ct, bool skipFinalize = false)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -170,7 +176,7 @@ public class FrameworkKickoffRouter(
                 logger.LogInformation(
                     "[Stage51] HandleKickoffMeetingAsync 提早 return — workflow yield for HITL（Group={Id}），等 Christ 回應",
                     group.Id);
-                return;
+                return null;
             }
 
             if (loopResult is null)
@@ -203,7 +209,7 @@ public class FrameworkKickoffRouter(
                     CurrentTaskTitle = "Kick-off 失敗：framework Workflow 未產生結果"
                 });
                 await NotifyKickoffFailureAsync(group, "framework Workflow 未產生結果");
-                return;
+                return null;
             }
 
             // ── 寫 DB（對齊 legacy line 119-123）──
@@ -211,7 +217,7 @@ public class FrameworkKickoffRouter(
             if (freshGroup is null)
             {
                 logger.LogError("[Stage50] Kick-off 完成後找不到 Group={Id}", group.Id);
-                return;
+                return null;
             }
 
             freshGroup.KickoffMeetingLog = loopResult.MeetingLog;
@@ -224,7 +230,19 @@ public class FrameworkKickoffRouter(
                 group.Id, loopResult.Decision, loopResult.TotalRounds);
 
             // ── Discord embed + 3 buttons + BossInteraction（對齊 legacy line 126-185 + escalate 路徑）──
-            await CreateKickoffConfirmationAsync(freshGroup, loopResult, kickoffTask.Id, taskRepo, pushService, ct);
+            // Stage 55A：skipFinalize=true 時 Pipeline KickoffStageExecutor 自己接管 CreateKickoffConfirmationAsync
+            if (!skipFinalize)
+            {
+                await CreateKickoffConfirmationAsync(freshGroup, loopResult, kickoffTask.Id, taskRepo, pushService, ct);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "[Stage55A] HandleKickoffMeetingAsync skipFinalize=true — Pipeline 接管 finalize（Group={Id}）",
+                    group.Id);
+            }
+
+            return new KickoffMeetingOutcome(loopResult, kickoffTask.Id);
         }
         catch (Exception ex)
         {
@@ -280,6 +298,9 @@ public class FrameworkKickoffRouter(
                         CancellationToken.None);
             }
         }
+
+        // Stage 55A：catch path 走到此處（exception 後 finally 已跑），return null 表失敗
+        return null;
     }
 
     /// <summary>
@@ -659,8 +680,10 @@ public class FrameworkKickoffRouter(
     /// <summary>
     /// 對齊 legacy MeetingOrchestrationService.RunKickoffMeetingAndWaitAsync line 126-192：
     /// Discord embed + 3 buttons + RegisterKickoffConfirmation + InteractionService.CreateInteractionAsync + task done log。
+    ///
+    /// Stage 55A：改 internal — Pipeline KickoffStageExecutor 同 assembly 直接 call 接管 finalize（議題 G3 解法）。
     /// </summary>
-    private async Task CreateKickoffConfirmationAsync(
+    internal async Task CreateKickoffConfirmationAsync(
         TaskGroup freshGroup,
         KickoffLoopResult loopResult,
         Guid kickoffTaskId,
@@ -813,3 +836,10 @@ public class FrameworkKickoffRouter(
             ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
     }
 }
+
+/// <summary>
+/// Stage 55A：HandleKickoffMeetingAsync 回傳結構（議題 G3 解法）— Pipeline KickoffStageExecutor 收到後接管 finalize：
+/// 自己 call CreateKickoffConfirmationAsync 開 BossInteraction + SendMessage(KickoffCompletionRequest) yield。
+/// LoopResult / KickoffTaskId 為 success path，failure / yield path 整個 Outcome 為 null。
+/// </summary>
+public sealed record KickoffMeetingOutcome(KickoffLoopResult LoopResult, Guid KickoffTaskId);

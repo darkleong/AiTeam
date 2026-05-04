@@ -644,6 +644,26 @@ public class MeetingOrchestrationService(
         var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
         var tgs   = serviceProvider.GetRequiredService<TaskGroupService>();
 
+        // Stage 55A（議題 G3 解法）：Pipeline path 接管 continue / stop button
+        // 條件：① group.PipelineFrameworkStateJson != null（Pipeline 仍 yield 在 KickoffStage RequestPort 等 callback）
+        //       ② feature flag UseFrameworkPipeline=true
+        // modify / restart 仍走 legacy 邏輯（Pipeline 仍 yield 等下一輪 button — modify 重開卡 / restart fire 新 Kickoff）
+        var lowerDecision = decision.ToLower();
+        if (group.PipelineFrameworkStateJson != null
+            && (lowerDecision == "continue" || lowerDecision == "stop"))
+        {
+            var workflowResolver = scope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkPipelineAsync(ct))
+            {
+                logger.LogInformation("[Stage55A] HandleKickoffConfirmedAsync Pipeline path 接管（Group={Id}, decision={Decision}）",
+                    groupId, decision);
+                await meetingCommons.CloseAllSessionsAsync(groupId);
+                var pipelineRouter = scope.ServiceProvider.GetRequiredService<FrameworkPipelineRouter>();
+                await pipelineRouter.ResumeAfterKickoffAsync(group, lowerDecision, modifyContent, ct);
+                return;
+            }
+        }
+
         switch (decision.ToLower())
         {
             case "continue":
@@ -806,6 +826,24 @@ public class MeetingOrchestrationService(
         var owner = _gitHub.Owner;
         var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
         var tgs   = serviceProvider.GetRequiredService<TaskGroupService>();
+
+        // Stage 55A（議題 G3 解法）：Pipeline path 接管 continue / stop button — modify 走 legacy
+        var lowerDecision = decision.ToLower();
+        if (group.PipelineFrameworkStateJson != null
+            && (lowerDecision == "continue" || lowerDecision == "stop"))
+        {
+            var workflowResolver = scope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
+            if (await workflowResolver.GetUseFrameworkPipelineAsync(ct))
+            {
+                logger.LogInformation("[Stage55A] HandleDesignConfirmedAsync Pipeline path 接管（Group={Id}, decision={Decision}）",
+                    groupId, decision);
+                if (lowerDecision == "stop")
+                    await meetingCommons.CloseAllSessionsAsync(groupId);
+                var pipelineRouter = scope.ServiceProvider.GetRequiredService<FrameworkPipelineRouter>();
+                await pipelineRouter.ResumeAfterDesignAsync(group, lowerDecision, modifyContent, ct);
+                return;
+            }
+        }
 
         switch (decision.ToLower())
         {

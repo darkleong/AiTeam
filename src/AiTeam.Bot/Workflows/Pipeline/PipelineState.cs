@@ -25,8 +25,8 @@ public sealed class PipelineState
     [JsonPropertyName("workflowType")]
     public string WorkflowType { get; set; } = "new_feature";
 
-    /// <summary>當前 stage 名稱（"Start" / "Dev_plan" / "Dev" / "Reviewer" / "QA" / "Doc" / "NotifyMerge"），跨 callback resume 用。
-    /// Aria 方案 C 拍板（2026-05-03）：53A 範圍縮小，Kickoff/Design 留 legacy（Stage 55 收尾統一整合），Pipeline 從 Dev_plan 階段啟動。</summary>
+    /// <summary>當前 stage 名稱（"Start" / "Kickoff" / "Design" / "Dev_plan" / "Dev" / "Reviewer" / "QA" / "Doc" / "NotifyMerge"），跨 callback resume 用。
+    /// Stage 55A：Kickoff/Design 整合到 Pipeline framework，PipelineStart 依 IsSubTask 路由（parent: KickoffStage / sub-task: DevPlanStage skip）。</summary>
     [JsonPropertyName("currentStage")]
     public string CurrentStage { get; set; } = "Start";
 
@@ -36,8 +36,20 @@ public sealed class PipelineState
     [JsonPropertyName("repo")]
     public string Repo { get; set; } = "";
 
+    /// <summary>Stage 55A（缺口 2 解法）：sub-task 標記 — true 時 PipelineStart 路由到 DevPlanStage（skip Kickoff/Design）。
+    /// 由 FrameworkPipelineRouter.HandlePipelineAsync 寫入 group.ParentGroupId != null。
+    /// 業務語義保留：Stage 46 sub-task 從 Dev_plan 啟動（parent group Petra 已拆好計劃，sub-task 不需要重複 Kickoff/Design）。</summary>
+    [JsonPropertyName("isSubTask")]
+    public bool IsSubTask { get; set; }
+
     // ── 各 stage 完成 marker（resume 時跳過已完成 stage） ──
-    // Aria 方案 C 拍板：Kickoff/Design 留 legacy 不在 Pipeline 範圍，移除 KickoffDone / DesignDone marker
+    // Stage 55A：Kickoff/Design 整合進 Pipeline，恢復 KickoffDone / DesignDone marker（議題 G3 解法）
+
+    [JsonPropertyName("kickoffDone")]
+    public bool KickoffDone { get; set; }
+
+    [JsonPropertyName("designDone")]
+    public bool DesignDone { get; set; }
 
     [JsonPropertyName("devPlanDone")]
     public bool DevPlanDone { get; set; }
@@ -76,9 +88,18 @@ public sealed class PipelineState
 
 // ── records（顯式 send/yield 訊息型別，Stage 52 fix#2 type-explicit Bridge record 紀律延續） ──
 
-/// <summary>Stage 53A：PipelineStartExecutor → DevPlanStageExecutor 的初始 bridge。
-/// Aria 方案 C 拍板：53A 範圍縮小，Pipeline 從 Dev_plan 階段啟動（Kickoff/Design 留 legacy）。</summary>
+/// <summary>Stage 53A → 55A：PipelineStartExecutor 起點 bridge。
+/// Stage 55A 加 IsSubTask 欄位（缺口 2 兩入口路由）— PipelineStart 依此決定 KickoffStageBridge / DevPlanStageBridge。</summary>
 public sealed record PipelineStartBridge(
+    [property: JsonPropertyName("groupId")]   Guid GroupId,
+    [property: JsonPropertyName("isSubTask")] bool IsSubTask = false);
+
+/// <summary>Stage 55A：KickoffStage 入口 bridge（議題 G3 解法 — Pipeline 從 Kickoff 階段啟動 parent group 路徑）。</summary>
+public sealed record KickoffStageBridge(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55A：DesignStage 入口 bridge（議題 G3 解法）。</summary>
+public sealed record DesignStageBridge(
     [property: JsonPropertyName("groupId")] Guid GroupId);
 
 /// <summary>Stage 53A：DevPlanStage 入口 bridge。</summary>
@@ -125,6 +146,27 @@ public sealed record NotifyMergeStageBridge(
 //   Stage 52 fix#2 教訓 — framework AddEdge 對 message dispatch 只看 type 不看 source
 //   若 5 stage 共用同一 record type，emit 時會 routing 到全部 5 個 RequestPort（collision）
 //   每 stage 獨立型別 → type-based dispatch 自然分流到正確 port（type-explicit Bridge record 紀律延續）
+
+/// <summary>Stage 55A：Kickoff stage J1 yield-resume RequestPort 請求 payload（議題 G3 解法）。
+/// HITL 仍用既有 BossInteraction kickoff type — Pipeline 自己開 BossInteraction 後 yield 等 InteractionProcessor 觸發 ResumeAfterKickoffAsync 餵 KickoffCompletionResponse。</summary>
+public sealed record KickoffCompletionRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55A：Kickoff stage J1 yield-resume RequestPort 回傳 payload。
+/// Decision = "continue" / "stop" / "modify"（沿用既有 HandleKickoffConfirmedAsync button id）；ModifyContent 為 modify 路徑 Christ 提供的修改文字。</summary>
+public sealed record KickoffCompletionResponse(
+    [property: JsonPropertyName("decision")]      string  Decision,
+    [property: JsonPropertyName("modifyContent")] string? ModifyContent);
+
+/// <summary>Stage 55A：Design stage J1 yield-resume RequestPort 請求 payload（議題 G3 解法）。</summary>
+public sealed record DesignCompletionRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 55A：Design stage J1 yield-resume RequestPort 回傳 payload。
+/// Decision = "continue" / "stop" / "modify"（沿用既有 HandleDesignConfirmedAsync button id）。</summary>
+public sealed record DesignCompletionResponse(
+    [property: JsonPropertyName("decision")]      string  Decision,
+    [property: JsonPropertyName("modifyContent")] string? ModifyContent);
 
 /// <summary>Stage 53A：DevPlan stage J1 yield-resume RequestPort 請求 payload。</summary>
 public sealed record DevPlanCompletionRequest(

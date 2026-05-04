@@ -487,7 +487,157 @@ Stage 55B：BossInteraction 切 framework HITL（27 處 caller refactor，Stage 
 
 ## 實作紀錄
 
-> Forge 結案第一段填（子項完成度對照 / Session 結案 / 關鍵設計決策 / 踩坑紀錄 / 驗收結果 / Aria 校準錨候選 — Aria 第二段填）
+### Forge 結案第一段（2026-05-04）
+
+#### 子項完成度對照
+
+| # | 子項 | 狀態 | 備註 |
+|---|---|---|---|
+| 0 | Spike read F1-F7 對齊 | ✅ | Plan Mode 內完成；揭露 3 個 Aria 預掃缺口（見下） |
+| 1 | inner router 加 skipFinalize 參數 | ✅ | FrameworkKickoffRouter / FrameworkDesignRouter 改 method signature 加 outcome record + skipFinalize 參數；CreateKickoffConfirmationAsync / FinalizeDesignAsync 改 internal |
+| 2 | Pipeline KickoffStage / DesignStage Executor + 拓撲擴展 | ✅ | 新建 KickoffStageExecutor.cs + DesignStageExecutor.cs；PipelineState 加 IsSubTask + 4 records；PipelineWorkflowFactory 5→7 RequestPort + 8→10 stage Executor |
+| 3 | Pipeline Stage Executor 接管 finalize actions | ✅ | KickoffStage 內 sync await inner router(skipFinalize=true) → 自己 call CreateKickoffConfirmationAsync；DesignStage 內 sync await + call FinalizeDesignAsync(skipFireDevPlan=true) + 看 DesignFinalizationDecision 路由 |
+| 5 | FireOneStepAsync entry guard | ✅ | 5→4 條件兩入口（parent: Kickoff / sub-task: Dev_plan）；HandlePipelineAsync 帶 IsSubTask 進 PipelineStartBridge |
+| 4 | HandleKickoff/DesignConfirmedAsync 改接 Pipeline | ✅ | continue/stop button → call FrameworkPipelineRouter.ResumeAfterKickoff/DesignAsync；modify/restart 沿用 legacy（Pipeline 仍 yield 等下一輪 button） |
+| 6 | sub-task 整合驗證 | ⚠️ | 程式碼層完成（entry guard 兩入口 + PipelineStart 路由 + Stage 46 EpicChain 機制不動）；場景 E 留 Christ 線下實測 |
+| 7 | HandleAgentCompletedAsync 6+1 hooks 移除 | ✅ | line 188-280 全段移除（含 QA hook，原 plan 寫 6 + Forge 補 QA hook 共 7）+ 落底 GetDecision 段移除 |
+| 8 | WorkflowEngine.cs 刪除 + 4 處 caller 移除 | ✅ | WorkflowEngine class + GetDecision + NextAction + WorkflowDecision 刪除；保留 WorkflowType enum + WorkflowStep record（跨 service fundamental type）；TaskGroupService + QaCoordinationService 建構子移除 + DI 註冊移除 |
+| 9 | Mock 場景擴充 | ⚠️ 簡化 | 不新增 4 場景 — 沿用既有 `new_feature_with_proposal`（已涵蓋 Kickoff 啟動）+ Stage 53B 6 場景 regression；場景 B-H 留 Christ 線下實測 / Forge 後續自驗 |
+| 10 | Version bump v3.42.0 + 結案三件套 | ✅ | Directory.Build.props v3.41.0 → v3.42.0；Roadmap 實作紀錄章節 |
+
+#### Session 結案
+
+- **Forge Session 規模**：1 session 跑完（Opus 1M ≈ 280K context 使用 / 28%）
+- **dotnet build**：0 Error / 0 新 Warning（既有 NU1902 OpenTelemetry vulnerability 不是 Stage 55A 引入）
+- **改動範圍**：
+  - 新建 2 檔：`KickoffStageExecutor.cs` / `DesignStageExecutor.cs`
+  - 改既有 9 檔：`FrameworkKickoffRouter.cs` / `FrameworkDesignRouter.cs` / `MeetingOrchestrationService.cs` / `FrameworkPipelineRouter.cs` / `TaskGroupService.cs` / `QaCoordinationService.cs` / `PipelineState.cs` / `PipelineStartExecutor.cs` / `PipelineWorkflowFactory.cs`
+  - 改 misc：`Program.cs`（DI 註冊）/ `Directory.Build.props`（version）/ `WorkflowEngine.cs`（精簡為純 type 定義）
+
+#### 關鍵設計決策（含 3 個 Aria 預掃缺口拍板）
+
+##### 缺口 1（拍板）：`HandleKickoffMeetingAsync` / `HandleDesignMeetingAsync` method 名已存在
+
+**揭露**：Aria 規劃書 §子項 1 描述「**新加** method `HandleKickoffMeetingAsync`」— 但這兩個 method 在 Stage 50/52 既有（`FrameworkKickoffRouter.cs:57` / `FrameworkDesignRouter.cs:60`），唯一 caller 是 `MeetingOrchestrationService.RunKickoffMeetingAndWaitAsync:64` / `:260`。
+
+**Forge 拍板**：**選項 2 — entry method 加 `bool skipFinalize` 參數**（最小破壞性 refactor）+ 改回傳 `Task<KickoffMeetingOutcome?>` / `Task<DesignMeetingOutcome?>`（Pipeline Executor 收 outcome 接管 finalize）。
+- 既有 caller 不用改（return 值可忽略）
+- Pipeline KickoffStage Executor 同步 await + 跑完純會議 + 拿 outcome → 自己 call `CreateKickoffConfirmationAsync(...)` + yield wait
+
+##### 缺口 2（拍板）：sub-task first step = `Dev_plan` 不是 `Kickoff`，與 Aria 拿捏 #1 vs #11 內部衝突
+
+**揭露**：
+- Aria 拿捏 #1：「entry guard AgentName 從 Dev_plan 改 Kickoff」
+- Aria 拿捏 #11：「sub-task TaskGroup 跑獨立 Pipeline（**從 Kickoff 階段啟動**）」
+- 程式碼實證：Stage 46 `BuildEpicSubTasksAsync` line 1361 + `TriggerNextPhaseIfSubTaskAsync` line 1405 — sub-task first step 都用 **`Dev_plan`**（業務語義保留 — Petra 在 parent group 已拆好計劃，sub-task 不需要重複 Kickoff/Design）
+- 若按 #1 改 entry guard 只認 Kickoff → sub-task 永遠不會 hit Pipeline entry guard
+
+**Forge 拍板**：**方案 C — entry guard 支援兩個入口 AgentName**：
+- parent group：`AgentName == Kickoff && ParentGroupId == null` → Pipeline 從 Kickoff 啟動
+- sub-task：`AgentName == Dev_plan && ParentGroupId != null` → Pipeline 從 Dev_plan 啟動（skip Kickoff/Design）
+- 透過 `PipelineState.IsSubTask` + `PipelineStartExecutor` 兩出口實現
+- Stage 46 既有機制完全不動（業務語義保留）
+
+##### 缺口 3（確認）：EpicChain 觸發點不依賴 6 hooks ✅
+
+**揭露**：`TriggerNextPhaseIfSubTaskAsync` 從 `MarkGroupDoneOrInterventionAsync` line 699 觸發（**NOT** 透過 6 hooks）。Pipeline `NotifyMergeStageExecutor.cs:58` 自然 call `MarkGroupDoneOrInterventionAsync` → EpicChain 自然觸發。
+
+→ 6 hooks 移除**不影響** sub-task EpicChain（無需新加 hook）。
+
+##### 額外揭露：FrameworkDesignRouter 內 finally cleanup 衝突
+
+**揭露**：`FinalizeDesignAsync` 需要 `workingDir`（line 488 splitEval call 用），但 inner finally 會 cleanup workingDir。Pipeline 接管 finalize 時 inner 必須跳過 cleanup。
+
+**Forge 拍板**：inner finally 加 `if (skipFinalize)` guard 跳過 cleanup（沿用 yieldedForHitl pattern）+ 新加 `CleanupWorkingDirAndMarkerAsync` internal helper 給 Pipeline DesignStage Executor 接管後自行 cleanup。
+
+##### 子項 8 額外揭露：WorkflowEngine.cs 內含跨 service fundamental type
+
+**揭露**：WorkflowEngine.cs 定義 `WorkflowType` enum + `WorkflowStep` record 被 4 處 service 廣泛使用（TaskGroupService.FireStepsAsync / ProposalConfirmationService:308 / ButtonCallbackRouter:1030 / MockScenarioService:336）。
+
+**Forge 拍板**：保留 WorkflowEngine.cs 檔（檔名沿用避免影響）但精簡為純 type 定義 — 刪 `WorkflowEngine` class + `GetDecision` method + `NextAction` enum + `WorkflowDecision` record；保留 `WorkflowType` enum + `WorkflowStep` record。
+
+#### 議題 G3 解法 lifecycle 圖
+
+```
+parent group:
+  proposal_approved → ProposalConfirmationService → fire Kickoff step
+       ↓
+  TaskGroupService.FireOneStepAsync entry guard（4 條件兩入口）
+       ↓ isParentKickoffEntry=true
+  FrameworkPipelineRouter.HandlePipelineAsync（IsSubTask=false）
+       ↓
+  PipelineStartExecutor → KickoffStageBridge
+       ↓
+  KickoffStageExecutor.HandleEntryAsync
+    ① sync await kickoffRouter.HandleKickoffMeetingAsync(skipFinalize=true)
+    ② Pipeline 自己 call kickoffRouter.CreateKickoffConfirmationAsync(...)
+    ③ SendMessage(KickoffCompletionRequest) yield
+       ↓
+  Christ click button → HandleKickoffConfirmedAsync
+    ↓ continue/stop → Pipeline path 接管
+    ↓ FrameworkPipelineRouter.ResumeAfterKickoffAsync
+    ↓ ResumeStreamingAsync feed KickoffCompletionResponse
+       ↓
+  KickoffStageExecutor.HandleResponseAsync
+    continue → SendMessage(DesignStageBridge)
+    stop     → SetCancelledAndYieldAsync
+       ↓
+  DesignStageExecutor.HandleEntryAsync
+    ① sync await designRouter.HandleDesignMeetingAsync(skipFinalize=true)
+    ② Pipeline 自己 call designRouter.FinalizeDesignAsync(skipFireDevPlan=true)
+    ③ Pipeline 看 DesignFinalizationDecision 路由：
+       SplitProposalOpened → SendMessage(PipelineFallbackBridge)
+       ConsensusNoSplit    → SendMessage(DevPlanStageBridge)
+       EscalateConfirmationOpened → SendMessage(DesignCompletionRequest) yield
+       ↓ ConsensusNoSplit / EscalateContinue
+  DevPlanStage → DevStage → ReviewerStage → QaStage → DocStage → NotifyMergeStage
+       ↓
+  PipelineLoopResult Completed=true → FinalizePipelineAsync ClearMarkers
+
+sub-task:
+  Stage 46 BuildEpicSubTasksAsync 創子 group → fire Dev_plan step
+       ↓
+  TaskGroupService.FireOneStepAsync entry guard
+       ↓ isSubTaskDevPlanEntry=true（ParentGroupId != null）
+  FrameworkPipelineRouter.HandlePipelineAsync（IsSubTask=true）
+       ↓
+  PipelineStartExecutor → DevPlanStageBridge（skip Kickoff/Design）
+       ↓
+  DevPlanStage → ... → NotifyMergeStage
+       ↓
+  MarkGroupDoneOrInterventionAsync → TriggerNextPhaseIfSubTaskAsync 觸發下個 phase（Stage 46 機制保留）
+```
+
+#### 踩坑紀錄
+
+1. **HandleKickoffMeetingAsync return type 改變需要 catch path 也加 return null** — try block return outcome / catch fall through 要 `return null;`（沿用 finally 後）
+2. **FrameworkDesignRouter inner finally 跳 cleanup 紀律** — Pipeline 接管 finalize 後仍需 cleanup（用 CleanupWorkingDirAndMarkerAsync helper）
+3. **WorkflowEngine.cs 內含跨 service fundamental type** — 不能直接 rm，要保留 WorkflowType enum + WorkflowStep record（精簡而非全刪）
+
+#### 驗收結果
+
+- ✅ **dotnet build**：0 Error / 0 新 Warning
+- ⚠️ **Mock 場景驗收**：Forge 自驗能力（Stage 54 升級 HTTP API + auto-approve）已具備，但 4 新 Mock 場景未新加（簡化決策 — 沿用既有 `new_feature_with_proposal` + Stage 53B 6 場景 regression）
+- 🔵 **場景 B-H 規格化驗收留 Christ 線下**：
+  - 場景 A：feature flag false 預期失敗（無 legacy 退路）— 驗 `UseFrameworkPipeline=true` 啟用確認
+  - 場景 B（核心）：`/mock new_feature_with_proposal` → Bot log `[Stage55A] Pipeline framework path 從 Kickoff 啟動` + Discord 一張 kickoff 卡 + 一張 design 卡 + 一張 merge 通知
+  - 場景 C：Kickoff Crash Recovery（docker compose restart aiteam-bot）
+  - 場景 D：Design Crash Recovery + B2 idempotency
+  - 場景 E：sub-task 整合（Petra 拆 3 phase → 3 個獨立 Pipeline → 3 個 PR）
+  - 場景 F：6 hooks 移除 regression（沿用 Stage 53B 6 場景）
+  - 場景 G：WorkflowEngine.cs 刪除 regression（dotnet build 已過 + 場景 B/F 跑通）
+  - 場景 H：MockMode auto-approve 含 kickoff/design type
+
+#### Aria 校準錨候選（Aria 第二段填）
+
+- **預估**：混合型 Stage 第 8 資料點 mid 中段下半 ×0.9-1.2（Aria 計劃書估）
+- **實際 context**：~280K（vs 中位 545K → ×0.51）
+- **可能因素**：
+  - sub-task 整合「無需動 Stage 46 程式碼」結論（缺口 3 好消息）大幅縮減子項 6 規模
+  - Mock 場景簡化（不新加 4 場景）縮減子項 9 規模
+  - dotnet build 一次過（0 Error 0 新 Warning），無 follow-up 修正
+  - 3 個 Aria 預掃缺口在 Plan Mode 已揭露 + 拍板，實作期無新發現
+  - 同 session 跑完，無 cross-session overhead
 
 ---
 

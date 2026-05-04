@@ -59,11 +59,18 @@ public sealed class PipelineWorkflowFactory
     }
 
     /// <summary>
-    /// Build Pipeline Workflow（5 Agent stage yield-resume + Start/NotifyMerge + Fallback）。
+    /// Build Pipeline Workflow（Stage 55A：7 Agent stage yield-resume + Start/NotifyMerge + Fallback + Kickoff/Design 整合）。
+    ///
+    /// Stage 55A 拓撲擴展（議題 G3 解法）：
+    ///   - 5→7 RequestPort（加 KickoffCompletion / DesignCompletion）
+    ///   - 8→10 stage Executor（加 KickoffStage / DesignStage）
+    ///   - PipelineStart 兩出口：parent → KickoffStage / sub-task → DevPlanStage（缺口 2 解法）
     /// </summary>
     public Workflow CreatePipelineWorkflow()
     {
         var start         = new PipelineStartExecutor(_scopeFactory, _loggerFactory.CreateLogger<PipelineStartExecutor>());
+        var kickoffStage  = new KickoffStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<KickoffStageExecutor>());     // Stage 55A 新加
+        var designStage   = new DesignStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<DesignStageExecutor>());       // Stage 55A 新加
         var devPlanStage  = new DevPlanStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<DevPlanStageExecutor>());
         var devStage      = new DevStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<DevStageExecutor>());
         var reviewerStage = new ReviewerStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<ReviewerStageExecutor>());
@@ -73,7 +80,9 @@ public sealed class PipelineWorkflowFactory
         var notifyMerge   = new NotifyMergeStageExecutor(_scopeFactory, _loggerFactory.CreateLogger<NotifyMergeStageExecutor>());
         var fallback      = new PipelineFallbackExecutor(_loggerFactory.CreateLogger<PipelineFallbackExecutor>());
 
-        // 6 個 RequestPort（53B 新加 DevFixCompletionPortId — K1 拍板擴 5 → 6 entry）
+        // 7 個 RequestPort（Stage 55A 新加 KickoffCompletionPortId / DesignCompletionPortId — 5+1+1 entry）
+        var kickoffPort  = RequestPort.Create<KickoffCompletionRequest,  KickoffCompletionResponse> (KickoffCompletionPortId);   // Stage 55A
+        var designPort   = RequestPort.Create<DesignCompletionRequest,   DesignCompletionResponse>  (DesignCompletionPortId);    // Stage 55A
         var devPlanPort  = RequestPort.Create<DevPlanCompletionRequest,  DevPlanCompletionResponse> (DevPlanCompletionPortId);
         var devPort      = RequestPort.Create<DevCompletionRequest,      DevCompletionResponse>     (DevCompletionPortId);
         var reviewerPort = RequestPort.Create<ReviewerCompletionRequest, ReviewerCompletionResponse>(ReviewerCompletionPortId);
@@ -82,8 +91,18 @@ public sealed class PipelineWorkflowFactory
         var devFixPort   = RequestPort.Create<DevFixCompletionRequest,   DevFixCompletionResponse>  (DevFixCompletionPortId);  // Stage 53B 新加
 
         return new WorkflowBuilder(start)
-            // Start → DevPlan
-            .AddEdge(start, devPlanStage)
+            // Stage 55A：Start → KickoffStage（parent group） / DevPlanStage（sub-task）— 兩出口
+            .AddEdge(start, kickoffStage)                  // Stage 55A：parent group 入口
+            .AddEdge(start, devPlanStage)                  // Stage 55A：sub-task 入口（skip Kickoff/Design）
+            // Stage 55A：KickoffStage RequestPort 雙向 + 兩出口
+            .AddEdge(kickoffStage, kickoffPort)            // KickoffCompletionRequest → port
+            .AddEdge(kickoffPort, kickoffStage)            // KickoffCompletionResponse → KickoffStageExecutor.HandleResponseAsync
+            .AddEdge(kickoffStage, designStage)            // DesignStageBridge → DesignStage
+            // Stage 55A：DesignStage RequestPort 雙向 + 兩出口
+            .AddEdge(designStage, designPort)              // DesignCompletionRequest → port
+            .AddEdge(designPort, designStage)              // DesignCompletionResponse → DesignStageExecutor.HandleResponseAsync
+            .AddEdge(designStage, devPlanStage)            // DevPlanStageBridge passes through（ConsensusNoSplit / EscalateContinue）
+            .AddEdge(designStage, fallback)                // PipelineFallbackBridge（SplitProposalOpened — sub-task chain 接手）
             // DevPlan stage RequestPort 雙向 + 兩出口 + Stage 53B 新加 self-loop（DevPlanRetryBridge）
             .AddEdge(devPlanStage, devPlanPort)            // DevPlanCompletionRequest → port
             .AddEdge(devPlanPort, devPlanStage)            // DevPlanCompletionResponse → DevPlanStageExecutor.HandleResponseAsync
@@ -117,13 +136,15 @@ public sealed class PipelineWorkflowFactory
             .AddEdge(devFixStage, devFixPort)
             .AddEdge(devFixPort, devFixStage)
             .AddEdge(devFixStage, reviewerStage)           // Stage 53B：DevFix passed → ReviewerStageBridge loop back（fix loop 主路徑）
-            // 終結 — NotifyMerge（happy path）/ fallback / 53B：4 stage Executor 都可 YieldOutput PipelineLoopResult intervention
-            .WithOutputFrom(notifyMerge, fallback, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
+            // 終結 — NotifyMerge（happy path）/ fallback / 55A：含 Kickoff/Design Stage Executor 都可 YieldOutput PipelineLoopResult intervention
+            .WithOutputFrom(notifyMerge, fallback, kickoffStage, designStage, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
     }
 
-    /// <summary>5 個 Agent 型 stage 各自獨立 RequestPort PortId 常數（Aria 提醒 1 修正：5 個常數取代單一）。
-    /// FrameworkPipelineRouter / ResumeAfterAgentAsync 用以從 ExternalRequest.PortInfo.PortId 篩選事件。</summary>
+    /// <summary>Stage 55A：7 個 Agent 型 stage 各自獨立 RequestPort PortId 常數（55A 加 Kickoff/Design 兩 PortId）。
+    /// FrameworkPipelineRouter / ResumeAfterKickoff/DesignAsync 用以從 ExternalRequest.PortInfo.PortId 篩選事件。</summary>
+    public const string KickoffCompletionPortId  = "Pipeline-KickoffCompletion";   // Stage 55A
+    public const string DesignCompletionPortId   = "Pipeline-DesignCompletion";    // Stage 55A
     public const string DevPlanCompletionPortId  = "Pipeline-DevPlanCompletion";
     public const string DevCompletionPortId      = "Pipeline-DevCompletion";
     public const string ReviewerCompletionPortId = "Pipeline-ReviewerCompletion";
