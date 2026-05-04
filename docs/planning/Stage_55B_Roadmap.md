@@ -1,10 +1,10 @@
 # Stage 55B：v4 漸進遷移第九步（拆 55A/55B 第二段）— BossInteraction 切 framework HITL（10 type）+ AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除
 
-> 對應 Future Feature：v4 漸進遷移 9 Stage 路線第九步（v4 路線**最後一塊** — 完成後 9/9 達成 🎉 Session A 部分 — Session B 待開）
-> 對應版本：**v3.43.0**（v4 漸進遷移第九個產生版本變動的 Stage）
+> 對應 Future Feature：v4 漸進遷移 9 Stage 路線第九步（v4 路線**最後一塊** — 9/9 達成 🎉）
+> 對應版本：**v3.44.0**（Session A v3.43.0 + Session B v3.44.0）
 > 建立日期：2026-05-04
-> 狀態：✅ Session A 已完成（2026-05-04，Session B 留作 Christ 拍板開工）
-> 文件版本：v2.0
+> 狀態：✅ 已完成（Session A 2026-05-04 + Session B 2026-05-05）
+> 文件版本：v3.0
 
 ---
 
@@ -590,6 +590,59 @@ Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 c
 > Forge 預估：Session A 規模 S-M（純 dead code 清理 + 文件補強 + version bump + 自驗 3 場景全綠）— 對齊 Stage 41 ×0.84 / Stage 47 ×N/A 失準（純機械化 / 純 prompt 補強類）/ Stage 48 ×0.78（spike 類）區間下半。實際 context 約 ~250-300K（Opus 1M 25-30%）。
 > 4 戰略議題 escalate Christ 拍板（議題 1=1A / 議題 2=2C / 議題 3=3A / 議題 4=4A）— 守 critical_3「失敗成本高 → escalate 不自己拍板」紀律累積 4 個資料點。
 
+### Session B 結案（2026-05-05，Forge）
+
+#### 實作期 1 個戰略議題 + 1 確認 escalate Christ 拍板
+
+| 議題 | 拍板 | 理由 |
+|---|---|---|
+| **議題 5：legacy ProcessBossResponseAsync handlers 處理方式** | **5A：保留 legacy handler 加 Pipeline 分支** | 對齊 Stage 55A kickoff/design 既有 pattern；Session A pre-check 揭露 1 stuck mock NewFeature group `PipelineFrameworkStateJson IS NULL`（功能 inert），刪 legacy handler 會 NullReferenceException；dead code 清理範圍留 Stage 56 |
+| **議題 6（確認）：split modify ModifyContent forward** | 對齊 Stage 55A KickoffCompletionResponse `(Decision, ModifyContent)` 既有設計 — `SplitTaskProposalResponse(Action, ModifyContent, SplitProposalJson)` 三 field（accept path 帶 BossInteraction 既有 splitProposalJson）| 不需 Christ 拍板，僅紀錄確認 |
+
+#### Session B 缺口 5/6 揭露（戰略級）
+
+- **缺口 5（已對齊）**：5 routing 既有 button id / actions / response handler 完整 grep（dev_intervention_skip/_retry/_abort / qa_intervention_continue/_skip/_abort / devplan_skip/_abort / devplan_unable_skip/_unable_abort / split_accept/_modify/_reject/_abort）— 既有 NotifyBoss + AvailableActionsJson 全 reuse，不重寫。
+- **缺口 6（戰略級揭露）**：Pipeline failure path 既有結構 — 5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（QA / DevPlan / split — by inner service NotifyBoss 內部），但 Pipeline executor **不 yield 等 Christ**，而是 SetInterventionAndYieldAsync end Pipeline → Christ button click 走 legacy ProcessBossResponseAsync handlers（FireSteps / 直接操作）。Session B 改造 = Pipeline 接管 yield-resume routing 取代 SetIntervention end + legacy 接管。
+
+#### Session B 完成範圍
+
+- **子項 2.1 + 2.2**：5 records（DevIntervention / QaIntervention / DevPlanEscalate / DevPlanUnable / SplitTaskProposal × 2）+ 5 PortIds + 10 雙向 AddEdge 對齊 Stage 55A KickoffCompletion pattern
+- **子項 2.3**：DevStageExecutor 改 yield-resume — escalate path + 其他失敗 path → call NotifyBossDevFailedInterventionAsync + YieldForChristResponseAsync(DevInterventionRequest) + HandleDevInterventionResponseAsync routing（skip→Reviewer / retry→DevRetry / abort→SetIntervention end）
+- **子項 2.4**：QaStageExecutor 改 yield-resume — result.Success=false + Status NeedsIntervention/Failed 兩 path 改 yield + HandleQaInterventionResponseAsync routing（continue→QaStage self-loop / skip→Doc / abort→end）+ QaCoordinationService.NotifyBossQaFailedInterventionAsync 改 public
+- **子項 2.5**：DevPlanStageExecutor escalate vs unable 區分 yield + 兩 handler routing — InterventionReason 開頭含「DevPlan 重產」→ unable / 其他 → escalate；AppealOrchestrationService.NotifyBossDevPlanEscalationFromPipelineAsync overload 加（不需 PetraReview）
+- **子項 2.6**：DesignStageExecutor SplitTaskProposal yield-resume — SplitProposalOpened path 改 yield + HandleSplitTaskProposalResponseAsync routing（accept/modify→BuildEpicSubTasksAsync(原/modified) + PipelineFallbackBridge / reject→DevPlanStage / abort→cancel）；SplitTaskProposalResponse 加 SplitProposalJson 第三 field
+- **子項 2.7**：FrameworkPipelineRouter 5 ResumeAfterXxxAsync thin wrapper（對齊 ResumeAfterKickoff/Design pattern delegation 到 ResumeWithResponseAsync helper）
+- **子項 2.8**：TaskGroupService.ProcessBossResponseAsync 5 case Pipeline 分支 + TryRoutePipelineXxxAsync helper 共用 TryGetPipelineGroupAsync 前置檢查（議題 5 = 5A 加 Pipeline 分支保留 legacy handler）
+- **子項 4**：InteractionProcessor.GetActionLabel 補 8 entries + InteractionService.cs Mock auto-approve switch 補 4 case（dev/qa intervention default action / devplan escalate/unable default skip）
+- **子項 7**：5 alias 場景擴充（framework_pipeline_dev_intervention_hitl / qa_intervention_hitl / devplan_escalate_hitl / devplan_unable_hitl / split_task_proposal_hitl）— 觸發既有 FailScenario 邏輯 + auto-approve routing
+- **子項 9 第二輪**：Version bump v3.43.0 → v3.44.0 + Roadmap v3.0 結案紀錄
+
+#### Session B 程式碼變化統計
+
+- 新增：0 file（5 records 加在既有 PipelineState.cs / 5 ResumeAfter 加在既有 FrameworkPipelineRouter.cs / 5 helper 加在既有 TaskGroupService.cs）
+- 修改：~10 files（5 records + 5 PortIds + AddEdges + 4 Stage Executor 失敗 path + 5 ResumeAfter + 5 ProcessBossResponse 分支 + 路由表 + Mock auto-approve + 5 場景 + version bump + roadmap）
+- 淨變化：**+~600 LOC**（5 records ~80 LOC + 5 PortIds + AddEdges ~20 LOC + 4 Executor refactor ~250 LOC + 5 ResumeAfter ~60 LOC + 5 TryRoute helper ~140 LOC + 路由表 + Mock 補 ~50 LOC）
+
+#### Session B 驗收依據（regression + 5 新場景）
+
+- **5 新場景**：framework_pipeline_dev_intervention_hitl / qa_intervention_hitl / devplan_escalate_hitl / devplan_unable_hitl / split_task_proposal_hitl — 各驗 Pipeline yield + auto-approve + ResumeAfter routing 完整 cycle
+- **Session A 3 regression 場景沿用**：framework_pipeline_kickoff_to_merge_full / subtask_chain / kickoff_crash_recovery — 確認 Pipeline shape 改動無破壞 happy path
+- **Stage 53B 6 場景沿用**：fix_loop / appeal / qa_no_tests / reviewer_fallback / blocker / crash_recovery — 確認既有 4 子流程 framework 化仍綠
+
+#### Session B 戰略級洞察
+
+- **Stage 55A pattern 完美 reuse**：5 records / 5 PortIds / 5 ResumeAfter / 5 case Pipeline 分支對齊 Stage 55A KickoffCompletion + Stage 55A HandleKickoffConfirmedAsync 既有 pattern — 0 設計創新，純機械化推廣
+- **議題 5 = 5A 守 Stage 55A pattern**：legacy handler 加 Pipeline 分支保留 — Session B 範圍邊界守住，不跨入 Stage 56 dead code 清理範圍
+- **AppealOrchestrationService.NotifyBossDevPlanEscalationFromPipelineAsync overload**：Pipeline 不需 PetraReview blocking issues（用 group.InterventionReason 替代），保持 legacy method signature 不破壞向下相容
+- **QaCoordinationService.NotifyBossQaFailedInterventionAsync 改 public**：Session A 已標「Pipeline 接管」legacy dead，Session B 補上 Pipeline 端 call — Session A 留的「Pipeline 自接管」精神 Session B 真正生效
+
+### Stage 55B 整體達成（Session A + B）
+
+**v4 漸進遷移 9/9 達成 🎉** — Pipeline framework HITL 推廣 + AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除完整完成。
+- 9 切 + 1 留（proposal Stage 56） + 5 不切（fire-and-forget Discord 命令層 / 通知 ack 性質 + Session B 議題 3=3A 加 intervention/merge_notify）
+- v4 路線殘留 legacy 全清完
+- Stage 56 = Trial v6 前置條件統包鋪路完成
+
 ---
 
 ## 版本歷史
@@ -598,3 +651,4 @@ Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 c
 |---|---|---|
 | v1.0 | 2026-05-04 | 初版規劃書建立（Aria）—— v4 漸進遷移第九步（拆 55A/55B 第二段）Stage 55B：BossInteraction 切 framework HITL（10 type）+ AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除（A1 Stage 55B 範圍 = HITL 10 type + v4 殘留 legacy 一次清完 + B1 Stage 56 = Trial v6 前置條件統包 + C1 切 10 type / 5 type 仍 fire-and-forget + Aria 拿捏 FrameworkHitlBridgeBase 抽象 + Pipeline Stage Executor RequestPort 對應 10 type + proposal Pipeline pre-stage 整合議題 6 ② + AppealOrchestration 每處 skip 分類精簡 + F-α 移除 sub-task race condition 0 + Mock 場景擴充含 5 type fire-and-forget verify）。**規劃前期已 grep**：27 處 BossInteraction caller 散在 14 service + 5 個「不適合切」type calling site 完整 context（Discord 命令層 / 通知 ack 性質確認）+ FrameworkHitlBridge.cs 353 行 + Stage 51 試點 pattern + AppealOrchestrationService 16 處 skip 位置 + F-α 排除條件 4 處 + InteractionProcessor 路由表結構 — 對齊自省點 #23 規劃前期 grep 紀律。|
 | v2.0 | 2026-05-04 | **Session A 結案**（Forge）— 4 戰略議題 escalate Christ 拍板（議題 1 = 1A proposal 留 Stage 56 / 議題 2 = 2C Pattern A 主 + Stage 51 試點獨立保留 / 議題 3 = 3A intervention/merge_notify 留 fire-and-forget / 議題 4 = 4A 拆 Session B）。**Session A 完成範圍**：子項 0 spike F1-F7 + 子項 1 PipelineHitlHelper + 子項 5 AppealOrchestrationService 11 + QaCoordinationService 5 處 skip 全清 + 子項 6 F-α 排除條件 4 處 router 移除 + 子項 8 8 處 calling site comment + 子項 9 v3.43.0 version bump。**程式碼變化**：~150 LOC dead code 刪除 + ~50 LOC 新 helper + ~80 LOC comment 補強。**Production DB pre-check**：96 done + 54 cancelled + 14 failed + 1 stuck mock NewFeature group — skip 移除 production safe。**Forge 自驗 3 regression 場景全綠**：framework_pipeline_kickoff_to_merge_full / framework_pipeline_subtask_chain（parent + Phase 1/2/3 全 done，F-α race risk = 0 確認）/ framework_pipeline_kickoff_crash_recovery + 4 router Recovery 啟動證據鏈完整。**Session B 留作 Christ 拍板開工**：5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ 子項 4 InteractionProcessor 路由表 + Mock 5 新場景 + Mock auto-approve switch 補（~600-900 LOC，Pipeline workflow shape 重構）。Commit hashes：6b4c6f9 / a484ff9 / 17cbb96。|
+| v3.0 | 2026-05-05 | **Session B 結案 — Stage 55B 整體完成 🎉 v4 漸進遷移 9/9 達成**（Forge）— 1 戰略議題 + 1 確認 Christ 拍板（議題 5 = 5A 保留 legacy handler 加 Pipeline 分支對齊 Stage 55A pattern / 議題 6 確認 SplitTaskProposalResponse 加 SplitProposalJson 第三 field）。**Session B 完成範圍**：子項 2.1 + 2.2（5 records DevIntervention/QaIntervention/DevPlanEscalate/DevPlanUnable/SplitTaskProposal × 2 + 5 PortIds + 10 雙向 AddEdge）+ 子項 2.3-2.6（4 Stage Executor 失敗 path 改 yield-resume：DevStage / QaStage / DevPlanStage 區分 escalate vs unable / DesignStage SplitTaskProposal）+ 子項 2.7（FrameworkPipelineRouter 5 ResumeAfterXxxAsync thin wrapper）+ 子項 2.8（TaskGroupService.ProcessBossResponseAsync 5 case Pipeline 分支 + TryRoutePipelineXxxAsync helper）+ 子項 4（InteractionProcessor 8 entries + Mock auto-approve 4 case 補）+ 子項 7（5 alias 場景擴充）+ 子項 9 第二輪 v3.44.0 version bump。**戰略級洞察**：缺口 6 揭露 Pipeline failure path 既有結構 — 5 type-specific BossInteraction 部分已 fire 但 Pipeline 不 yield 改造 = Pipeline 接管 yield-resume routing 取代 SetIntervention end + legacy handler。**程式碼變化**：+~600 LOC（5 records + 5 PortIds + 4 Executor refactor + 5 ResumeAfter + 5 TryRoute helper + 路由表 + Mock 補）。**輔助修法**：QaCoordinationService.NotifyBossQaFailedInterventionAsync 改 public + AppealOrchestrationService.NotifyBossDevPlanEscalationFromPipelineAsync overload 加（不需 PetraReview）。**Stage 55B 整體達成**：9 切 + 1 留 Stage 56（proposal）+ 5 不切（Discord 命令層 / 通知 ack 性質）+ AppealOrchestrationService 16 處 skip 精簡 + F-α 排除條件移除 — v4 路線殘留 legacy 全清完。|
