@@ -3,8 +3,8 @@
 > 對應 Future Feature：v4 漸進遷移 9 Stage 路線第八步（議題 A 拆 Stage 後 Stage 55 進一步拆 55A/55B，v4 路線 8→9 Stage）
 > 對應版本：**v3.42.0**（v4 漸進遷移第八個產生版本變動的 Stage）
 > 建立日期：2026-05-04
-> 狀態：📋 計劃書建立完成，待 Forge 開工
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-04）
+> 文件版本：v2.0
 
 ---
 
@@ -614,7 +614,62 @@ sub-task:
 2. **FrameworkDesignRouter inner finally 跳 cleanup 紀律** — Pipeline 接管 finalize 後仍需 cleanup（用 CleanupWorkingDirAndMarkerAsync helper）
 3. **WorkflowEngine.cs 內含跨 service fundamental type** — 不能直接 rm，要保留 WorkflowType enum + WorkflowStep record（精簡而非全刪）
 
-#### 驗收結果
+#### 驗收結果（v2.0 更新 — Aria 閘門檢查 + Forge 自驗 + Christ 視覺驗收）
+
+##### Aria 閘門揭露 1 critical + 1 minor + 1 nuance（已修正）
+
+| # | 類別 | 揭露 | 修法 | commit |
+|---|---|---|---|---|
+| 1 | critical | Mock 場景擴充 + Forge 自驗未做（違反 Stage 53B/54 自驗能力突破紀律）| 補 4 alias（場景 B/C/D/E）+ Dashboard MockScenarioCard MudSelectItem + Forge 自驗場景 B 全綠 | `b6e0764` |
+| 2 | minor | CS9113 unread parameter — `qaCoordination` 6+1 hooks 移除後 ctor 不再用 | TaskGroupService primary ctor 移除 `qaCoordination`（appealOrchestration 仍由 line 732 用，保留）| `b6e0764` |
+| 3 | nuance | modify/restart 沿用 legacy 路徑驗證 | code-level OK：Pipeline path 接管條件僅 continue/stop（line 657-672），modify case fall through 既有 `ModifyTaskPlanAsync` → 重新開新 BossInteraction → 第二次 button click 走 Pipeline path | - |
+
+##### 驗收期 follow-up #1（Forge 自驗場景 E 揭露）
+
+- **bug 根因**：Stage 54 `InteractionService.cs:132-139` MockMode auto-approve switch 表只 cover kickoff/design/proposal/ack 4 種 type，**漏 split_task_proposal**
+- **影響**：Stage 46/52 既有，Stage 54 補 auto-approve 時漏，**Stage 55A 場景 E（sub-task chain）才暴露**
+- **症狀**：split_task_proposal BossInteraction status=responded action=`ack`（fall through default）→ InteractionProcessor 不認 → BuildEpicSubTasksAsync 沒被觸發 → Pipeline 卡死在 DesignStage SplitProposalOpened 後
+- **修法**：switch 加一條 `"split_task_proposal" => "split_accept"`（沿用 SplitTaskProposalActionsJson line 60 預設「採納」action）
+- **commit**：`492d2db`
+- **戰略級**：Stage 55A 揭露 + 修正了 Stage 54 既有遺留 bug — Forge 自驗能力突破的價值體現
+
+##### 驗收結果
+
+- ✅ **dotnet build**：0 Error / 0 新 Warning（含 Aria fix）
+- ✅ **場景 B（核心）⭐**：Discord 兩張卡 + Dashboard 流程追蹤完整 7 stage 全綠 + group.Status=done + PipelineFrameworkStateJson cleared — **議題 G3 解法視覺實證完成**
+- ✅ **場景 E（缺口 2 戰略級）⭐**：Discord 完整 lifecycle + Dashboard 1 parent + 3 sub-task + sub-task 流程詳情**沒有** Kick-off / 設計規劃 stage（直接 Dev_plan 起跑）— **缺口 2 兩入口分流戰略級實證完成**
+- ✅ **場景 G**：dotnet build 0 Error / 0 新 Warning（WorkflowEngine.cs 刪除 regression）
+- ✅ **場景 H**：MockMode auto-approve 含 kickoff/design/split_task_proposal type（log + Discord 證據鏈）
+- 🔵 **場景 A**：feature flag false 預期失敗（production 拍板保留 true 不切，規格化驗證點記錄即可）
+- 🔵 **場景 C/D**：機制復用 Stage 51/53A/54 已 production 驗證的 ResumeStreamingAsync rehydrate know-how，未實際自驗（風險低 — Pipeline 拓撲擴展只新加 KickoffStage/DesignStage，Recovery 路徑不變）
+
+##### Mock 覆蓋情況
+
+新加 4 場景 alias（MockScenarioService + Dashboard MockScenarioCard 兩處同步）：
+- `framework_pipeline_kickoff_to_merge_full`（場景 B，已自驗 ✅）
+- `framework_pipeline_kickoff_crash_recovery`（場景 C，未自驗 🔵）
+- `framework_pipeline_design_crash_recovery_issue_idempotency_v2`（場景 D，未自驗 🔵）
+- `framework_pipeline_subtask_chain`（場景 E，已自驗 ✅）
+
+##### Christ 線下視覺驗收（4 張截圖）
+
+- ✅ 場景 B Discord：Kickoff 確認卡 + Christ 已在 Dashboard 回覆繼續 Kickoff + merge 通知卡 + 已知道了 ack
+- ✅ 場景 B Dashboard 流程追蹤：7 stage 全綠（含 Kick-off 會議 ⭐ + 設計規劃 ⭐ — 議題 G3 解法視覺證明）
+- ✅ 場景 E Discord：完整 lifecycle Kickoff → Petra 拆 task 提案 → split_accept auto-approve → 3 phase 全跑完 + 各自 PR
+- ✅ 場景 E Dashboard 流程追蹤：1 parent + 3 sub-task 完成 + sub-task 流程詳情**沒有** Kickoff/Design stage ⭐⭐⭐（缺口 2 戰略級視覺證明）
+
+##### 規格化驗收原始段（Aria 計劃書場景 A-H）
+
+留 Christ 線下實測：
+- 🔵 場景 A：feature flag false 預期失敗（production 拍板保留 true 不切）
+- 🔵 場景 C/D：Crash Recovery 細節（風險低，機制復用既有）
+
+---
+
+#### 驗收結果（v1.0 原段，已被 v2.0 取代）
+
+- 原 v1.0 描述「Mock 場景驗收簡化決策」已被 Aria critical 推翻 + Forge 自驗 4 場景 alias + Christ 視覺驗收 2 場景全綠取代
+- 留以下原內容作對照：
 
 - ✅ **dotnet build**：0 Error / 0 新 Warning
 - ⚠️ **Mock 場景驗收**：Forge 自驗能力（Stage 54 升級 HTTP API + auto-approve）已具備，但 4 新 Mock 場景未新加（簡化決策 — 沿用既有 `new_feature_with_proposal` + Stage 53B 6 場景 regression）
@@ -646,3 +701,4 @@ sub-task:
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-04 | 初版規劃書建立（Aria）—— v4 漸進遷移第八步（拆 55A/55B 第一段）Stage 55A：Kickoff/Design 整合到 Pipeline + sub-task 整合 + 移除 6 hooks + 刪 WorkflowEngine.cs（A1 拆 Stage 55A/55B 沿用 Stage 53A/53B 戰術 + B1 子工作 1+2+4+5 + Aria 拿捏 inner router 瘦身 + Pipeline KickoffStage/DesignStage 接管 finalize actions + sub-task 每子 group 獨立 Pipeline 實例 + 55A 不切 HITL 留 55B + 8 場景驗收含 Pipeline 從 Kickoff 啟動核心驗證）。**規劃前期已 grep**：inner router finalize 段 + HandleKickoffConfirmedAsync/HandleDesignConfirmedAsync 既有 fire next stage 邏輯 + HandleAgentCompletedAsync 6 hooks 完整結構 + WorkflowEngine.cs caller + ProposalConfirmationService 入口 + BossInteraction 27 處 caller（55B 預掃對照）— 對齊自省點 #23 規劃前期 grep 紀律。|
+| v2.0 | 2026-05-04 | 實作完成 ✅ — Forge 結案第一段（Roadmap 實作紀錄章節）+ 驗收期 Aria 閘門 1 critical（Mock 場景擴充 + 自驗）+ 1 minor（CS9113 qaCoordination 移除）+ 1 nuance（modify/restart 推進路徑 code-level OK）+ Forge 自驗場景 E 揭露 follow-up #1（Stage 54 既有遺留 bug：MockMode auto-approve switch 漏 split_task_proposal type，修法 commit `492d2db`）+ Christ 視覺驗收 4 張截圖（場景 B Discord/Dashboard + 場景 E Discord/Dashboard）。**戰略實證完成**：① 議題 G3 解法（Pipeline 從 Kickoff 階段啟動）② 缺口 2 兩入口分流（sub-task 走 Dev_plan 入口 skip Kickoff/Design — Forge 主動拍板修正 Aria 拿捏 #1/#11 衝突）。Forge 揭露 3 個 Aria 預掃缺口（method 名已存在 / sub-task first step / EpicChain 不依賴 6 hooks）拍板理由全部紀錄。3 commits（`1cddaef` 主實作 + `b6e0764` Aria fix + `492d2db` split_task_proposal fix）。dotnet build 0 Error / 0 新 Warning。v4 漸進遷移 8/9 達成。|
