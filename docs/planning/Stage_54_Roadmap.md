@@ -534,14 +534,24 @@ Stage 55：戰略級收尾 — Kickoff/Design 整合到 Pipeline framework（議
 
 驗收期間 Forge 即時揭露 + 修 + redeploy + 重跑 — 對齊 Christ 偏好「Forge 自驗能力突破」工作模式。
 
-### Aria 校準錨候選（Aria 第二段填）
+### Aria 校準錨（混合型第 7 資料點 ×0.77）
 
-> 預估 Forge 提案 ~×0.9-1.1（混合型 mid 中段下半，第 7 個資料點）— 純機制升級 + 重構 + idempotency 加固，Stage 49-53B know-how 全複用。
-> 子項間每次 dotnet build 0 Error + dotnet test 127 passed，無實作期重大踩坑（僅 2 個小編譯 nuance）。
-> Forge 在 Plan Mode 主動揭露 R5（B1 → B2 戰略級改動）+ R6（保守 OutputEvent 處理）2 項 plan 邊界 — Christ 重拍板議題 B B1 → B2 為 Stage 54 戰略級設計修正。
-> 子項 4 進一步揭露 plan IsFixLoop=true 條件對 dev_blocker 場景無效，廣義化判斷 — 自省點 #23 grep 紀律對 plan 條件 cross-check 議題候選。
-> 驗收期 1 個 follow-up bug（MockMode auto-approve source mock→dashboard）即時揭露 + 修復 + redeploy 重跑全部 8 場景驗證 — 對齊 Christ 偏好「Forge 自驗能力突破」工作模式。
-> 場景 E inject 法（jq + psql heredoc）為 Stage 51 know-how 驗證新工具 — 在 MockMode auto-approve 干擾下無法 catch 自然時序時，用 SQL 直接 inject `midInterruptRequestPending=true` 到 checkpoint JSON 驗 Recovery 路徑可達性。
+**精確計算**：
+- Aria Charter 預估範圍 420-670K（Roadmap Model 段七項公式），中位 **545K**
+- Forge 實際 context（Christ 紀錄）：Plan v1.0 → 182K / Plan v1.1 修正後 → 192K（+10K）/ 實作完畢 → 300K（+108K）/ 結案完畢 → **421K**（+121K）
+- 倍率 = 421 / 545 = **×0.77**（mid 帶下半，接近 Stage 53A ×0.73）
+
+**為什麼比預期低 ~23%**（4 因素疊加）：
+1. **base class 重構是「Plan Mode 把 unknown 變 known」類型** — 4 CheckpointStore 99% 重複，Plan Mode 第一步 read 完後實作機械化（對齊 Stage 41 ×0.84 + Stage 48 ×0.78 spike 機械化型校準）
+2. **3 router 升級全複用 Pipeline 既有 know-how** — Stage 53A 議題 12 ResumeStreamingAsync rehydrate pattern 已 production 驗證，沒新機制需 spike
+3. **0 Aria gate1 揭露問題進入實作期** — Forge gate1 揭露 R5（B1 → B2 戰略級）+ R6（保守 OutputEvent 處理）兩項在 Plan Mode 階段就解決
+4. **Forge 自驗自抓自修 follow-up bug** — 8 場景自驗 + MockMode auto-approve source 對齊 `84bd874` 自抓自修，不需要 Christ 介入 + Aria 介入
+
+**戰略意義**：
+- 混合型 Stage **7 資料點區間穩定 ×0.73-1.25**（49 ×1.25 / 50 ×1.09 / 51 ×0.96 / 52 ×1.05 / 53A ×0.73 / 53B ×0.88 / **54 ×0.77**）— 純機制 + 重構性質落區間下半驗證
+- **Forge 自驗能力進一步演進**：從 Stage 53B「Christ 線下實跑為選擇性」突破，到 Stage 54「自驗 follow-up bug 自抓自修」（驗收期 fix `84bd874` Forge 自跑場景 H 揭露 source 字串對齊問題自修 + redeploy 重跑全 8 場景驗證）
+- **新工具驗證**：場景 E inject 法（jq + psql heredoc）為 Stage 51 know-how 驗證新工具 — MockMode auto-approve 干擾下無法 catch 自然時序時，用 SQL 直接 inject `midInterruptRequestPending=true` 到 checkpoint JSON 驗 Recovery 路徑可達性
+- 子項 4 揭露 Aria 規劃前期 grep 紀律新邊界（plan IsFixLoop=true 嚴格條件 vs production 實際 dev_blocker 場景）— 對 Stage 55 規劃前期 grep 紀律候選議題（自省點 #23 升級候選：grep 紀律應 cross-check 「plan 假設條件 vs production 實際機制 trigger 條件」一致性）
 
 ---
 
