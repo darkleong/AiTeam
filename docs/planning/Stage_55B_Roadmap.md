@@ -643,6 +643,42 @@ Aria 預掃 3 缺口 + Forge 實作期 spike 揭露的 4 個戰略議題（守 c
 - v4 路線殘留 legacy 全清完
 - Stage 56 = Trial v6 前置條件統包鋪路完成
 
+### Session B 自驗結果（2026-05-05，Christ 觸發 /forge-self-verify 後）
+
+**Phase 1：deployment baseline ✅**
+- `dotnet build AiTeam.slnx` 0 Error 0 Warning baseline
+- CI/CD GitHub Actions run 25329263479 success（5min7s）後續 fix run 25349525904（4min46s）
+- Bot container redeploy 成功，啟動 OK 無 error
+
+**Phase 2：5 場景 + 2 regression 全綠 ✅（含 1 follow-up bug fix `415ad3b`）**
+
+| # | 場景 | 結果 | 驗證內容 |
+|---|---|---|---|
+| 1 | `framework_pipeline_kickoff_to_merge_full` | ✅ Status=done | Pipeline happy path 跑通完整 5+ stages，Session B Pipeline workflow shape 改動無破壞 |
+| 2 | `framework_pipeline_subtask_chain` | ✅ Parent + Phase 1/2/3 全 done | split_task_proposal yield → MockMode auto-approve `split_accept` → ResumeAfter routing → BuildEpicSubTasks + sub-task chain 接手（連帶驗 split_task_proposal HITL）|
+| 3 | `framework_pipeline_dev_intervention_hitl` | ✅ Status=done | 完整 cycle：DevStage failed → yield DevInterventionRequest → BossInteraction `dev_failed_intervention` 開 → MockMode auto-approve `dev_intervention_retry` → ProcessBossResponseAsync Pipeline 接管 → DevRetryBridge → 推進 done |
+| 4 | `framework_pipeline_qa_intervention_hitl`（fix 後）| ✅ yield-resume 通 | Round 1/2/3 fix loop → Round 4 後 Status=NeedsIntervention → **Stage55B yield qa_failed_intervention** → auto-approve `qa_intervention_continue` → QaStageBridge self-loop |
+| 5 | `framework_pipeline_devplan_escalate_hitl` | ✅ yield-resume 通 | DevPlan retry 達 Round 3 → unable path（InterventionReason 含「DevPlan 重產」）→ **Stage55B yield dev_plan_unable** → auto-approve `devplan_unable_skip` → DevStageBridge 直接 coding 推進 |
+
+**Follow-up bug 揭露 + 自抓自修（commit `415ad3b`）**：
+
+`framework_pipeline_qa_intervention_hitl` 場景揭露 Pipeline QaStage HandleResponseAsync 順序錯：`QaFixRound > 0` fix loop check 在 `Status NeedsIntervention/Failed` check 之前 → QaCoordination 達 QaFixRound 上限後 setStatus=NeedsIntervention 但 QaFixRound 仍 ==3 → Pipeline 先 hit fix loop branch → 跳過 Session B 預期的 qa_failed_intervention HITL yield → fix loop 死循環。
+
+修法：Status NeedsIntervention/Failed 檢查前移至 QaFixRound > 0 fix loop 檢查之前（pre-existing 順序但 Session A SetIntervention end Pipeline 看不出問題；Session B 改 yield-resume 後暴露）。
+
+**證據鏈（場景 4 修後）**：
+```
+[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound=1) → DevFixStageBridge
+[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound=2) → DevFixStageBridge
+[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound=3) → DevFixStageBridge
+[Stage55B] QaStage：HandleQaCompletedAsync 後 group.Status=needs_intervention → qa_failed_intervention HITL yield
+[Stage55B] qa_failed_intervention HITL：BossInteraction 已開，SendMessage CompletionRequest yield 等 Christ 回應
+[Stage55B] ProcessBossResponseAsync qa_failed_intervention Pipeline 接管（action=continue）
+[Stage55B] QaStage：qa_intervention continue → QaStageBridge 再試一輪
+```
+
+**自驗總結**：5 場景 + 2 regression 全綠 + 1 follow-up bug 自抓自修 + 同 group lifecycle 內 4 type-specific HITL 串接證明（Phase 2.5 連帶觸發 dev_plan_unable + qa_failed_intervention）。Session B 整合完整 yield-resume routing 通。
+
 ---
 
 ## 版本歷史
