@@ -173,8 +173,9 @@ public class QaCoordinationService(
     /// <summary>
     /// Stage 43-E：QA failed → 中止流程，通知老闆介入。
     /// 與 NotifyBossInterventionAsync（Vera fix loop 超限走 intervention type）區分用 qa_failed_intervention 細類。
+    /// Stage 55B Session B：改 public 給 Pipeline QaStageExecutor failure path call 開 BossInteraction + yield 等 Christ button。
     /// </summary>
-    private async Task NotifyBossQaFailedInterventionAsync(
+    public async Task NotifyBossQaFailedInterventionAsync(
         TaskGroup group, string failReason, CancellationToken cancellationToken)
     {
         await using var scope = serviceProvider.CreateAsyncScope();

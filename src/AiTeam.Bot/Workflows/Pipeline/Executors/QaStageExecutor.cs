@@ -14,17 +14,18 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 /// <summary>
 /// Stage 53A：QA stage Executor（J1 yield-resume 機制 — Agent 型 stage 第 4 個 + C2 整合 HandleQaCompletedAsync）。
 ///
-/// 職責（dual handler）：
+/// 職責（dual + intervention handler）：
 ///   - HandleEntryAsync(QaStageBridge)：state.CurrentStage = "QA" → fetch fresh group → call FireStepsAsync(QA) enqueue → SendMessageAsync(QaCompletionRequest) yield
 ///   - HandleResponseAsync(QaCompletionResponse)：
-///     ① result.Success=false → fallback qa_failed
-///     ② result.Success=true → call qaCoordination.HandleQaCompletedAsync 同步 await（C2 拍板 — 內部 routing 邏輯不動：no_tests / passed / code_bug fix loop / env_or_test_issue / escalate_boss）
-///         - HandleQaCompletedAsync 內部可能 fire Dev_fix（QaFixRound++）— 議題 9 fallback 時序紀律：sync await 完後立即檢查 group.QaFixRound > 0 → fallback qa_fix_loop（先清 marker → SendMessage）
-///         - 否則 happy path：QA passed → SendMessageAsync(DocStageBridge)
-///
-/// Stage 53A 範圍邊界：
-///   - bypass QA fix loop 子流程（屬 Stage 53B）
-///   - HandleQaCompletedAsync 內部 fire Dev_fix 後 Pipeline marker 已清 → Dev_fix callback 自然走 legacy ✅
+///     ① result.Success=false → Stage 55B Session B：qa_failed_intervention HITL yield
+///     ② result.Success=true → call qaCoordination.HandleQaCompletedAsync 同步 await
+///         - QaFixRound > 0 → DevFixStageBridge（53B fix loop）
+///         - Status NeedsIntervention/Failed → Stage 55B Session B：qa_failed_intervention HITL yield
+///         - happy path → DocStageBridge
+///   - HandleQaInterventionResponseAsync(QaInterventionResponse)（Stage 55B Session B 新加）：Christ button routing：
+///     ① continue → SendMessageAsync(QaStageBridge)（QA 再試一輪 self-loop）
+///     ② skip     → state.QaDone=true → SendMessageAsync(DocStageBridge)
+///     ③ abort    → SetInterventionAndYieldAsync（mark failed end Pipeline）
 ///
 /// 紀律：fallback 時序（先清 marker → 再 SendMessage）+ type-explicit Bridge record + Stage 50 三件套。
 /// </summary>
@@ -32,6 +33,8 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 [SendsMessage(typeof(DevFixStageBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(QaCompletionRequest))]
+[SendsMessage(typeof(QaStageBridge))]
+[SendsMessage(typeof(QaInterventionRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class QaStageExecutor : Executor
 {
@@ -79,8 +82,27 @@ internal sealed partial class QaStageExecutor : Executor
 
         if (!result.Success)
         {
-            _logger.LogInformation("[Stage53B] QaStage：result.Success=false → SetInterventionAndYieldAsync（Group={Id}）", state.GroupId);
-            await SetInterventionAndYieldAsync(context, state.GroupId, $"QA 失敗：{result.Summary}", result);
+            // Stage 55B Session B：QA agent failed → 開 qa_failed_intervention BossInteraction + yield 等 Christ
+            _logger.LogInformation("[Stage55B] QaStage：result.Success=false → qa_failed_intervention HITL yield（Group={Id}）", state.GroupId);
+            state.LastAgentResult = result;
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            await using (var scopeQaFail = _scopeFactory.CreateAsyncScope())
+            {
+                var taskRepoFail = scopeQaFail.ServiceProvider.GetRequiredService<TaskRepository>();
+                var groupFail = await taskRepoFail.GetGroupByIdAsync(state.GroupId, default);
+                if (groupFail is null)
+                {
+                    _logger.LogError("[Stage55B] QaStage：qa_failed yield 前找不到 Group={Id}，fallback", state.GroupId);
+                    await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
+                    return;
+                }
+                var qaCoordinationFail = scopeQaFail.ServiceProvider.GetRequiredService<QaCoordinationService>();
+                await qaCoordinationFail.NotifyBossQaFailedInterventionAsync(groupFail, $"QA agent 失敗：{result.Summary}", default);
+            }
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new QaInterventionRequest(state.GroupId), _logger,
+                "qa_failed_intervention", state.GroupId);
             return;
         }
 
@@ -121,13 +143,22 @@ internal sealed partial class QaStageExecutor : Executor
             return;
         }
 
-        // group.Status 變化（needs_intervention / failed）→ 53B：SetInterventionAndYieldAsync 結束 Workflow
+        // group.Status 變化（needs_intervention / failed）→ Stage 55B Session B：qa_failed_intervention HITL yield 等 Christ
         if (refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.NeedsIntervention || refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.Failed)
         {
-            _logger.LogInformation("[Stage53B] QaStage：HandleQaCompletedAsync 後 group.Status={Status} → SetInterventionAndYieldAsync（Group={Id}）",
+            _logger.LogInformation("[Stage55B] QaStage：HandleQaCompletedAsync 後 group.Status={Status} → qa_failed_intervention HITL yield（Group={Id}）",
                 refreshedGroup.Status, state.GroupId);
-            await SetInterventionAndYieldAsync(context, state.GroupId,
-                refreshedGroup.InterventionReason ?? "QA failed/intervention", result);
+            state.LastAgentResult = result;
+            state.LastAgentName = "QA";
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            // Pipeline 接管 NotifyBoss（QaCoordination 內 escalate_boss / qa_max_rounds path Session A 已標記為 legacy dead，由 Pipeline 自己開）
+            var qaCoordinationIntervene = scope.ServiceProvider.GetRequiredService<QaCoordinationService>();
+            await qaCoordinationIntervene.NotifyBossQaFailedInterventionAsync(
+                refreshedGroup, refreshedGroup.InterventionReason ?? "QA failed/intervention", default);
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new QaInterventionRequest(state.GroupId), _logger,
+                "qa_failed_intervention", state.GroupId);
             return;
         }
 
@@ -138,6 +169,39 @@ internal sealed partial class QaStageExecutor : Executor
         await PipelineStateHelpers.SaveAsync(context, state);
         _logger.LogInformation("[Stage53A] QaStage：QA passed → DocStageBridge（Group={Id}）", state.GroupId);
         await context.SendMessageAsync(new DocStageBridge(state.GroupId));
+    }
+
+    /// <summary>Stage 55B Session B：qa_failed_intervention HITL 回應 handler — Christ button click 後 routing。
+    /// continue → SendMessage(QaStageBridge) QA self-loop / skip → SendMessage(DocStageBridge) / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleQaInterventionResponseAsync(QaInterventionResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "continue":
+                _logger.LogInformation("[Stage55B] QaStage：qa_intervention continue → QaStageBridge 再試一輪（Group={Id}）", state.GroupId);
+                await context.SendMessageAsync(new QaStageBridge(state.GroupId));
+                return;
+
+            case "skip":
+                _logger.LogInformation("[Stage55B] QaStage：qa_intervention skip → DocStageBridge（Group={Id}）", state.GroupId);
+                state.QaDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DocStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage55B] QaStage：qa_intervention abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "QA intervention abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage55B] QaStage：未知 qa_intervention action={Action}（Group={Id}）— SetInterventionAndYieldAsync", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 qa_intervention action: {response.Action}", state.LastAgentResult);
+                return;
+        }
     }
 
     /// <summary>Stage 53B：intervention 統一 helper（qa_failed / qa_intervention）。</summary>
