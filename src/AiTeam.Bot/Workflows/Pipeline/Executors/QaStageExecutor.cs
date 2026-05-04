@@ -129,20 +129,10 @@ internal sealed partial class QaStageExecutor : Executor
             return;
         }
 
-        // 53B：QA fix loop 觸發（Petra 判 code_bug / back_to_reviewer → QaFixRound++）
-        // QaCoordinationService 內 fire Dev_fix 已議題 F-1 修正 6-e Pipeline path skip
-        // Pipeline 自 SendMessage(DevFixStageBridge) 觸發 framework fix loop
-        if (refreshedGroup.QaFixRound > 0)
-        {
-            _logger.LogInformation("[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound={Round}) → DevFixStageBridge（Group={Id}）",
-                refreshedGroup.QaFixRound, state.GroupId);
-            state.LastAgentResult = result;
-            state.LastAgentName = "QA";
-            await PipelineStateHelpers.SaveAsync(context, state);
-            await context.SendMessageAsync(new DevFixStageBridge(state.GroupId));
-            return;
-        }
-
+        // ⚠️ Stage 55B Session B 自驗 follow-up：Status NeedsIntervention/Failed 必須先檢查（先於 QaFixRound > 0 fix loop）。
+        // 理由：QaCoordination 達 QaFixRound 上限時 setStatus=NeedsIntervention 後 return（不 increment），
+        // QaFixRound 仍 > 0 → 若先 hit fix loop branch 會錯誤推進 DevFix → Pipeline 進入 fix loop 死循環，
+        // 跳過 Session B 預期的 qa_failed_intervention HITL yield。
         // group.Status 變化（needs_intervention / failed）→ Stage 55B Session B：qa_failed_intervention HITL yield 等 Christ
         if (refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.NeedsIntervention || refreshedGroup.Status == AiTeam.Shared.Constants.TaskStatus.Failed)
         {
@@ -159,6 +149,20 @@ internal sealed partial class QaStageExecutor : Executor
             await PipelineHitlHelper.YieldForChristResponseAsync(
                 context, new QaInterventionRequest(state.GroupId), _logger,
                 "qa_failed_intervention", state.GroupId);
+            return;
+        }
+
+        // 53B：QA fix loop 觸發（Petra 判 code_bug / back_to_reviewer → QaFixRound++，未達上限）
+        // QaCoordinationService 內 fire Dev_fix 已議題 F-1 修正 6-e Pipeline path skip
+        // Pipeline 自 SendMessage(DevFixStageBridge) 觸發 framework fix loop
+        if (refreshedGroup.QaFixRound > 0)
+        {
+            _logger.LogInformation("[Stage53B] QaStage：HandleQaCompletedAsync 觸發 QA fix loop (QaFixRound={Round}) → DevFixStageBridge（Group={Id}）",
+                refreshedGroup.QaFixRound, state.GroupId);
+            state.LastAgentResult = result;
+            state.LastAgentName = "QA";
+            await PipelineStateHelpers.SaveAsync(context, state);
+            await context.SendMessageAsync(new DevFixStageBridge(state.GroupId));
             return;
         }
 
