@@ -293,6 +293,64 @@ public sealed class FrameworkPipelineRouter
             $"Design(decision={decision})",
             ct);
 
+    // ── Stage 55B Session B：5 type-specific intervention HITL Resume methods ──
+    //
+    // 對齊 ResumeAfterKickoff/Design 純 thin wrapper pattern — delegate to ResumeWithResponseAsync helper。
+    // 由 TaskGroupService.ProcessBossResponseAsync 5 case Pipeline 分支觸發（議題 5 = 5A 加 Pipeline 分支保留 legacy handler）。
+
+    /// <summary>Stage 55B：Dev intervention（dev_failed_intervention）button callback resume。
+    /// action = "skip" / "retry" / "abort"（從 dev_intervention_skip / _retry / _abort 去前綴）。</summary>
+    public Task ResumeAfterDevInterventionAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DevInterventionPortId,
+            new DevInterventionResponse(action),
+            $"DevIntervention(action={action})",
+            ct);
+
+    /// <summary>Stage 55B：QA intervention（qa_failed_intervention）button callback resume。
+    /// action = "continue" / "skip" / "abort"（從 qa_intervention_continue / _skip / _abort 去前綴）。</summary>
+    public Task ResumeAfterQaInterventionAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.QaInterventionPortId,
+            new QaInterventionResponse(action),
+            $"QaIntervention(action={action})",
+            ct);
+
+    /// <summary>Stage 55B：DevPlan escalate（devplan_escalate）button callback resume。
+    /// action = "skip" / "abort"（從 devplan_skip / _abort 去前綴）。</summary>
+    public Task ResumeAfterDevPlanEscalateAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DevPlanEscalatePortId,
+            new DevPlanEscalateResponse(action),
+            $"DevPlanEscalate(action={action})",
+            ct);
+
+    /// <summary>Stage 55B：DevPlan unable（dev_plan_unable）button callback resume。
+    /// action = "skip" / "abort"（從 devplan_unable_skip / _unable_abort 去 devplan_unable_ 前綴）。</summary>
+    public Task ResumeAfterDevPlanUnableAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DevPlanUnablePortId,
+            new DevPlanUnableResponse(action),
+            $"DevPlanUnable(action={action})",
+            ct);
+
+    /// <summary>Stage 55B：Split task proposal（split_task_proposal）button callback resume。
+    /// action = "accept" / "modify" / "reject" / "abort"（從 split_accept / _modify / _reject / _abort 去前綴）。
+    /// modifyContent = Christ TextInputDialog 修改的 phases JSON（modify path 用）；
+    /// splitProposalJson = BossInteraction.ContextJson 內既有 Petra 原 proposal JSON（accept path 用）。</summary>
+    public Task ResumeAfterSplitTaskProposalAsync(
+        TaskGroup group, string action, string? modifyContent, string? splitProposalJson, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.SplitTaskProposalPortId,
+            new SplitTaskProposalResponse(action, modifyContent, splitProposalJson),
+            $"SplitTaskProposal(action={action})",
+            ct);
+
     /// <summary>
     /// Stage 55A：Pipeline ResumeStreamingAsync 共用 helper — ResumeAfterAgentAsync / ResumeAfterKickoff/DesignAsync 共用核心邏輯。
     /// 流程：LoadFromDb → ResumeStreamingAsync from latest → 找 expectedPortId 的 RequestInfoEvent → SendResponseAsync → 繼續 watch 直到下個 yield/finalize。
