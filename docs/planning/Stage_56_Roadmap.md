@@ -266,7 +266,7 @@ emoji + label 慣例：
 |---|---|---|
 | 0 | Spike 第一步 — 5 read 對齊 + 計劃書 3 spike 報告 | ✅ 子項 0 spike 報告寫進 Plan Mode 計劃書（Path A vs B 根因分開校準 + Dashboard current 10 vs target 43 對照表 + multi-line array literal 3 case 確認）|
 | 1 | Dashboard 33 framework_* 場景補 + frameworkHint 補 | ✅ `MockScenarioCard.razor` 加 33 個 MudSelectItem（按 Stage 分組註解）+ `MockScenarioService.cs` emoji map 補 4 條 startsWith pattern + frameworkHint switch 補 4 條 startsWith 分支（design / pipeline / pipeline HITL routing / dev_blocker idempotency）|
-| 2 | FF 四十三 spike + 修（路線 b + 議題 spike-2 選項 B）| ✅ 7 步全達成：Entity `IsEstimated` 欄位 + Migration `Stage56TokenLogsIsEstimated` + `TokenUsage.IsEstimated` 欄位 + `ClaudeCodeService.TryParseUsage` 多欄位兼容（total_cost_usd / cost_usd / usage.cost_usd）+ LogDebug dump fallback + 新建 `TokenCostEstimator`（hardcoded per-model 4 欄位 dict：Opus / Sonnet / Haiku × input/output/cache_creation/cache_read 12 數字）+ `TokenLogService` CLI fallback + `TokenTrackingProvider` API path 中央寫入點 + `LlmProviderFactory` DI |
+| 2 | FF 四十三 spike + 修（路線 b + 議題 spike-2 選項 B）| ✅ 6 步達成 + 第 7 步跳過（範圍變更，見下方「範圍變更」段）：Entity `IsEstimated` 欄位 + Migration `Stage56TokenLogsIsEstimated` + `TokenUsage.IsEstimated` 欄位 + `ClaudeCodeService.TryParseUsage` 多欄位兼容（total_cost_usd / cost_usd / usage.cost_usd）+ LogDebug dump fallback + 新建 `TokenCostEstimator`（hardcoded per-model 4 欄位 dict：Opus / Sonnet / Haiku × input/output/cache_creation/cache_read 12 數字）+ `TokenLogService` CLI fallback + `TokenTrackingProvider` API path 中央寫入點 + `LlmProviderFactory` DI |
 | 3 | FF 四十二 修 + 3 unit tests | ✅ `TryParseDesignIssues` 改 line-iteration + try-deserialize pattern；新建 `src/AiTeam.Bot.Tests/`（xUnit）加進 `AiTeam.slnx` + `InternalsVisibleTo` 開放；`DesignPromptsTests.cs` 4 case 全 passed |
 | 4 | conventions 補 2 段 | ✅ `docs/conventions/csharp.md` 加「跨 service fundamental type 標記（WorkflowType/WorkflowStep）」+「Windows dev 機 Process.Start + .cmd PATHEXT 解法」 |
 | 6 | Version bump v3.45.0 + Roadmap 實作紀錄 | ✅ `src/Directory.Build.props` 3.44.0 → 3.45.0 + 本章節 |
@@ -278,6 +278,10 @@ emoji + label 慣例：
 - `dotnet build AiTeam.slnx` — **0 errors**（既有 100 warnings 全預存，無新增）
 - `dotnet test src/AiTeam.Bot.Tests` — **4/4 passed**（FF 四十二 三 case + null edge case 全綠）
 - Migration `Stage56TokenLogsIsEstimated` 建好
+
+### 範圍變更
+
+**子項 2 詳化第 7 步 Dashboard 視覺區分跳過**：原計劃書「token 統計頁 cost 加 `~$0.123` estimated 標記 + tooltip」評估後判定 razor 改動範圍超出 1 處 grid cell — 實際範圍 = `TokenMonitoring.razor` **4 處顯示點**（line 64 per-agent / line 101 總計 / line 152 SortLabel / line 159 表格 cell）+ `TokenAgentSummaryDto` 加 `IsEstimated` 聚合欄位 + backend SQL/LINQ GROUP BY `IsEstimated` 改動。對齊計劃書原文「若 razor 改動超出 1 處 grid cell 則留 follow-up FF」拍板跳過。**留 follow-up FF**：待 Aria 結案第二段立 FF（Trial_v6 觀察期間 `IsEstimated=true` 的 row 仍在 DB 可查，SQL `WHERE "IsEstimated" = true`，UI 標記延後不阻擋 Trial_v6 cost 對照）。**注**：TokenMonitoring 既有 `EstimatedCostUsd` 欄位是用 `app_settings` 兩 key client-side 估算的，與 token_logs.TotalCostUsd 欄位不同來源，本 Stage 56 修法影響的是 token_logs 寫入而非該頁顯示邏輯，UI 標記改動性質為「新增 estimated 視覺辨識」非「對齊既有顯示」。
 
 ### 設計決策（跨 Stage 預警價值）
 
