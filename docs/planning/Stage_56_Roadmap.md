@@ -3,8 +3,8 @@
 > 對應 Future Feature：Trial v6 前置條件鋪路（Stage 55B 拍板）— v4 路線 9/9 達成後最後一個觀察類整理 Stage
 > 對應版本：**v3.45.0**（Stage 55B v3.44.0 + 1）
 > 建立日期：2026-05-05
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-05）
+> 文件版本：v2.0
 
 ---
 
@@ -254,6 +254,7 @@ emoji + label 慣例：
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-05 | Stage 56 結案（Forge 2 段）— 子項 1/2/3/4/6 完成 + 子項 5 自驗 V1/V3/V4/V5 全綠（V2 既有設計 MockMode bypass 待 Trial_v6 真實任務驗）。FF 四十三 路線 b + 選項 B（TokenCostEstimator hardcoded per-model dict）+ IsEstimated flag + Migration `Stage56TokenLogsIsEstimated` 部署；FF 四十二 line-iteration + try-deserialize pattern + 新建 `AiTeam.Bot.Tests` xUnit project（4 case all pass）；Dashboard 33 framework_* 場景 + frameworkHint 4 條 startsWith 分支 + emoji map 補；conventions 加 2 段。**範圍變更紀錄**：子項 2 第 7 步 Dashboard 視覺區分（estimated 標記 + tooltip）跳過，留 follow-up FF（待 Aria 結案第二段立）— 實際範圍 4 處 razor 顯示點 + DTO 聚合 + SQL GROUP BY 超出 1 處 grid cell 上限。0 follow-up bug 自抓自修。**踩坑**：Internal API port `:5052`（Bot）vs `:5051`（Dashboard）+ X-Api-Key auth header，自驗 know-how 補入正式紀錄。Commits：`8054f64`（主實作）+ `43e5454`（Aria 二檢範圍變更紀錄補正）。|
 | v1.0 | 2026-05-05 | 初版規劃書建立（Aria）— Stage 56 = Trial_v6 前置條件統包 = Dashboard MockScenarioCard 補全 33 framework_* 場景（議題 1 = A 全補）+ FF 四十三 spike + 修一氣呵成（議題 2 = B Forge 自驗能力信任）+ FF 四十二 對齊既有 line-based pattern 重構 + WorkflowEngine 殘留評估補註（Aria 拿捏：grep 揭露 23 service 用 WorkflowType/WorkflowStep 是 fundamental type 不是 dead code → conventions 補註） + Stage 48 PATHEXT 候選 FF 落地 conventions（Aria 拿捏：Linux Docker production 無此問題不立 FF）。**規劃前期已 grep**：MockScenarioCard.razor 既有 10 framework_* / MockScenarioService.cs 全 43 framework_* case + workflowType switch + frameworkHint switch / DesignPrompts.cs 3 個 TryParseXxx helper pattern / TokenLogService.LogCliUsageAsync + TokenUsage record / WorkflowEngine.cs Stage 55A 既有註解 — 對齊自省點 #23 規劃前期 grep 紀律。|
 
 ---
@@ -288,3 +289,22 @@ emoji + label 慣例：
 - **TokenCostEstimator 採 hardcoded per-model dict**（議題 spike-2 選項 B）— Anthropic pricing 公開穩定（USD per 1M tokens），Model 升級時改 const dict 一處；Stage 47 `app_settings` 兩 key 仍保留作 Dashboard UI 顯示 fallback，**主 pricing 不依賴 DB**（避免動態 ops 操作改費率引發 race / cache invalidation）
 - **`InternalsVisibleTo` 開放給 test project**：對齊 .NET 慣例，避免為 unit test 把 internal type 改 public 污染 API 邊界
 - **Path A vs Path B 根因校準後續**：H1（CLI single-shot schema 變更）/ H2（short-circuit）仍未證實 — `TryParseUsage` LogDebug dump 已加，未來 Docker log 觀察到真實 schema 後可再縮 fallback 範圍（fallback 估算僅用於缺值，不破真實值）
+
+### 自驗結果（Forge 2026-05-05 子項 5）
+
+子項 5 自驗在 production 環境（commit `43e5454` 已 deploy + Migration `Stage56TokenLogsIsEstimated` applied）跑：
+
+| 驗證 | 結果 |
+|---|---|
+| **V1** Mock 3 場景 POST `/internal/mock/scenario` | ✅ 3/3 HTTP 202 + ok=True；T1 🚀 framework_appeal_loop_fast_approve / T2 🤝 framework_kickoff_consensus_round1 / T3 ⚠️ framework_pipeline_dev_intervention_hitl + frameworkHint「v4 漸進遷移第九步驗收（HITL routing）」生效，新補 emoji map（🚀🤝⚠️） + startsWith 分支正確 |
+| **V3** FF 四十二 unit tests | ✅ 4/4 passed（[MOCK] 前綴 / 純 multi-line array regression / 字串 [example] 嵌套 / null edge case）|
+| **V4** conventions 兩段 | ✅ `csharp.md` 含「跨 service fundamental type 標記」+「Windows dev 機 Process.Start + .cmd PATHEXT 解法」|
+| **V5** build / Migration / regression | ✅ `dotnet build AiTeam.slnx` 0 errors / Migration `20260505080050_Stage56TokenLogsIsEstimated` applied / Bot 啟動正常 / 既有 10 framework_* 不受新場景干擾 |
+
+**V2（FF 四十三 寫入率）— 無法在 MockMode 直接驗（既有設計）**：MockMode 下 `LlmProviderFactory.cs:47` `if (MockMode) return new MockLlmProvider` **bypass TokenTrackingProvider**；`MockClaudeCodeService` 全部回傳 `ClaudeCodeResult` `Usage=null` → `LogCliUsageAsync` line 32 early return 不寫 token_logs。**屬 Stage 17 既有設計**（避免假數據污染 Dashboard 監控頁），**非本 Stage 缺陷**。Trial_v6 真實任務跑通後查 SQL `SELECT COUNT(*) FILTER (WHERE "TotalCostUsd" IS NOT NULL) * 100.0 / COUNT(*) FROM token_logs ...` 即可驗 95%+ 達標。修法本身（路線 b + 選項 B + IsEstimated）已部署 production，等 Trial_v6 自然驗證。
+
+**0 follow-up bug**（本 Stage 觀察類整理性質單純，無自抓自修案例）。
+
+### 踩坑紀錄（跨 Stage 預警價值）
+
+- **Internal API port + auth header**（自驗期間揭露）：Bot 跑在 `:5052`（不是 Dashboard 的 `:5051`，docker port mapping 區分），`/internal/mock/scenario` 需 `X-Api-Key` header 帶 `AgentSettings__InternalApiKey` env 值。Stage 53B 起 Forge 自驗 know-how 累積，Stage 56 補入正式紀錄供未來 reference
