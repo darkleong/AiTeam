@@ -255,3 +255,32 @@ emoji + label 慣例：
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-05 | 初版規劃書建立（Aria）— Stage 56 = Trial_v6 前置條件統包 = Dashboard MockScenarioCard 補全 33 framework_* 場景（議題 1 = A 全補）+ FF 四十三 spike + 修一氣呵成（議題 2 = B Forge 自驗能力信任）+ FF 四十二 對齊既有 line-based pattern 重構 + WorkflowEngine 殘留評估補註（Aria 拿捏：grep 揭露 23 service 用 WorkflowType/WorkflowStep 是 fundamental type 不是 dead code → conventions 補註） + Stage 48 PATHEXT 候選 FF 落地 conventions（Aria 拿捏：Linux Docker production 無此問題不立 FF）。**規劃前期已 grep**：MockScenarioCard.razor 既有 10 framework_* / MockScenarioService.cs 全 43 framework_* case + workflowType switch + frameworkHint switch / DesignPrompts.cs 3 個 TryParseXxx helper pattern / TokenLogService.LogCliUsageAsync + TokenUsage record / WorkflowEngine.cs Stage 55A 既有註解 — 對齊自省點 #23 規劃前期 grep 紀律。|
+
+---
+
+## 實作紀錄（Forge 2026-05-05 結案第一段）
+
+### 子項完成度
+
+| # | 子項 | 結果 |
+|---|---|---|
+| 0 | Spike 第一步 — 5 read 對齊 + 計劃書 3 spike 報告 | ✅ 子項 0 spike 報告寫進 Plan Mode 計劃書（Path A vs B 根因分開校準 + Dashboard current 10 vs target 43 對照表 + multi-line array literal 3 case 確認）|
+| 1 | Dashboard 33 framework_* 場景補 + frameworkHint 補 | ✅ `MockScenarioCard.razor` 加 33 個 MudSelectItem（按 Stage 分組註解）+ `MockScenarioService.cs` emoji map 補 4 條 startsWith pattern + frameworkHint switch 補 4 條 startsWith 分支（design / pipeline / pipeline HITL routing / dev_blocker idempotency）|
+| 2 | FF 四十三 spike + 修（路線 b + 議題 spike-2 選項 B）| ✅ 7 步全達成：Entity `IsEstimated` 欄位 + Migration `Stage56TokenLogsIsEstimated` + `TokenUsage.IsEstimated` 欄位 + `ClaudeCodeService.TryParseUsage` 多欄位兼容（total_cost_usd / cost_usd / usage.cost_usd）+ LogDebug dump fallback + 新建 `TokenCostEstimator`（hardcoded per-model 4 欄位 dict：Opus / Sonnet / Haiku × input/output/cache_creation/cache_read 12 數字）+ `TokenLogService` CLI fallback + `TokenTrackingProvider` API path 中央寫入點 + `LlmProviderFactory` DI |
+| 3 | FF 四十二 修 + 3 unit tests | ✅ `TryParseDesignIssues` 改 line-iteration + try-deserialize pattern；新建 `src/AiTeam.Bot.Tests/`（xUnit）加進 `AiTeam.slnx` + `InternalsVisibleTo` 開放；`DesignPromptsTests.cs` 4 case 全 passed |
+| 4 | conventions 補 2 段 | ✅ `docs/conventions/csharp.md` 加「跨 service fundamental type 標記（WorkflowType/WorkflowStep）」+「Windows dev 機 Process.Start + .cmd PATHEXT 解法」 |
+| 6 | Version bump v3.45.0 + Roadmap 實作紀錄 | ✅ `src/Directory.Build.props` 3.44.0 → 3.45.0 + 本章節 |
+
+子項 5（Forge 自驗）等 Aria 閘門一檢查通過 + Christ 觸發後再進。
+
+### 驗證結果
+
+- `dotnet build AiTeam.slnx` — **0 errors**（既有 100 warnings 全預存，無新增）
+- `dotnet test src/AiTeam.Bot.Tests` — **4/4 passed**（FF 四十二 三 case + null edge case 全綠）
+- Migration `Stage56TokenLogsIsEstimated` 建好
+
+### 設計決策（跨 Stage 預警價值）
+
+- **TokenCostEstimator 採 hardcoded per-model dict**（議題 spike-2 選項 B）— Anthropic pricing 公開穩定（USD per 1M tokens），Model 升級時改 const dict 一處；Stage 47 `app_settings` 兩 key 仍保留作 Dashboard UI 顯示 fallback，**主 pricing 不依賴 DB**（避免動態 ops 操作改費率引發 race / cache invalidation）
+- **`InternalsVisibleTo` 開放給 test project**：對齊 .NET 慣例，避免為 unit test 把 internal type 改 public 污染 API 邊界
+- **Path A vs Path B 根因校準後續**：H1（CLI single-shot schema 變更）/ H2（short-circuit）仍未證實 — `TryParseUsage` LogDebug dump 已加，未來 Docker log 觀察到真實 schema 後可再縮 fallback 範圍（fallback 估算僅用於缺值，不破真實值）

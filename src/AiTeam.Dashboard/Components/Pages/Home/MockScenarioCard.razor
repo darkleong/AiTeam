@@ -75,6 +75,46 @@
                 <MudSelectItem Value="@("framework_pipeline_kickoff_crash_recovery")">💥 Stage55A — Kickoff 階段 Crash Recovery（場景 C）</MudSelectItem>
                 <MudSelectItem Value="@("framework_pipeline_design_crash_recovery_issue_idempotency_v2")">🛡️ Stage55A — Design 階段 B2 idempotency（場景 D）</MudSelectItem>
                 <MudSelectItem Value="@("framework_pipeline_subtask_chain")">🔗 Stage55A — sub-task 整合 Pipeline framework path（場景 E）</MudSelectItem>
+                @* Stage 49：FF 四十九 framework Appeal Loop 5 場景 *@
+                <MudSelectItem Value="@("framework_appeal_loop_fast_approve")">🚀 Stage49 — Appeal fast approve（Vera 第 1 輪 approve）</MudSelectItem>
+                <MudSelectItem Value="@("framework_appeal_loop_max_iter_approve")">🚀 Stage49 — Appeal max-iter Petra approve</MudSelectItem>
+                <MudSelectItem Value="@("framework_appeal_loop_max_iter_reject")">🚀 Stage49 — Appeal max-iter Petra reject</MudSelectItem>
+                <MudSelectItem Value="@("framework_appeal_loop_max_iter_escalate")">🚀 Stage49 — Appeal max-iter Petra escalate</MudSelectItem>
+                <MudSelectItem Value="@("framework_appeal_loop_crash_recovery")">🚀 Stage49 — Appeal Round 2 Crash Recovery</MudSelectItem>
+                @* Stage 50：framework Kickoff Meeting 5 場景 *@
+                <MudSelectItem Value="@("framework_kickoff_consensus_round1")">🤝 Stage50 — Kickoff Round 1 consensus</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_consensus_round2")">🤝 Stage50 — Kickoff Round 2 consensus</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_max_iter")">🤝 Stage50 — Kickoff max iter</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_escalate")">🤝 Stage50 — Kickoff Petra escalate</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_crash_recovery")">🤝 Stage50 — Kickoff Round 2 Crash Recovery</MudSelectItem>
+                @* Stage 51：framework HITL Kickoff 中途介入 4 場景 *@
+                <MudSelectItem Value="@("framework_kickoff_mid_interrupt_apply")">✏️ Stage51 — Kickoff 中途介入 套用修改（場景 B）</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_mid_interrupt_cancel")">✏️ Stage51 — Kickoff 中途介入 取消（場景 E）</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_mid_interrupt_crash_during_wait")">✏️ Stage51 — Kickoff 中途介入 等待中 Crash（場景 D）</MudSelectItem>
+                <MudSelectItem Value="@("framework_kickoff_mid_interrupt_no_trigger")">✏️ Stage51 — Kickoff 中途介入 不觸發 baseline（場景 F）</MudSelectItem>
+                @* Stage 52：framework Design Meeting 6 場景 *@
+                <MudSelectItem Value="@("framework_design_consensus_round1")">🎨 Stage52 — Design Round 1 consensus</MudSelectItem>
+                <MudSelectItem Value="@("framework_design_consensus_round2")">🎨 Stage52 — Design Round 2 consensus</MudSelectItem>
+                <MudSelectItem Value="@("framework_design_needs_adjustment_approved")">🎨 Stage52 — Design needs_adjustment → approved</MudSelectItem>
+                <MudSelectItem Value="@("framework_design_needs_adjustment_needs_meeting")">🎨 Stage52 — Design needs_adjustment → needs_meeting</MudSelectItem>
+                <MudSelectItem Value="@("framework_design_no_demi")">🎨 Stage52 — Design no_demi（純後端任務）</MudSelectItem>
+                <MudSelectItem Value="@("framework_design_crash_recovery_during_round")">🎨 Stage52 — Design Round 期間 Crash Recovery</MudSelectItem>
+                @* Stage 53A：framework Pipeline 6 場景（Aria 方案 C：Pipeline 從 Dev_plan 階段啟動）*@
+                <MudSelectItem Value="@("framework_pipeline_happy_path")">🔧 Stage53A — Pipeline happy path</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_dev_plan_resume")">🔧 Stage53A — Pipeline DevPlan resume</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_dev_resume")">🔧 Stage53A — Pipeline Dev resume</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_qa_no_tests")">🔧 Stage53A — Pipeline QA no_tests</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_reviewer_fallback")">🔧 Stage53A — Pipeline Reviewer fallback</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_dev_plan_failed_escalate")">🔧 Stage53A — Pipeline DevPlan failed escalate</MudSelectItem>
+                @* Stage 54：framework Recovery 升級 + idempotency 2 alias *@
+                <MudSelectItem Value="@("framework_design_crash_recovery_issue_idempotency")">🛡️ Stage54 — Design Crash Recovery Issue idempotency</MudSelectItem>
+                <MudSelectItem Value="@("pipeline_dev_blocker_retry_idempotency")">🛡️ Stage54 — Pipeline DevBlocker retry idempotency</MudSelectItem>
+                @* Stage 55B：5 type-specific intervention HITL alias 場景 *@
+                <MudSelectItem Value="@("framework_pipeline_dev_intervention_hitl")">⚠️ Stage55B — Pipeline Dev intervention HITL</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_qa_intervention_hitl")">⚠️ Stage55B — Pipeline QA intervention HITL</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_devplan_escalate_hitl")">⚠️ Stage55B — Pipeline DevPlan escalate HITL</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_devplan_unable_hitl")">⚠️ Stage55B — Pipeline DevPlan unable HITL</MudSelectItem>
+                <MudSelectItem Value="@("framework_pipeline_split_task_proposal_hitl")">⚠️ Stage55B — Pipeline split-task proposal HITL</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="4">

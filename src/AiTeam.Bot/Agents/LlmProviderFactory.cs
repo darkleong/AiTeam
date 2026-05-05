@@ -31,7 +31,8 @@ public class LlmProviderFactory(
     ILogger<TokenTrackingProvider> tokenLogger,
     ILoggerFactory loggerFactory,
     AppSettingsService appSettings,
-    AgentConfigCache agentConfigCache)
+    AgentConfigCache agentConfigCache,
+    TokenCostEstimator costEstimator)
 {
     private readonly BotAgentSettings _settings = settings.Value;
     private readonly string _geminiApiKey = configuration["Gemini:ApiKey"] ?? "";
@@ -76,6 +77,7 @@ public class LlmProviderFactory(
             config,
             appSettings,
             agentConfigCache,
+            costEstimator,
             tokenLogger,
             agentName,
             finalModel);

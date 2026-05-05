@@ -25,6 +25,7 @@ public class TokenTrackingProvider(
     BotAgentConfig agentConfig,
     AppSettingsService appSettings,
     AgentConfigCache agentConfigCache,
+    TokenCostEstimator costEstimator,
     ILogger<TokenTrackingProvider> logger,
     string agentName,
     string model) : ILlmProvider
@@ -115,12 +116,18 @@ public class TokenTrackingProvider(
         // ── 記錄實際用量 ──────────────────────────────────────────────
         // Stage 44：API 層 cache 欄位由 LlmResponse 自身提供時可填（目前 AnthropicProvider/GeminiProvider 未回傳 cache 細節
         // → 留 null，與舊行為相容。後續 FF 一搭車時可從 Anthropic SDK response 取 cache_creation_input_tokens 等欄位）。
+        // Stage 56：FF 四十三 修 — Path B（API direct call）原本連 TotalCostUsd 都不寫，現走 TokenCostEstimator
+        // 估算 + 標記 IsEstimated=true。cache 細節仍受 ILlmProvider 既有限制傳 0（未來補 cache 欄位後可改）。
+        var (cost, isEstimated) = costEstimator.Estimate(
+            model, response.InputTokens, response.OutputTokens, cacheCreate: 0, cacheRead: 0);
         tokenRepository.Add(new TokenLog
         {
             AgentName    = agentName,
             Model        = model,
             InputTokens  = response.InputTokens,
             OutputTokens = response.OutputTokens,
+            TotalCostUsd = cost,
+            IsEstimated  = isEstimated,
             CreatedAt    = DateTime.UtcNow
         });
         await tokenRepository.SaveAsync(cancellationToken);

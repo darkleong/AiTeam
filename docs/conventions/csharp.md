@@ -256,3 +256,20 @@ if (user.RegistrationDate < DateTime.Now.AddDays(-1))
 - [ ] DTO 不往上展開父物件
 - [ ] Service / Controller 使用 Primary Constructor 注入（非 Blazor 組件）
 - [ ] ILogger 訊息使用結構化佔位符（非字串串接）
+
+## 跨 service fundamental type 標記（Stage 56）
+
+`WorkflowType` enum + `WorkflowStep` record（`src/AiTeam.Bot/Orchestration/WorkflowEngine.cs`）是 Stage 55A v4 漸進遷移後保留的**跨 service fundamental type，不是 dead code**。
+
+Stage 55A 已刪除原 `WorkflowEngine` class + `GetDecision` method + `NextAction` enum + `WorkflowDecision` record（v4 Pipeline framework 接管 routing），剩 type 定義廣泛被 `TaskGroupService` / `ProposalConfirmationService` / `ButtonCallbackRouter` / `MockScenarioService` 等 23+ service 使用。
+
+**規則**：未來重構若想動 `WorkflowType` / `WorkflowStep`，先 grep 全 reference 評估影響面再下手；不可單純看「WorkflowEngine.cs 內部 logic 已搬走」就誤判為殘留。
+
+## Windows dev 機 Process.Start + .cmd PATHEXT 解法（Stage 56）
+
+Production Linux Docker 容器內 `claude` 是 node-installed 無副檔名 binary 不踩此問題；**Windows dev 機本機跑 framework workflow** 時 .NET `Process.Start` 配 `UseShellExecute=false` 不 honor PATHEXT 找不到 `claude.cmd`，需採以下其中一條解法：
+
+- **(a) shim 法**：建立 `claude.exe` shim 把呼叫導向 `cmd.exe /c claude.cmd`（PATH 順序需高於原 `claude.cmd`）
+- **(b) OS-aware invoke 法**：`ClaudeCodeService` 內判 `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)` 改 `FileName="cmd.exe"` + `Arguments="/c claude " + 既有 args`
+
+Stage 48 spike 揭露，Stage 56 落地 conventions 避免未來 onboarding 踩坑。

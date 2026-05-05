@@ -521,8 +521,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     /// <summary>
     /// Stage 44：從 type="result" 物件解析 usage + total_cost_usd。
     /// schema 不符或欄位缺失 → 回傳 null（呼叫端 LogCliUsageAsync 會 early return，不阻塞主流程）。
+    /// Stage 56：cost 欄位擴容多名兼容（total_cost_usd / cost_usd / usage.cost_usd）+ 找不到時 LogDebug dump
+    /// result keys（FF 四十三 spike H1/H2 觀察用）。Cost null 時呼叫端會走 TokenCostEstimator fallback。
     /// </summary>
-    private static TokenUsage? TryParseUsage(JsonElement root)
+    private TokenUsage? TryParseUsage(JsonElement root)
     {
         try
         {
@@ -531,8 +533,24 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             var output = u.TryGetProperty("output_tokens",               out var v2) && v2.ValueKind == JsonValueKind.Number ? v2.GetInt32() : 0;
             var cc     = u.TryGetProperty("cache_creation_input_tokens", out var v3) && v3.ValueKind == JsonValueKind.Number ? v3.GetInt32() : 0;
             var cr     = u.TryGetProperty("cache_read_input_tokens",     out var v4) && v4.ValueKind == JsonValueKind.Number ? v4.GetInt32() : 0;
-            decimal? cost = root.TryGetProperty("total_cost_usd", out var c) && c.ValueKind == JsonValueKind.Number
-                ? c.GetDecimal() : null;
+
+            // Stage 56：多欄位名兼容（按優先序試 total_cost_usd → cost_usd → usage.cost_usd）
+            decimal? cost = null;
+            if (root.TryGetProperty("total_cost_usd", out var c1) && c1.ValueKind == JsonValueKind.Number)
+                cost = c1.GetDecimal();
+            else if (root.TryGetProperty("cost_usd", out var c2) && c2.ValueKind == JsonValueKind.Number)
+                cost = c2.GetDecimal();
+            else if (u.TryGetProperty("cost_usd", out var c3) && c3.ValueKind == JsonValueKind.Number)
+                cost = c3.GetDecimal();
+
+            // Stage 56：cost 找不到時 dump result keys 供未來 Docker log 觀察真實 schema（FF 四十三 spike H1/H2）
+            if (cost is null && logger.IsEnabled(LogLevel.Debug))
+            {
+                var keys = new List<string>();
+                foreach (var p in root.EnumerateObject()) keys.Add(p.Name);
+                logger.LogDebug("[Stage56-FF43] CLI result.total_cost_usd 找不到（兼容三欄位皆無），result keys={Keys}", string.Join(",", keys));
+            }
+
             return new TokenUsage(input, output, cc, cr, cost);
         }
         catch (Exception)

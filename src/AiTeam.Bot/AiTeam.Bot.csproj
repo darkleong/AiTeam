@@ -39,6 +39,11 @@
     <ProjectReference Include="..\AiTeam.Shared\AiTeam.Shared.csproj" />
   </ItemGroup>
 
+  <!-- Stage 56：開放 internal type 給 AiTeam.Bot.Tests（unit test 用） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="AiTeam.Bot.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 各 Agent 專用 CLAUDE.md 模板（FF 二十四：glob 一次涵蓋，避免新增 template 時漏改 csproj）。
          8 個 Agent service 都從 AppContext.BaseDirectory/Resources/CLAUDE_*.md 讀取：

@@ -347,6 +347,15 @@ public class MockScenarioService(
             "framework_kickoff_mid_interrupt_cancel"               => "✏️",
             "framework_kickoff_mid_interrupt_crash_during_wait"    => "✏️",
             "framework_kickoff_mid_interrupt_no_trigger"           => "✏️",
+            // Stage 56：補 Stage 52 / 53A / 54 / 55B emoji
+            var s when s.StartsWith("framework_design_")            => "🎨",
+            var s when s.StartsWith("framework_pipeline_dev_intervention_hitl")
+                    || s.StartsWith("framework_pipeline_qa_intervention_hitl")
+                    || s.StartsWith("framework_pipeline_devplan_escalate_hitl")
+                    || s.StartsWith("framework_pipeline_devplan_unable_hitl")
+                    || s.StartsWith("framework_pipeline_split_task_proposal_hitl") => "⚠️",
+            "pipeline_dev_blocker_retry_idempotency"               => "🛡️",
+            var s when s.StartsWith("framework_pipeline_")          => "🔧",
             _                                                       => "✨"
         };
 
@@ -369,7 +378,20 @@ public class MockScenarioService(
                       (scenario == "framework_kickoff_crash_recovery"
                           ? "\n💡 場景 C 流程：等 Round 2 4 Agent 並行進行中（log 觀察）→ 手動 `docker compose restart aiteam-bot` → 觀察 Bot 啟動時 [Stage50-CrashRecoveryFrameworkKickoff] log 與降級策略。"
                           : "")
-                    : "";
+                    // Stage 56：補 Stage 52 / 53A / 54 / 55B 對應 hint
+                    : scenario.StartsWith("framework_design_")
+                        ? "\n⚠️ **v4 漸進遷移第四步驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Design Meeting = ON**，否則此 Mock 走 legacy DesignMeetingService。"
+                        : (scenario.StartsWith("framework_pipeline_dev_intervention_hitl")
+                            || scenario.StartsWith("framework_pipeline_qa_intervention_hitl")
+                            || scenario.StartsWith("framework_pipeline_devplan_escalate_hitl")
+                            || scenario.StartsWith("framework_pipeline_devplan_unable_hitl")
+                            || scenario.StartsWith("framework_pipeline_split_task_proposal_hitl"))
+                            ? "\n⚠️ **v4 漸進遷移第九步驗收（HITL routing）**：請於 Dashboard → 系統設定 → 啟用對應 framework Pipeline feature flag，Mock 失敗 path 會 yield BossInteraction，MockMode auto-approve 自動觸發 default action 後 Resume 推進 Pipeline。"
+                            : scenario.StartsWith("framework_pipeline_")
+                                ? "\n⚠️ **v4 漸進遷移第五～八步驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Pipeline = ON**（其他 framework flag 視場景而定）。"
+                                : scenario == "pipeline_dev_blocker_retry_idempotency"
+                                    ? "\n⚠️ **Stage 54 idempotency 驗證**：請啟用 Pipeline framework flag，驗 Round 2 success → group.Status=done 不誤判 needs_intervention。"
+                                    : "";
 
         return (true,
             $"{emoji} **[MOCK] {workflowLabel}流程已啟動**\n" +

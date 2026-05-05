@@ -237,6 +237,9 @@ public class TokenLog
     /// <summary>Stage 44：本次呼叫總成本（USD），由 Claude Code 直接提供。null = 既有資料。</summary>
     public decimal? TotalCostUsd { get; set; }
 
+    /// <summary>Stage 56：TotalCostUsd 是否為 fallback 估算值（true = 由 TokenCostEstimator 推算；false = 由 LLM provider 直接回傳）。</summary>
+    public bool IsEstimated { get; set; }
+
     public TaskItem? Task { get; set; }
 
     /// <summary>

@@ -271,18 +271,36 @@ internal static class DesignPrompts
         return true; // 解析失敗時預設需要 Demi（保守策略）
     }
 
+    /// <summary>
+    /// Stage 56：FF 四十二 修 — 改 line-iteration + try-deserialize pattern。
+    /// 對齊 TryParseDesignPetraDecision (line 288) / TryParseDesignAdjustmentEvaluation (line 305) 既有 helper pattern：
+    /// 從輸入頭往下掃，遇到 trim 後 startsWith('[') 的 line 起，把該行 + 後續所有 lines join 起來嘗試 Deserialize；
+    /// 失敗則跳到下一個 startsWith('[') 起點重試。處理三個 case：
+    ///   ① `[MOCK] 開頭` + 後接合法 array — 第一輪 `[MOCK]...` parse 失敗 → 第二輪真 array 起點 parse 成功
+    ///   ② 純 multi-line array — 第一輪 join 全文 parse 成功
+    ///   ③ 含字串 `[example]` 嵌套 — 第一輪 `[example]...` parse 失敗 → 跳到真 array 第二輪成功
+    /// </summary>
     public static List<DesignIssueDto>? TryParseDesignIssues(string content)
     {
-        try
+        if (string.IsNullOrWhiteSpace(content)) return null;
+        var lines = content.Split('\n');
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        for (var i = 0; i < lines.Length; i++)
         {
-            var start = content.IndexOf('[');
-            var end   = content.LastIndexOf(']');
-            if (start < 0 || end < 0) return null;
-            var json = content[start..(end + 1)];
-            return JsonSerializer.Deserialize<List<DesignIssueDto>>(json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var trimmed = lines[i].TrimStart();
+            if (!trimmed.StartsWith('[')) continue;
+
+            // 從第 i 行起 join 到尾，嘗試解析
+            var candidate = string.Join('\n', lines, i, lines.Length - i);
+            try
+            {
+                var result = JsonSerializer.Deserialize<List<DesignIssueDto>>(candidate, options);
+                if (result is not null) return result;
+            }
+            catch { /* 繼續往下找下一個 [ 起點 */ }
         }
-        catch { return null; }
+        return null;
     }
 
     public static DesignPetraDecision? TryParseDesignPetraDecision(string output)
