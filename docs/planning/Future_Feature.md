@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.75
+> 版本：v7.76
 > 建立日期：2026-04-01
 > 最後更新：2026-05-05
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -17,6 +17,7 @@
 > **2026-05-04 v7.73**：Stage 55A v4 漸進遷移第八步完成（v3.42.0，拆 55A/55B 第一段）— Kickoff/Design 整合到 Pipeline（議題 G3 真正解決，Stage 53A 留的核心戰略級 TODO）+ sub-task 整合 + 6+1 hooks 移除 + WorkflowEngine.cs 精簡（保留 enum + record，刪 GetDecision 邏輯）。**Forge Plan Mode 主動揭露 3 個 Aria 預掃缺口拍板**：① inner router method 名已存在 → skipFinalize 參數選項 2 ② sub-task first step = Dev_plan ≠ Kickoff（Aria 拿捏 #1 vs #11 衝突）→ 兩入口分流方案 C ③ EpicChain 不依賴 6 hooks ✅ 好消息。**Aria gate1 揭露 1 critical**（Mock 場景擴充 + Forge 自驗未做 — 時序：Forge 不知道剛寫好的 forge-self-verify skill）→ Forge 補 4 alias + 場景 B/E 自驗全綠。**驗收期 follow-up #1（戰略級）**：Forge 自驗場景 E 揭露 **Stage 54 既有遺留 bug**（MockMode auto-approve switch 漏 split_task_proposal type）→ Forge 自抓自修 — Stage 53B/54 自驗能力進化在 Stage 55A 揭露遺留 bug 真正生效。**Christ 視覺驗收 4 張截圖**：場景 B Pipeline 從 Kickoff 啟動 7 stage 全綠（議題 G3 視覺證明）+ 場景 E sub-task 流程詳情**沒有** Kickoff/Design stage（缺口 2 兩入口分流戰略級視覺證明）。Aria 校準錨 **×0.88**（482K vs 中位 545K，混合型第 8 資料點 mid 中段，跟 Stage 53B 一樣 ×0.88；8 資料點區間穩定 ×0.73-1.25）。**9 Stage 遷移 8/9 達成**，剩 Stage 55B BossInteraction HITL 推廣（27 處 caller refactor）→ v4 路線 9/9 達成。
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
+> **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
 
 ---
 
@@ -32,17 +33,17 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-02 v7.65 — Stage 48 spike 採用後）
+## 當前優先級 Top 5（2026-05-05 v7.76 — Stage 56 完成後）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **三十六** | v4 動態流程架構 — Phase B | ⚪ Phase A 已通過解鎖，**等 Stage 49+ 漸進遷移過半（Stage 52 後）再評估** | 戰略主軸（pending）— FF 三十六 拍板路線：先做 6 Stage 漸進遷移，遷移過半再評估動態流程是否有獨立價值 |
-| 2 | **四十三** | token_logs.TotalCostUsd 99.7% NULL | 🟡 中 | Trial_v5 follow-up，影響 Trial 對照組成本評估 |
-| 3 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
-| 4 | **四十二** | TryParseDesignIssues 邊界判斷重構 | 🔵 低 | Stage 25b 既有 bug，已 workaround，可搭車或留 v4 後 |
-| 5 | **十二** | Sage 全系統文件健康檢查 | 🔵 低 | Phase 1 觀察期，定期排程 |
+| 1 | **三十六** | v4 動態流程架構 — Phase B | ⚪ Phase A 已通過解鎖 + **v4 路線 9/9 達成 + Stage 56 完成 → 評估解鎖** | 戰略主軸 — Trial_v6 觀察期開跑後 + 評估動態流程是否有獨立價值（per-task session / Magentic Orchestration 行為驗證 vs hierarchical static 路線） |
+| 2 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
+| 3 | **五十** | Dashboard token 統計頁 IsEstimated 視覺區分 | 🔵 低 | Stage 56 範圍變更 follow-up；Trial_v6 觀察期間 SQL `WHERE IsEstimated = true` 可查不阻擋對照，UI 標記延後 |
+| 4 | **十二** | Sage 全系統文件健康檢查 | 🔵 低 | Phase 1 觀察期，定期排程 |
+| 5 | — | Trial_v6 排程（v4 動態架構驗證）| ⚪ 待開跑 | Stage 56 工具完備，可隨時排 — Petra Magentic Orchestration / per-task session 行為驗證；同時自然驗 Stage 56 修法 token_logs.TotalCostUsd 95%+ 寫入率達標 |
 
-> ⚠️ **戰略主軸已轉向**：v4 工具選型完成，剩下是 Stage 49-54 漸進遷移（不開新 FF，按 Stage 走）。`Stage 49 = Cody-Vera-Petra Appeal loop` 為下個工作主軸（不在 Top 5 內，因為 Stage 工作不算 FF backlog）。
+> ⚠️ **戰略主軸轉向**：v4 漸進遷移 9/9 達成 + Stage 56 觀察類整理完成 → **進入 Trial_v6 觀察期**（不開新 FF，等 Trial_v6 結論驅動 FF 三十六 Phase B 評估或新 FF 立檔）。
 
 ---
 
@@ -262,89 +263,44 @@ Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟
 
 ---
 
-## 四十二、TryParseDesignIssues 邊界判斷重構（Stage 25b 既有 bug，FF 三十五 揭露）
+## 五十、Dashboard token 統計頁 IsEstimated 視覺區分（Stage 56 範圍變更 follow-up）
 
-> 狀態：🔵 低 — 純 robustness 提升，已有 workaround（Mock prefix 改 `MOCK:` 不含 `[`）
-> 提出日期：2026-04-29（Stage 46 驗收期揭露 Stage 25b 起既有 bug）
-
-### 背景
-
-從 Stage 25b 起 `TryParseDesignIssues` 用 `IndexOf('[')` + `LastIndexOf(']')` 抓 array 邊界 — 對任何含 `[` 的前綴文字（如 `[MOCK]`）都會解析失敗。
-
-**為何從未被驗到**：Stage 25b ~ Stage 45 期間既有 1 Issue Mock 也踩這個 bug（解析失敗 → 沒建 GitHub Issue），但因為 1 < 8 規則層本來就不觸發、且**沒下游邏輯依賴 issuesJson** → bug silently 存在。
-
-**直到 Stage 46 拆 task 機制首次依賴 issuesJson 解析正確才揭露**。
-
-### 修法方向
-
-`TryParseDesignIssues` 改用更嚴謹的 JSON balance 邏輯：
-- 找對 array `[` 的第一個 token start（不是任何 `[`）
-- 逐字 parse 直到匹配 `]` 結尾（counter-based balance）
-- 對 `[` 出現在 string literal 內時忽略（quote-aware）
-
-### 規模 / 風險
-
-**規模**：S（單一 method 重構）  
-**風險**：低（純 robustness，既有 Mock fix 已 workaround）
-
-### 優先級
-
-🔵 低 — 觀察類 backlog，可搭車或留 v4 路線後
-
-### v4 兼容性
-
-純解析邏輯，與 framework / 架構無關，v4 落地後仍可獨立做。
-
----
-
-## 四十三、token_logs.TotalCostUsd 欄位寫入覆蓋率不全（FF 三十三 漏 cost 路徑）
-
-> 狀態：🟡 中 — Token 計費觀察缺真實成本資料（已有 effective tokens 涵蓋大部分需求，但成本對照失真）
-> 提出日期:：2026-04-29（Trial_v5 開跑前 Token 監控盤點時揭露）
+> 狀態：🔵 低 — Trial_v6 觀察期間 SQL `WHERE "IsEstimated" = true` 可查不阻擋對照，UI 標記延後不影響 cost 對照可信度
+> 提出日期：2026-05-05（Stage 56 子項 2 詳化第 7 步範圍變更跳過）
 
 ### 背景
 
-Stage 44 FF 三十三完成「Token 計費機制 CLI Agent 涵蓋」並升級 token_logs schema 5 個 nullable 欄位（含 `TotalCostUsd HasPrecision(18,6)`），驗收期 Christ 對 Victoria 一句話對話實證 CEO 那 1 row 寫入完整含 `TotalCostUsd $0.179531`。
+Stage 56 FF 四十三 修法新加 `token_logs.IsEstimated` 欄位（區分 `TokenCostEstimator` fallback 估算值 vs CLI/API 真實值）。原計劃書子項 2 詳化第 7 步「Dashboard token 統計頁 cost 加 `~$0.123` estimated 標記 + tooltip」評估後實際範圍超出 1 處 grid cell 上限：
 
-但 Trial_v5 開跑前 Token 監控盤點查 token_logs 揭露：
+- `TokenMonitoring.razor` **4 處顯示點**（line 64 per-agent / line 101 總計 / line 152 SortLabel / line 159 表格 cell）
+- `TokenAgentSummaryDto` 加 `IsEstimated` 聚合欄位
+- backend SQL/LINQ GROUP BY `IsEstimated` 改動
 
-```
-SELECT COUNT("TotalCostUsd") AS filled, COUNT(*) AS total
-  FROM token_logs WHERE "CreatedAt" >= date_trunc('month', now())
-→ filled = 1 / total = 331 → 99.7% NULL
-```
-
-### 假設根因（待 Forge 探索確認）
-
-1. **API layer Provider（Anthropic/Gemini）未回傳 cost 細節** — Stage 44 只在 ClaudeCodeService（CLI 路徑）解 `total_cost_usd`，API 層 LlmResponse 可能沒這欄位
-2. **CLI 路徑 helper 套用範圍未覆蓋全 16 caller** — 可能某些路徑沒走 TokenLogService 共用 helper
-
-### 影響
-
-- token_logs 99.7% row 缺 cost → Dashboard `/tokens` 頁顯示成本不準（但 token 量準）
-- Trial 對照組（Trial_v4 $4.99 vs Trial_v5 ?）需手算估算
-- 不影響 token 守門邏輯（守門讀 input + output，非 cost）
+對齊計劃書原文「若 razor 改動超出 1 處 grid cell 則留 follow-up FF」拍板跳過。
 
 ### 修法方向
 
-需 Forge 探索後確認：
-- 若是 API layer 漏：檢查 Anthropic / Gemini Provider 是否 return cost 欄位
-- 若是 CLI 路徑覆蓋率不全：grep 全 ClaudeCodeService caller 確認 ParseJsonOutput 3-tuple 第 3 元素 Usage 是否被丟棄
+- `TokenMonitoring.razor` 4 處顯示點加 estimated 標記（`~$0.123` 前綴 + tooltip「fallback 估算值」）
+- `TokenAgentSummaryDto` 加 `IsEstimated` bool 聚合
+- backend SQL/LINQ GROUP BY 加 IsEstimated 維度
 
 ### 規模 / 風險
 
-**規模**：S-M（探索後可能單檔 fix 或多 caller 串接補洞）  
-**風險**：低（純資料完整性，不影響功能）
+**規模**：S（單頁 razor + DTO + SQL，3 layer 改動但範圍可控）
+**風險**：極低（純 UI 視覺 + 聚合 layer，不影響 cost 寫入邏輯）
 
 ### 優先級
 
-🟡 中 — Trial_v5 結束後盤點，可獨立 Stage 或搭車 FF 十一
+🔵 低 — Trial_v6 觀察期間 SQL 可手查 `WHERE IsEstimated = true`，UI 標記延後不阻擋 cost 對照可信度。觀察期累積真實 estimated row 後再評估視覺呈現需求。
 
 ### v4 兼容性
 
-與 framework 無關，v4 落地後仍可獨立做。
+純 UI / DTO 改動，與 framework / 架構無關。
 
----
+### 注（跨欄位來源差異 — Stage 56 揭露）
+
+`TokenMonitoring` 既有 `EstimatedCostUsd` 欄位是用 `app_settings` 兩 key（`TokenPricing:InputPer1kUsd` / `OutputPer1kUsd`）client-side 估算的，與 `token_logs.TotalCostUsd` 欄位**不同來源**（後者是 Stage 56 修法寫入的，含 CLI 真實值 + Anthropic API path 用 `TokenCostEstimator` per-model 4 欄位估算）。本 FF 修法是「新增 IsEstimated 視覺辨識」非「對齊既有 EstimatedCostUsd 顯示」。
+
 
 ## v4 後重評估 FF 簡表
 

@@ -11,16 +11,18 @@
 
 ## [Unreleased]
 
-- **🎉🎉🎉 v4 漸進遷移 9/9 完整達成 🎉🎉🎉** — [Stage 55B](docs/planning/Stage_55B_Roadmap.md) Session B 5 routing HITL refactor 完成（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A）+ 5 routing 場景 + Session A regression 全綠。**Stage 55B 整體完整結案**（v3.44.0）— **首次拆 Session 戰術成功 + Stage 51 試點 framework HITL pattern 全面 wire 完成**。
-- **下個動作候選**：① **Stage 56 Trial v6 前置條件統包**（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）/ ② Trial_v6 排程（v4 動態架構驗證 — Petra Magentic Orchestration / per-task session 行為驗證）/ ③ FF 三十六 Phase B 動態流程架構評估
-- **9 Stage 遷移路線進度**：✅ **49** ✅ **50** ✅ **51 ⭐** ✅ **52** ✅ **53A ⭐** ✅ **53B ⭐** ✅ **54** ✅ **55A** ✅ **55B（Session A + B）⭐** — **v4 路線 9/9 達成 🎉**
-- **FF 三十六 Phase B 動態流程架構**：路線 = **Stage 56 後再評估**（v4 路線 9/9 已達成，可進入 Trial_v6 觀察期）
-- **4 戰略議題拍板紀錄（Stage 55B）**：議題 1 = **1A**（proposal 留 Stage 56 — Forge spike F6 揭露 ProposalConfirmationService 整合衝突）/ 議題 2 = **2C**（Pattern A inter-Executor message yield 主 + Stage 51 試點 mid_interrupt 獨立保留 — Forge 揭露 Stage 55A 已採 Pattern A）/ 議題 3 = **3A**（intervention/merge_notify 留 fire-and-forget — ack only no routing 切 yield-resume 收益 = 0）/ 議題 4 = **4A**（拆 Session B — Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）
-- **FF 三十二 ✅** / **FF 三十三 ✅** / **FF 三十四 ✅ + FF 三十七 ✅** / **FF 三十五 ✅ + FF 三十九 ✅** / **FF 四十七 ✅ + FF 十一 ✅** / **FF 四十九 ✅** / **Stage 49 v4 首發 ✅** / **Stage 50 v4 第二步 ✅** / **Stage 51 v4 第三步 ✅ ⭐** / **Stage 52 v4 第四步 ✅** / **Stage 53A v4 第五步 ✅ ⭐** / **Stage 53B v4 第六步 ✅ ⭐** / **Stage 54 v4 第七步 ✅** / **Stage 55A v4 第八步 ✅** / **Stage 55B v4 第九步 ✅ ⭐ — v4 路線 9/9 完成 🎉**
-- **新立 FF 四十 / 四十一 / 四十二**（Stage 46 驗收期 follow-up 採集）
-- **Stage 48 揭露候選 FF**（待 Christ 拍板）：Windows-only Process.Start + UseShellExecute=false 不 honor PATHEXT for `.cmd`（production hardening FF）
+- **Stage 56 Trial_v6 前置條件統包完成** — Dashboard MockScenarioCard 補全 33 framework_* 場景 + FF 四十二 + FF 四十三 + conventions 補 2 段 + Stage 48 PATHEXT 候選 FF 落地 conventions（不立 FF）+ WorkflowEngine.cs enum/record 殘留 grep 揭露為跨 23 service fundamental type（補 conventions 註明不可移除）。**Trial_v6 開跑前工具完備**。
+- **下個動作候選**：① **Trial_v6 排程**（v4 動態架構驗證 — Petra Magentic Orchestration / per-task session 行為驗證 + Stage 56 修法 production 自然驗 token_logs.TotalCostUsd 95%+ 寫入率達標）/ ② FF 三十六 Phase B 動態流程架構評估（v4 路線 9/9 已達成，Stage 56 完成，可進入評估）/ ③ 新立 FF 五十（Dashboard token 統計頁 IsEstimated 視覺區分，Stage 56 範圍變更留的 follow-up）
+- **v4 漸進遷移完整路線 9/9 達成 🎉 + Trial_v6 前置條件就緒**
+- **FF 四十二 ✅ + FF 四十三 ✅**（Stage 56 完成）
+- **Stage 48 PATHEXT 候選 FF 落地** ✅ — 寫入 `docs/conventions/csharp.md`（Linux Docker production 無此問題不立 FF，Windows dev 機 onboarding 預警）
+- **新立 FF 五十**（Stage 56 follow-up）：Dashboard token 統計頁 IsEstimated 視覺區分（estimated 標記 + tooltip）
 
 ---
+
+## [3.45.0] — 2026-05-05 — [Stage 56](docs/planning/Stage_56_Roadmap.md) Trial_v6 前置條件統包 — Dashboard MockScenarioCard 補全 33 場景 + FF 四十二/四十三 修 + conventions 補 2 段
+
+v4 路線 9/9 達成後第一個觀察類整理 Stage，Trial_v6 開跑前工具完備。**4 件事一氣呵成**：① **Dashboard MockScenarioCard 補全 33 framework_* 場景**（Stage 49 5 + 50 5 + 51 4 + 52 6 + 53A 6 + 54 2 + 55B 5 = 33；MockScenarioCard.razor 加 33 個 MudSelectItem + MockScenarioService.cs emoji map / frameworkHint switch 補 4 條 startsWith 分支 — 範圍變更：原計劃僅 Dashboard UI，現含 service 端 frameworkHint switch 補 feature flag 提示）② **FF 四十三 修**（路線 b + 議題 spike-2 選項 B）— 99.7% NULL → 95%+ 寫入：兩 path 校準（Path A CLI single-shot：`ClaudeCodeService.TryParseUsage` 多欄位兼容 total_cost_usd / cost_usd / usage.cost_usd + LogDebug dump fallback；Path B Anthropic API direct 既有 Stage 44 設計缺口連 TotalCostUsd 都不寫 → `TokenTrackingProvider` line 113-126 中央寫入點補 cost 估算 + IsEstimated 寫入）+ 新建 `TokenCostEstimator`（Anthropic 官方 per-model 4 欄位 hardcoded dict：Opus/Sonnet/Haiku × input/output/cache_creation/cache_read 12 數字）+ token_logs.IsEstimated 欄位 + Migration `Stage56TokenLogsIsEstimated` 區分真實值 vs 估算值 ③ **FF 四十二 修** — `TryParseDesignIssues` `[MOCK]` 前綴邊界誤判 → 改 line-iteration + try-deserialize pattern 對齊既有 `TryParseDesignPetraDecision` helper + 新建 `src/AiTeam.Bot.Tests/`（xUnit + InternalsVisibleTo）+ DesignPromptsTests.cs 4 case 全 passed ④ **conventions 補 2 段** — `csharp.md` 加「跨 service fundamental type 標記（WorkflowType/WorkflowStep）」+「Windows dev 機 Process.Start + .cmd PATHEXT 解法」（Stage 48 候選 FF 落地）。**Aria 閘門一發現 4 critical**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests project 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B。**Aria 閘門一二檢揭露子項 7 範圍變更紀錄不完整**（Dashboard 視覺區分跳過評估 4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ Forge 補正 commit `43e5454`，留 follow-up FF 五十。**自驗 V1/V3/V4/V5 全綠 + V2 既有設計 MockMode bypass 待 Trial_v6 真實任務驗**（MockClaudeCodeService Usage=null → LogCliUsageAsync early return 屬 Stage 17 既有 MockMode 不污染 Dashboard 設計，非本 Stage 缺陷）。**0 follow-up bug**（觀察類整理性質單純）。**Aria 校準錨 ×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。詳見 Stage 56 Roadmap。commits：`8054f64`(主) + `43e5454`(範圍變更紀錄補正) + `e8e35ad`(自驗結果)。
 
 ## [3.44.0] — 2026-05-05 — [Stage 55B Session B](docs/planning/Stage_55B_Roadmap.md) ⭐ v4 漸進遷移第九步完整結案 — 5 routing types HITL refactor + v4 路線 9/9 達成 🎉
 
