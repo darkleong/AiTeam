@@ -1,6 +1,7 @@
 using AiTeam.Data;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.Dtos;
+using AiTeam.Shared.Exceptions;
 using AiTeam.Shared.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -60,7 +61,7 @@ public class DashboardAgentService(AppDbContext db)
         CancellationToken cancellationToken = default)
     {
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return isActive;
+        if (agent is null) throw new AgentNotFoundException(agentId);
 
         agent.IsActive = isActive;
         await db.SaveChangesAsync(cancellationToken);
@@ -74,7 +75,7 @@ public class DashboardAgentService(AppDbContext db)
         CancellationToken cancellationToken = default)
     {
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return;
+        if (agent is null) throw new AgentNotFoundException(agentId);
         agent.TrustLevel = trustLevel;
         await db.SaveChangesAsync(cancellationToken);
     }
