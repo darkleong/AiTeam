@@ -23,7 +23,7 @@ public partial class AgentSettings
     private IDialogService DialogService { get; set; } = null!;
 
     [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
+    private INotificationService NotificationService { get; set; } = null!;
 
     #endregion
 
@@ -68,11 +68,19 @@ public partial class AgentSettings
     {
         if (_isTogglingActive) return;
         _isTogglingActive = true;
-
-        agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
-        _saveMessage = $"{agent.Name} 已{(agent.IsActive ? "啟用" : "停用")}";
-
-        _isTogglingActive = false;
+        try
+        {
+            agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
+            _saveMessage = $"{agent.Name} 已{(agent.IsActive ? "啟用" : "停用")}";
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"切換 Agent 狀態失敗：{ex.Message}");
+        }
+        finally
+        {
+            _isTogglingActive = false;
+        }
     }
 
     private async Task OpenCreateAgentDialogAsync()
@@ -91,21 +99,43 @@ public partial class AgentSettings
     {
         _isSaving    = true;
         _saveMessage = null;
-
-        await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
-        agent.TrustLevel = _trustLevels[agent.Id];
-
-        _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
-        _isSaving    = false;
+        try
+        {
+            await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
+            agent.TrustLevel = _trustLevels[agent.Id];
+            _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"儲存信任等級失敗：{ex.Message}");
+        }
+        finally
+        {
+            _isSaving = false;
+        }
     }
 
     private async Task RestartBotAsync()
     {
         _isRestarting = true;
-        var success = await BotService.RestartBotAsync();
-        _showRestartConfirm = false;
-        _saveMessage = success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定";
-        _isRestarting = false;
+        try
+        {
+            var success = await BotService.RestartBotAsync();
+            _showRestartConfirm = false;
+            _saveMessage = success
+                ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態"
+                : "重啟失敗，請確認 Bot 服務設定";
+            if (!success)
+                NotificationService.ShowError("Bot 重啟失敗，請確認 Bot 服務設定");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Bot 重啟失敗：{ex.Message}");
+        }
+        finally
+        {
+            _isRestarting = false;
+        }
     }
 
     /// <summary>
@@ -119,7 +149,7 @@ public partial class AgentSettings
         if (string.IsNullOrEmpty(agent.Model) || !validModels.Contains(agent.Model))
         {
             agent.Model = null;
-            Snackbar.Add($"Provider 已改為 {newProvider}，請選擇對應的 Model。", Severity.Warning);
+            NotificationService.ShowWarning($"Provider 已改為 {newProvider}，請選擇對應的 Model。");
             return;
         }
         await SaveProviderModelAsync(agent);
@@ -146,7 +176,7 @@ public partial class AgentSettings
                 agent.MonthlyTokenLimitK);
             if (!ok)
             {
-                Snackbar.Add($"{agent.Name} Token Limit 儲存失敗：查無 Agent", Severity.Error);
+                NotificationService.ShowError($"{agent.Name} Token Limit 儲存失敗：查無 Agent");
                 return;
             }
             await BotService.ReloadCacheAsync("agent-config");
@@ -156,11 +186,11 @@ public partial class AgentSettings
             var monthlyStr = agent.MonthlyTokenLimitK > 0
                 ? $"{agent.MonthlyTokenLimitK}K"
                 : "未設定（fallback appsettings）";
-            Snackbar.Add($"{agent.Name}：日限={dailyStr} / 月限={monthlyStr} 已更新，Bot Cache 已刷新。", Severity.Success);
+            NotificationService.ShowSuccess($"{agent.Name}：日限={dailyStr} / 月限={monthlyStr} 已更新，Bot Cache 已刷新。");
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            NotificationService.ShowError($"儲存失敗：{ex.Message}");
         }
         finally
         {
@@ -179,20 +209,20 @@ public partial class AgentSettings
             var ok = await AgentService.UpdateProviderModelAsync(agent.Id, agent.Provider, agent.Model);
             if (!ok)
             {
-                Snackbar.Add($"{agent.Name} 儲存失敗：查無 Agent", Severity.Error);
+                NotificationService.ShowError($"{agent.Name} 儲存失敗：查無 Agent");
                 return;
             }
             // Stage 38：通知 Bot 端快取失效，下次任務立即生效（無需重啟）
             await BotService.ReloadCacheAsync("agent-config");
-            Snackbar.Add($"{agent.Name}：Provider={agent.Provider}、Model={agent.Model} 已更新，Bot Cache 已刷新。", Severity.Success);
+            NotificationService.ShowSuccess($"{agent.Name}：Provider={agent.Provider}、Model={agent.Model} 已更新，Bot Cache 已刷新。");
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            NotificationService.ShowError($"儲存失敗：{ex.Message}");
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            NotificationService.ShowError($"儲存失敗：{ex.Message}");
         }
         finally
         {
