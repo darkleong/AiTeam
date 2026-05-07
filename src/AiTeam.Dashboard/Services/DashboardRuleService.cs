@@ -59,8 +59,8 @@ public class DashboardRuleService(AppDbContext db)
         bool isActive,
         CancellationToken cancellationToken = default)
     {
-        var rule = await db.Rules.FindAsync([id], cancellationToken);
-        if (rule is null) return;
+        var rule = await db.Rules.FindAsync([id], cancellationToken)
+            ?? throw new KeyNotFoundException($"找不到規則 {id}");
         rule.IsActive = isActive;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -68,8 +68,8 @@ public class DashboardRuleService(AppDbContext db)
     /// <summary>刪除規則。</summary>
     public async Task DeleteRuleAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var rule = await db.Rules.FindAsync([id], cancellationToken);
-        if (rule is null) return;
+        var rule = await db.Rules.FindAsync([id], cancellationToken)
+            ?? throw new KeyNotFoundException($"找不到規則 {id}");
         db.Rules.Remove(rule);
         await db.SaveChangesAsync(cancellationToken);
     }

@@ -59,8 +59,8 @@ public class DashboardAgentService(AppDbContext db)
         bool isActive,
         CancellationToken cancellationToken = default)
     {
-        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return isActive;
+        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken)
+            ?? throw new KeyNotFoundException($"找不到 Agent {agentId}");
 
         agent.IsActive = isActive;
         await db.SaveChangesAsync(cancellationToken);
