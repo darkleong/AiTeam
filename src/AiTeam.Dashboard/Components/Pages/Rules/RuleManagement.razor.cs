@@ -13,7 +13,7 @@ public partial class RuleManagement
     private DashboardBotService BotService { get; set; } = null!;
 
     [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
+    private INotificationService NotificationService { get; set; } = null!;
 
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
@@ -76,8 +76,8 @@ public partial class RuleManagement
         _isReloading = true;
         var ok = await BotService.ReloadCacheAsync("rules");
         _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則快取已更新）" : "套用失敗，請確認 Bot 服務正常",
-            ok ? Severity.Success : Severity.Error);
+        if (ok) NotificationService.Success("已套用變更（規則快取已更新）");
+        else    NotificationService.Error("套用失敗，請確認 Bot 服務正常");
     }
 
     private List<(string Label, string Value)> GetDialogAgentOptions()
@@ -120,14 +120,31 @@ public partial class RuleManagement
 
     private async Task ToggleActiveAsync(Rule rule, bool isActive)
     {
-        await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
-        rule.IsActive = isActive;
+        try
+        {
+            await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
+            rule.IsActive = isActive;
+            NotificationService.Success($"規則已{(isActive ? "啟用" : "停用")}");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Error($"狀態更新失敗：{ex.Message}");
+        }
     }
 
     private async Task DeleteRuleAsync(Guid id)
     {
-        await RuleService.DeleteRuleAsync(id);
-        _rules.RemoveAll(r => r.Id == id);
+        try
+        {
+            await RuleService.DeleteRuleAsync(id);
+            _rules.RemoveAll(r => r.Id == id);
+            NotificationService.Success("規則已刪除");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Error($"刪除失敗：{ex.Message}");
+            _rules = await RuleService.GetAllRulesAsync();
+        }
     }
 
     #endregion

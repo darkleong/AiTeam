@@ -1,4 +1,5 @@
 using AiTeam.Data;
+using AiTeam.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Dashboard.Services;
@@ -60,7 +61,7 @@ public class DashboardRuleService(AppDbContext db)
         CancellationToken cancellationToken = default)
     {
         var rule = await db.Rules.FindAsync([id], cancellationToken);
-        if (rule is null) return;
+        if (rule is null) throw new RuleNotFoundException();
         rule.IsActive = isActive;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -69,7 +70,7 @@ public class DashboardRuleService(AppDbContext db)
     public async Task DeleteRuleAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var rule = await db.Rules.FindAsync([id], cancellationToken);
-        if (rule is null) return;
+        if (rule is null) throw new RuleNotFoundException();
         db.Rules.Remove(rule);
         await db.SaveChangesAsync(cancellationToken);
     }

@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
     <!-- 集中版本號管理（Future Feature 十五）。改版只需修改此檔案。 -->
-    <Version>3.45.0</Version>
-    <AssemblyVersion>3.45.0</AssemblyVersion>
-    <FileVersion>3.45.0</FileVersion>
+    <Version>3.45.1</Version>
+    <AssemblyVersion>3.45.1</AssemblyVersion>
+    <FileVersion>3.45.1</FileVersion>
     <!-- 明確設定 InformationalVersion，避免 SDK 附加 commit hash 後綴 -->
     <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>
