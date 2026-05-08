@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.77
+> 版本：v7.78
 > 建立日期：2026-04-01
-> 最後更新：2026-05-08
+> 最後更新：2026-05-09
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
@@ -413,6 +413,196 @@ Trial_v6 預算自然耗盡時揭露 API 餘額用盡（Anthropic API 401 / insu
 ### v4 兼容性
 
 純 v4 framework + Token 守門擴充，不影響業務邏輯層。
+
+---
+
+## 十、Dashboard UI 細節打磨（第四批）
+
+> 狀態：低優先級 — UI 組織與使用便利性優化，待 Christ 確認完整清單後排入 Stage
+> 重新分類：2026-05-09（從 v4_eval 升 active — hierarchical static 沒重設計 UI，仍需做）
+
+### 修法方向
+
+待 Christ 確認完整清單（Dashboard 系統設定 / 任務列表 / 流程追蹤 / Agent 設定 / 規則管理等頁面 UX 整體打磨清單）。
+
+### 規模 / 風險
+
+**規模**：M-L（依清單範圍）/ **風險**：低
+
+### 優先級
+
+低 — 業務上不阻塞，UX 優化性質
+
+### v4 兼容性
+
+純 Dashboard UI 改動，與 framework 無關。
+
+---
+
+## 二十二、Agent 命名一致性（守門 + 名稱映射）
+
+> 狀態：中 — Agent 名稱混雜（Cody/Dev/Vera/Reviewer 等），需建統一守門 + 名稱映射
+> 重新分類：2026-05-09（從 v4_eval 升 active — hierarchical static Worker pool 命名規則沒改變）
+
+### 修法方向
+
+建立 Agent 名稱映射常數表（`AgentNames.cs`）+ 跨層 (Discord channel / DB AssignedAgent / Workflow executor key) 守門檢查。
+
+### 規模 / 風險
+
+**規模**：S-M（建 const + 跨層守門）/ **風險**：低
+
+### 優先級
+
+中 — Christ 觀察 Dashboard 顯示混淆時優先處理
+
+### v4 兼容性
+
+純 const + 守門，與 framework 無關。
+
+---
+
+## 二十五、Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）
+
+> 狀態：中 — Trial_v6 進一步揭露 Cody/Petra prompt 對齊系統性議題（×3 確認）
+> 重新分類：2026-05-09（從 v4_eval 升 active — Trial_v6 揭露議題加重）
+
+### 背景
+
+Trial_v6 Phase 1/2/3 三個 phase Cody Dev_plan 都 escalate（×3 系統性確認）— Cody 寫「現況確認」表格 vs Petra 期待「實作步驟說明」結構衝突。對齊 Trial_v5 Checkpoint 4 同議題重演。
+
+### 修法方向
+
+- Cody Dev_plan prompt 補強「實作步驟說明」結構規範（Step 1 / Step 2 / 改哪些檔案 / 加哪些 class / DI 註冊等）
+- 對齊 Petra prompt 期待結構（CLAUDE_Cody.md vs CLAUDE_Petra.md prompt 對齊 audit）
+
+### 規模 / 風險
+
+**規模**：S-M（純 prompt 改寫 + Trial_v7 重跑驗證）/ **風險**：低
+
+### 優先級
+
+中 — Stage 57+ 候選（與 FF 五十一/五十二/五十三 一起處理 Cody/Petra prompt 對齊群組）
+
+### v4 兼容性
+
+純 prompt 改動，與 framework 無關。
+
+---
+
+## 四十、Stage 46 Dashboard razor UI 接線（epic 折疊 + 進度條 + 暫停按鈕）
+
+> 狀態：中-高 — Stage 46 FF 三十五自動拆任務的 Dashboard UI 接線未完成
+> 重新分類：2026-05-09（從 v4_eval 升 active — hierarchical static UI 沒重設計，仍需做）
+
+### 背景
+
+Stage 46 自動拆任務（FF 三十五）已完成 backend 邏輯（EpicChain + sub-task chain），但 Dashboard razor UI 接線未完成：epic 折疊面板 / sub-task 進度條 / 暫停 epic 按鈕等 UX 缺失。Trial_v6 揭露 parent group 流程追蹤不顯示 sub-task 內部 stage（議題 #5）對應這個 FF。
+
+### 修法方向
+
+- Dashboard 流程追蹤頁加 epic 折疊面板（parent group 顯示 N sub-task 子層）
+- sub-task 進度條（顯示 sub-task 內部 stage：Dev_plan/Dev/Reviewer/QA/Doc）
+- 暫停整個 epic 按鈕（對應 EpicPaused 邏輯）
+
+### 規模 / 風險
+
+**規模**：M（razor + DTO + SignalR push）/ **風險**：低
+
+### 優先級
+
+中-高 — Trial_v6 觀察期間 Christ 體驗痛點（議題 #5），Stage 57+ 候選
+
+### v4 兼容性
+
+純 Dashboard UI 接線，與 framework 無關。
+
+---
+
+## 四十五、Dashboard 重試/跳過後舊 failed task 沒清理（MarkGroupDoneOrIntervention 誤判）
+
+> 狀態：中 — Trial_v6 議題 #9 直接踩（generic intervention 訊息「Vera 0 次修復後仍發現問題」誤導，實際是 Sage escalate）
+> 重新分類：2026-05-09（從 archived_v4 升 active — v4 hierarchical static 仍依賴 task status 聚合判斷）
+
+### 背景
+
+Trial_v5 + Trial_v6 都觀察：Christ 按「跳過審核」/「重啟 Dev」action 後前置 failed task 沒被自動清除 → `MarkGroupDoneOrIntervention` helper 看到歷史 failed task 仍掛在 group → 標 needs_intervention + 建 generic intervention BossInteraction（訊息誤導實際根因）。
+
+### 修法方向
+
+- Christ action 標記後（跳過審核 / 重啟 Dev）→ 對應 task 標 cancelled / superseded
+- `MarkGroupDoneOrIntervention` 邏輯加「忽略已被 superseded 的 failed task」
+- generic intervention 訊息模板按真實 escalate source 動態化（對齊 FF 五十三第三 Agent fail-fast 統一精神）
+
+### 規模 / 風險
+
+**規模**：S-M（純 status 邏輯 + 訊息模板）/ **風險**：中（涉及 group 判定邏輯，需 Trial 對照組重驗）
+
+### 優先級
+
+中 — Stage 57+ 候選（跟 FF 五十一/五十二/五十三 一起處理）
+
+### v4 兼容性
+
+純 status 聚合 + 訊息模板，與 framework 無關。
+
+---
+
+## 四十六、ImplementationNote 寫入路徑與 PR Body 對齊（Sage 過嚴 escalate + Cody 實作範本補強）
+
+> 狀態：中 — Trial_v6 議題 #8 直接踩（Cody 跳過 Dev_plan 後沒寫 ImplementationNote → Sage 歸檔失敗）
+> 重新分類：2026-05-09（從 archived_v4 升 active — v4 hierarchical static Sage 仍看 ImplementationNote）
+
+### 背景
+
+Trial_v5 PR #170：Cody PR Body 寫了完整實作說明，但 DB `task_groups.ImplementationNote = 0 字` → Sage escalate 誤判 Cody 沒寫實作。Trial_v6 Phase 1 / 3 同議題重演（Cody 跳過 Dev_plan 後沒寫 ImplementationNote → Sage 歸檔失敗）。
+
+### 修法方向
+
+- Cody Dev / Dev_fix prompt 強制寫 ImplementationNote DB 欄位（不論是否走 Dev_plan）
+- Sage 歸檔流程加備援 source（PR Body / commit log）— 不只看 ImplementationNote
+- 兩條路雙保險
+
+### 規模 / 風險
+
+**規模**：S-M（Cody prompt + Sage 邏輯）/ **風險**：低
+
+### 優先級
+
+中 — Stage 57+ 候選
+
+### v4 兼容性
+
+純 Agent prompt + 歸檔邏輯，與 framework 無關。
+
+---
+
+## 四十八、Cody Dev_plan 階段 maxTurns 配置不足（複雜任務踩 100%）
+
+> 狀態：中-高 — Trial_v6 Phase 1/2/3 三個 phase Cody Dev_plan 全 escalate
+> 重新分類：2026-05-09（從 v4_eval 升 active — Trial_v6 真實任務驗證觸發）
+
+### 背景
+
+Trial_v5 / Trial_v6 觀察 Cody Dev_plan 在複雜任務踩 maxTurns 100% → escalate dev_plan_unable HITL routing。對應 FF 二十五（Cody/Petra prompt 對齊問題）的子議題 — maxTurns 不夠是 prompt 對齊問題的物理表現。
+
+### 修法方向
+
+- Cody Dev_plan maxTurns 從預設值（推測 40）提升至 80-100
+- 或動態化（Dashboard 可調，對齊 FF 十九 Agent maxTurns 動態化精神）
+- 跟 FF 二十五一起處理 prompt 對齊根因
+
+### 規模 / 風險
+
+**規模**：S（純 config 改動）/ **風險**：低
+
+### 優先級
+
+中-高 — Trial_v6 系統性議題確認（×3 phase 都踩），Stage 57+ 候選
+
+### v4 兼容性
+
+純 config 動態化，與 framework 無關。
 
 
 ## v4 後重評估 FF 簡表

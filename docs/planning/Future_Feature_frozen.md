@@ -102,6 +102,116 @@ Victoria 在 pipeline 完成前整理一份輕量交付摘要（關鍵結果 + �
 - Trial_v6+ 觀察期間頻繁出現「做出來不是我要的」case（≥ 3 次）
 - v4 動態架構落地後 Petra 自我檢查仍擋不下需求偏離
 
+
+---
+
+## 五、CEO 長期記憶升級（向量搜索版）
+
+> 狀態：低優先級 — Stage 15 簡易版（DB + 全量載入 prompt）目前夠用
+> 重新分類：2026-05-09（從 archived_v4 移回 frozen — v4 hierarchical static 沒吸收動態架構假設未實現）
+
+### 解凍觸發條件
+
+- 簡易版記憶量超過 prompt 容量限制（~100 筆 / ~10,000 tokens）
+- Christ 反映「Victoria 記憶不足」case >= 3 次
+
+### 修法方向（保留供未來 reference）
+
+PostgreSQL 啟用 `pgvector` + `CeoMemory.Embedding` 欄位 + Embedding API 寫入 + 語意搜索撈相關 5-10 筆。
+
+### v4 兼容性
+
+純 DB / Provider 改動，與 framework 無關。
+
+---
+
+## 二十三、Orchestration 異常退出 Crash Recovery 盲點
+
+> 狀態：待觀察 — Stage 54 Crash Recovery 全切 framework Checkpointing 後行為改變
+> 重新分類：2026-05-09（從 archived_v4 移回 frozen — Stage 54 後盲點是否仍存在待 Trial_v7+ 觀察）
+
+### 背景
+
+Stage 31/37 設計前提「crash = 進程被 kill → finally 沒機會跑 → flag 留在非 null」對「邏輯 exception」場景失效（exception 沿 call stack 上傳但 finally 正常清 flag → Recovery 掃不到 → group 卡死）。
+
+### 解凍觸發條件
+
+- Trial_v7+ 觀察期間踩到 logic exception 卡死 case >= 1 次
+- 或 Stage 57+ 修 FF 五十一/五十二 過程中順帶處理
+
+### v4 兼容性
+
+Stage 54 framework Checkpointing 已改變行為，需重新驗是否仍踩。
+
+---
+
+## 三十、tech_improvement 工作流的 ghost Dev task
+
+> 狀態：待觀察 — Trial_v3 觀察的 ghost Dev task 在 v4 hierarchical static 是否仍踩需驗
+> 重新分類：2026-05-09（從 archived_v4 移回 frozen — hierarchical static 仍有固定 pipeline，可能仍踩）
+
+### 背景
+
+Trial_v3 觀察 tech_improvement 流程任務列表出現 ghost Dev task 永遠 stuck — `ShowDirectAgentConfirm` 建初始 Dev TaskItem 但 Orchestrator 另起爐灶建 Dev_plan + Dev。
+
+### 解凍觸發條件
+
+- Trial_v7+ 觀察 tech_improvement 任務仍出現 ghost task
+- 或 Stage 57+ 順帶清
+
+### v4 兼容性
+
+v4 hierarchical static 仍有固定 pipeline，待 Trial_v7+ 觀察是否仍踩。
+
+---
+
+## 十四、Agent I/O 完整記錄（待討論）
+
+> 狀態：待討論 — 等 framework telemetry 涵蓋度確認後再決定
+> 重新分類：2026-05-09（從 v4_eval 移到 frozen — MS Agent Framework 內建 telemetry 可能涵蓋）
+
+### 解凍觸發條件
+
+- 確認 MS Agent Framework telemetry 涵蓋度（觀察 Stage 49-55B 已產生的 telemetry）
+- 若涵蓋足夠 → 移到 archived（framework 內建吸收）
+- 若不夠 → 升 active 補強
+
+### v4 兼容性
+
+依 framework telemetry 涵蓋度決定。
+
+---
+
+## 十九、Agent maxTurns 動態化（Dashboard 可調）
+
+> 狀態：待觀察 — 跟 FF 四十八（Cody Dev_plan maxTurns 配置不足）合併考慮
+> 重新分類：2026-05-09（從 v4_eval 移到 frozen — FF 四十八是 specific 子議題，本 FF 涵蓋更廣）
+
+### 解凍觸發條件
+
+- FF 四十八 active 動工時順帶評估是否升級為「全 Agent maxTurns 動態化」
+- 或除 Cody Dev_plan 外其他 Agent 也踩 maxTurns 不足
+
+### v4 兼容性
+
+純 prompt 配置動態化，與 framework 無關。
+
+---
+
+## 三十八、跨專案能力研究（多 repo / scaffold / 環境建置 spike）
+
+> 狀態：低優先級 — 子議題 B 耦合 FF 三十六 Phase B 動態架構
+> 重新分類：2026-05-09（從 v4_eval 移到 frozen — 等 FF 三十六 Phase B 評估後再看）
+
+### 解凍觸發條件
+
+- FF 三十六 Phase B 動態流程架構評估完成
+- 或 Christ 真實「在第二個 repo 工作」需求出現
+
+### v4 兼容性
+
+子議題 B（per-task session 跨 repo）耦合 FF 三十六 Phase B 設計。
+
 ---
 
 > 此檔僅含冷凍 FF。其他類型 FF 拆分如下：

@@ -3,8 +3,9 @@
 > 從 `Future_Feature.md` 拆出（2026-05-01）
 > 作用：保留歷史脈絡 — 受 v4 路線影響不再需要獨立做的 FF，避免 git diff 噪音
 
-**歸檔分類**：
-- **A. v4 動態架構吸收**：MS Agent Framework + 動態調度 + per-task session + 重啟重跑模式下，這些議題自動消失（7 個）
+**歸檔分類**（2026-05-09 Trial_v6 後重新分類）：
+- **重新分類紀錄（2026-05-09）**：FF 五/二十三/三十 → 移到 frozen / FF 四十五/四十六 → 升回 active / FF 四十一/四十四 → 已吸收 FF 五十一/五十三
+- **A. v4 動態架構吸收**：MS Agent Framework + 動態調度 + per-task session + 重啟重跑模式下，這些議題自動消失（**2 個 — Trial_v6 後 5 個重新分類；剩餘 2 個已吸收進 FF 五十一/五十三**）
 - **C. Framework 內建**：FF 四十九 內建涵蓋（2 個）
 - **F. Trial 歷程完成**：Trial_v2/v3/v4/v5 已完成驗證任務（2 個）
 
@@ -12,187 +13,15 @@
 
 # A. v4 動態架構吸收（7 個）
 
-## 五、CEO 長期記憶升級（向量搜索版）
+## 四十一、Stage 46 Sequential 鏈精修（已吸收 FF 五十一）
 
-> 歸檔理由：v4 動態架構下 Victoria 變 Discord 秘書 / Router，不負責業務邏輯，沒「長期記憶」需求；per-task session 屬 Petra 而非 Victoria
+> 狀態：✅ **已吸收進 [FF 五十一](Future_Feature.md#五十一pipeline-framework-race-condition)**（Pipeline framework race condition）— Trial_v6 揭露 race + Status sync 同根因，子議題（race / Status sync）併入 FF 五十一處理。
+> 提出日期：2026-04-29 / 重新分類：2026-05-09（Trial_v6 結案後）
 
-### 背景
+## 四十四、TokenTrackingProvider 守門 estimatedTokens 缺陷（已吸收 FF 五十三）
 
-Stage 15 的長期記憶採用簡易版（DB 表 + 全量載入 prompt），在記憶量少時（< 100 筆）足夠使用。但隨著使用時間增長，記憶量會超過 prompt 容量限制。
-
-### 簡易版 vs 向量搜索版
-
-| | 簡易版（Stage 15） | 向量搜索版（本項目） |
-|---|---|---|
-| **存** | Victoria 提示詞驅動，自行判斷 | 每次對話結束自動摘要 + 存 |
-| **找** | 全部載入 prompt，LLM 自己看 | 用 Embedding 語意搜索，只撈相關的 5~10 筆 |
-| **Prompt 大小** | 隨記憶量線性增長 | 穩定（只載入相關記憶） |
-| **基礎設施** | PostgreSQL 純文字表 | pgvector 擴充 + Embedding API（Anthropic / OpenAI） |
-| **上限** | ~100 筆（10,000 tokens） | 數千筆 |
-
-### 實作方向（如果未來解凍）
-
-1. PostgreSQL 啟用 `pgvector` 擴充
-2. `CeoMemory` Entity 新增 `Embedding` 欄位（`vector(1536)` 或對應維度）
-3. 記憶寫入時，呼叫 Embedding API 產生向量並存入
-
-### v4 動態架構下的處置
-
-- **Victoria** 變 Discord facade，沒「會議記憶」需求 — 改用即時 query system tools 取代
-- **Petra** 才需要 per-task session（FF 三十六 Phase B 實作）— 但用 CLI session resume 不是向量搜索
-
-→ 本 FF 在 v4 架構下無對應角色，**歸檔不再規劃**。如未來真有需求，重新立 FF。
-
----
-
-## 二十三、Orchestration 異常退出的復原機制（Stage 31/37 Crash Recovery 盲點）
-
-> 歸檔理由：v4 動態架構採「重啟重跑」模式（FF 三十六 Phase B 拍板），不依賴 ActiveOrchestration flag；MS Agent Framework Checkpointing 內建涵蓋
-
-### 背景
-
-Stage 31 實作會議 Crash Recovery（v3.18.0）、Stage 37-2 升級為全編排流程 Crash Recovery（五種 `ActiveOrchestration` 值）。**設計前提**：crash = 進程被 kill → finally 沒機會跑 → flag 留在非 null → 下次啟動掃到。
-
-### 盲點
-
-Stage 37-2 驗收當日踩到：`DesignMeetingService.RunDesignAdjustmentAsync` 因 Petra JSON 漏填 `AdjustmentTargets` 拋 `ArgumentNullException`：
-- Exception 沿 call stack 往上傳
-- Design 的 try-finally **正常執行 finally** → `ActiveOrchestration` 被清回 `null` ✅
-- 但 exception 也讓整場會議失敗、group 卡在 `Status=running / DesignPlan=null`
-- **Crash Recovery 掃不到**（flag 已清），group 永遠卡住
-
-即「crash recovery 只防 crash，不防邏輯 exception」。
-
-### v4 動態架構下的處置
-
-FF 三十六 Phase B 拍板「**重啟重跑**」（不做 Checkpointing）+ 已 responded BossInteraction 算 task input 避免雙重 ask：
-
-```csharp
-// Petra 重跑時的 prompt 自動帶入：
-"""
-任務需求：[原始 prompt]
-
-已有老闆回應紀錄：
-- 2026-05-01 14:30 [需要老闆決策 X] → Christ approve
-"""
-```
-
-→ 重跑模式繞過 ActiveOrchestration flag 整類問題，本 FF 自動消失。
-
-### 原方向（保留供 spike 階段 reference）
-
-三個方向：A. 異常不清 flag / B. Dashboard 手動「重啟會議」按鈕 / C. 失敗狀態欄位 + 自動重啟計數
-
----
-
-## 三十、tech_improvement 工作流的 ghost Dev task
-
-> 歸檔理由：v4 動態架構下沒有固定 pipeline，沒有 ghost Dev task 概念
-
-### 背景
-
-Trial_v3 觀察：tech_improvement 流程的任務列表會出現一筆 **ghost Dev task** 永遠 stuck 在「等待中」：
-
-| 時間 | 事件 | TaskItem |
-|------|------|---------|
-| t+0 | Christ 按 Agent 執行確認的「執行」 | 建 **Dev (等待中, Dashboard 觸發)** ← orphan |
-| t+2min | Orchestrator 啟動 tech_improvement 流程 | 另起 **Dev_plan (執行中, Orchestrator)** |
-
-### 根因（推測）
-
-CEO 確認 → `ShowDirectAgentConfirm` 建立初始 Dev TaskItem，但 tech_improvement workflow 的 Orchestrator **沒使用這筆 task**，另起爐灶建 Dev_plan + 後來的 Dev。
-
-### v4 動態架構下的處置
-
-動態架構下 Petra orchestrate 不照固定 pipeline，沒有「先建 task 再 orchestrator 另起爐灶」這種設計矛盾 → 本 FF 自動消失。
-
----
-
-## 四十一、Stage 46 Sequential 鏈精修（race condition + Status sync）
-
-> 歸檔理由：v4 動態架構下沒有「Sequential 鏈」概念（Petra Magentic Orchestration 動態調度）
-
-### 背景
-
-Stage 46 驗收期觀察 2 個機制細節：
-
-#### 子項 A：Race condition — pause-epic 與 sub-task done 觸發 TriggerNextPhase 時序競爭
-- pause-epic 在 sub-task 即將 done 時呼叫 → `TriggerNextPhaseIfSubTaskAsync` 已先讀 EpicPaused（仍 false） → fire 下個 Phase
-
-#### 子項 B：sub-task TaskGroup.Status 與內部 TaskItems 進度脫鉤
-- `BuildEpicSubTasksAsync` 建 sub-task 時 Status="pending"；`FireStepsAsync` 後內部 TaskItems 開始跑但 sub-task 自身 group.Status 仍 pending
-
-### v4 動態架構下的處置
-
-動態架構下 Petra 不用「Sequential 鏈」固定模式（用 MS Agent Framework Sub-Workflow 內建機制），race condition 整類問題消失 → 本 FF 歸檔。
-
----
-
-## 四十四、TokenTrackingProvider 守門 estimatedTokens 設計缺陷（input-only vs 累計含 output）
-
-> 歸檔理由：v4 動態架構下守門邏輯重設計（FF 四十七 Token SoT 統一 + MS Agent Framework 自帶 telemetry）
-
-### 背景
-
-`TokenTrackingProvider.cs:37` 的守門邏輯：
-
-```csharp
-long estimatedTokens = (systemPrompt.Length + userMessage.Length) / 4;  // 只算 input
-if (monthlyUsed + estimatedTokens > monthlyLimit) → throw
-```
-
-但 `monthlyUsed` 累計值含 input + output。導致 Reviewer 月限 300K 配置下實際累計到 411K（137% 超標）才被擋。
-
-### v4 動態架構下的處置
-
-- FF 四十七 Token SoT 統一會重設計守門邏輯（appsettings vs docker-compose env 對齊 + DB 動態化）
-- MS Agent Framework 自帶 telemetry / 計費機制可能取代手刻 TokenTrackingProvider
-- 本 FF 在 v4 路線下自動失效
-
----
-
-## 四十五、Dashboard 重試/跳過後舊 failed task 沒清理 — MarkGroupDoneOrIntervention 誤判
-
-> 歸檔理由：FF 四十九 已寫明「議題 A 在動態架構下消失」（重啟重跑模式不依賴 task status 聚合判斷）
-
-### 背景
-
-Trial_v5 觀察：Christ 按「跳過審核」/「重啟 Dev」action 後，前置 failed task 沒被自動清除：
-- 21:30:29 PM (Petra Dev_plan escalate) → failed → Christ 21:52 跳過審核 → row 仍 failed
-- 21:52:34 Dev (Token 守門擋) → failed → Christ 22:11 重啟 Dev → row 仍 failed
-- 22:11:03 Dev (重啟後) → done ✅
-
-22:33 流程末端 `MarkGroupDoneOrIntervention` helper 看到歷史 failed task 仍掛在 group → 標 needs_intervention + 建 intervention BossInteraction「Vera 在 0 次修復後仍發現問題」（**訊息嚴重誤導：實際 Vera approve**）
-
-### v4 動態架構下的處置
-
-FF 三十六 Phase B 拍板「重啟重跑」模式：
-- 不依賴 task status 聚合判斷
-- BossInteraction 紀錄算 Petra 重跑時的 input
-- Petra 看到「已 approve 路徑」直接走，不會誤觸發 intervention
-
-→ 本 FF 整類 bug 自動消失。
-
----
-
-## 四十六、ImplementationNote 寫入路徑與 PR Body 對齊（Sage 過嚴 escalate 修法 + Cody 實作範本補強）
-
-> 歸檔理由：FF 四十九 已寫明「議題 B 在動態架構下消失」（Petra orchestrate 時直接看 PR Body / Sage 結果，不依賴特定 DB 欄位）
-
-### 背景
-
-Trial_v5 PR #170：
-- Cody **PR Body 寫了完整實作說明**（變更摘要 + Closes #159-#169 列表 + 詳盡 commit messages）
-- 但 **DB `task_groups.ImplementationNote` = 0 字**
-- Sage 看 ImplementationNote 為空 → escalate（FF 三十二子項 F 觸發） → **誤判 Cody 沒寫實作**
-
-### v4 動態架構下的處置
-
-Petra orchestrate 時動態決定 Sage 看什麼資料源（PR Body / DB / commit log），不依賴特定 DB 欄位 → 本 FF 路徑斷裂問題自動消失。
-
-子項 B（Stage 42 補強單向性）部分緩解（CLAUDE_*.md 對齊問題仍要 prompt iteration），但動態架構下 Petra 可動態檢查避免下游放大。
-
----
+> 狀態：✅ **已吸收進 [FF 五十三](Future_Feature.md#五十三api-餘額用盡時容錯性缺口)**（API 餘額用盡時容錯性缺口）— Token 守門設計重疊（FF 五十三補 USD billing 守門 + 三 Agent fail-fast 統一涵蓋本 FF 議題）。
+> 提出日期：2026-04-30 / 重新分類：2026-05-09（Trial_v6 結案後）
 
 # C. Framework 內建（2 個）
 
