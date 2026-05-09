@@ -1217,80 +1217,91 @@ public class TaskGroupService(
             case "epic_resume":
             {
                 // Stage 57-FF 五十一：transaction + AsNoTracking fresh read idempotent
-                await using var tx = await db.Database.BeginTransactionAsync(ct);
-                var freshEpic = await db.TaskGroups.AsNoTracking()
-                    .FirstOrDefaultAsync(t => t.Id == epicId, ct);
-                if (freshEpic is null)
+                // 議題 3 修法：NpgsqlRetryingExecutionStrategy 不允許 user-initiated transaction，
+                // 必須用 CreateExecutionStrategy().ExecuteAsync 包整個 transaction 作 retriable unit
+                var strategyResume = db.Database.CreateExecutionStrategy();
+                await strategyResume.ExecuteAsync(async () =>
                 {
-                    logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
-                    await tx.CommitAsync(ct);
-                    return;
-                }
-                if (freshEpic.EpicPaused == false)
-                {
-                    logger.LogInformation(
-                        "[Stage57] HandleEpicPartialPaused：epic 已 EpicPaused=false（前一個 handler 已處理），跳過 nextPending FireSteps（Epic={Id}）",
-                        epicId);
-                    await tx.CommitAsync(ct);
-                    return;
-                }
+                    await using var tx = await db.Database.BeginTransactionAsync(ct);
+                    var freshEpic = await db.TaskGroups.AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Id == epicId, ct);
+                    if (freshEpic is null)
+                    {
+                        logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
+                    if (freshEpic.EpicPaused == false)
+                    {
+                        logger.LogInformation(
+                            "[Stage57] HandleEpicPartialPaused：epic 已 EpicPaused=false（前一個 handler 已處理），跳過 nextPending FireSteps（Epic={Id}）",
+                            epicId);
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
 
-                // 仍 EpicPaused=true → 走原邏輯（fresh tracked entity 後寫入 + nextPending fire）
-                var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
-                if (epic is null)
-                {
-                    await tx.CommitAsync(ct);
-                    return;
-                }
-                epic.EpicPaused = false;
-                await taskRepo.SaveAsync(ct);
+                    // 仍 EpicPaused=true → 走原邏輯（fresh tracked entity 後寫入 + nextPending fire）
+                    var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
+                    if (epic is null)
+                    {
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
+                    epic.EpicPaused = false;
+                    await taskRepo.SaveAsync(ct);
 
-                var nextPending = await db.TaskGroups
-                    .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
-                    .OrderBy(t => t.PhaseNumber)
-                    .FirstOrDefaultAsync(ct);
-                if (nextPending is not null)
-                    await FireStepsAsync(nextPending, [new WorkflowStep("Dev_plan")], ct);
-                await tx.CommitAsync(ct);
+                    var nextPending = await db.TaskGroups
+                        .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
+                        .OrderBy(t => t.PhaseNumber)
+                        .FirstOrDefaultAsync(ct);
+                    if (nextPending is not null)
+                        await FireStepsAsync(nextPending, [new WorkflowStep("Dev_plan")], ct);
+                    await tx.CommitAsync(ct);
+                });
                 break;
             }
             case "epic_abort":
             {
                 // Stage 57-FF 五十一：epic_abort 同樣 idempotent（避免重複標 cancelled / 重複 log）
-                await using var tx = await db.Database.BeginTransactionAsync(ct);
-                var freshEpic = await db.TaskGroups.AsNoTracking()
-                    .FirstOrDefaultAsync(t => t.Id == epicId, ct);
-                if (freshEpic is null)
+                // 議題 3 修法：CreateExecutionStrategy 包 transaction
+                var strategyAbort = db.Database.CreateExecutionStrategy();
+                await strategyAbort.ExecuteAsync(async () =>
                 {
-                    logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
-                    await tx.CommitAsync(ct);
-                    return;
-                }
-                if (freshEpic.Status == "cancelled")
-                {
-                    logger.LogInformation(
-                        "[Stage57] HandleEpicPartialPaused：epic 已 cancelled（前一個 handler 已處理），跳過 abort（Epic={Id}）",
-                        epicId);
-                    await tx.CommitAsync(ct);
-                    return;
-                }
+                    await using var tx = await db.Database.BeginTransactionAsync(ct);
+                    var freshEpic = await db.TaskGroups.AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.Id == epicId, ct);
+                    if (freshEpic is null)
+                    {
+                        logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
+                    if (freshEpic.Status == "cancelled")
+                    {
+                        logger.LogInformation(
+                            "[Stage57] HandleEpicPartialPaused：epic 已 cancelled（前一個 handler 已處理），跳過 abort（Epic={Id}）",
+                            epicId);
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
 
-                var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
-                if (epic is null)
-                {
+                    var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
+                    if (epic is null)
+                    {
+                        await tx.CommitAsync(ct);
+                        return;
+                    }
+                    taskRepo.UpdateGroupStatus(epic, "cancelled");
+                    var subPending = await db.TaskGroups
+                        .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
+                        .ToListAsync(ct);
+                    foreach (var s in subPending)
+                        taskRepo.UpdateGroupStatus(s, "cancelled");
+                    await taskRepo.SaveAsync(ct);
                     await tx.CommitAsync(ct);
-                    return;
-                }
-                taskRepo.UpdateGroupStatus(epic, "cancelled");
-                var subPending = await db.TaskGroups
-                    .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
-                    .ToListAsync(ct);
-                foreach (var s in subPending)
-                    taskRepo.UpdateGroupStatus(s, "cancelled");
-                await taskRepo.SaveAsync(ct);
-                await tx.CommitAsync(ct);
-                logger.LogInformation("epic_abort：epic + {Count} 個 pending sub-task 全標 cancelled（Epic={Id}）",
-                    subPending.Count, epicId);
+                    logger.LogInformation("epic_abort：epic + {Count} 個 pending sub-task 全標 cancelled（Epic={Id}）",
+                        subPending.Count, epicId);
+                });
                 break;
             }
             default:
