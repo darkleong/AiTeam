@@ -41,13 +41,19 @@ Stage 57 完成後 = 3 🔴 中 2/3 修復 + Stage 58 完成 FF 五十三後達 
 
 ## 設計決策
 
-### 主路線（待 Christ 拍板議題 1-3）
+### 主路線（Christ 拍板）
 
-| 議題 | 拍板 | 替代方案 |
+| 議題 | 拍板 | 理由 |
 |---|---|---|
-| **議題 1：FF 五十一修法層級** | **待拍**：A 雙層防（fire idempotent + handler idempotent）/ B 只修 fire 端（依賴 fire 端後 handler 自然不會雙觸發）/ C 只修 handler 端（容忍多卡視覺但 race-free） | A 最穩但工作量略大；B/C 各有 trade-off |
-| **議題 2：FF 五十二新 routing 命名 + actions set** | **待拍**：name 候選 `reviewer_fix_loop_limit` vs `pipeline_fix_loop_limit` vs Forge spike 後對齊既有命名提議；actions 候選 `{mark_done, skip_qa, abort}` vs `{intervention_done, abort}` 兩條 vs Forge 提案 | 由 Stage 55B Session B 既有 5 routing 命名一致性決定，spike 後再拍 |
-| **議題 3：idempotent helper 抽 vs inline** | **待拍**：A 抽 `InteractionService.TryCreateUniqueInteractionAsync` helper（未來其他 type 也能用）/ B inline 在 PauseEpicAndNotifyAsync（不過早抽象）| 偏 A — race 是普遍 pattern，Trial_v6 Checkpoint 7 也提過 generic intervention 模板議題 |
+| **FF 五十二 actions set**（Christ 卡片看得到的 button 數量 + label）| **三選 `mark_done` / `skip_qa` / `abort`** — label「標完成 / 跳過 QA / 終止 Pipeline」| Trial_v6 Christ 實際做的就是「強制 done 推進到 Doc」，給「跳過 QA」一鍵達成；保留 abort 退路 |
+
+### Aria 自拍（議題層次篩選紀律 — Christ 看不到行為差異 / 純 refactor）
+
+| 議題 | 拍板 | 理由 |
+|---|---|---|
+| FF 五十一修法層級 | **雙層防**（fire idempotent + handler idempotent）| 對 Christ 看到行為與「只修 fire」一樣（都 1 卡 + 1 推進），但 handler 端 race-free 是設計層保險；helper 抽出後增量小 |
+| FF 五十二新 routing 命名 | Forge spike 後對齊 Stage 55B Session B 既有 5 routing 命名提議 | 純內部 type 字串 Christ 看不到 |
+| idempotent helper 抽 vs inline | **抽 `InteractionService.TryCreateUniqueInteractionAsync`** helper | race-prone pattern 普遍（Trial_v6 Checkpoint 7 generic intervention 模板議題也用得上），未來複用 |
 
 ### Aria 拿捏（已決，純內部實作不對外議題）
 
@@ -66,8 +72,8 @@ Stage 57 完成後 = 3 🔴 中 2/3 修復 + Stage 58 完成 FF 五十三後達 
 | # | 子項 | 規模 |
 |---|---|---|
 | **0** | **Spike 第一步：read 對齊範圍**（Forge Plan Mode 第一步）— read PauseEpicAndNotifyAsync + HandleEpicPartialPausedAsync + ReviewerStageExecutor FixIteration≥3 case + Stage 55B Session B 5 routing 既有 dispatch（QaStage / DevPlanStage qa_intervention + devplan_escalate + dev_plan_unable）+ InteractionProcessor type+action mapping | XS |
-| **1** | FF 五十一 race condition 雙層防：① PauseEpicAndNotifyAsync fire idempotent（同 epic active epic_partial_paused 跳過 fire）② HandleEpicPartialPausedAsync epic_resume case idempotent（DB transaction + EpicPaused 已 false 跳過 nextPending FireSteps）③（議題 3 = A 才做）抽 InteractionService.TryCreateUniqueInteractionAsync helper | M |
-| **2** | FF 五十二 Vera fix loop HITL routing：① 補第 6 type-specific routing（命名待議題 2 拍板）② ReviewerStageExecutor FixIteration≥3 case 改 fire 新 type interaction + SendsMessage 等 user response（取代 generic SetInterventionAndYieldAsync）③ InteractionProcessor 加新 type 的 dispatch + 對應 ContinuationAction（mark_done → DocStageBridge / skip_qa → 直接 done / abort → SetIntervention end，具體 action set 待議題 2 拍板）④ InteractionService 加 actions JSON const | M |
+| **1** | FF 五十一 race condition 雙層防：① PauseEpicAndNotifyAsync fire idempotent（同 epic active epic_partial_paused 跳過 fire）② HandleEpicPartialPausedAsync epic_resume case idempotent（DB transaction + EpicPaused 已 false 跳過 nextPending FireSteps）③ 抽 InteractionService.TryCreateUniqueInteractionAsync helper（race-prone pattern 未來複用） | M |
+| **2** | FF 五十二 Vera fix loop HITL routing：① 補第 6 type-specific routing（命名待議題 2 拍板）② ReviewerStageExecutor FixIteration≥3 case 改 fire 新 type interaction + SendsMessage 等 user response（取代 generic SetInterventionAndYieldAsync）③ InteractionProcessor 加新 type dispatch + 對應 ContinuationAction（mark_done → DocStageBridge 推進 Doc / skip_qa → 直接 done / abort → SetIntervention end）④ InteractionService 加 ReviewerFixLoopLimitActionsJson const（三選 button：標完成 / 跳過 QA / 終止 Pipeline） | M |
 | **3** | Mock 場景補強：① MockScenarioService 加 2 case（race double fail / fix loop limit）② MockClaudeCodeService 對應 FailScenario 邏輯（race：sub-task fail 同時 fire 兩次模擬 / fix loop：Vera 連續 Critical>0 ×3 模擬）| S |
 | **4** | Dashboard MockScenarioCard 補 2 場景：MudSelectItem + emoji map + frameworkHint 文案 — 對齊 Stage 56 補 33 場景同模式 | XS |
 | **5** | Forge 自驗：① 跑 race Mock 場景 POST `/internal/mock/scenario` → SQL 查 BossInteraction 同 epic 只有 1 個 active epic_partial_paused（vs 修前 2 個）② 跑 fix loop limit Mock 場景 → SQL 查 BossInteraction Type=新 routing（vs 修前 generic intervention）+ user 點 mark_done 後 Pipeline 推進 Doc ③ regression：dotnet build + 既有 5 routing 5 個 Mock 場景仍綠（不破壞 Stage 55B Session B）| S |
@@ -93,15 +99,15 @@ Stage 57 完成後 = 3 🔴 中 2/3 修復 + Stage 58 完成 FF 五十三後達 
 ### 寫入點 spike 報告（在計劃書 Plan Mode 內）
 
 Forge 完成 read 後在 Plan Mode 計劃書內報告：
-1. **議題 1 雙層 vs 單層 trade-off 評估**：fire 端 idempotent 工作量 vs handler 端 idempotent 工作量 vs 雙層成本，給 Christ 拍板 A/B/C
-2. **議題 2 routing 命名 + actions set 提案**：對齊既有 5 routing 命名 + 給 actions set 提案（mark_done / skip_qa / abort 三選 vs intervention_done / abort 兩選），給 Christ 拍板
-3. **議題 3 helper 抽 vs inline 評估**：抽 helper 的 reuse 場景列舉（race-prone interaction type 全清單）vs inline 不過早抽象的 KISS 評估，給 Christ 拍板
+1. **新 routing 命名提案**：對齊 Stage 55B Session B 既有 5 routing 命名慣例（dev_intervention / qa_intervention / devplan_escalate / dev_plan_unable / split_task_proposal），給 1-2 個候選 + 偏好，Aria 拍（Christ 看不到此實作層細節）
+2. **Stage 55B Session B 5 routing dispatch 鏈路對照表**：每 routing 的 fire 點 + SendsMessage 訊號 + InteractionProcessor 收件 + ContinuationAction → 哪個 bridge 推進 — Forge 對照新 routing 補對齊（純執行，無需 Christ 拍）
+3. **TryCreateUniqueInteractionAsync helper 簽名定稿**：依 InteractionService.CreateInteractionAsync 既有簽名 derive，回 nullable id + 短註解既有 active 跳過邏輯（純執行，無需 Christ 拍）
 
 ---
 
 ## 子項 1：FF 五十一 race condition 雙層防
 
-### 修法策略（議題 1 = A 雙層防 假設下，B/C 對應砍）
+### 修法策略
 
 #### 第一層 fire 端 idempotent
 
@@ -124,7 +130,7 @@ Forge 完成 read 後在 Plan Mode 計劃書內報告：
 
 epic_abort case 同樣加 idempotent（避免重複標 cancelled / 重複 log）。
 
-#### 議題 3 = A：抽 InteractionService.TryCreateUniqueInteractionAsync helper
+#### Helper 抽出：InteractionService.TryCreateUniqueInteractionAsync
 
 簽名草案（Forge Plan Mode 內細化）：
 ```csharp
@@ -145,15 +151,17 @@ public async Task<long?> TryCreateUniqueInteractionAsync(
 
 ## 子項 2：FF 五十二 Vera fix loop HITL routing
 
-### 修法策略（議題 2 命名 + actions set 待拍板假設下，spike 後 finalize）
+### 修法策略
 
 #### 新 routing type + actions JSON
 
 `InteractionService` 加新 const：
 ```csharp
-public const string ReviewerFixLoopLimitActionsJson = "[...]";
-// actions 候選：mark_done（標完成，Pipeline 推進 Doc）/ skip_qa（跳過 QA + Doc 直接 done）/ abort（終止 Pipeline）
+public const string ReviewerFixLoopLimitActionsJson =
+    """[{"id":"mark_done","label":"標完成","color":"success"},{"id":"skip_qa","label":"跳過 QA","color":"warning"},{"id":"abort","label":"終止 Pipeline","color":"error"}]""";
 ```
+
+對齊 EpicPartialPausedActionsJson (line 64) 既有命名 + JSON 風格。
 
 #### ReviewerStageExecutor 修法
 
@@ -165,11 +173,11 @@ public const string ReviewerFixLoopLimitActionsJson = "[...]";
 
 #### InteractionProcessor 新 dispatch
 
-加 type+action mapping（對齊 line 155-162 既有 5 routing）：
+加 type+action mapping（對齊 line 155-162 既有 5 routing；type 字串待 spike 命名提案後 finalize）：
 ```csharp
-("reviewer_fix_loop_limit", "mark_done") => "標完成 ✅",
-("reviewer_fix_loop_limit", "skip_qa")   => "跳過 QA + Doc ⏭️",
-("reviewer_fix_loop_limit", "abort")     => "終止 Pipeline ❌",
+(<新 type>, "mark_done") => "標完成 ✅",
+(<新 type>, "skip_qa")   => "跳過 QA ⏭️",
+(<新 type>, "abort")     => "終止 Pipeline ❌",
 ```
 
 dispatch 鏈路對齊 Stage 55B Session B 5 routing — InteractionProcessor 收到 user response → 觸發對應 ContinuationAction → Pipeline executor 收 SendMessage 推進。
@@ -304,4 +312,5 @@ frameworkHint 文案：「Trial_v6 揭露 v4 framework production-ready 缺口�
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v1.1 | 2026-05-09 | Christ 拍板（Aria 重寫）— actions set 三選 `mark_done` / `skip_qa` / `abort`（label「標完成 / 跳過 QA / 終止 Pipeline」），對應 Trial_v6 Christ 實際強制 done 推進的操作。其他三項依議題層次篩選紀律（user_christ.md:32-38）Aria 自拍：① FF 五十一修法 = 雙層防（對 Christ 看到行為與「只修 fire」一樣，handler 端 race-free 設計層保險）② FF 五十二新 routing 命名 = Forge spike 後對齊 Stage 55B Session B 5 routing 命名提議（純內部 type 字串）③ idempotent helper = 抽 InteractionService.TryCreateUniqueInteractionAsync（race-prone pattern 普遍，未來複用）。子項 0 spike 報告改為純執行對齊（命名提案 + dispatch 鏈路對照 + helper 簽名定稿），無需再 Christ 拍。
 | v1.0 | 2026-05-09 | 初版規劃書建立（Aria）— Stage 57 = Trial_v6 揭露 3 🔴 戰略級議題前兩個合併（FF 五十一 race condition 雙層防 + FF 五十二 Vera fix loop HITL routing 補第 6 routing），FF 五十三 API 容錯獨立 Stage 58。Christ 拍板「五十一+五十二合併、五十三獨立」基於兩議題都動 Pipeline framework HITL routing 同一塊，分開做會 merge conflict / 設計分裂。**待 Christ 拍板議題 3 個**：① FF 五十一修法層級（雙層防 / 只修 fire / 只修 handler）② FF 五十二新 routing 命名 + actions set ③ idempotent helper 抽 vs inline。**規劃前期已 grep**：PauseEpicAndNotifyAsync (TaskGroupService.cs:1342) + HandleEpicPartialPausedAsync (line 1158) + BuildEpicSubTasksAsync idempotent 範例 (line 1224) + ReviewerStageExecutor FixIteration≥3 case (line 148-162) + Stage 55B Session B 5 routing dispatch (QaStageExecutor.cs / DevPlanStageExecutor.cs) + InteractionProcessor type+action mapping (line 155-162) + InteractionService.EpicPartialPausedActionsJson (line 64) — 對齊自省點 #23 規劃前期 grep 紀律。
