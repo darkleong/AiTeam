@@ -343,13 +343,40 @@ public class MockScenarioService(
                 "[MockMode][Stage51] Mid-Interrupt trigger flag 已預設（GroupId={Id}，scenario={Scenario}）",
                 group.Id, scenario);
         }
-        // Stage 57：race condition Mock — alias 觸發後等 BuildEpicSubTasksAsync 跑完，並行雙 PauseEpic call 模擬 race
+        // Stage 57：race condition Mock — alias 觸發後 polling 等 BuildEpicSubTasksAsync 跑完（sub-task >= 2），並行雙 PauseEpic call 模擬 race
+        // 修法：固定 8s Delay 不夠（Kickoff/Design framework 跑 30+ 秒），改 polling max 120 秒每 2 秒查
         else if (scenario == "framework_pipeline_epic_race_double_fail")
         {
             var epicId = group.Id;
             _ = Task.Run(async () =>
             {
-                await Task.Delay(8000);  // 等 epic + Phase 1/2 sub-task 建出（split_task_propose_accept 路徑跑 Kickoff/Design）
+                var ready = false;
+                for (int i = 0; i < 60; i++)  // max 120 秒（60 × 2s）
+                {
+                    await Task.Delay(2000);
+                    try
+                    {
+                        await using var pollScope = serviceProvider.CreateAsyncScope();
+                        var pollDb = pollScope.ServiceProvider.GetRequiredService<AiTeam.Data.AppDbContext>();
+                        var count = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(
+                            pollDb.TaskGroups.Where(t => t.ParentGroupId == epicId));
+                        if (count >= 2)
+                        {
+                            ready = true;
+                            logger.LogInformation("[Stage57] Mock race polling：sub-task 已建好（count={Count}），attempt={I}", count, i + 1);
+                            break;
+                        }
+                    }
+                    catch (Exception pollEx)
+                    {
+                        logger.LogWarning(pollEx, "[Stage57] Mock race polling 失敗（attempt={I}），continue", i + 1);
+                    }
+                }
+                if (!ready)
+                {
+                    logger.LogWarning("[Stage57] Mock race polling timeout：sub-task 仍 < 2 在 120 秒內，放棄 race trigger");
+                    return;
+                }
                 try
                 {
                     await using var raceScope = serviceProvider.CreateAsyncScope();
