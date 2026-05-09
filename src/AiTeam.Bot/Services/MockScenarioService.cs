@@ -216,6 +216,15 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "framework_pipeline_fix_loop_max_iter";  // 對齊 Stage 53B 既有 max_iter 邏輯
             MockClaudeCodeService.ResetScenarioRoundCounters();
         }
+        // ── Stage 58-FF 五十三：Agent API 失敗（餘額不足 / 401）容錯性 alias 場景 ──
+        // 機制：FailScenario="agent_api_failure" → 4 agent service MockMode early return 開頭檢測 → throw LlmApiFailureException →
+        //       AgentQueueProcessor specific catch build [API_FAILURE] result + call HandleAgentCompletedAsync → 4 stage executor marker check → fire interaction +
+        //       MockMode auto-approve 預設 api_failure_continue（議題 13 拍板）→ 4 agent 一次跑通驗 4 fire（Dev → Reviewer → QA → Doc）
+        else if (scenario == "framework_pipeline_agent_api_failure")
+        {
+            MockClaudeCodeService.FailScenario = "agent_api_failure";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -293,6 +302,8 @@ public class MockScenarioService(
             // Stage 57：FF 五十一 race + FF 五十二 fix loop limit 2 場景
             "framework_pipeline_epic_race_double_fail"          => (WorkflowType.NewFeature, "Stage57-EpicRaceDoubleFail",         "Kickoff"),
             "framework_pipeline_reviewer_fix_loop_limit"        => (WorkflowType.NewFeature, "Stage57-ReviewerFixLoopLimit",       "Kickoff"),
+            // Stage 58：FF 五十三 Agent API 失敗容錯性
+            "framework_pipeline_agent_api_failure"              => (WorkflowType.NewFeature, "Stage58-AgentApiFailure",            "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -423,12 +434,18 @@ public class MockScenarioService(
             // Stage 57：FF 五十一 race + FF 五十二 fix loop limit
             "framework_pipeline_epic_race_double_fail"             => "🌀",
             "framework_pipeline_reviewer_fix_loop_limit"           => "🔁",
+            // Stage 58：FF 五十三 Agent API 失敗
+            "framework_pipeline_agent_api_failure"                 => "💸",
             var s when s.StartsWith("framework_pipeline_")          => "🔧",
             _                                                       => "✨"
         };
 
         // Stage 49 v4 漸進遷移：framework Mock 場景啟動時提示 Christ 確認 feature flag
-        var frameworkHint = scenario is "framework_pipeline_epic_race_double_fail" or "framework_pipeline_reviewer_fix_loop_limit"
+        var frameworkHint = scenario == "framework_pipeline_agent_api_failure"
+            ? "\n⚠️ **Stage 58 — v4 framework production-ready 補強驗收（FF 五十三 API 餘額容錯性）**：請啟用 Pipeline framework flag。" +
+              "\n💡 場景：4 agent（Dev → Reviewer → QA → Doc）依序進入 stage 時 throw LlmApiFailureException 模擬 API 餘額不足 → AgentQueueProcessor specific catch build [API_FAILURE] result → 4 stage executor marker check → fire agent_api_failure_intervention interaction → MockMode auto-approve 預設 api_failure_continue 推進 → 4 agent 一次跑通驗 4 fire interaction。" +
+              "\n🔍 SQL 驗 BossInteraction Type='agent_api_failure_intervention' 應有 4 row（Dev/Reviewer/QA/Doc 各一）+ context.agent 區分 + token_logs 無新 row（API 失敗 cost 0 不寫）。"
+            : scenario is "framework_pipeline_epic_race_double_fail" or "framework_pipeline_reviewer_fix_loop_limit"
             ? "\n⚠️ **Stage 57 — v4 framework production-ready 補強驗收**：請啟用 Pipeline framework flag。" +
               (scenario == "framework_pipeline_epic_race_double_fail"
                   ? "\n💡 場景：兩個 sub-task 同時 fail（SimulateEpicRaceAsync 並行 PauseEpic）→ 修前 fire 2 張 epic_partial_paused，修後 1 張（FF 五十一 idempotent helper 攔住）。"

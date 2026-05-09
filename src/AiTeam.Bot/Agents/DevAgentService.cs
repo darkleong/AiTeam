@@ -677,6 +677,12 @@ public class DevAgentService(
         // Stage 17：MockMode early return — 跳過所有 GitHub 操作，回傳模擬 PR URL
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 58-FF 五十三：Mock API 失敗 — throw LlmApiFailureException 模擬 Anthropic 餘額不足
+            // 由 AgentQueueProcessor specific catch 接手 build [API_FAILURE] result + call HandleAgentCompletedAsync → DevStageExecutor marker check → fire interaction
+            if (MockClaudeCodeService.FailScenario == "agent_api_failure")
+                throw new LlmApiFailureException(LlmProviderType.Anthropic,
+                    "[MOCK] Credit balance is too low. Please top up at console.anthropic.com");
+
             // Stage 43-A：Dev_plan 階段的 mock 控制（dev_plan_fail_retry / dev_plan_fail_escalate）
             if (IsDevPlanMode(task.Description))
             {

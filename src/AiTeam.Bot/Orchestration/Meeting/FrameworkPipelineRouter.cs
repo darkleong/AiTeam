@@ -361,6 +361,45 @@ public sealed class FrameworkPipelineRouter
             $"ReviewerFixLoopLimit(action={action})",
             ct);
 
+    // ── Stage 58-FF 五十三：Agent API 失敗 per-stage 4 typed thin wrapper（第 7 routing — 路線 a：對齊 Stage 57 typed pattern 不動 ResumeWithResponseAsync 簽名）──
+    // action = "continue" / "retry" / "abort"（從 api_failure_continue / _retry / _abort 去 api_failure_ 前綴 — TryRoutePipelineAgentApiFailureAsync 內處理）
+
+    /// <summary>Stage 58：Dev agent_api_failure button callback resume。</summary>
+    public Task ResumeAfterDevAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DevAgentApiFailurePortId,
+            new DevAgentApiFailureResponse(action),
+            $"DevAgentApiFailure(action={action})",
+            ct);
+
+    /// <summary>Stage 58：Reviewer agent_api_failure button callback resume。</summary>
+    public Task ResumeAfterReviewerAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.ReviewerAgentApiFailurePortId,
+            new ReviewerAgentApiFailureResponse(action),
+            $"ReviewerAgentApiFailure(action={action})",
+            ct);
+
+    /// <summary>Stage 58：QA agent_api_failure button callback resume。</summary>
+    public Task ResumeAfterQaAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.QaAgentApiFailurePortId,
+            new QaAgentApiFailureResponse(action),
+            $"QaAgentApiFailure(action={action})",
+            ct);
+
+    /// <summary>Stage 58：Doc agent_api_failure button callback resume。</summary>
+    public Task ResumeAfterDocAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DocAgentApiFailurePortId,
+            new DocAgentApiFailureResponse(action),
+            $"DocAgentApiFailure(action={action})",
+            ct);
+
     /// <summary>
     /// Stage 55A：Pipeline ResumeStreamingAsync 共用 helper — ResumeAfterAgentAsync / ResumeAfterKickoff/DesignAsync 共用核心邏輯。
     /// 流程：LoadFromDb → ResumeStreamingAsync from latest → 找 expectedPortId 的 RequestInfoEvent → SendResponseAsync → 繼續 watch 直到下個 yield/finalize。

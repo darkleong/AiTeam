@@ -231,6 +231,13 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             logger.LogError("Claude Code 失敗完整輸出（含圖片，exitCode={Code}）：\n{Raw}", exitCode, rawTail);
         }
 
+        // Stage 58：CLI path API 失敗 signal 偵測（detect 失敗 fallback 既有 result.Success=false path 不破壞既有失敗路徑）
+        if (!success && DetectApiFailureSignal(output, stderr) is { } apiErrorSnippet)
+        {
+            logger.LogWarning("[Stage58] Claude Code 偵測到 API 失敗 signal（含圖片）：{Snippet}", apiErrorSnippet);
+            throw new LlmApiFailureException(LlmProviderType.Anthropic, apiErrorSnippet);
+        }
+
         logger.LogInformation(
             "Claude Code subprocess 結束（含圖片，exitCode={Code}，success={Success}）",
             exitCode, success);
@@ -331,6 +338,13 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
                 exitCode, rawTail);
         }
 
+        // Stage 58：CLI path API 失敗 signal 偵測（detect 失敗 fallback 既有 result.Success=false path 不破壞既有失敗路徑）
+        if (!success && DetectApiFailureSignal(output, stderr) is { } apiErrorSnippet)
+        {
+            logger.LogWarning("[Stage58] Claude Code 偵測到 API 失敗 signal：{Snippet}", apiErrorSnippet);
+            throw new LlmApiFailureException(LlmProviderType.Anthropic, apiErrorSnippet);
+        }
+
         logger.LogInformation(
             "Claude Code subprocess 結束（exitCode={Code}，success={Success}）",
             exitCode, success);
@@ -423,6 +437,14 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             logger.LogError(
                 "Claude Code 會議 session 失敗（sessionId={Id}，exitCode={Code}）：\n{Raw}",
                 sessionId, exitCode, rawTail);
+        }
+
+        // Stage 58：CLI path API 失敗 signal 偵測（detect 失敗 fallback 既有 result.Success=false path 不破壞既有失敗路徑）
+        if (!success && DetectApiFailureSignal(output, stderr) is { } apiErrorSnippet)
+        {
+            logger.LogWarning("[Stage58] Claude Code 會議 session 偵測到 API 失敗 signal（sessionId={Id}）：{Snippet}",
+                sessionId, apiErrorSnippet);
+            throw new LlmApiFailureException(LlmProviderType.Anthropic, apiErrorSnippet);
         }
 
         logger.LogInformation(
@@ -557,6 +579,41 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         {
             return null;   // 任何例外 → null，硬規則「不阻塞」
         }
+    }
+
+    /// <summary>
+    /// Stage 58 (FF 五十三)：CLI path API 失敗 signal 偵測（CLI subprocess stdout / stderr 含 Anthropic API 餘額不足 / 401 等錯誤格式）。
+    ///
+    /// 配對 case-insensitive substring：
+    ///   - "Credit balance is too low"（餘額不足，最常見）
+    ///   - "insufficient_balance"（API error code）
+    ///   - "401"（HTTP 401 Unauthorized — 可能是 API key 失效或 over-limit）
+    ///   - "authentication_error"（API error type）
+    ///
+    /// 保守原則：detect 失敗時回 null，呼叫端 fallback 既有 result.Success=false path（不破壞既有失敗路徑），
+    /// 任何漏接最壞情況退化為 silent fail（修前 baseline 行為，不會比現況差）。
+    ///
+    /// 回傳：偵測到 signal 時回 capped 500 chars 的錯誤摘要供 LlmApiFailureException.RawError 用；無 signal 回 null。
+    /// </summary>
+    private static string? DetectApiFailureSignal(string output, string stderr)
+    {
+        if (string.IsNullOrWhiteSpace(output) && string.IsNullOrWhiteSpace(stderr))
+            return null;
+
+        var combined = $"{output}\n{stderr}";
+        var lower    = combined.ToLowerInvariant();
+
+        if (lower.Contains("credit balance is too low")
+            || lower.Contains("insufficient_balance")
+            || lower.Contains("authentication_error")
+            || lower.Contains("401"))
+        {
+            // 取 output 優先（API error 通常在 result 文字內）；若 output 空 fallback stderr
+            var source = !string.IsNullOrWhiteSpace(output) ? output : stderr;
+            return source.Length > 500 ? source[..500] : source;
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -42,6 +42,12 @@ public class DocAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 58-FF 五十三：Mock API 失敗 — throw LlmApiFailureException 模擬 Anthropic 餘額不足
+            // 由 AgentQueueProcessor specific catch 接手 build [API_FAILURE] result + call HandleAgentCompletedAsync → DocStageExecutor marker check → fire interaction
+            if (MockClaudeCodeService.FailScenario == "agent_api_failure")
+                throw new LlmApiFailureException(LlmProviderType.Anthropic,
+                    "[MOCK] Credit balance is too low. Please top up at console.anthropic.com");
+
             logger.LogInformation("[MockMode] DocAgentService 跳過 GitHub 操作，回傳模擬結果");
             AddLog(task, "[MOCK] Sage 模擬歸檔中...", "running");
             await taskRepository.SaveAsync(cancellationToken);

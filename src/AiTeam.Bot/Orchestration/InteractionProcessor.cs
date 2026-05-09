@@ -161,6 +161,10 @@ public class InteractionProcessor(
         ("reviewer_fix_loop_limit", "fix_loop_mark_done") => "標完成 ✅",
         ("reviewer_fix_loop_limit", "fix_loop_skip_qa")   => "跳過 QA ⏭️",
         ("reviewer_fix_loop_limit", "fix_loop_abort")     => "終止 Pipeline ❌",
+        // Stage 58-FF 五十三：Agent API 失敗（餘額不足 / 401）
+        ("agent_api_failure_intervention", "api_failure_continue") => "略過該 Agent ⏭️",
+        ("agent_api_failure_intervention", "api_failure_retry")    => "重試（儲值後）🔄",
+        ("agent_api_failure_intervention", "api_failure_abort")    => "終止 Pipeline ❌",
         // Stage 51：framework HITL 試點
         ("framework_kickoff_mid_interrupt", "midinterrupt_apply")  => "套用修改 ✏️",
         ("framework_kickoff_mid_interrupt", "midinterrupt_cancel") => "取消介入",

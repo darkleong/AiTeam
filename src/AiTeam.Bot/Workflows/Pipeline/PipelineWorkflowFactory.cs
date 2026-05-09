@@ -100,6 +100,12 @@ public sealed class PipelineWorkflowFactory
         // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit RequestPort（第 6 routing）
         var reviewerFixLoopLimitPort = RequestPort.Create<ReviewerFixLoopLimitRequest, ReviewerFixLoopLimitResponse>(ReviewerFixLoopLimitPortId);
 
+        // Stage 58-FF 五十三：Agent API 失敗 per-stage 4 RequestPort（第 7 routing）
+        var devAgentApiFailurePort      = RequestPort.Create<DevAgentApiFailureRequest,      DevAgentApiFailureResponse>     (DevAgentApiFailurePortId);
+        var reviewerAgentApiFailurePort = RequestPort.Create<ReviewerAgentApiFailureRequest, ReviewerAgentApiFailureResponse>(ReviewerAgentApiFailurePortId);
+        var qaAgentApiFailurePort       = RequestPort.Create<QaAgentApiFailureRequest,       QaAgentApiFailureResponse>      (QaAgentApiFailurePortId);
+        var docAgentApiFailurePort      = RequestPort.Create<DocAgentApiFailureRequest,      DocAgentApiFailureResponse>     (DocAgentApiFailurePortId);
+
         return new WorkflowBuilder(start)
             // Stage 55A：Start → KickoffStage（parent group） / DevPlanStage（sub-task）— 兩出口
             .AddEdge(start, kickoffStage)                  // Stage 55A：parent group 入口
@@ -161,6 +167,15 @@ public sealed class PipelineWorkflowFactory
             .AddEdge(reviewerStage, reviewerFixLoopLimitPort)   // ReviewerFixLoopLimitRequest → port
             .AddEdge(reviewerFixLoopLimitPort, reviewerStage)   // ReviewerFixLoopLimitResponse → ReviewerStageExecutor.HandleReviewerFixLoopLimitResponseAsync
             .AddEdge(reviewerStage, docStage)                   // Stage 57：fix_loop_skip_qa case 跳 QA 直接送 Doc
+            // Stage 58-FF 五十三：Agent API 失敗 per-stage 4 RequestPort 雙向（第 7 routing — continue 跳下游 edge 共用既有 Dev→Reviewer / Reviewer→Qa / Qa→Doc / Doc→NotifyMerge wiring）
+            .AddEdge(devStage,      devAgentApiFailurePort)      // DevAgentApiFailureRequest → port
+            .AddEdge(devAgentApiFailurePort,      devStage)      // DevAgentApiFailureResponse → DevStageExecutor.HandleAgentApiFailureResponseAsync
+            .AddEdge(reviewerStage, reviewerAgentApiFailurePort) // ReviewerAgentApiFailureRequest → port
+            .AddEdge(reviewerAgentApiFailurePort, reviewerStage) // ReviewerAgentApiFailureResponse → ReviewerStageExecutor.HandleAgentApiFailureResponseAsync
+            .AddEdge(qaStage,       qaAgentApiFailurePort)       // QaAgentApiFailureRequest → port
+            .AddEdge(qaAgentApiFailurePort,       qaStage)       // QaAgentApiFailureResponse → QaStageExecutor.HandleAgentApiFailureResponseAsync
+            .AddEdge(docStage,      docAgentApiFailurePort)      // DocAgentApiFailureRequest → port
+            .AddEdge(docAgentApiFailurePort,      docStage)      // DocAgentApiFailureResponse → DocStageExecutor.HandleAgentApiFailureResponseAsync
             // 終結 — NotifyMerge（happy path）/ fallback / 55A：含 Kickoff/Design Stage Executor 都可 YieldOutput PipelineLoopResult intervention
             .WithOutputFrom(notifyMerge, fallback, kickoffStage, designStage, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
@@ -187,6 +202,12 @@ public sealed class PipelineWorkflowFactory
 
     /// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit RequestPort PortId（第 6 routing）。</summary>
     public const string ReviewerFixLoopLimitPortId = "Pipeline-ReviewerFixLoopLimit";
+
+    // Stage 58-FF 五十三：Agent API 失敗 per-stage 4 RequestPort PortId（第 7 routing — Christ 拍板真三選 continue / retry / abort）
+    public const string DevAgentApiFailurePortId      = "Pipeline-DevAgentApiFailure";
+    public const string ReviewerAgentApiFailurePortId = "Pipeline-ReviewerAgentApiFailure";
+    public const string QaAgentApiFailurePortId       = "Pipeline-QaAgentApiFailure";
+    public const string DocAgentApiFailurePortId      = "Pipeline-DocAgentApiFailure";
 
     /// <summary>建立 framework CheckpointManager（綁 PipelineCheckpointStore）。
     /// FrameworkPipelineRouter 用此 manager 跑 InProcessExecution.RunStreamingAsync(...) / ResumeStreamingAsync(...)。

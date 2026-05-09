@@ -658,6 +658,40 @@ public class TaskGroupService(
             taskGroupId: group.Id);
     }
 
+    /// <summary>Stage 58-FF 五十三：Agent API 失敗（餘額不足 / 401）→ Pipeline yield-resume 開 type-specific BossInteraction。
+    /// 統一 1 helper（議題 3 拍板）— agentName 參數區分 context（Dev / Reviewer / QA / Doc），4 stage executor marker check 後共用 fire-and-forget pattern。
+    /// 對齊 Stage 57 NotifyBossReviewerFixLoopLimitAsync 既有 fire-and-forget pattern + Pipeline path 接管 routing（agent_api_failure_intervention 第 7 routing）。</summary>
+    public async Task NotifyBossAgentApiFailureAsync(
+        TaskGroup group, string agentName, string failSummary, CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        var summarySnippet = failSummary.Length > 300 ? failSummary[..300] + "..." : failSummary;
+        await ceoChannel.SendMessageAsync(
+            $"⚠️ **{group.Title}** — {agentName} LLM API 呼叫失敗（可能餘額不足 / 401），需要決策：略過 / 重試 / 終止。\n" +
+            $"原因摘要：{summarySnippet}");
+
+        logger.LogWarning("[Stage58] TaskGroup {Id} agent={Agent} API failure，fire agent_api_failure_intervention",
+            group.Id, agentName);
+
+        _ = interactionService.CreateInteractionAsync(
+            "agent_api_failure_intervention",
+            title:                $"{agentName} API 失敗：{group.Title}",
+            description:          $"{agentName} 的 LLM API 呼叫失敗（可能是餘額不足或 401）。原因：{(failSummary.Length > 500 ? failSummary[..500] + "..." : failSummary)}",
+            project:              group.Project,
+            agentName:            agentName,
+            availableActionsJson: InteractionService.AgentApiFailureActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId = ceoChannel.Id.ToString(),
+                groupId   = group.Id.ToString(),
+                agent     = agentName,
+                prUrl     = group.DevPrUrl ?? ""
+            }),
+            taskGroupId: group.Id);
+    }
+
     public async Task NotifyBossInterventionAsync(TaskGroup group, CancellationToken cancellationToken)
     {
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
@@ -833,6 +867,16 @@ public class TaskGroupService(
                     break;
                 // 無 legacy fallback — 此 type 為 Pipeline 專屬（legacy WorkflowEngine 走 NotifyBossInterventionAsync 既有 generic intervention path 不變）
                 logger.LogWarning("[Stage57] reviewer_fix_loop_limit 收到回應但 Pipeline path 未接管（PipelineFrameworkStateJson IS NULL?），略過");
+                break;
+            }
+
+            // Stage 58-FF 五十三：Agent API 失敗 HITL routing（第 7 routing 對齊 Stage 55B Session B + Stage 57 第 6 routing）
+            case "agent_api_failure_intervention":
+            {
+                if (contextJson is not null && await TryRoutePipelineAgentApiFailureAsync(contextJson, action, ct))
+                    break;
+                // 無 legacy fallback — 此 type 為 Pipeline 專屬
+                logger.LogWarning("[Stage58] agent_api_failure_intervention 收到回應但 Pipeline path 未接管（PipelineFrameworkStateJson IS NULL?），略過");
                 break;
             }
 
@@ -1628,6 +1672,60 @@ public class TaskGroupService(
         logger.LogInformation("[Stage57] ProcessBossResponseAsync reviewer_fix_loop_limit Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
         await router.ResumeAfterReviewerFixLoopLimitAsync(group, actionShort, ct);
         return true;
+    }
+
+    /// <summary>Stage 58-FF 五十三：Agent API 失敗 Pipeline path 接管 routing（第 7 routing — 對齊 Stage 55B Session B / Stage 57 既有 TryRoute pattern）。
+    /// 從 contextJson 取 agentName + action 去 api_failure_ 前綴 → 依 agentName dispatch 到 4 個 typed thin wrapper（路線 a：對齊 Stage 57 typed pattern 不動 ResumeWithResponseAsync 簽名）。</summary>
+    private async Task<bool> TryRoutePipelineAgentApiFailureAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        // 從 contextJson 取 agentName（NotifyBossAgentApiFailureAsync 寫入時的 "agent" 欄位）
+        string? agentName;
+        try
+        {
+            using var doc = JsonDocument.Parse(contextJson);
+            agentName = doc.RootElement.TryGetProperty("agent", out var a) ? a.GetString() : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "[Stage58] TryRoutePipelineAgentApiFailureAsync：parse contextJson 取 agent 失敗（Group={Id}），略過", group.Id);
+            return false;
+        }
+        if (string.IsNullOrEmpty(agentName))
+        {
+            logger.LogWarning("[Stage58] TryRoutePipelineAgentApiFailureAsync：contextJson 無 agent 欄位（Group={Id}），略過", group.Id);
+            return false;
+        }
+
+        // api_failure_continue / api_failure_retry / api_failure_abort → continue / retry / abort
+        var actionShort = action.StartsWith("api_failure_") ? action.Substring("api_failure_".Length) : action;
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage58] ProcessBossResponseAsync agent_api_failure_intervention Pipeline 接管（Group={Id}, agent={Agent}, action={Action}）",
+            group.Id, agentName, actionShort);
+
+        switch (agentName)
+        {
+            case "Dev":
+                await router.ResumeAfterDevAgentApiFailureAsync(group, actionShort, ct);
+                return true;
+            case "Reviewer":
+                await router.ResumeAfterReviewerAgentApiFailureAsync(group, actionShort, ct);
+                return true;
+            case "QA":
+                await router.ResumeAfterQaAgentApiFailureAsync(group, actionShort, ct);
+                return true;
+            case "Doc":
+                await router.ResumeAfterDocAgentApiFailureAsync(group, actionShort, ct);
+                return true;
+            default:
+                logger.LogWarning("[Stage58] TryRoutePipelineAgentApiFailureAsync：未知 agentName={Agent}（Group={Id}），略過",
+                    agentName, group.Id);
+                return false;
+        }
     }
 
     private async Task<bool> TryRoutePipelineSplitTaskProposalAsync(string contextJson, string action, string? responseContent, CancellationToken ct)

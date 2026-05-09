@@ -35,6 +35,8 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 [SendsMessage(typeof(QaCompletionRequest))]
 [SendsMessage(typeof(QaStageBridge))]
 [SendsMessage(typeof(QaInterventionRequest))]
+// Stage 58-FF 五十三：Agent API 失敗 RequestPort（第 7 routing）
+[SendsMessage(typeof(QaAgentApiFailureRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class QaStageExecutor : Executor
 {
@@ -79,6 +81,31 @@ internal sealed partial class QaStageExecutor : Executor
     {
         var state = await PipelineStateHelpers.ReadAsync(context);
         var result = response.Result;
+
+        // Stage 58-FF 五十三：API 失敗 marker check（先於既有 Success=false routing — 對齊 Stage 53B [BLOCKED] pattern）
+        if (result.Summary.StartsWith("[API_FAILURE]", StringComparison.Ordinal))
+        {
+            _logger.LogWarning("[Stage58] QaStage：result [API_FAILURE] marker → fire agent_api_failure_intervention + yield 等 Christ（Group={Id}）",
+                state.GroupId);
+            state.LastAgentResult = result;
+            state.LastAgentName = "QA";
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            await using var apiFailScope = _scopeFactory.CreateAsyncScope();
+            var apiFailRepo = apiFailScope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var apiFailGroup = await apiFailRepo.GetGroupByIdAsync(state.GroupId, default);
+            if (apiFailGroup is null)
+            {
+                await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
+                return;
+            }
+            var apiFailTgs = apiFailScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await apiFailTgs.NotifyBossAgentApiFailureAsync(apiFailGroup, "QA", result.Summary, default);
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new QaAgentApiFailureRequest(state.GroupId), _logger,
+                "agent_api_failure_intervention", state.GroupId);
+            return;
+        }
 
         if (!result.Success)
         {
@@ -208,7 +235,40 @@ internal sealed partial class QaStageExecutor : Executor
         }
     }
 
-    /// <summary>Stage 53B：intervention 統一 helper（qa_failed / qa_intervention）。</summary>
+    /// <summary>Stage 58-FF 五十三：QA agent_api_failure HITL 回應 handler — Christ button click 後真三選 routing。
+    /// continue → state.QaDone=true + SendMessage(DocStageBridge) 跳下游 / retry → SendMessage(QaStageBridge) re-invoke 同 stage / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleAgentApiFailureResponseAsync(QaAgentApiFailureResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "continue":
+                _logger.LogInformation("[Stage58] QaStage：agent_api_failure continue → DocStageBridge（state.QaDone=true，跳過 QA 進下階段）（Group={Id}）", state.GroupId);
+                state.QaDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DocStageBridge(state.GroupId));
+                return;
+
+            case "retry":
+                _logger.LogInformation("[Stage58] QaStage：agent_api_failure retry → QaStageBridge re-invoke 同 stage（儲值後）（Group={Id}）", state.GroupId);
+                await context.SendMessageAsync(new QaStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage58] QaStage：agent_api_failure abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "QA API failure abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage58] QaStage：未知 agent_api_failure action={Action}（Group={Id}）— SetInterventionAndYieldAsync", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 agent_api_failure action: {response.Action}", state.LastAgentResult);
+                return;
+        }
+    }
+
+    /// <summary>Stage 53B：intervention 統一 helper（qa_failed / qa_intervention / Stage 58 agent_api_failure abort）。</summary>
     private async ValueTask SetInterventionAndYieldAsync(
         IWorkflowContext context, Guid groupId, string interventionReason, AgentExecutionResult? lastResult)
     {

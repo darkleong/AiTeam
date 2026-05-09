@@ -68,6 +68,12 @@ public class InteractionService(
     public const string ReviewerFixLoopLimitActionsJson =
         """[{"id":"fix_loop_mark_done","label":"標完成","color":"success"},{"id":"fix_loop_skip_qa","label":"跳過 QA","color":"warning"},{"id":"fix_loop_abort","label":"終止 Pipeline","color":"error"}]""";
 
+    /// <summary>Stage 58-FF 五十三：Agent API 失敗（餘額不足 / 401）— Christ 拍板真三選 continue / retry / abort。
+    /// continue = 略過該 Agent 進下階段（state.AgentDone=true + SendMessage 下游 Bridge）；
+    /// retry = re-invoke 同 Agent task（儲值後）；abort = SetIntervention end Pipeline。</summary>
+    public const string AgentApiFailureActionsJson =
+        """[{"id":"api_failure_continue","label":"略過該 Agent 進下階段","color":"warning"},{"id":"api_failure_retry","label":"重試（儲值後）","color":"info"},{"id":"api_failure_abort","label":"終止 Pipeline","color":"error"}]""";
+
     /// <summary>Stage 51：framework HITL 中途介入卡（v4 漸進遷移第三步試點）。
     /// midinterrupt_apply 需 modal 收文字（修改指引）；midinterrupt_cancel 直接結束介入。</summary>
     public const string MidInterruptActionsJson =
@@ -150,6 +156,9 @@ public class InteractionService(
                         "dev_plan_unable"         => "devplan_unable_skip",
                         // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit — default 走完整 QA 路徑（mark_done → QaStageBridge）
                         "reviewer_fix_loop_limit" => "fix_loop_mark_done",
+                        // Stage 58-FF 五十三：Agent API 失敗 — default 略過該 Agent 進下階段（continue → 4 agent 一次跑通驗 4 fire interaction）
+                        // Aria 議題 13 拍板理由：retry 預設會無限迴圈卡死 Mock（FailScenario 仍 = api_failure）；continue 對齊「auto-approve 推進精神」+ retry 行為手動 SQL update auto-approve action 驗對齊既有慣例
+                        "agent_api_failure_intervention" => "api_failure_continue",
                         // Stage 57 自驗揭露 pre-Stage 57 既有 bug：epic_partial_paused 沒有 ack action（buttons: epic_resume / epic_abort）
                         // 預設 epic_resume 觸發 HandleEpicPartialPausedAsync handler idempotent 路徑（驗 FF 五十一第二層防線）
                         "epic_partial_paused"     => "epic_resume",

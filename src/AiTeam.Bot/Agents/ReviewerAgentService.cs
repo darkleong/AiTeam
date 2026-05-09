@@ -52,6 +52,12 @@ public class ReviewerAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 58-FF 五十三：Mock API 失敗 — throw LlmApiFailureException 模擬 Anthropic 餘額不足
+            // 由 AgentQueueProcessor specific catch 接手 build [API_FAILURE] result + call HandleAgentCompletedAsync → ReviewerStageExecutor marker check → fire interaction
+            if (MockClaudeCodeService.FailScenario == "agent_api_failure")
+                throw new LlmApiFailureException(LlmProviderType.Anthropic,
+                    "[MOCK] Credit balance is too low. Please top up at console.anthropic.com");
+
             // Stage 39：略過驗收情境（review_skipped）— 回傳 Skipped 結果，task.Status 標 "skipped"，跳過 Petra
             if (MockClaudeCodeService.FailScenario == "review_skipped")
             {

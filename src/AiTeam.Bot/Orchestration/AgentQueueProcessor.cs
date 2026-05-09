@@ -309,6 +309,61 @@ public class AgentQueueProcessor(
                 Status    = "idle"
             });
         }
+        // Stage 58 (FF 五十三)：API 失敗 specific catch — 在 generic catch 之前，build [API_FAILURE] result + call HandleAgentCompletedAsync 走正常 callback flow
+        // （路線 A 修正：v1.0 計劃書的「4 Stage Executor catch」架構不可行，因 Stage Executor 與本處 async path 不同 —
+        //  本處 catch 後若 swallow 走 generic catch line 312，HandleAgentCompletedAsync 永遠不 fire，Pipeline 永遠卡在 PortId）
+        catch (LlmApiFailureException apiEx)
+        {
+            logger.LogWarning(apiEx,
+                "[Stage58] AgentQueueProcessor：Agent {Agent} API failure（Task={Id}, Provider={Provider}）— build [API_FAILURE] result + 觸發 HandleAgentCompletedAsync",
+                task.AssignedAgent, task.Id, apiEx.ProviderType);
+
+            taskRepo.UpdateStatus(task, "failed");
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = task.Id,
+                Agent  = task.AssignedAgent,
+                Step   = $"[API_FAILURE] {apiEx.ProviderType}: {apiEx.RawError}",
+                Status = "failed",
+            });
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = task.Id,
+                GroupId   = group.Id,
+                Title     = task.Title,
+                AgentName = task.AssignedAgent,
+                Status    = "failed"
+            });
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = task.AssignedAgent,
+                Status           = "error",
+                CurrentTaskTitle = $"[API_FAILURE] {apiEx.RawError}"
+            });
+
+            // ⚠️ 路線 A 核心：build [API_FAILURE] summary 前綴 result + call HandleAgentCompletedAsync（走正常 callback flow）
+            // 不跟 generic catch 一樣 swallow — Pipeline 4 stage executor HandleResponseAsync 第一行 marker check 接手
+            var apiFailureResult = new AgentExecutionResult(
+                Success: false,
+                Summary: $"[API_FAILURE] {apiEx.ProviderType}: {apiEx.RawError}");
+
+            var workflowKey = task.WorkflowAgentKey ?? task.AssignedAgent;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await taskGroupService.HandleAgentCompletedAsync(
+                        group.Id, workflowKey, apiFailureResult, group.DevPrUrl ?? "",
+                        appLifetime.ApplicationStopping);
+                }
+                catch (Exception cbEx)
+                {
+                    logger.LogError(cbEx,
+                        "[Stage58] HandleAgentCompletedAsync (API failure path) 失敗（Group={Id}）", group.Id);
+                }
+            }, appLifetime.ApplicationStopping);
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "AgentQueueProcessor：Agent {Agent} 執行失敗（Task={Id}）",

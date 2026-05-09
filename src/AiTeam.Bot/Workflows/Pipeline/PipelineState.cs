@@ -275,6 +275,45 @@ public sealed record ReviewerFixLoopLimitRequest(
 public sealed record ReviewerFixLoopLimitResponse(
     [property: JsonPropertyName("action")] string Action);
 
+// ── Stage 58-FF 五十三：Agent API 失敗 per-stage 4 RequestPort records（第 7 routing） ──
+//
+// 對齊 Stage 55B Session B per-stage pattern + framework 1.3.0 RequestPort type-bound 限制（每 stage 獨立型別避免 type-based dispatch collision）。
+// 4 stage 各自的 marker check（HandleResponseAsync 第一行 result.Summary.StartsWith("[API_FAILURE]")）→ NotifyBossAgentApiFailureAsync(agentName) → SendMessage Request →
+// 等 ResumeAfter<Stage>AgentApiFailureAsync（4 typed thin wrapper，路線 a）餵 Response → HandleAgentApiFailureResponseAsync 真三選 routing：
+//   continue → state.<Stage>Done=true + SendMessage 下游 Bridge / retry → SendMessage 同 stage Bridge re-invoke / abort → SetInterventionAndYieldAsync end
+
+/// <summary>Stage 58：Dev stage Agent API 失敗 RequestPort 請求 payload。對應 BossInteraction type "agent_api_failure_intervention" + context.agent="Dev"。</summary>
+public sealed record DevAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 58：Dev stage Agent API 失敗回傳 payload。Action = "continue" / "retry" / "abort"（從 api_failure_continue / _retry / _abort 去前綴）。</summary>
+public sealed record DevAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 58：Reviewer stage Agent API 失敗 RequestPort 請求 payload。</summary>
+public sealed record ReviewerAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 58：Reviewer stage Agent API 失敗回傳 payload。</summary>
+public sealed record ReviewerAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 58：QA stage Agent API 失敗 RequestPort 請求 payload。</summary>
+public sealed record QaAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 58：QA stage Agent API 失敗回傳 payload。</summary>
+public sealed record QaAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 58：Doc stage Agent API 失敗 RequestPort 請求 payload。</summary>
+public sealed record DocAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 58：Doc stage Agent API 失敗回傳 payload。Doc continue 跳到 NotifyMergeStage（Pipeline 終結節點）。</summary>
+public sealed record DocAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
 /// <summary>Stage 55B：Split task proposal RequestPort 請求 payload（Stage 46 Petra 拆 task 機制）。
 /// 對應既有 BossInteraction type "split_task_proposal" — buttons: split_accept / _modify / _reject / _abort。</summary>
 public sealed record SplitTaskProposalRequest(

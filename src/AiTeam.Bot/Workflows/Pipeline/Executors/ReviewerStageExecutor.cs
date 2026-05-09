@@ -37,6 +37,9 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 // Stage 57-FF 五十二：fix loop limit type-specific routing（第 6 routing）
 [SendsMessage(typeof(DocStageBridge))]              // fix_loop_skip_qa case 跳 QA 直接送 Doc
 [SendsMessage(typeof(ReviewerFixLoopLimitRequest))] // fix loop limit yield request
+// Stage 58-FF 五十三：Agent API 失敗 RequestPort（第 7 routing）
+[SendsMessage(typeof(ReviewerStageBridge))]         // retry case re-invoke 同 stage
+[SendsMessage(typeof(ReviewerAgentApiFailureRequest))]
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class ReviewerStageExecutor : Executor
 {
@@ -81,6 +84,31 @@ internal sealed partial class ReviewerStageExecutor : Executor
     {
         var state = await PipelineStateHelpers.ReadAsync(context);
         var result = response.Result;
+
+        // Stage 58-FF 五十三：API 失敗 marker check（先於既有 Success / Skipped routing — 對齊 Stage 53B [BLOCKED] pattern）
+        if (result.Summary.StartsWith("[API_FAILURE]", StringComparison.Ordinal))
+        {
+            _logger.LogWarning("[Stage58] ReviewerStage：result [API_FAILURE] marker → fire agent_api_failure_intervention + yield 等 Christ（Group={Id}）",
+                state.GroupId);
+            state.LastAgentResult = result;
+            state.LastAgentName = "Reviewer";
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            await using var apiFailScope = _scopeFactory.CreateAsyncScope();
+            var apiFailRepo = apiFailScope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var apiFailGroup = await apiFailRepo.GetGroupByIdAsync(state.GroupId, default);
+            if (apiFailGroup is null)
+            {
+                await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
+                return;
+            }
+            var apiFailTgs = apiFailScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await apiFailTgs.NotifyBossAgentApiFailureAsync(apiFailGroup, "Reviewer", result.Summary, default);
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new ReviewerAgentApiFailureRequest(state.GroupId), _logger,
+                "agent_api_failure_intervention", state.GroupId);
+            return;
+        }
 
         // 情境 ① / ②：Vera 失敗或略過 — 對齊 Stage 39 既有 line 179-199
         if (!result.Success || result.ResultType == AgentResultType.Skipped)
@@ -218,7 +246,40 @@ internal sealed partial class ReviewerStageExecutor : Executor
         }
     }
 
-    /// <summary>Stage 53B：intervention 統一 helper（fix loop max_iter / Petra escalate）。
+    /// <summary>Stage 58-FF 五十三：Reviewer agent_api_failure HITL 回應 handler — Christ button click 後真三選 routing。
+    /// continue → state.ReviewerDone=true + SendMessage(QaStageBridge) 跳下游 / retry → SendMessage(ReviewerStageBridge) re-invoke 同 stage / abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleAgentApiFailureResponseAsync(ReviewerAgentApiFailureResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "continue":
+                _logger.LogInformation("[Stage58] ReviewerStage：agent_api_failure continue → QaStageBridge（state.ReviewerDone=true，跳過 Reviewer 進下階段）（Group={Id}）", state.GroupId);
+                state.ReviewerDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new QaStageBridge(state.GroupId));
+                return;
+
+            case "retry":
+                _logger.LogInformation("[Stage58] ReviewerStage：agent_api_failure retry → ReviewerStageBridge re-invoke 同 stage（儲值後）（Group={Id}）", state.GroupId);
+                await context.SendMessageAsync(new ReviewerStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage58] ReviewerStage：agent_api_failure abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "Reviewer API failure abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage58] ReviewerStage：未知 agent_api_failure action={Action}（Group={Id}）— SetInterventionAndYieldAsync", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 agent_api_failure action: {response.Action}", state.LastAgentResult);
+                return;
+        }
+    }
+
+    /// <summary>Stage 53B：intervention 統一 helper（fix loop max_iter / Petra escalate / Stage 58 agent_api_failure abort）。
     /// DB set group.Status=NeedsIntervention + InterventionReason → call NotifyBossInterventionAsync → YieldOutput Completed=true 結束 Workflow。
     /// PipelineLoopResult.Completed=true 語義：Pipeline Workflow 完整跑完（含 intervention），FinalizePipelineAsync 只 ClearMarkersAsync。</summary>
     private async ValueTask SetInterventionAndYieldAsync(

@@ -48,6 +48,12 @@ public class QaAgentService(
         // Stage 26：修正狀態時序 — 先推 running，等待延遲後再設 done，確保 Dashboard 可觀察到 running 狀態
         if (await appSettings.GetBoolAsync("MockMode", false, cancellationToken))
         {
+            // Stage 58-FF 五十三：Mock API 失敗 — throw LlmApiFailureException 模擬 Anthropic 餘額不足
+            // 由 AgentQueueProcessor specific catch 接手 build [API_FAILURE] result + call HandleAgentCompletedAsync → QaStageExecutor marker check → fire interaction
+            if (MockClaudeCodeService.FailScenario == "agent_api_failure")
+                throw new LlmApiFailureException(LlmProviderType.Anthropic,
+                    "[MOCK] Credit balance is too low. Please top up at console.anthropic.com");
+
             // Stage 43-E：qa_fix_loop_fail 情境 — 持續回 failed 報告，讓 Petra 走 code_bug 路由 + QaFixRound 累計
             //   不切換 FailScenario（持續失敗直到 QaFixRound >= max 由 QaCoordinationService 觸發 escalate）
             if (MockClaudeCodeService.FailScenario == "qa_fix_loop_fail")
