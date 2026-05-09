@@ -129,6 +129,11 @@ builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Meeting.MeetingOrchestrat
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Appeal.AppealOrchestrationService>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Qa.QaCoordinationService>();
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Proposal.ProposalConfirmationService>();
+// Stage 59：TaskGroupService 二次拆解（FF 五十四子項 1）— 4 子 service 對齊 Stage 36 既有 Orchestration 子目錄 single-theme pattern（Boss/Epic/Routing 拆 3 子目錄避免 namespace TaskGroup 與 entity 衝突）
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Boss.BossNotificationService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Boss.BossResponseHandlerService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Epic.EpicChainService>();
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Routing.PipelineRoutingService>();
 
 // Stage 49：v4 漸進遷移首發 — MS Agent Framework Appeal Workflow 整合層
 // 設計（驗證 B 結論）：framework Executor 不註冊到 DI（factory 模式由 AppealWorkflowFactory 內 new 出 Executor instance）

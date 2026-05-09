@@ -1,5 +1,6 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Bot.Workflows.Appeal;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -109,8 +110,8 @@ public class FrameworkAppealRouter(
                     group.Id);
                 taskRepo.UpdateGroupStatus(group, "failed");
                 await taskRepo.SaveAsync(cancellationToken);
-                var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-                await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+                var bossNotification = serviceProvider.GetRequiredService<BossNotificationService>();
+                await bossNotification.NotifyBossInterventionAsync(group, cancellationToken);
                 return null;
             }
 
@@ -468,8 +469,8 @@ public class FrameworkAppealRouter(
                     group.Id, appealResult.Verdict);
                 taskRepo.UpdateGroupStatus(group, "failed");
                 await taskRepo.SaveAsync(cancellationToken);
-                var tgs = serviceProvider.GetRequiredService<TaskGroupService>();
-                await tgs.NotifyBossInterventionAsync(group, cancellationToken);
+                var bossNotification = serviceProvider.GetRequiredService<BossNotificationService>();
+                await bossNotification.NotifyBossInterventionAsync(group, cancellationToken);
                 return null;
         }
     }

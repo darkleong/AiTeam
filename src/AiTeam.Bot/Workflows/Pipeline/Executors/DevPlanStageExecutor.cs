@@ -2,6 +2,7 @@ using AiTeam.Bot.Agents;
 using AiTeam.Bot.Agents.Pm;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Appeal;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
@@ -255,8 +256,8 @@ internal sealed partial class DevPlanStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

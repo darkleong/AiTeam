@@ -1,6 +1,7 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Appeal;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
@@ -112,8 +113,8 @@ internal sealed partial class DevStageExecutor : Executor
                 await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
                 return;
             }
-            var apiFailTgs = apiFailScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await apiFailTgs.NotifyBossAgentApiFailureAsync(apiFailGroup, "Dev", result.Summary, default);
+            var apiFailBossNotification = apiFailScope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await apiFailBossNotification.NotifyBossAgentApiFailureAsync(apiFailGroup, "Dev", result.Summary, default);
             await PipelineHitlHelper.YieldForChristResponseAsync(
                 context, new DevAgentApiFailureRequest(state.GroupId), _logger,
                 "agent_api_failure_intervention", state.GroupId);
@@ -153,9 +154,9 @@ internal sealed partial class DevStageExecutor : Executor
                     state.LastAgentResult = result;
                     await PipelineStateHelpers.SaveAsync(context, state);
 
-                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                    var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
                     var failSummary = $"Dev blocker {decision.Routing}：{decision.Instructions}";
-                    await tgs.NotifyBossDevFailedInterventionAsync(group, isFixLoop: false, failSummary, default);
+                    await bossNotification.NotifyBossDevFailedInterventionAsync(group, isFixLoop: false, failSummary, default);
                     await PipelineHitlHelper.YieldForChristResponseAsync(
                         context, new DevInterventionRequest(state.GroupId), _logger,
                         "dev_failed_intervention", state.GroupId);
@@ -185,8 +186,8 @@ internal sealed partial class DevStageExecutor : Executor
                     await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
                     return;
                 }
-                var tgsFail = scopeDevFail.ServiceProvider.GetRequiredService<TaskGroupService>();
-                await tgsFail.NotifyBossDevFailedInterventionAsync(groupFail, isFixLoop: false, $"Dev 失敗：{result.Summary}", default);
+                var bossNotificationFail = scopeDevFail.ServiceProvider.GetRequiredService<BossNotificationService>();
+                await bossNotificationFail.NotifyBossDevFailedInterventionAsync(groupFail, isFixLoop: false, $"Dev 失敗：{result.Summary}", default);
             }
             await PipelineHitlHelper.YieldForChristResponseAsync(
                 context, new DevInterventionRequest(state.GroupId), _logger,
@@ -283,8 +284,8 @@ internal sealed partial class DevStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

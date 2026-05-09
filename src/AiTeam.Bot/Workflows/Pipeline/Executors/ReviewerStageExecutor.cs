@@ -1,6 +1,7 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Appeal;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
@@ -102,8 +103,8 @@ internal sealed partial class ReviewerStageExecutor : Executor
                 await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "group_not_found", result));
                 return;
             }
-            var apiFailTgs = apiFailScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await apiFailTgs.NotifyBossAgentApiFailureAsync(apiFailGroup, "Reviewer", result.Summary, default);
+            var apiFailBossNotification = apiFailScope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await apiFailBossNotification.NotifyBossAgentApiFailureAsync(apiFailGroup, "Reviewer", result.Summary, default);
             await PipelineHitlHelper.YieldForChristResponseAsync(
                 context, new ReviewerAgentApiFailureRequest(state.GroupId), _logger,
                 "agent_api_failure_intervention", state.GroupId);
@@ -187,8 +188,8 @@ internal sealed partial class ReviewerStageExecutor : Executor
             state.LastAgentName = "Reviewer";
             await PipelineStateHelpers.SaveAsync(context, state);
 
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossReviewerFixLoopLimitAsync(group, petraResult, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossReviewerFixLoopLimitAsync(group, petraResult, default);
 
             // ② SendsMessage(ReviewerFixLoopLimitRequest) → Workflow yield 等 Christ button click
             await PipelineHitlHelper.YieldForChristResponseAsync(
@@ -296,8 +297,8 @@ internal sealed partial class ReviewerStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

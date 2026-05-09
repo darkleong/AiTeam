@@ -1,5 +1,6 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI.Workflows;
@@ -89,8 +90,8 @@ internal sealed partial class DocStageExecutor : Executor
                 await ClearMarkerAndFallbackAsync(context, state.GroupId, "group_not_found", result);
                 return;
             }
-            var apiFailTgs = apiFailScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await apiFailTgs.NotifyBossAgentApiFailureAsync(apiFailGroup, "Doc", result.Summary, default);
+            var apiFailBossNotification = apiFailScope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await apiFailBossNotification.NotifyBossAgentApiFailureAsync(apiFailGroup, "Doc", result.Summary, default);
             await PipelineHitlHelper.YieldForChristResponseAsync(
                 context, new DocAgentApiFailureRequest(state.GroupId), _logger,
                 "agent_api_failure_intervention", state.GroupId);
@@ -160,8 +161,8 @@ internal sealed partial class DocStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

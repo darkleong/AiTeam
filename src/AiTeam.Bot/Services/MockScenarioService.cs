@@ -4,6 +4,7 @@ using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.Discord.Routing;
 using AiTeam.Bot.Orchestration;
+using AiTeam.Bot.Orchestration.Epic;
 using AiTeam.Bot.Orchestration.Hitl;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -391,8 +392,8 @@ public class MockScenarioService(
                 try
                 {
                     await using var raceScope = serviceProvider.CreateAsyncScope();
-                    var tgs = raceScope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.SimulateEpicRaceAsync(epicId, default);
+                    var epicChain = raceScope.ServiceProvider.GetRequiredService<EpicChainService>();
+                    await epicChain.SimulateEpicRaceAsync(epicId, default);
                 }
                 catch (Exception raceEx)
                 {

@@ -2,6 +2,7 @@ using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Orchestration.Appeal;
 using AiTeam.Bot.Orchestration.Qa;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Bot.Workflows.Pipeline;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -656,8 +657,8 @@ public sealed class FrameworkPipelineRouter
                     taskRepo.UpdateGroupStatus(freshGroup, AiTeam.Shared.Constants.TaskStatus.NeedsIntervention);
                     freshGroup.InterventionReason = $"Dev 失敗（Pipeline framework path）：{failSummary}";
                     await taskRepo.SaveAsync(ct);
-                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.NotifyBossDevFailedInterventionAsync(freshGroup, isFixLoop: false, failSummary, ct);
+                    var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+                    await bossNotification.NotifyBossDevFailedInterventionAsync(freshGroup, isFixLoop: false, failSummary, ct);
                     _logger.LogInformation("[Stage53B] dev_failed → NotifyBossDevFailedInterventionAsync（Group={Id}）", group.Id);
                 }
                 break;
@@ -665,8 +666,8 @@ public sealed class FrameworkPipelineRouter
             case "qa_failed":
             case "qa_intervention":
                 {
-                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.NotifyBossInterventionAsync(freshGroup, ct);
+                    var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+                    await bossNotification.NotifyBossInterventionAsync(freshGroup, ct);
                     _logger.LogInformation("[Stage53B] {Reason} → NotifyBossInterventionAsync（Group={Id}）", reason, group.Id);
                 }
                 break;
@@ -677,8 +678,8 @@ public sealed class FrameworkPipelineRouter
                     taskRepo.UpdateGroupStatus(freshGroup, AiTeam.Shared.Constants.TaskStatus.NeedsIntervention);
                     freshGroup.InterventionReason = $"Doc 失敗（Pipeline framework path）：{failSummary}";
                     await taskRepo.SaveAsync(ct);
-                    var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.NotifyBossInterventionAsync(freshGroup, ct);
+                    var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+                    await bossNotification.NotifyBossInterventionAsync(freshGroup, ct);
                     _logger.LogInformation("[Stage53B] doc_failed → NotifyBossInterventionAsync（Group={Id}）", group.Id);
                 }
                 break;

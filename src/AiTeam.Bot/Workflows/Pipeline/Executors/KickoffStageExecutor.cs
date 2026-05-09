@@ -1,6 +1,7 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Meeting;
+using AiTeam.Bot.Orchestration.Boss;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Services;
@@ -157,8 +158,8 @@ internal sealed partial class KickoffStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

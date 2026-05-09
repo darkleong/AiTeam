@@ -1,6 +1,8 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Meeting;
+using AiTeam.Bot.Orchestration.Boss;
+using AiTeam.Bot.Orchestration.Epic;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.Services;
@@ -178,8 +180,8 @@ internal sealed partial class DesignStageExecutor : Executor
                 }
                 await using (var scopeAccept = _scopeFactory.CreateAsyncScope())
                 {
-                    var tgs = scopeAccept.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.BuildEpicSubTasksAsync(state.GroupId, proposal, default);
+                    var epicChain = scopeAccept.ServiceProvider.GetRequiredService<EpicChainService>();
+                    await epicChain.BuildEpicSubTasksAsync(state.GroupId, proposal, default);
                 }
                 await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "split_accepted", null));
                 return;
@@ -204,8 +206,8 @@ internal sealed partial class DesignStageExecutor : Executor
                 }
                 await using (var scopeModify = _scopeFactory.CreateAsyncScope())
                 {
-                    var tgs = scopeModify.ServiceProvider.GetRequiredService<TaskGroupService>();
-                    await tgs.BuildEpicSubTasksAsync(state.GroupId, modified, default);
+                    var epicChain = scopeModify.ServiceProvider.GetRequiredService<EpicChainService>();
+                    await epicChain.BuildEpicSubTasksAsync(state.GroupId, modified, default);
                 }
                 await context.SendMessageAsync(new PipelineFallbackBridge(state.GroupId, "split_modified", null));
                 return;
@@ -262,8 +264,8 @@ internal sealed partial class DesignStageExecutor : Executor
         var freshGroup = await taskRepo.GetGroupByIdAsync(groupId, default);
         if (freshGroup is not null)
         {
-            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-            await tgs.NotifyBossInterventionAsync(freshGroup, default);
+            var bossNotification = scope.ServiceProvider.GetRequiredService<BossNotificationService>();
+            await bossNotification.NotifyBossInterventionAsync(freshGroup, default);
         }
 
         await context.YieldOutputAsync(new PipelineLoopResult

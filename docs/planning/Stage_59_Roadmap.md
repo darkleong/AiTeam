@@ -201,3 +201,84 @@ Forge 完成 read 後在 Plan Mode 計劃書內報告：
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-10 | 初版規劃書建立（Aria）— Stage 59 = FF 五十四子項 1 TaskGroupService 拆解（1759 行 → 主檔瘦身 ~400-500 + 4 新子 service）。**0 議題攤 Christ**（純 refactor 不動業務 → 對 Christ 看到行為 0 影響）。**Aria 拿捏 8 件純內部議題**（拆解模式 / 子 service 命名 / caller 切換 / 子目錄組織 / DI / Migration / prompt / SOP 6 全套用）。**Stage 57+58 教訓延伸**（不引入新 user transaction + 新 idempotent helper）。**規劃前期已 grep**：TaskGroupService method 分布 6 區段 partial read（A/B/C/D/E/F line 範圍 + method 群組）+ refactor-sop.md SOP 6 項 + Stage 36 Roadmap 拆解設計段 — 對齊自省點 #23 規劃前期 grep 紀律 + **對齊新立 workflow_aria.md 第 5+6 條紀律**（partial read + 不寫 code 範例 + 大檔精準 line + 簽名 reference）。**Aria 校準錨預估**：對齊 Stage 34/35/36 拆解倍率 ×1.5-1.7（平均 ×1.58），預估 Forge context ~480-640K / Opus 1M + medium-high。**第一個套用新立紀律的 Stage**（驗證計劃書本身下降 ~30-40%）。
+| v2.0 | 2026-05-10 | **Forge 實作完成 + V1/V2/V5 自驗通過 + 結案紀錄補充**（v3.48.0）。
+
+---
+
+## 實作紀錄（v2.0 — 對齊 refactor-sop.md「結案必做清單」5 項）
+
+### 1. 實際產出檔案 + 行數（vs 規劃預估）
+
+| 檔案 | 實際行數 | 規劃預估 | 差距 |
+|---|---|---|---|
+| **TaskGroupService.cs**（主檔瘦身）| **808 行** | 450-550 行 | **+47%~+79% 超出**（因 ProcessBossResponseAsync 主 dispatch switch ~150 行 + FireOneStepAsync framework entry guard ~70 行 必須留主檔，plan 預估 -69%~-74% 過樂觀）|
+| BossNotificationService.cs（Boss/）| 208 行 | 280-320 行 | -26%~-35% 比預估精簡 |
+| BossResponseHandlerService.cs（Boss/）| 267 行 | 340-400 行 | -21%~-33% 比預估精簡 |
+| EpicChainService.cs（Epic/）| 372 行 | 420-460 行 | -11%~-19% 命中區間下緣 |
+| PipelineRoutingService.cs（Routing/）| 204 行 | 190-220 行 | ✅ 命中區間 |
+| **5 檔合計** | **1859 行** | 1500-1800 行 | +5.7% vs 原 1759 行（對齊 SOP「拆完總碼略多是 boilerplate 正常」）|
+
+**主檔瘦身 -54%**（1759 → 808） — 對齊 Stage 36 -73% 期望偏低，但仍是有意義降低。
+
+### 2. SOP 套用對照（refactor-sop.md 6 項）
+
+| SOP | 本次實踐 |
+|---|---|
+| **SOP 1：Record/Type 組織** | 本次無新 public record；`SplitProposal`（既有 Stage 52 抽出的 MeetingResults.cs）by EpicChainService + BossResponseHandlerService 共用 — `using AiTeam.Bot.Orchestration.Meeting;` import 不動既有設計 ✓ |
+| **SOP 2：Migration 策略** | **直接切換不做 thin wrapper**（caller class ~11 個 < 15 對齊 SOP 表格）— 22+ call site 機械化 replace `tgs.NotifyBossXXX` → `bossNotification.NotifyBossXXX` + 11 caller 加 `using AiTeam.Bot.Orchestration.Boss;`。**無 ctor 改動**（揭露：所有 caller 都用 `IServiceScopeFactory` lazy resolve，scope.GetRequiredService 模式取代 ctor 注入）✓ |
+| **SOP 3：Commons 範圍** | **不需要 Commons** — 5 子 service 各自職責不重疊，無共用 helper > 5 行 ✓ |
+| **SOP 4：DI 註冊順序** | Program.cs L132-135 補 4 新子 service AddSingleton（順序：Boss → Epic → Routing；BossResponseHandler 在 BossNotification 後對齊邏輯依賴方向）+ TaskGroupService L176 維持原位 ✓ |
+| **SOP 5：Session state 管理** | 無 singleton-level state — 5 子 service 全 stateless（per-call scope） ✓ |
+| **SOP 6：子目錄組織** | **3 子目錄 Boss/Epic/Routing**（spike 後修正方案 — 原 plan「TaskGroup/ 統一目錄」因 namespace 衝突改為 single-theme 多子目錄對齊 Stage 36 Meeting/Appeal/Qa/Proposal 既有 pattern） ✓ |
+
+### 3. 踩坑紀錄（refactor-sop.md SOP 沒涵蓋的新發現 — 供未來擴充 SOP）
+
+#### 踩坑 #1：**Namespace 與 entity 同名衝突**（C# child namespace shadow 規則）
+
+**現象**：原 plan「Orchestration/TaskGroup/ 統一子目錄」第一次 build 報 75 errors `'TaskGroup' is a namespace but is used like a type`。
+
+**根因**：C# 編譯器在 `AiTeam.Bot.Orchestration.X` namespace 內優先解析同層 child namespace，`Orchestration.TaskGroup` namespace 與 `Data.TaskGroup` entity 同名 → entity 被 shadow。所有 `AiTeam.Bot.Orchestration.*` 內既有 file 的 `TaskGroup` entity 引用全部 break。
+
+**修法**：3 子目錄 Boss/Epic/Routing 取代 TaskGroup/ 統一目錄（每個子 namespace 名稱與 entity 不同名）+ 配套對齊 Stage 36 Meeting/Appeal/Qa/Proposal single-theme pattern。
+
+**SOP 擴充建議（供未來）**：refactor-sop.md SOP 6「子目錄組織」段加一句紀律 — 「**子目錄/namespace 名稱避免與既有 entity 同名**（C# child namespace 解析優先級會 shadow 同名 entity，造成全 namespace tree 內 entity 引用 break）。對應 SOP 6 子目錄命名規則。」
+
+#### 踩坑 #2：**Caller ctor 改動工作量比預期大幅減少**（Pipeline Executor 全用 IServiceScopeFactory）
+
+**現象**：plan 預期 11 caller 改 ctor 注入 + 18-20 call site replace。實際發現所有 11 caller（Pipeline Executor + Framework Router）都用 `IServiceScopeFactory` + `scope.ServiceProvider.GetRequiredService<TaskGroupService>()` lazy resolve pattern — **0 ctor 改動**，只需改 22+ call site `var tgs = ...GetRequiredService<TaskGroupService>(); tgs.NotifyBossXXX(...)` → `var bossNotification = ...GetRequiredService<BossNotificationService>(); bossNotification.NotifyBossXXX(...)` + 11 caller 加 1 行 using。
+
+**洞察**：spike 第一步 grep 不只看「ctor 注入清單」更要看「scope.ServiceProvider.GetRequiredService 模式」— 後者改動成本遠低（ctor 改動牽動 DI registration + parameter 簽名 + base class 呼叫，scope resolve 改動只是 1 個 var name + 1 個 using）。
+
+**SOP 擴充建議（供未來）**：refactor-sop.md SOP 2「Migration 策略」加說明 — 「**caller 改動成本評估三層分**：① ctor 注入（最重）② scope.ServiceProvider.GetRequiredService（最輕，改動 = call site replace + using）③ 既有 IServiceProvider field 注入（中等）。spike 第一步 grep 區分這三類 caller 才能準確評估範圍。」
+
+#### 踩坑 #3：**主檔瘦身比例 plan 預估過樂觀**（必須留主檔的 dispatch 結構行數沒充分計入）
+
+**現象**：plan 預估主檔 -69%~-74% 對齊 Stage 36 -73%，實際 -54%（808 vs 預估 450-550）。
+
+**根因**：`ProcessBossResponseAsync` 主 dispatch switch ~150 行 + `FireOneStepAsync` 含 framework Pipeline entry guard + Kickoff/Design 路由 ~70 行 + `HandleAgentCompletedAsync` 含 Pipeline path 接管 callback ~100 行 — 這 3 段「主入口 method 含 dispatch / guard / 路由」必須留主檔，plan 預估時沒精準分離「可搬走的 method body」vs「必留的 dispatch 結構」。
+
+**SOP 擴充建議（供未來）**：refactor-sop.md「Stage 34-36 實戰數據」段加一行 — 「**dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60%**（vs Stage 34-36 純拆 -73%~-85% 是因為 Stage 34-36 拆對象是「同類別 4 怪物合併」沒 dispatch 主入口；Stage 59 拆對象是「單檔含 dispatch + 多子職責」必留 dispatch 結構）。」
+
+### 4. 驗收情境清單 + 0 follow-up commits 狀態
+
+| # | 驗收 | 結果 |
+|---|---|---|
+| **V1 build** | ✅ Forge 自驗 — `dotnet build AiTeam.slnx` 0 errors / 0 new warnings / v3.48.0 確認 / 4 新 .cs 檔產生 |
+| **V2 test** | ✅ Forge 自驗 — `dotnet test` 4 + 127 = **131 tests all pass**, 0 failures |
+| **V3 Mock 7 routing regression** | ⏳ 需 production deploy 後 Christ 觸發 7 framework_pipeline_* Mock 場景驗 dispatch + Pipeline 推進 |
+| **V4 Mock 完整 pipeline** | ⏳ 需 production deploy 後 Christ 觸發 `new_feature_with_proposal` Mock 驗 group.Status=done + token_logs |
+| **V5 行數驗證** | ✅ Forge 自驗 — TaskGroupService 1759 → 808（-54%）+ 4 新檔合計 1051（合計 1859 vs 原 1759 = +5.7% boilerplate 正常）|
+| **V6 DI 啟動驗證** | ⏳ 需 production deploy 後 Bot 啟動 log 驗 v3.48.0 + 4 新子 service 註冊 + 0 循環依賴錯誤 |
+
+**0 follow-up commits 狀態（截至子項 7 結束）**：✅ 主實作 1 commit 預期 push 後即 production deploy 自動 trigger；無 v3.48.x patch 預期需求。
+
+### 5. Context 消耗實測（供 Aria 校準公式）
+
+> Aria 第二段填（結案 Roadmap 補校準錨 — 待量測實際 Forge context ÷ 計劃書預估比值）。
+> Aria 預估：×1.5-1.7（對齊 Stage 34/35/36 拆解倍率平均 ×1.58）/ Opus 1M + medium-high.
+
+### Stage 59 戰略觀察（搭車 follow-up）
+
+- **Dead code 觀察**：`GetGroupProjectIdAsync` (TaskGroupService 主檔 line ~474) — grep 確認 0 caller，dead code。本次保守留主檔（純檔案搬移精神不刪 dead code），未來 Stage 可清。立 follow-up 觀察不立 FF。
+- **MarkGroupDoneOrInterventionAsync 跨 B+E 邏輯留主檔**設計修正（plan v1 設計 vs 實際）：plan 將 B 區段全抽到 BossNotificationService，但 spike 揭露 MarkGroupDone 內部呼叫 EpicChain.PauseEpicAndNotify + TriggerNextPhase（B → E 反向耦合）。Forge 自決留主檔（守門邏輯跨 B+E）對齊 SOP 4「子 service 單向依賴 Commons 不可反向」。BossNotificationService 因此只含 5 NotifyBoss + FindChannel（不含 MarkGroupDone）。
+- **Lazy resolve follow-up 觀察**（plan v1 通過時 Aria 提）：循環依賴用 IServiceProvider lazy resolve 對齊 Stage 36 既有 FrameworkAppealRouter pattern OK — 但這是繞道不是真正解循環。徹底解 = 「FireStepsAsync 抽 ITaskFireService 介面」會動 method 簽名超 Stage 59 範圍。**接受 lazy resolve 範圍內最小改動 + 留 backlog 觀察給未來 reference**（不立 FF）。本 Stage 用了 5 處 IServiceProvider lazy resolve：BossResponseHandler (4 case bodies) + EpicChain (3 method) — 對齊既有 pattern 不擴張。
