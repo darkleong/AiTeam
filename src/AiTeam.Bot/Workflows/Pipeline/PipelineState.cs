@@ -265,6 +265,16 @@ public sealed record DevPlanUnableRequest(
 public sealed record DevPlanUnableResponse(
     [property: JsonPropertyName("action")] string Action);
 
+/// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit 的 RequestPort 請求 payload（第 6 routing — Christ 拍板真三選）。
+/// 對應 BossInteraction type "reviewer_fix_loop_limit" — buttons: fix_loop_mark_done / _skip_qa / _abort。</summary>
+public sealed record ReviewerFixLoopLimitRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit 回傳 payload。
+/// Action = "mark_done"（→ QaStageBridge 走完整 QA → Doc）/ "skip_qa"（→ DocStageBridge 跳過 QA 直接 Doc）/ "abort"（→ SetIntervention end）。</summary>
+public sealed record ReviewerFixLoopLimitResponse(
+    [property: JsonPropertyName("action")] string Action);
+
 /// <summary>Stage 55B：Split task proposal RequestPort 請求 payload（Stage 46 Petra 拆 task 機制）。
 /// 對應既有 BossInteraction type "split_task_proposal" — buttons: split_accept / _modify / _reject / _abort。</summary>
 public sealed record SplitTaskProposalRequest(

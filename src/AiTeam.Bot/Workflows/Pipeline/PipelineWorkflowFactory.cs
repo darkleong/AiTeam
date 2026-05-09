@@ -97,6 +97,9 @@ public sealed class PipelineWorkflowFactory
         var devPlanUnablePort     = RequestPort.Create<DevPlanUnableRequest,     DevPlanUnableResponse>    (DevPlanUnablePortId);
         var splitTaskProposalPort = RequestPort.Create<SplitTaskProposalRequest, SplitTaskProposalResponse>(SplitTaskProposalPortId);
 
+        // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit RequestPort（第 6 routing）
+        var reviewerFixLoopLimitPort = RequestPort.Create<ReviewerFixLoopLimitRequest, ReviewerFixLoopLimitResponse>(ReviewerFixLoopLimitPortId);
+
         return new WorkflowBuilder(start)
             // Stage 55A：Start → KickoffStage（parent group） / DevPlanStage（sub-task）— 兩出口
             .AddEdge(start, kickoffStage)                  // Stage 55A：parent group 入口
@@ -154,6 +157,10 @@ public sealed class PipelineWorkflowFactory
             .AddEdge(devPlanUnablePort, devPlanStage)      // DevPlanUnableResponse → DevPlanStageExecutor.HandleDevPlanUnableResponseAsync
             .AddEdge(designStage, splitTaskProposalPort)   // SplitTaskProposalRequest → port
             .AddEdge(splitTaskProposalPort, designStage)   // SplitTaskProposalResponse → DesignStageExecutor.HandleSplitTaskProposalResponseAsync
+            // Stage 57-FF 五十二：Reviewer fix loop limit RequestPort 雙向 + 直送 Doc edge（skip_qa case 跳 QA 直接 Doc）
+            .AddEdge(reviewerStage, reviewerFixLoopLimitPort)   // ReviewerFixLoopLimitRequest → port
+            .AddEdge(reviewerFixLoopLimitPort, reviewerStage)   // ReviewerFixLoopLimitResponse → ReviewerStageExecutor.HandleReviewerFixLoopLimitResponseAsync
+            .AddEdge(reviewerStage, docStage)                   // Stage 57：fix_loop_skip_qa case 跳 QA 直接送 Doc
             // 終結 — NotifyMerge（happy path）/ fallback / 55A：含 Kickoff/Design Stage Executor 都可 YieldOutput PipelineLoopResult intervention
             .WithOutputFrom(notifyMerge, fallback, kickoffStage, designStage, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
@@ -177,6 +184,9 @@ public sealed class PipelineWorkflowFactory
     public const string DevPlanEscalatePortId      = "Pipeline-DevPlanEscalate";
     public const string DevPlanUnablePortId        = "Pipeline-DevPlanUnable";
     public const string SplitTaskProposalPortId    = "Pipeline-SplitTaskProposal";
+
+    /// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit RequestPort PortId（第 6 routing）。</summary>
+    public const string ReviewerFixLoopLimitPortId = "Pipeline-ReviewerFixLoopLimit";
 
     /// <summary>建立 framework CheckpointManager（綁 PipelineCheckpointStore）。
     /// FrameworkPipelineRouter 用此 manager 跑 InProcessExecution.RunStreamingAsync(...) / ResumeStreamingAsync(...)。

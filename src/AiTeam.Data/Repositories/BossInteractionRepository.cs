@@ -40,6 +40,16 @@ public class BossInteractionRepository(AppDbContext db)
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
+    /// <summary>Stage 57-FF 五十一：查同 (taskGroupId, type) 是否有 pending（未響應）interaction。
+    /// 用於 InteractionService.TryCreateUniqueInteractionAsync 的 idempotent 鍵 — race-prone fire 點防雙 fire。</summary>
+    public Task<bool> HasPendingForGroupAndTypeAsync(
+        Guid taskGroupId, string interactionType, CancellationToken ct = default)
+        => db.BossInteractions.AnyAsync(
+            x => x.TaskGroupId == taskGroupId
+              && x.InteractionType == interactionType
+              && x.Status == "pending",
+            ct);
+
     /// <summary>查詢最近已處理的互動（Dashboard 歷史區）。</summary>
     public Task<List<BossInteraction>> GetRecentRespondedAsync(int count = 10, CancellationToken ct = default)
         => db.BossInteractions

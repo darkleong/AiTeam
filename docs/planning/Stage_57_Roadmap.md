@@ -308,9 +308,96 @@ frameworkHint 文案：「Trial_v6 揭露 v4 framework production-ready 缺口�
 
 ---
 
+## 實作紀錄（Forge）
+
+> Forge session date：2026-05-09（Stage 57 一氣呵成 — race condition 雙層防 + Vera fix loop HITL routing 第 6 routing）
+> 實作計劃書：`~/.claude/plans/stage-57-jazzy-pascal.md` v2（含 spike 報告 + 三點 Aria/Christ 拍板修正套入）
+> Forge context 用量：（待 Aria 結案第二段補校準錨倍率資料）
+
+### 實作摘要
+
+依計劃書 v2 完成 6 子項全部，build 0 errors：
+
+| 子項 | 內容 | 觸碰檔案 |
+|---|---|---|
+| **0 spike** | dispatch 對照表 + 命名候選 1 拍板 + helper 簽名定稿 | （計劃書內，無 code 改動）|
+| **1-A** | `BossInteractionRepository.HasPendingForGroupAndTypeAsync` + `InteractionService.TryCreateUniqueInteractionAsync` helper（race-prone fire 端 idempotent wrapper）| BossInteractionRepository.cs / InteractionService.cs |
+| **1-B** | `PauseEpicAndNotifyAsync` private→internal + swap `CreateInteractionAsync` → `TryCreateUniqueInteractionAsync` | TaskGroupService.cs:1342 |
+| **1-C** | `HandleEpicPartialPausedAsync` epic_resume / epic_abort 雙 case：`db.Database.BeginTransactionAsync` + `AsNoTracking().FirstOrDefaultAsync` fresh read idempotent，繞過 EF tracker cache | TaskGroupService.cs:1158 |
+| **2-A** | `ReviewerFixLoopLimitActionsJson` const（3 button JSON）+ MockMode auto-approve switch case | InteractionService.cs |
+| **2-B** | `ReviewerFixLoopLimitRequest` / `Response` records | PipelineState.cs |
+| **2-C** | `ReviewerFixLoopLimitPortId` const + RequestPort + 3 AddEdge（fix loop limit Port 雙向 + reviewerStage→docStage skip_qa edge）| PipelineWorkflowFactory.cs |
+| **2-D** | ReviewerStageExecutor `[SendsMessage]` 加 `DocStageBridge` + `ReviewerFixLoopLimitRequest`；FixIteration≥3 case 改 fire `reviewer_fix_loop_limit` interaction + `PipelineHitlHelper.YieldForChristResponseAsync`；新增 `HandleReviewerFixLoopLimitResponseAsync` 三 case 真三選獨立 path（mark_done→QaStageBridge / skip_qa→DocStageBridge / abort→SetIntervention）| ReviewerStageExecutor.cs:148-156 + handler |
+| **2-E/F** | TaskGroupService 加 `NotifyBossReviewerFixLoopLimitAsync` + `TryRoutePipelineReviewerFixLoopLimitAsync` + `case "reviewer_fix_loop_limit"` dispatch | TaskGroupService.cs |
+| **2-G** | FrameworkPipelineRouter `ResumeAfterReviewerFixLoopLimitAsync` thin wrapper | FrameworkPipelineRouter.cs |
+| **2-H** | InteractionProcessor label dispatch 3 mapping（標完成 ✅ / 跳過 QA ⏭️ / 終止 Pipeline ❌）| InteractionProcessor.cs |
+| **3** | MockScenarioService 加 2 alias case + scenario switch + emoji（🌀/🔁）+ frameworkHint + race Task.Run 觸發；TaskGroupService 加 `SimulateEpicRaceAsync` internal Mock test helper（並行雙 PauseEpic 模擬 race window）| MockScenarioService.cs / TaskGroupService.cs |
+| **4** | Dashboard MockScenarioCard 加 2 MudSelectItem（Stage57 race + fix loop limit）| MockScenarioCard.razor |
+| **6** | version bump 3.45.0 → 3.46.0 | Directory.Build.props |
+
+### 計劃書 v1→v2 修正套入
+
+依 Aria 二檢回饋三點修正全部套入：
+1. **命名候選 1**：`reviewer_fix_loop_limit` + action `fix_loop_*` 短前綴（對齊 ReviewerStageExecutor stage label + 5 routing prefix 慣例）✅
+2. **race Mock 路線 b**：`SimulateEpicRaceAsync` internal helper + Task.Run 並行手動觸發 PauseEpic 雙 fire（對齊 Stage 51 in-memory trigger pattern）✅
+3. **真三選獨立 path**（Christ 拍）：mark_done → QaStageBridge（走完整 QA 給 Quinn 獨立驗證）/ skip_qa → DocStageBridge（直接 Doc 急推進）/ abort → SetIntervention end ✅
+4. **AsNoTracking fresh read**（Aria 補強）：transaction 內 `db.TaskGroups.AsNoTracking().FirstOrDefaultAsync` 繞過 EF tracker cache，基本版 ReadCommitted（自驗 V2 觀察 log 評估是否升級 Serializable + retry 補強）✅
+
+### Build 驗證
+
+```
+dotnet build AiTeam.slnx
+→ 0 Error(s) / 100 Warning(s)（全 pre-Stage 57 既有 — MSTEST0037 / MUD0002 / CS0618 obsolete fallback）
+```
+
+### Forge 自驗 SOP（待 CI/CD 部署後跑）
+
+> 待 push 觸發 self-hosted runner 重 build container 後 Forge 線上跑 Mock 自驗。對齊 `forge-self-verify` skill，race + fix loop 兩場景都 Mock 可重現 + SQL 可驗。
+
+**V1 + V2：FF 五十一 race condition 雙層防**
+```bash
+curl -X POST http://localhost:5051/internal/mock/scenario \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":"framework_pipeline_epic_race_double_fail"}'
+sleep 12  # 8s wait + race fire
+docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c \
+  "SELECT \"GroupId\", COUNT(*) FROM boss_interactions
+   WHERE \"InteractionType\"='epic_partial_paused' AND \"Status\"='pending'
+   GROUP BY \"GroupId\" HAVING COUNT(*) > 1;"
+# 預期 0 row（修前 1 row 同 epic 2 個 active）
+# log: 應出現 "[Stage57] TryCreateUniqueInteraction：同 (groupId=..., type=epic_partial_paused) 已有 active interaction，跳過 fire 新卡"
+```
+
+**V3 + V4：FF 五十二 fix loop limit type-specific routing**
+```bash
+curl -X POST http://localhost:5051/internal/mock/scenario \
+  -H "Content-Type: application/json" \
+  -d '{"scenario":"framework_pipeline_reviewer_fix_loop_limit"}'
+sleep 60  # Pipeline 跑 Kickoff/Design/DevPlan/Dev/Reviewer ×3 fix loop
+docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c \
+  "SELECT \"InteractionType\", \"AvailableActionsJson\"
+   FROM boss_interactions
+   WHERE \"Title\" LIKE '%Stage57%' ORDER BY \"CreatedAt\" DESC LIMIT 1;"
+# 預期 reviewer_fix_loop_limit + 3 button JSON（vs 修前 intervention + ack only）
+# auto-approve fix_loop_mark_done → QaStageBridge → QA → Doc → done
+```
+
+**V6 + V7：regression**
+- Stage 55B Session B 5 routing 5 場景仍綠（dev_intervention / qa_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）
+- Stage 46 split_task_subtask_fail_intervention 單 sub-task fail 場景仍綠（不被新 idempotent 邏輯誤擋）
+
+### 風險點觀察（實作期確認）
+
+1. **DB transaction + AsNoTracking fresh read**：採基本版 ReadCommitted；自驗 V2 觀察 log 若仍 race write skew → 升級 Serializable + SerializationFailure（SqlState 40001）retry 一次補強
+2. **TaskGroupService 達 1591+ 行**：Stage 57 加 ~75 行（NotifyBossReviewerFixLoopLimit + TryRoutePipelineReviewerFixLoopLimit + case dispatch + 兩 case transaction idempotent + SimulateEpicRaceAsync）— 仍未動拆檔，留 follow-up FF 觀察
+3. **Mock race Task.Run timing**：8 秒 Delay 等 BuildEpicSubTasksAsync 跑完；若 Kickoff/Design 慢於 8 秒 → Mock race 可能撞 sub-task 還沒建好（log warning「sub-task 數 < 2，無法模擬 race」）— 自驗時觀察 log
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v1.2 | 2026-05-09 | Forge 實作紀錄補入（6 子項全部完成，dotnet build 0 errors，計劃書 v2 三點修正全套入：命名候選 1 / race Mock 路線 b / 真三選獨立 path / AsNoTracking fresh read）。Aria 結案第二段補 CHANGELOG / Future_Feature 同步 + Forge context 校準錨倍率。
 | v1.1 | 2026-05-09 | Christ 拍板（Aria 重寫）— actions set 三選 `mark_done` / `skip_qa` / `abort`（label「標完成 / 跳過 QA / 終止 Pipeline」），對應 Trial_v6 Christ 實際強制 done 推進的操作。其他三項依議題層次篩選紀律（user_christ.md:32-38）Aria 自拍：① FF 五十一修法 = 雙層防（對 Christ 看到行為與「只修 fire」一樣，handler 端 race-free 設計層保險）② FF 五十二新 routing 命名 = Forge spike 後對齊 Stage 55B Session B 5 routing 命名提議（純內部 type 字串）③ idempotent helper = 抽 InteractionService.TryCreateUniqueInteractionAsync（race-prone pattern 普遍，未來複用）。子項 0 spike 報告改為純執行對齊（命名提案 + dispatch 鏈路對照 + helper 簽名定稿），無需再 Christ 拍。
 | v1.0 | 2026-05-09 | 初版規劃書建立（Aria）— Stage 57 = Trial_v6 揭露 3 🔴 戰略級議題前兩個合併（FF 五十一 race condition 雙層防 + FF 五十二 Vera fix loop HITL routing 補第 6 routing），FF 五十三 API 容錯獨立 Stage 58。Christ 拍板「五十一+五十二合併、五十三獨立」基於兩議題都動 Pipeline framework HITL routing 同一塊，分開做會 merge conflict / 設計分裂。**待 Christ 拍板議題 3 個**：① FF 五十一修法層級（雙層防 / 只修 fire / 只修 handler）② FF 五十二新 routing 命名 + actions set ③ idempotent helper 抽 vs inline。**規劃前期已 grep**：PauseEpicAndNotifyAsync (TaskGroupService.cs:1342) + HandleEpicPartialPausedAsync (line 1158) + BuildEpicSubTasksAsync idempotent 範例 (line 1224) + ReviewerStageExecutor FixIteration≥3 case (line 148-162) + Stage 55B Session B 5 routing dispatch (QaStageExecutor.cs / DevPlanStageExecutor.cs) + InteractionProcessor type+action mapping (line 155-162) + InteractionService.EpicPartialPausedActionsJson (line 64) — 對齊自省點 #23 規劃前期 grep 紀律。

@@ -624,6 +624,40 @@ public class TaskGroupService(
             taskGroupId: group.Id);
     }
 
+    /// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit → Pipeline yield-resume 開 type-specific BossInteraction。
+    /// 對齊 NotifyBossDevFailedInterventionAsync 既有 fire-and-forget pattern + Pipeline path 接管 routing（reviewer_fix_loop_limit 第 6 routing）。</summary>
+    public async Task NotifyBossReviewerFixLoopLimitAsync(
+        TaskGroup group, AgentExecutionResult? petraResult, CancellationToken cancellationToken)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null) return;
+
+        var petraReason = petraResult?.Summary ?? "（無 Petra 仲裁理由）";
+        await ceoChannel.SendMessageAsync(
+            $"⚠️ **{group.Title}** — Vera 連 {group.FixIteration} 輪 Critical 仍有問題，需要決策：標完成 / 跳過 QA / 終止。\n" +
+            $"PR：{group.DevPrUrl ?? "（無）"}\n" +
+            $"Petra 最後仲裁：{petraReason}");
+
+        logger.LogWarning("[Stage57] TaskGroup {Id} Reviewer fix loop {Count} 輪達 limit，fire reviewer_fix_loop_limit",
+            group.Id, group.FixIteration);
+
+        _ = interactionService.CreateInteractionAsync(
+            "reviewer_fix_loop_limit",
+            title:                $"Vera fix loop 達上限：{group.Title}",
+            description:          $"Vera 連續 {group.FixIteration} 輪審查仍有 Critical 問題。Petra 最後仲裁：{petraReason}",
+            project:              group.Project,
+            agentName:            null,
+            availableActionsJson: InteractionService.ReviewerFixLoopLimitActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId    = ceoChannel.Id.ToString(),
+                groupId      = group.Id.ToString(),
+                prUrl        = group.DevPrUrl ?? "",
+                fixIteration = group.FixIteration
+            }),
+            taskGroupId: group.Id);
+    }
+
     public async Task NotifyBossInterventionAsync(TaskGroup group, CancellationToken cancellationToken)
     {
         var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
@@ -791,6 +825,16 @@ public class TaskGroupService(
                 if (contextJson is not null)
                     await HandleEpicPartialPausedAsync(contextJson, action, ct);
                 break;
+
+            // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit HITL routing（第 6 routing 對齊 Stage 55B Session B）
+            case "reviewer_fix_loop_limit":
+            {
+                if (contextJson is not null && await TryRoutePipelineReviewerFixLoopLimitAsync(contextJson, action, ct))
+                    break;
+                // 無 legacy fallback — 此 type 為 Pipeline 專屬（legacy WorkflowEngine 走 NotifyBossInterventionAsync 既有 generic intervention path 不變）
+                logger.LogWarning("[Stage57] reviewer_fix_loop_limit 收到回應但 Pipeline path 未接管（PipelineFrameworkStateJson IS NULL?），略過");
+                break;
+            }
 
             // Stage 51：framework HITL 試點 — Christ 中途介入回應路由
             case "framework_kickoff_mid_interrupt":
@@ -1154,6 +1198,7 @@ public class TaskGroupService(
 
     /// <summary>
     /// Stage 46-FF 三十五：epic_partial_paused 卡片分派（恢復 epic / 放棄整個 epic）。
+    /// Stage 57-FF 五十一：雙 case transaction + AsNoTracking fresh read idempotent（race condition 雙層防第二層 — handler 端）。
     /// </summary>
     private async Task HandleEpicPartialPausedAsync(
         string contextJson, string action, CancellationToken ct)
@@ -1167,32 +1212,75 @@ public class TaskGroupService(
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var db       = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
-        if (epic is null)
-        {
-            logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
-            return;
-        }
-
         switch (action)
         {
             case "epic_resume":
             {
+                // Stage 57-FF 五十一：transaction + AsNoTracking fresh read idempotent
+                await using var tx = await db.Database.BeginTransactionAsync(ct);
+                var freshEpic = await db.TaskGroups.AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.Id == epicId, ct);
+                if (freshEpic is null)
+                {
+                    logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
+                    await tx.CommitAsync(ct);
+                    return;
+                }
+                if (freshEpic.EpicPaused == false)
+                {
+                    logger.LogInformation(
+                        "[Stage57] HandleEpicPartialPaused：epic 已 EpicPaused=false（前一個 handler 已處理），跳過 nextPending FireSteps（Epic={Id}）",
+                        epicId);
+                    await tx.CommitAsync(ct);
+                    return;
+                }
+
+                // 仍 EpicPaused=true → 走原邏輯（fresh tracked entity 後寫入 + nextPending fire）
+                var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
+                if (epic is null)
+                {
+                    await tx.CommitAsync(ct);
+                    return;
+                }
                 epic.EpicPaused = false;
                 await taskRepo.SaveAsync(ct);
 
-                // 找下個 pending sub-task fire Dev_plan
                 var nextPending = await db.TaskGroups
                     .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
                     .OrderBy(t => t.PhaseNumber)
                     .FirstOrDefaultAsync(ct);
                 if (nextPending is not null)
                     await FireStepsAsync(nextPending, [new WorkflowStep("Dev_plan")], ct);
+                await tx.CommitAsync(ct);
                 break;
             }
             case "epic_abort":
             {
-                // 標 epic + 所有 pending sub-task cancelled
+                // Stage 57-FF 五十一：epic_abort 同樣 idempotent（避免重複標 cancelled / 重複 log）
+                await using var tx = await db.Database.BeginTransactionAsync(ct);
+                var freshEpic = await db.TaskGroups.AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.Id == epicId, ct);
+                if (freshEpic is null)
+                {
+                    logger.LogWarning("HandleEpicPartialPaused：找不到 epic TaskGroup ({Id})", epicId);
+                    await tx.CommitAsync(ct);
+                    return;
+                }
+                if (freshEpic.Status == "cancelled")
+                {
+                    logger.LogInformation(
+                        "[Stage57] HandleEpicPartialPaused：epic 已 cancelled（前一個 handler 已處理），跳過 abort（Epic={Id}）",
+                        epicId);
+                    await tx.CommitAsync(ct);
+                    return;
+                }
+
+                var epic = await taskRepo.GetGroupByIdAsync(epicId, ct);
+                if (epic is null)
+                {
+                    await tx.CommitAsync(ct);
+                    return;
+                }
                 taskRepo.UpdateGroupStatus(epic, "cancelled");
                 var subPending = await db.TaskGroups
                     .Where(t => t.ParentGroupId == epicId && t.Status == "pending")
@@ -1200,6 +1288,7 @@ public class TaskGroupService(
                 foreach (var s in subPending)
                     taskRepo.UpdateGroupStatus(s, "cancelled");
                 await taskRepo.SaveAsync(ct);
+                await tx.CommitAsync(ct);
                 logger.LogInformation("epic_abort：epic + {Count} 個 pending sub-task 全標 cancelled（Epic={Id}）",
                     subPending.Count, epicId);
                 break;
@@ -1336,10 +1425,36 @@ public class TaskGroupService(
         }
     }
 
+    /// <summary>Stage 57 Mock 專用：模擬同 epic 兩 sub-task 同時 fail 的 race condition（驗 FF 五十一 idempotent helper 防線）。
+    /// 並行對 Phase 1 + Phase 2 sub-task 呼叫 PauseEpicAndNotifyAsync，模擬時間差 < 100ms 雙 fire。
+    /// 對齊 Stage 51 KickoffMidInterruptTriggerStore in-memory pattern — 只在 Mock alias case 內呼叫。</summary>
+    internal async Task SimulateEpicRaceAsync(Guid epicId, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var subTasks = await db.TaskGroups.AsNoTracking()
+            .Where(t => t.ParentGroupId == epicId)
+            .OrderBy(t => t.PhaseNumber)
+            .Take(2)
+            .ToListAsync(ct);
+        if (subTasks.Count < 2)
+        {
+            logger.LogWarning("[Stage57] SimulateEpicRace：sub-task 數 {Count} < 2，無法模擬 race（Epic={Id}）", subTasks.Count, epicId);
+            return;
+        }
+        logger.LogInformation("[Stage57] SimulateEpicRace：並行雙 PauseEpicAndNotify（Epic={Id}, Phase1={P1}, Phase2={P2}）",
+            epicId, subTasks[0].Id, subTasks[1].Id);
+        // 並行雙呼叫 — Task.WhenAll 模擬 < 100ms 雙 fire race window
+        await Task.WhenAll(
+            PauseEpicAndNotifyAsync(subTasks[0], ct),
+            PauseEpicAndNotifyAsync(subTasks[1], ct));
+    }
+
     /// <summary>
     /// Stage 46-FF 三十五：sub-task failed/needs_intervention → epic 標 EpicPaused + 建 BossInteraction。
+    /// Stage 57：private → internal（讓 SimulateEpicRaceAsync race Mock test helper 在同 namespace 內呼叫）。
     /// </summary>
-    private async Task PauseEpicAndNotifyAsync(TaskGroup subTask, CancellationToken ct)
+    internal async Task PauseEpicAndNotifyAsync(TaskGroup subTask, CancellationToken ct)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
@@ -1355,8 +1470,10 @@ public class TaskGroupService(
 
         // Stage 55B 範圍邊界：epic_partial_paused 仍 fire-and-forget — Stage 46 Epic Chain 機制跨 framework boundary
         // （parent group 在 Pipeline，sub-task pause 是 epic-level 動作，不在 sub-task 自己的 Pipeline Workflow 內）
-        _ = interactionService.CreateInteractionAsync(
-            "epic_partial_paused",
+        // Stage 57-FF 五十一：CreateInteractionAsync → TryCreateUniqueInteractionAsync 雙 fire 防護（race-prone fire 端 idempotent）
+        _ = interactionService.TryCreateUniqueInteractionAsync(
+            taskGroupId:          parent.Id,
+            interactionType:      "epic_partial_paused",
             title:                $"Epic 部分暫停：{parent.Title}",
             description:          $"Phase {subTask.PhaseNumber}（{subTask.PhaseDescription}）失敗，後續 Phase 已暫停。" +
                                   $"原因：{subTask.InterventionReason ?? "（無）"}",
@@ -1368,8 +1485,7 @@ public class TaskGroupService(
                 epicGroupId       = parent.Id.ToString(),
                 failedPhaseId     = subTask.Id.ToString(),
                 failedPhaseNumber = subTask.PhaseNumber
-            }),
-            taskGroupId: parent.Id);
+            }));
     }
 
     /// <summary>
@@ -1486,6 +1602,20 @@ public class TaskGroupService(
         var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
         logger.LogInformation("[Stage55B] ProcessBossResponseAsync dev_plan_unable Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
         await router.ResumeAfterDevPlanUnableAsync(group, actionShort, ct);
+        return true;
+    }
+
+    private async Task<bool> TryRoutePipelineReviewerFixLoopLimitAsync(string contextJson, string action, CancellationToken ct)
+    {
+        var group = await TryGetPipelineGroupAsync(contextJson, ct);
+        if (group is null) return false;
+
+        // fix_loop_mark_done / fix_loop_skip_qa / fix_loop_abort → mark_done / skip_qa / abort
+        var actionShort = action.StartsWith("fix_loop_") ? action.Substring("fix_loop_".Length) : action;
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var router = scope.ServiceProvider.GetRequiredService<Meeting.FrameworkPipelineRouter>();
+        logger.LogInformation("[Stage57] ProcessBossResponseAsync reviewer_fix_loop_limit Pipeline 接管（Group={Id}, action={Action}）", group.Id, actionShort);
+        await router.ResumeAfterReviewerFixLoopLimitAsync(group, actionShort, ct);
         return true;
     }
 

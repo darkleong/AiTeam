@@ -351,6 +351,16 @@ public sealed class FrameworkPipelineRouter
             $"SplitTaskProposal(action={action})",
             ct);
 
+    /// <summary>Stage 57-FF 五十二：Reviewer fix loop limit（reviewer_fix_loop_limit）button callback resume。
+    /// action = "mark_done" / "skip_qa" / "abort"（從 fix_loop_mark_done / _skip_qa / _abort 去 fix_loop_ 前綴）。</summary>
+    public Task ResumeAfterReviewerFixLoopLimitAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.ReviewerFixLoopLimitPortId,
+            new ReviewerFixLoopLimitResponse(action),
+            $"ReviewerFixLoopLimit(action={action})",
+            ct);
+
     /// <summary>
     /// Stage 55A：Pipeline ResumeStreamingAsync 共用 helper — ResumeAfterAgentAsync / ResumeAfterKickoff/DesignAsync 共用核心邏輯。
     /// 流程：LoadFromDb → ResumeStreamingAsync from latest → 找 expectedPortId 的 RequestInfoEvent → SendResponseAsync → 繼續 watch 直到下個 yield/finalize。

@@ -34,6 +34,9 @@ namespace AiTeam.Bot.Workflows.Pipeline.Executors;
 [SendsMessage(typeof(DevFixStageBridge))]
 [SendsMessage(typeof(PipelineFallbackBridge))]
 [SendsMessage(typeof(ReviewerCompletionRequest))]
+// Stage 57-FF 五十二：fix loop limit type-specific routing（第 6 routing）
+[SendsMessage(typeof(DocStageBridge))]              // fix_loop_skip_qa case 跳 QA 直接送 Doc
+[SendsMessage(typeof(ReviewerFixLoopLimitRequest))] // fix loop limit yield request
 [YieldsOutput(typeof(PipelineLoopResult))]
 internal sealed partial class ReviewerStageExecutor : Executor
 {
@@ -145,13 +148,24 @@ internal sealed partial class ReviewerStageExecutor : Executor
             return;
         }
 
-        // 53B：Petra revise → fix loop（max 3 輪，對齊 WorkflowEngine.MaxFixIterations=3 既有 const）
+        // 53B → 57：Petra revise → fix loop（max 3 輪）；Stage 57-FF 五十二：達 limit 改 yield-resume 第 6 routing
         if (group.FixIteration >= 3)
         {
-            _logger.LogWarning("[Stage53B] ReviewerStage：FixIteration={N} >= 3 達上限 → SetInterventionAndYieldAsync（Group={Id}）",
+            _logger.LogWarning("[Stage57] ReviewerStage：FixIteration={N} >= 3 達上限 → fire reviewer_fix_loop_limit interaction + yield 等 Christ（Group={Id}）",
                 group.FixIteration, state.GroupId);
-            await SetInterventionAndYieldAsync(context, state.GroupId,
-                $"Vera fix loop 超 {group.FixIteration} 次仍有問題", petraResult);
+
+            // ① 紀錄 state 後 fire BossInteraction（type-specific）
+            state.LastAgentResult = petraResult;
+            state.LastAgentName = "Reviewer";
+            await PipelineStateHelpers.SaveAsync(context, state);
+
+            var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
+            await tgs.NotifyBossReviewerFixLoopLimitAsync(group, petraResult, default);
+
+            // ② SendsMessage(ReviewerFixLoopLimitRequest) → Workflow yield 等 Christ button click
+            await PipelineHitlHelper.YieldForChristResponseAsync(
+                context, new ReviewerFixLoopLimitRequest(state.GroupId), _logger,
+                "reviewer_fix_loop_limit", state.GroupId);
             return;
         }
 
@@ -164,6 +178,44 @@ internal sealed partial class ReviewerStageExecutor : Executor
         state.LastAgentName = "Reviewer";
         await PipelineStateHelpers.SaveAsync(context, state);
         await context.SendMessageAsync(new DevFixStageBridge(state.GroupId));
+    }
+
+    /// <summary>Stage 57-FF 五十二：reviewer_fix_loop_limit HITL 回應 handler — Christ button click 後 routing（真三選獨立 path）。
+    /// mark_done → QaStageBridge（state.ReviewerDone=true 走完整 QA → Doc）/
+    /// skip_qa → DocStageBridge（state.ReviewerDone=true + state.QaDone=true 跳過 QA 直接 Doc）/
+    /// abort → SetInterventionAndYieldAsync end Pipeline。</summary>
+    [MessageHandler]
+    private async ValueTask HandleReviewerFixLoopLimitResponseAsync(ReviewerFixLoopLimitResponse response, IWorkflowContext context)
+    {
+        var state = await PipelineStateHelpers.ReadAsync(context);
+
+        switch (response.Action.ToLower())
+        {
+            case "mark_done":
+                _logger.LogInformation("[Stage57] ReviewerStage：reviewer_fix_loop_limit mark_done → QaStageBridge（認可審查走完整 QA → Doc）（Group={Id}）", state.GroupId);
+                state.ReviewerDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new QaStageBridge(state.GroupId));
+                return;
+
+            case "skip_qa":
+                _logger.LogInformation("[Stage57] ReviewerStage：reviewer_fix_loop_limit skip_qa → DocStageBridge（跳過 QA 直接 Doc）（Group={Id}）", state.GroupId);
+                state.ReviewerDone = true;
+                state.QaDone = true;
+                await PipelineStateHelpers.SaveAsync(context, state);
+                await context.SendMessageAsync(new DocStageBridge(state.GroupId));
+                return;
+
+            case "abort":
+                _logger.LogInformation("[Stage57] ReviewerStage：reviewer_fix_loop_limit abort → SetInterventionAndYieldAsync 結束 Pipeline（Group={Id}）", state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, "Reviewer fix loop limit abort by Christ", state.LastAgentResult);
+                return;
+
+            default:
+                _logger.LogWarning("[Stage57] ReviewerStage：未知 reviewer_fix_loop_limit action={Action}（Group={Id}）— SetIntervention", response.Action, state.GroupId);
+                await SetInterventionAndYieldAsync(context, state.GroupId, $"未知 reviewer_fix_loop_limit action: {response.Action}", state.LastAgentResult);
+                return;
+        }
     }
 
     /// <summary>Stage 53B：intervention 統一 helper（fix loop max_iter / Petra escalate）。

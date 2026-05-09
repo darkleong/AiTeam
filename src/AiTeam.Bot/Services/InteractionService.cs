@@ -63,6 +63,10 @@ public class InteractionService(
     public const string EpicPartialPausedActionsJson =
         """[{"id":"epic_resume","label":"恢復 epic","color":"success"},{"id":"epic_abort","label":"放棄整個 epic","color":"error"}]""";
 
+    /// <summary>Stage 57-FF 五十二：Reviewer fix loop ×3 達上限 — Christ 拍板三選 mark_done / skip_qa / abort。</summary>
+    public const string ReviewerFixLoopLimitActionsJson =
+        """[{"id":"fix_loop_mark_done","label":"標完成","color":"success"},{"id":"fix_loop_skip_qa","label":"跳過 QA","color":"warning"},{"id":"fix_loop_abort","label":"終止 Pipeline","color":"error"}]""";
+
     /// <summary>Stage 51：framework HITL 中途介入卡（v4 漸進遷移第三步試點）。
     /// midinterrupt_apply 需 modal 收文字（修改指引）；midinterrupt_cancel 直接結束介入。</summary>
     public const string MidInterruptActionsJson =
@@ -143,6 +147,8 @@ public class InteractionService(
                         "qa_failed_intervention"  => "qa_intervention_continue",
                         "devplan_escalate"        => "devplan_skip",
                         "dev_plan_unable"         => "devplan_unable_skip",
+                        // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit — default 走完整 QA 路徑（mark_done → QaStageBridge）
+                        "reviewer_fix_loop_limit" => "fix_loop_mark_done",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
                         _                     => "ack",
                     };
@@ -168,6 +174,49 @@ public class InteractionService(
             logger.LogWarning(ex, "BossInteraction 寫入失敗（Type={Type}），略過（non-critical）", interactionType);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Stage 57-FF 五十一：race-prone interaction 防雙 fire 的 idempotent wrapper（修法第一層 + 未來複用）。
+    /// 同 (taskGroupId, type) 已有 status="pending" interaction → 回 null + log skip；無則 call CreateInteractionAsync。
+    /// 與 CreateInteractionAsync 簽名 1:1 對齊（taskGroupId 拉到第 1 必填參數作 idempotent 鍵）— caller 改 1 行 swap 即可。
+    /// pure additive：失敗只 log Warning 回 null（與 CreateInteractionAsync 一致）。
+    /// </summary>
+    public async Task<Guid?> TryCreateUniqueInteractionAsync(
+        Guid     taskGroupId,
+        string   interactionType,
+        string   title,
+        string   description,
+        string?  project,
+        string?  agentName,
+        string   availableActionsJson,
+        string?  contextJson      = null,
+        decimal? discordMessageId = null,
+        Guid?    taskItemId       = null)
+    {
+        try
+        {
+            await using var scope = serviceProvider.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<BossInteractionRepository>();
+            if (await repo.HasPendingForGroupAndTypeAsync(taskGroupId, interactionType))
+            {
+                logger.LogInformation(
+                    "[Stage57] TryCreateUniqueInteraction：同 (groupId={Id}, type={Type}) 已有 active interaction，跳過 fire 新卡（FF 五十一 idempotent helper）",
+                    taskGroupId, interactionType);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "[Stage57] TryCreateUniqueInteraction：idempotent 檢查失敗，fallback to CreateInteractionAsync（Type={Type}）",
+                interactionType);
+            // 失敗 fallback CreateInteractionAsync — 寧可雙 fire 也不要漏 fire
+        }
+
+        return await CreateInteractionAsync(
+            interactionType, title, description, project, agentName, availableActionsJson,
+            contextJson, discordMessageId, taskGroupId, taskItemId);
     }
 
     // ─── Discord 回覆時同步更新 ───────────────────────────────────────────────

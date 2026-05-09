@@ -200,6 +200,22 @@ public class MockScenarioService(
         }
         else if (scenario == "framework_pipeline_split_task_proposal_hitl")
             MockClaudeCodeService.FailScenario = "split_task_propose_accept"; // Petra 拆 task → Pipeline DesignStage yield SplitTaskProposalRequest（同 Stage 55A subtask_chain 但驗 yield-resume）
+        // ── Stage 57：FF 五十一 race condition + FF 五十二 Vera fix loop limit 2 alias 場景 ──
+        // 機制：alias 觸發既有 FailScenario 邏輯 + Task.Run 並行雙 PauseEpic call（race）/ Round counter ×3 達上限（fix loop limit）
+        //   - framework_pipeline_epic_race_double_fail：複用 split_task_propose_accept 建 epic + sub-task；
+        //     Task.Run 等 8 秒 BuildEpicSubTasksAsync 跑完 → SimulateEpicRaceAsync 並行雙 PauseEpic 模擬 race（FF 五十一 helper 攔住）
+        //   - framework_pipeline_reviewer_fix_loop_limit：對齊 Stage 53B framework_pipeline_fix_loop_max_iter 邏輯，
+        //     Vera 連 3 輪 Critical → ReviewerStageExecutor FixIteration>=3 觸發 reviewer_fix_loop_limit interaction（FF 五十二 第 6 routing）
+        else if (scenario == "framework_pipeline_epic_race_double_fail")
+        {
+            MockClaudeCodeService.FailScenario = "split_task_propose_accept";  // 複用既有 epic + sub-task 建構路徑
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_pipeline_reviewer_fix_loop_limit")
+        {
+            MockClaudeCodeService.FailScenario = "framework_pipeline_fix_loop_max_iter";  // 對齊 Stage 53B 既有 max_iter 邏輯
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -274,6 +290,9 @@ public class MockScenarioService(
             "framework_pipeline_devplan_escalate_hitl"          => (WorkflowType.NewFeature, "Stage55B-DevPlanEscalateHITL",       "Kickoff"),
             "framework_pipeline_devplan_unable_hitl"            => (WorkflowType.NewFeature, "Stage55B-DevPlanUnableHITL",         "Kickoff"),
             "framework_pipeline_split_task_proposal_hitl"       => (WorkflowType.NewFeature, "Stage55B-SplitTaskProposalHITL",     "Kickoff"),
+            // Stage 57：FF 五十一 race + FF 五十二 fix loop limit 2 場景
+            "framework_pipeline_epic_race_double_fail"          => (WorkflowType.NewFeature, "Stage57-EpicRaceDoubleFail",         "Kickoff"),
+            "framework_pipeline_reviewer_fix_loop_limit"        => (WorkflowType.NewFeature, "Stage57-ReviewerFixLoopLimit",       "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 
@@ -324,6 +343,25 @@ public class MockScenarioService(
                 "[MockMode][Stage51] Mid-Interrupt trigger flag 已預設（GroupId={Id}，scenario={Scenario}）",
                 group.Id, scenario);
         }
+        // Stage 57：race condition Mock — alias 觸發後等 BuildEpicSubTasksAsync 跑完，並行雙 PauseEpic call 模擬 race
+        else if (scenario == "framework_pipeline_epic_race_double_fail")
+        {
+            var epicId = group.Id;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(8000);  // 等 epic + Phase 1/2 sub-task 建出（split_task_propose_accept 路徑跑 Kickoff/Design）
+                try
+                {
+                    await using var raceScope = serviceProvider.CreateAsyncScope();
+                    var tgs = raceScope.ServiceProvider.GetRequiredService<TaskGroupService>();
+                    await tgs.SimulateEpicRaceAsync(epicId, default);
+                }
+                catch (Exception raceEx)
+                {
+                    logger.LogWarning(raceEx, "[Stage57] Mock race 觸發失敗（non-critical）");
+                }
+            });
+        }
 
         _ = Task.Run(() => taskGroupService.FireStepsAsync(group, [new WorkflowStep(initialStep)]));
 
@@ -355,12 +393,20 @@ public class MockScenarioService(
                     || s.StartsWith("framework_pipeline_devplan_unable_hitl")
                     || s.StartsWith("framework_pipeline_split_task_proposal_hitl") => "⚠️",
             "pipeline_dev_blocker_retry_idempotency"               => "🛡️",
+            // Stage 57：FF 五十一 race + FF 五十二 fix loop limit
+            "framework_pipeline_epic_race_double_fail"             => "🌀",
+            "framework_pipeline_reviewer_fix_loop_limit"           => "🔁",
             var s when s.StartsWith("framework_pipeline_")          => "🔧",
             _                                                       => "✨"
         };
 
         // Stage 49 v4 漸進遷移：framework Mock 場景啟動時提示 Christ 確認 feature flag
-        var frameworkHint = scenario.StartsWith("framework_appeal_loop_")
+        var frameworkHint = scenario is "framework_pipeline_epic_race_double_fail" or "framework_pipeline_reviewer_fix_loop_limit"
+            ? "\n⚠️ **Stage 57 — v4 framework production-ready 補強驗收**：請啟用 Pipeline framework flag。" +
+              (scenario == "framework_pipeline_epic_race_double_fail"
+                  ? "\n💡 場景：兩個 sub-task 同時 fail（SimulateEpicRaceAsync 並行 PauseEpic）→ 修前 fire 2 張 epic_partial_paused，修後 1 張（FF 五十一 idempotent helper 攔住）。"
+                  : "\n💡 場景：Vera 連 3 輪 Critical → 修前 generic intervention 卡死，修後 reviewer_fix_loop_limit 3 button（標完成 / 跳過 QA / 終止）推進。")
+            : scenario.StartsWith("framework_appeal_loop_")
             ? "\n⚠️ **v4 漸進遷移驗收**：請先於 Dashboard → 系統設定 → **使用 MS Agent Framework Appeal Loop = ON**，否則此 Mock 走 legacy path 無法驗 framework Workflow。"
             : scenario.StartsWith("framework_kickoff_mid_interrupt_")
                 ? "\n⚠️ **v4 漸進遷移第三步試點驗收**：請先於 Dashboard → 系統設定 → 同時啟用 ① **使用 MS Agent Framework Kickoff Meeting = ON** 與 ② **使用 MS Agent Framework HITL（Kickoff 中途介入試點） = ON**，否則此 Mock 走 legacy KickoffMeetingService 或試點 flag 不生效。" +
