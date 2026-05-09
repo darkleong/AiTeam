@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.78
+> 版本：v7.79
 > 建立日期：2026-04-01
 > 最後更新：2026-05-09
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -18,6 +18,7 @@
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
 > **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
+> **2026-05-09 v7.79：Stage 57 完成（v3.46.0 + 自驗 patch v3.46.1）— v4 framework production-ready 補強第一波** ✅ — Trial_v6 揭露 3 🔴 議題前兩個合併修：**FF 五十一** ✅（race condition 雙層防：fire 端 TryCreateUniqueInteractionAsync helper + handler 端 transaction + AsNoTracking idempotent + **驗收 patch v3.46.1** partial unique index DB constraint 雙保險擋 read-then-write race window）+ **FF 五十二** ✅（補 Stage 55B Session B 第 6 routing reviewer_fix_loop_limit + Christ 拍板真三選 mark_done→QaStageBridge / skip_qa→DocStageBridge / abort→SetIntervention end）。**4 self-diag fix + 1 patch — 全 0 escalate Forge 自診自修**。剩 FF 五十三 API 容錯獨立 Stage 58。Aria 校準錨待 Forge context 數字補。
 > **2026-05-08 v7.77：Trial_v6 結案 ⭐ 部分成功 — 揭露 15 議題**（vs Trial_v5 baseline 6 個，戰略價值 ×2.5）。試驗目的達標（v4 framework path 100% 走通 + Stage 46 sub-task chain + Stage 55B 5 routing HITL 全 type 真實觸發 + Stage 56 token 寫入率 100%），但 deliverable 不完整因 API 餘額自然耗盡（容錯性試驗達成）。**3 🔴 戰略級議題立 FF**：① **FF 五十一** Pipeline framework race condition（epic_partial_paused HITL routing 雙觸發）② **FF 五十二** Vera fix loop limit HITL routing 缺口（Stage 55B 5 routing 設計遺漏）③ **FF 五十三** API 餘額容錯性（TokenTrackingProvider USD billing 守門 + 三 Agent fail-fast 統一）。**12 🟡 中議題**併入既有 backlog（Cody/Petra prompt 對齊群組 / Dashboard UI 一致性 / BossInteraction 模板 / Internal API 安全評估）。**v4 ROI 量化結論**：Kickoff cost -24% ⭐ / Design cost +45%（含 sub-task 評估 overhead）/ 拆 task 機制真實任務首次觸發 / **總 cost +80% 超 Trial_v5 ±50% 範圍** ❌ — v4 投資戰略級正向但 production-ready 需 Stage 57+ 補強 3 🔴 議題。詳見 [Trial_v6_Plan.md](../experiments/Trial_v6_Plan.md) v2.0 結案紀錄。
 
 
@@ -35,17 +36,17 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-08 v7.77 — Trial_v6 結案後）
+## 當前優先級 Top 5（2026-05-09 v7.79 — Stage 57 結案後）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **五十一** ⭐ | Pipeline framework race condition（epic_partial_paused HITL routing 雙觸發）| 🔴 戰略級必修 | Trial_v6 揭露 — production race bug，Pipeline framework HITL routing 雙 fire 引發 EpicChain 雙觸發 sub-task 啟動，cost 浪費 + 流程亂序。Stage 57 候選 |
-| 2 | **五十二** ⭐ | Vera fix loop limit HITL routing 缺口 | 🔴 戰略級必修 | Trial_v6 揭露 — Stage 55B Session B 5 routing HITL 設計遺漏「Vera fix loop limit」routing，達 limit 後只 fire generic intervention（ack only）→ Pipeline 卡死無法推進。Stage 57 候選補強第 6 routing |
-| 3 | **五十三** ⭐ | API 餘額用盡時容錯性缺口 | 🔴 戰略級必修 | Trial_v6 容錯性試驗揭露 — TokenTrackingProvider 守門用 token count 不用 USD billing + 三 Agent（Vera/Quinn/Sage）對 API 爆容錯設計各異不統一。Stage 57 候選補強 |
-| 4 | **三十六** | v4 動態流程架構 — Phase B | ⚪ 等 Stage 57 補完 3 🔴 後再評估 | Trial_v6 揭露的 3 🔴 戰略級議題優先於動態架構評估 |
+| 1 | **五十三** ⭐ | API 餘額用盡時容錯性缺口 | 🔴 戰略級必修 | Trial_v6 容錯性試驗揭露 — TokenTrackingProvider 守門用 token count 不用 USD billing + 三 Agent（Vera/Quinn/Sage）對 API 爆容錯設計各異不統一。**Stage 58 候選**（Stage 57 已完成 FF 五十一+五十二，剩這個 3 🔴 最後一個）|
+| 2 | **三十六** | v4 動態流程架構 — Phase B | ⚪ 等 Stage 58 補完最後 1 🔴 後再評估 | Trial_v6 揭露的 3 🔴 戰略級議題優先於動態架構評估 |
+| 3 | **二十五** | Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）| 🟡 中 — Stage 58+ 候選 | Trial_v6 揭露 Cody/Petra prompt 對齊群組（與 FF 四十六/四十八 同性質），影響面廣 |
+| 4 | **五十** | Dashboard token 統計頁 IsEstimated 視覺區分 | 🟡 中 — Stage 56 follow-up | Trial_v6 觀察期 follow-up，小規模 Dashboard razor 改動 |
 | 5 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
 
-> ⚠️ **戰略主軸轉向**：Trial_v6 結案揭露 3 🔴 戰略級議題 → **Stage 57 必修 3 🔴 後再進入 Trial_v7+ / FF 三十六 Phase B 評估**。Trial_v6 也揭露 12 🟡 中議題（Cody/Petra prompt 對齊群組 / Dashboard UI 一致性 / BossInteraction 模板 / Internal API 安全評估）併入既有 backlog 排程處理。
+> ⚠️ **戰略主軸**：Stage 57 完成 FF 五十一+五十二（v3.46.0 + patch v3.46.1）→ **剩 Stage 58 必修 FF 五十三後進入 Trial_v7+ / FF 三十六 Phase B 評估**。Trial_v6 揭露的 12 🟡 中議題（Cody/Petra prompt 對齊群組 / Dashboard UI 一致性 / BossInteraction 模板 / Internal API 安全評估）併入既有 backlog 排程處理。
 
 ---
 
@@ -302,74 +303,6 @@ Stage 56 FF 四十三 修法新加 `token_logs.IsEstimated` 欄位（區分 `Tok
 ### 注（跨欄位來源差異 — Stage 56 揭露）
 
 `TokenMonitoring` 既有 `EstimatedCostUsd` 欄位是用 `app_settings` 兩 key（`TokenPricing:InputPer1kUsd` / `OutputPer1kUsd`）client-side 估算的，與 `token_logs.TotalCostUsd` 欄位**不同來源**（後者是 Stage 56 修法寫入的，含 CLI 真實值 + Anthropic API path 用 `TokenCostEstimator` per-model 4 欄位估算）。本 FF 修法是「新增 IsEstimated 視覺辨識」非「對齊既有 EstimatedCostUsd 顯示」。
-
----
-
-## 五十一、Pipeline framework race condition — `epic_partial_paused` HITL routing 雙觸發 🔴 戰略級
-
-> 狀態：🔴 戰略級必修 — Trial_v6 揭露 production race bug
-> 提出日期：2026-05-08（Trial_v6 結案揭露）
-
-### 背景
-
-Trial_v6 Phase 2 啟動時揭露 race condition：Christ 點 1 次「恢復 EPIC」按鈕 → SQL 揭露 `epic_partial_paused` BossInteraction **2 個 row 都被 epic_resume 處理**（time diff 5 秒）→ EpicChain 雙觸發 → Phase 2 同時啟動 **2 個 Dev_plan task**。
-
-**真實傷害**：4 個 Dev_plan task（race + appeal 迴圈疊加）+ 2 個 PM 審第 1 個結果 → revise 觸發第 4 個 Dev_plan → cost 浪費 ~$1-1.5。
-
-### 假設根因（待 Forge 探索確認）
-
-Pipeline framework `epic_partial_paused` HITL routing 在 Sage escalate + Sage skip 流程中重複 fire BossInteraction（race condition）→ Dashboard UI 一次 click 對所有 pending 同 type BossInteraction 統一 update → 觸發 EpicChain 邏輯雙啟動 sub-task。
-
-### 修法方向
-
-1. Pipeline framework `epic_partial_paused` HITL routing 雙 fire 防範（idempotency check）
-2. EpicChain `ResumeEpicAsync` 邏輯加 sub-task 啟動 idempotency（已啟動 sub-task 不重複 enqueue Dev_plan task）
-
-### 規模 / 風險
-
-**規模**：M（Pipeline framework HITL routing + EpicChain 兩層 idempotency）
-**風險**：中（race fix 需 Mock 場景重建 + 真實任務驗證）
-
-### 優先級
-
-🔴 戰略級必修 — Trial_v6 production 揭露，Stage 57 候選
-
-### v4 兼容性
-
-純 v4 framework 內部 race fix，與其他層無關。
-
----
-
-## 五十二、Vera fix loop limit HITL routing 缺口 🔴 戰略級
-
-> 狀態：🔴 戰略級必修 — Trial_v6 揭露 Stage 55B Session B 5 routing HITL 設計遺漏
-> 提出日期：2026-05-08（Trial_v6 結案揭露）
-
-### 背景
-
-Trial_v6 Phase 2 fix loop ×3 達 `FixIteration` limit 3 後，Pipeline 觸發 `SetIntervention end` + fire generic `intervention` BossInteraction（ack only no routing）→ Christ 點「我知道了」後 Pipeline **卡死 needs_intervention 永久死局**。
-
-Stage 55B Session B 設計 5 routing HITL（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）— **不含「Vera fix loop limit」routing**，這個邊界 case 沒被 Stage 55B 設計涵蓋。
-
-### 修法方向
-
-新增第 6 routing HITL type：`vera_fix_loop_limit_intervention`
-- 觸發條件：`FixIteration >= MaxFixIteration`（預設 3）+ Vera 仍 Critical > 0 + Petra 仲裁仍 revise
-- 提供 routing 選項：① 強制接受當前 PR（標完成）② 重啟 fix loop 計數（再給 3 輪）③ skip Phase（標完成進下個 phase）④ 放棄 Phase
-- Pipeline DevFixStageExecutor 改 yield-resume HITL（對齊 Stage 55B Session B 5 routing pattern）
-
-### 規模 / 風險
-
-**規模**：M（同 Stage 55B Session B 1 routing refactor 規模 — record + PortId + AddEdge + ReviewerStageExecutor 改 yield-resume + ResumeAfterVeraFixLoopLimitAsync wrapper + InteractionProcessor 路由表 + Mock alias）
-**風險**：低（單一 routing 補強，對齊 Stage 55B 既有 5 routing pattern）
-
-### 優先級
-
-🔴 戰略級必修 — Trial_v6 production 卡死議題，Stage 57 候選
-
-### v4 兼容性
-
-純 v4 framework HITL routing 補強，沿用 Stage 55B Pattern A inter-Executor message yield 設計。
 
 ---
 

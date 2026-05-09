@@ -11,14 +11,16 @@
 
 ## [Unreleased]
 
-- **Stage 56 Trial_v6 前置條件統包完成** — Dashboard MockScenarioCard 補全 33 framework_* 場景 + FF 四十二 + FF 四十三 + conventions 補 2 段 + Stage 48 PATHEXT 候選 FF 落地 conventions（不立 FF）+ WorkflowEngine.cs enum/record 殘留 grep 揭露為跨 23 service fundamental type（補 conventions 註明不可移除）。**Trial_v6 開跑前工具完備**。
-- **下個動作候選**：① **Trial_v6 排程**（v4 動態架構驗證 — Petra Magentic Orchestration / per-task session 行為驗證 + Stage 56 修法 production 自然驗 token_logs.TotalCostUsd 95%+ 寫入率達標）/ ② FF 三十六 Phase B 動態流程架構評估（v4 路線 9/9 已達成，Stage 56 完成，可進入評估）/ ③ 新立 FF 五十（Dashboard token 統計頁 IsEstimated 視覺區分，Stage 56 範圍變更留的 follow-up）
-- **v4 漸進遷移完整路線 9/9 達成 🎉 + Trial_v6 前置條件就緒**
-- **FF 四十二 ✅ + FF 四十三 ✅**（Stage 56 完成）
-- **Stage 48 PATHEXT 候選 FF 落地** ✅ — 寫入 `docs/conventions/csharp.md`（Linux Docker production 無此問題不立 FF，Windows dev 機 onboarding 預警）
-- **新立 FF 五十**（Stage 56 follow-up）：Dashboard token 統計頁 IsEstimated 視覺區分（estimated 標記 + tooltip）
+- **Stage 57 v4 framework production-ready 補強第一波完成（v3.46.0 + 自驗 patch v3.46.1）** — Trial_v6 揭露 3 🔴 議題前兩個合併修：FF 五十一 race condition 雙層防（fire helper + handler transaction + AsNoTracking + patch DB unique constraint）+ FF 五十二 第 6 routing `reviewer_fix_loop_limit`（Christ 拍板真三選 mark_done / skip_qa / abort）。剩 FF 五十三獨立 Stage 58。
+- **下個動作候選**：① **Stage 58** = FF 五十三 API 餘額容錯性（TokenTrackingProvider USD billing 守門 + 三 Agent fail-fast 統一，3 🔴 最後一個，建議拆 Session 2 段）/ ② Stage 58 完成後重跑 Trial_v6（Trial_v7+ 量化新 baseline ROI）/ ③ FF 三十六 Phase B 動態流程架構評估（等 3 🔴 全補完後啟動）
+- **v4 漸進遷移完整路線 9/9 達成 🎉 + Stage 57 補強 race + fix loop HITL routing 兩 🔴**
+- **FF 五十一 ✅ + FF 五十二 ✅**（Stage 57 完成，含 v3.46.1 patch race window 補強）（estimated 標記 + tooltip）
 
 ---
+
+## [3.46.0] / [3.46.1] — 2026-05-09 — [Stage 57](docs/planning/Stage_57_Roadmap.md) v4 framework production-ready 補強第一波 — race condition 雙層防 + Vera fix loop HITL routing 第 6 routing
+
+Trial_v6 揭露 3 🔴 戰略級議題前兩個合併修（FF 五十三 API 容錯獨立 Stage 58）。**FF 五十一 race condition 雙層防**：① fire 端 — 抽 `InteractionService.TryCreateUniqueInteractionAsync` helper（race-prone interaction 防雙 fire wrapper + 未來複用，BossInteractionRepository.HasPendingForGroupAndTypeAsync idempotent 鍵查詢）+ `PauseEpicAndNotifyAsync` swap to TryCreate ② handler 端 — `HandleEpicPartialPausedAsync` epic_resume / epic_abort 雙 case 加 `BeginTransactionAsync` + `AsNoTracking().FirstOrDefaultAsync` fresh read idempotent，繞過 EF tracker cache。**FF 五十二 第 6 routing**（命名 `reviewer_fix_loop_limit` 對齊 Stage 55B Session B 5 routing prefix 慣例）：actions JSON const + Request/Response records + PortId + 3 AddEdge wiring（含 reviewerStage→docStage skip_qa edge）+ ReviewerStageExecutor FixIteration≥3 case 改 fire type-specific interaction + yield 等 Christ + `HandleReviewerFixLoopLimitResponseAsync` **Christ 拍板真三選獨立 path**（mark_done → QaStageBridge 走完整 QA 給 Quinn 獨立驗證 / skip_qa → DocStageBridge 急推進 / abort → SetIntervention end）+ TaskGroupService NotifyBossReviewerFixLoopLimit + TryRoute helper + dispatch case + FrameworkPipelineRouter Resume thin wrapper + InteractionProcessor 3 label mapping + MockMode auto-approve default fix_loop_mark_done。**驗收後 patch v3.46.1**：Forge 自驗 V1 揭露 `TryCreateUniqueInteractionAsync` TOCTOU race window（HasPending → Create 兩 transaction，並行 thread 都 read 0 → 都 create → DB 真出 2 卡，functional 由 V2 handler idempotent 擋住但 UI 層 race 沒擋）→ Christ 拍板路線 a 趁熱補：partial unique index `(TaskGroupId, InteractionType) WHERE Status='pending'` + Migration `Stage57BossInteractionPendingUniqueIndex` + DbUpdateException 23505 catch（DB constraint 雙保險擋 read-then-write race window）。**4 self-diag fix + 1 patch — 全 0 escalate Forge 自診自修**（race Mock polling / auto-approve epic_resume case 補 / NpgsqlRetryingExecutionStrategy wrap CreateExecutionStrategy.ExecuteAsync 包 user transaction / 23505 catch dead code 修正 emit 正確 fix-specific log）。**Aria 校準錨**：待 Forge context 數字補。**規模**：12 檔變更（含新 Migration），不動 Stage 55B Session B 既有 5 routing dispatch 鏈路（純加第 6 routing 對齊既有 pattern）。詳見 Stage 57 Roadmap。commits：`711a010`(主) + `6ba851a`/`78a616d`/`ffe2027`(self-diag) + `500158a`(自驗 docs) + `62afaf8`/`c12ae21`(v3.46.1 patch) + `772aad2`(驗收後修正紀錄)。
 
 ## [3.45.0] — 2026-05-05 — [Stage 56](docs/planning/Stage_56_Roadmap.md) Trial_v6 前置條件統包 — Dashboard MockScenarioCard 補全 33 場景 + FF 四十二/四十三 修 + conventions 補 2 段
 

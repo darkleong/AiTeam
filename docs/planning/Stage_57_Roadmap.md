@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 五十一（Pipeline framework race condition）+ FF 五十二（Vera fix loop limit HITL routing）— Trial_v6 揭露 3 🔴 戰略級議題的前兩個（FF 五十三 API 容錯獨立 Stage 58）
 > 對應版本：**v3.46.0**（Stage 56 v3.45.0 + 1）
 > 建立日期：2026-05-09
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-09）
+> 文件版本：v2.0
 
 ---
 
@@ -474,6 +474,7 @@ docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c \
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-09 | Stage 57 結案（Aria 第二段）— **v3.46.0 主實作 + v3.46.1 patch（FF 五十一 fire 端 race window 補強，Christ 拍板路線 a partial unique index）**。CHANGELOG / Future_Feature 三檔同步：FF 五十一 ✅ + FF 五十二 ✅ 移入 completed + FF changelog v7.79 + Top 5 更新（FF 五十三上 #1 / FF 三十六 #2 / 加 FF 二十五/五十/七）。**Aria 校準錨**：待 Christ 提供 Forge context 數字後補（同 Stage 56 結案模式）。Aria 結案第二段 commit + push。
 | v1.2 | 2026-05-09 | Forge 實作紀錄補入（6 子項全部完成，dotnet build 0 errors，計劃書 v2 三點修正全套入：命名候選 1 / race Mock 路線 b / 真三選獨立 path / AsNoTracking fresh read）。Aria 結案第二段補 CHANGELOG / Future_Feature 同步 + Forge context 校準錨倍率。
 | v1.1 | 2026-05-09 | Christ 拍板（Aria 重寫）— actions set 三選 `mark_done` / `skip_qa` / `abort`（label「標完成 / 跳過 QA / 終止 Pipeline」），對應 Trial_v6 Christ 實際強制 done 推進的操作。其他三項依議題層次篩選紀律（user_christ.md:32-38）Aria 自拍：① FF 五十一修法 = 雙層防（對 Christ 看到行為與「只修 fire」一樣，handler 端 race-free 設計層保險）② FF 五十二新 routing 命名 = Forge spike 後對齊 Stage 55B Session B 5 routing 命名提議（純內部 type 字串）③ idempotent helper = 抽 InteractionService.TryCreateUniqueInteractionAsync（race-prone pattern 普遍，未來複用）。子項 0 spike 報告改為純執行對齊（命名提案 + dispatch 鏈路對照 + helper 簽名定稿），無需再 Christ 拍。
 | v1.0 | 2026-05-09 | 初版規劃書建立（Aria）— Stage 57 = Trial_v6 揭露 3 🔴 戰略級議題前兩個合併（FF 五十一 race condition 雙層防 + FF 五十二 Vera fix loop HITL routing 補第 6 routing），FF 五十三 API 容錯獨立 Stage 58。Christ 拍板「五十一+五十二合併、五十三獨立」基於兩議題都動 Pipeline framework HITL routing 同一塊，分開做會 merge conflict / 設計分裂。**待 Christ 拍板議題 3 個**：① FF 五十一修法層級（雙層防 / 只修 fire / 只修 handler）② FF 五十二新 routing 命名 + actions set ③ idempotent helper 抽 vs inline。**規劃前期已 grep**：PauseEpicAndNotifyAsync (TaskGroupService.cs:1342) + HandleEpicPartialPausedAsync (line 1158) + BuildEpicSubTasksAsync idempotent 範例 (line 1224) + ReviewerStageExecutor FixIteration≥3 case (line 148-162) + Stage 55B Session B 5 routing dispatch (QaStageExecutor.cs / DevPlanStageExecutor.cs) + InteractionProcessor type+action mapping (line 155-162) + InteractionService.EpicPartialPausedActionsJson (line 64) — 對齊自省點 #23 規劃前期 grep 紀律。
