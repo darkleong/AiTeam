@@ -41,6 +41,16 @@
 
 **搬家後注意**：如果有多個子 service 都承接邏輯，**檢查是否有新的超大檔誕生**（例如 Stage 36 CommandHandler 拆後，ButtonCallbackRouter 變 1091 行新怪物）。搬家不等於拆解。
 
+**caller 改動成本評估三層分**（Stage 59 踩坑 #2 — spike 第一步必須區分這三類 caller 才能準確評估範圍）：
+
+| caller pattern | 改動成本 | 改動內容 |
+|---|---|---|
+| **ctor 注入**（傳統 DI）| **重** | DI registration + ctor parameter 簽名 + base class 呼叫 |
+| **既有 IServiceProvider field 注入** | 中等 | 既有 field 多用一處 → 加 GetRequiredService 呼叫 |
+| **scope.ServiceProvider.GetRequiredService**（lazy resolve）| **輕** | 1 個 var name + 1 個 using |
+
+→ Stage 59 plan 預期「11 caller 改 ctor」實際發現全是 lazy resolve pattern → 改動 = 22+ call site replace + 0 ctor 改動。spike 第一步 grep 不只看 ctor 注入清單更要看 scope.ServiceProvider.GetRequiredService 模式。
+
 ### SOP 3：Commons service 範圍界定
 
 **只放**符合以下所有條件的：
@@ -84,6 +94,16 @@
 - namespace 從 `AiTeam.Bot.Orchestration` → `AiTeam.Bot.Orchestration.Meeting`
 - caller 的 `using` 要補加 `using AiTeam.Bot.Orchestration.Meeting;`（兩個 namespace 可並存，原 using 不用刪）
 
+⚠️ **子目錄 / namespace 名稱避免與既有 entity 同名**（Stage 59 踩坑 #1 — C# child namespace shadow 規則）：
+
+C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若 child namespace 名稱與既有 entity 同名 → entity 被 shadow，整個 namespace tree 內 entity 引用全部 break。
+
+**反例**（Stage 59 第一次 build 報 75 errors `'TaskGroup' is a namespace but is used like a type`）：
+- ❌ `Orchestration/TaskGroup/` 子目錄 + `Data.TaskGroup` entity 同名 → `Orchestration.*` 內所有 `TaskGroup` 引用 break
+- ✅ 拆 `Boss/` `Epic/` `Routing/` 3 子目錄取代統一 TaskGroup 子目錄（每個 child namespace 不與 entity 同名）
+
+**SOP 6 子目錄命名規則**：先 grep 同 root namespace 下既有 entity 名稱，避免衝突。
+
 ---
 
 ## Stage 34-36 實戰數據（參考）
@@ -93,11 +113,13 @@
 | 34 | MeetingService | 1415 | 4 檔共 997 | —（拆完合計更多是正常）| Sonnet 200K + high | 160K / 200K = 80% |
 | 35 | PmAgentService + Agents/Pm/ 子資料夾首次實踐 | 1389 | 6 檔共 1444 | — | Opus 1M + high | 261K / 1M = 26% |
 | 36 | TaskGroupService + CommandHandler 合併 | 4795 合計 | TGS 716（-73%）+ CH 556（-74%）+ 11 新檔 | 主檔大幅瘦身 | Opus 1M + high | 360K / 1M = 36% |
+| 59 | TaskGroupService（v4 路線後復發 1759 行）| 1759 | TGS 808（-54%）+ 4 新檔合計 1051 | 主檔中度瘦身 | Opus 1M + medium-high | 402K / 1M = 40% |
 
 **觀察**：
-- **「SOP 累積後同類工作越做越省」** — Stage 36 規模最大但 context 倍率（×1.49）反而比 Stage 34（×1.60）低
+- **「SOP 累積後同類工作越做越省」** — Stage 36 規模最大但 context 倍率（×1.49）反而比 Stage 34（×1.60）低；**Stage 59 倍率 ×1.09**（SOP 累積第 4 次 + 新立 workflow_aria.md 第 5+6 條紀律生效 partial read + 不寫 code 範例）— FF 二十系列拆解倍率從 ×1.49-1.65 降到 ×1.09
 - **Opus 1M 是大型拆解的舒適區**，Sonnet 200K 邊界緊
-- **拆完行數總合可能變多**（Stage 34 997 vs 原 1415 只減 30%，是因為新 service 各自有 namespace / using / class declaration 的 boilerplate）——這是正常的，目的是**降低單檔 Read 成本**不是減總碼量
+- **拆完行數總合可能變多**（Stage 34 997 vs 原 1415 只減 30%；Stage 59 1859 vs 原 1759 = +5.7%）—— 這是正常的，目的是**降低單檔 Read 成本**不是減總碼量
+- **dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60%**（Stage 59 踩坑 #3 — vs Stage 34-36 純拆 -73%~-85% 是因為 Stage 34-36 拆對象是「同類別怪物合併」沒 dispatch 主入口；Stage 59 拆對象是「單檔含 dispatch + 多子職責」必留 dispatch 結構 ProcessBossResponseAsync 主 switch + FireOneStepAsync framework Pipeline entry guard + HandleAgentCompletedAsync Pipeline path 接管 callback）— spike 第一步必須精準分離「可搬走的 method body」vs「必留的 dispatch 結構」
 
 ---
 
@@ -125,4 +147,5 @@
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.1 | 2026-05-10 | Stage 59 結案升級（Aria 結案第二段 step 0 — 跨 Stage know-how 升級評估首次實踐）— ① SOP 2 加 caller 改動成本評估三層分（ctor / IServiceProvider field / scope.GetRequiredService） ② SOP 6 加子目錄 / namespace 名稱避免與既有 entity 同名（C# child namespace shadow 規則）③ 實戰數據加 Stage 59 row + dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60% 觀察 + SOP 累積倍率持續下降（34-36 ×1.49-1.65 → 59 ×1.09）|
 | v1.0 | 2026-04-22 | 初版，由 Stage 34-36（FF 二十合集）累積而成 |

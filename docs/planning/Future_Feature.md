@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.81
+> 版本：v7.82
 > 建立日期：2026-04-01
 > 最後更新：2026-05-10
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -18,6 +18,7 @@
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
 > **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
+> **2026-05-10 v7.82：Stage 59 完成（v3.48.0）— FF 五十四子項 1 ✅ TaskGroupService 怪物大檔拆解 -54% 瘦身**（1759 → 主檔 808 + 4 新子 service Boss/Epic/Routing 3 子目錄）。**Aria 校準錨 ×1.09**（FF 二十系列倍率從 ×1.58 → ×1.09 -31%，SOP 累積 + workflow_aria.md 第 5+6+7 條紀律生效 — Stage 59 計劃書 -65% vs Stage 58）。**Aria 結案第二段 step 0 升級首次實踐**（refactor-sop.md SOP 2/6 + 實戰數據 + forge-self-verify skill port 修正 + workflow_aria.md 第 7 條 source of truth 紀律）。FF 五十四子項 2/3 評估動工依 Stage 59 ROI（ButtonCallbackRouter 1091 / DevAgentService 958） — Trial_v7 後排程。
 > **2026-05-10 v7.81：Stage 58 完成（v3.47.0）— v4 framework production-ready 補強第二波 ✅ FF 五十三 ✅ 收口 = Trial_v6 揭露 3 🔴 戰略級議題全完成 🎉** — 路線 A marker pattern（AgentQueueProcessor specific catch [API_FAILURE] summary 前綴 + 4 Stage Executor HandleResponseAsync marker check + HandleAgentApiFailureResponseAsync 真三選 continue/retry/abort）+ LlmApiFailureException + LlmProviderType enum + 統一 type agent_api_failure_intervention + per-stage 4 PortId + 第 7 routing wiring。**Aria 校準錨 ×0.94**（439K vs 預估 465K，混合型第 12 資料點 mid 中段，接近 Stage 51 ×0.96 / Stage 56 ×0.92） — **戰略結論：Stage 57 ×1.36 → 58 ×0.94 大幅下降推翻「production-ready 補強性質倍率系統性偏高」假設，真正關鍵是 Aria 教訓套入完整度 + Forge spike 揭露架構盲點紀律生效**（Stage 58 0 self-diag fix vs Stage 57 4 self-diag + 1 patch race）。**Forge 自驗 V1-V8 全 PASS**（V2/V4 ROI skip + V3 4 agent 一次跑通驗 4 fire + dotnet test 131 passed）+ 1 follow-up backlog（Dev_plan stage API failure 走既有 dev_plan_unable routing graceful，不擴 Stage 58 範圍）。**Trial_v7+ 重跑 Trial_v6 候選排程**。
 > **2026-05-10 v7.80：新立 FF 五十四 — Stage 36 後怪物大檔復發追蹤**（Christ 觀察 Forge Plan context 漸漲根因之一）。3 候選 ≥ 800 行警戒線：TaskGroupService 1591 行（Stage 57 後超 Stage 36 拆解前 baseline）/ ButtonCallbackRouter 1091 行（Stage 36 後新觀察）/ DevAgentService 958 行（Stage 36 後新觀察）。立 FF 追蹤等 Trial_v7 重跑後評估動工（治本對齊 Stage 34-36 FF 二十系列拆解 SOP）。**配套治標**：workflow_aria.md 第三節 A 加第 6 條紀律「大檔 reference 標精準 line + method 簽名」（Stage 59+ 立刻生效）+ 第 5 條「不寫整段 code 範例」（Stage 56→57→58 計劃書漸漲反例修根因）。
 > **2026-05-09 v7.79：Stage 57 完成（v3.46.0 + 自驗 patch v3.46.1）— v4 framework production-ready 補強第一波** ✅ — Trial_v6 揭露 3 🔴 議題前兩個合併修：**FF 五十一** ✅（race condition 雙層防：fire 端 TryCreateUniqueInteractionAsync helper + handler 端 transaction + AsNoTracking idempotent + **驗收 patch v3.46.1** partial unique index DB constraint 雙保險擋 read-then-write race window）+ **FF 五十二** ✅（補 Stage 55B Session B 第 6 routing reviewer_fix_loop_limit + Christ 拍板真三選 mark_done→QaStageBridge / skip_qa→DocStageBridge / abort→SetIntervention end）。**4 self-diag fix + 1 patch — 全 0 escalate Forge 自診自修**。剩 FF 五十三 API 容錯獨立 Stage 58。Aria 校準錨待 Forge context 數字補。
@@ -38,12 +39,12 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-10 v7.81 — Stage 58 結案後 = Trial_v6 3 🔴 全收口 🎉）
+## 當前優先級 Top 5（2026-05-10 v7.82 — Stage 59 結案後 = FF 五十四子項 1 ✅）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
 | 1 | **三十六** ⭐ | v4 動態流程架構 — Phase B | 🟢 啟動條件達成 — Stage 58 完成 = Trial_v6 3 🔴 全收口 | Trial_v6 揭露的 3 🔴 戰略級議題已全完成（Stage 57+58），可進入動態架構評估啟動。**建議先 Trial_v7 重跑 Trial_v6 量化新 baseline 後再啟動 Phase B spike**（對照新 baseline 才知道 hierarchical static 真實 ROI vs 動態架構潛在 gain）|
-| 2 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — TaskGroupService 1689 行（Stage 58 後）+ ButtonCallbackRouter 1091 行 + DevAgentService 958 行 | 🟡 中 — Trial_v7 後評估動工 | 2026-05-10 Christ 觀察 Forge Plan context 漸漲根因之一；治本對齊 Stage 34-36 FF 二十系列 SOP，治標 workflow_aria.md 第 5+6 條 Aria 規劃精準 line + 簽名 reference + 不寫 code 範例 Stage 59+ 立刻生效 |
+| 2 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — **子項 1 TaskGroupService ✅ Stage 59（v3.48.0，-54% 瘦身）/ 子項 2/3 待**（ButtonCallbackRouter 1091 / DevAgentService 958）| 🟡 中 — Trial_v7 後評估動工子項 2/3 | Stage 59 ×1.09 ROI 確認 SOP 累積 + workflow_aria.md 紀律生效 — 子項 2/3 預估倍率類似 ×1.0-1.3，依 Trial_v7 後 codebase 痛點再排 |
 | 3 | **二十五** | Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）| 🟡 中 — Stage 58+ 候選 | Trial_v6 揭露 Cody/Petra prompt 對齊群組（與 FF 四十六/四十八 同性質），影響面廣 |
 | 4 | **五十** | Dashboard token 統計頁 IsEstimated 視覺區分 | 🟡 中 — Stage 56 follow-up | Trial_v6 觀察期 follow-up，小規模 Dashboard razor 改動 |
 | 5 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
@@ -310,7 +311,7 @@ Stage 56 FF 四十三 修法新加 `token_logs.IsEstimated` 欄位（區分 `Tok
 
 ## 五十四、Stage 36 後怪物大檔復發 — TaskGroupService / ButtonCallbackRouter / DevAgentService 拆解 ⭐
 
-> 狀態：🟡 中 — Trial_v7 重跑後評估動工
+> 狀態：🟡 子項 1 ✅（Stage 59，2026-05-10）/ 子項 2/3 待 Trial_v7 後評估動工
 > 提出日期：2026-05-10（Christ 觀察 Forge Plan context 漸漲根因之一）
 
 ### 背景

@@ -11,11 +11,15 @@
 
 ## [Unreleased]
 
-- **Stage 58 v4 framework production-ready 補強第二波完成（v3.47.0）= Trial_v6 揭露 3 🔴 戰略級議題全收口 🎉** — FF 五十三 API 餘額容錯性（路線 A marker pattern：LlmApiFailureException + AgentQueueProcessor specific catch [API_FAILURE] 前綴 + 4 Stage Executor marker check + HandleAgentApiFailureResponseAsync 真三選 + 第 7 routing wiring）。Stage 57+58 = Trial_v6 揭露 race condition + Vera fix loop + API 容錯三大議題全收口。
-- **下個動作候選**：① **Trial_v7 重跑 Trial_v6**（量化 v4 framework hierarchical static 真實 ROI 去掉三 noise — 給 FF 三十六 Phase B 評估提供對照基線）② **FF 五十四怪物大檔拆解**（Trial_v7 後評估動工，TaskGroupService 1689 行 / ButtonCallbackRouter 1091 行 / DevAgentService 958 行 — 對齊 Stage 34-36 拆解節奏）③ **FF 三十六 Phase B 動態流程架構評估啟動**（Trial_v7 後）
-- **v4 漸進遷移完整路線 9/9 達成 + Trial_v6 production-ready 邊界 3 🔴 補強完整**（estimated 標記 + tooltip）
+- **Stage 59 FF 五十四子項 1 完成（v3.48.0）— TaskGroupService 怪物大檔拆解 -54% 瘦身** — 1759 行 → 主檔 808 + 4 新子 service（BossNotification / BossResponseHandler / EpicChain / PipelineRouting，Boss/Epic/Routing 3 子目錄）。**Aria 校準錨 ×1.09**（FF 二十系列拆解倍率從 Stage 34-36 平均 ×1.58 降到 ×1.09 -31%）證明 SOP 累積 + workflow_aria.md 第 5+6 條紀律生效（計劃書 -65% / partial read / 不寫 code 範例 / 大檔精準 line + 簽名）。**Aria 結案第二段 step 0 升級首次實踐**：refactor-sop.md SOP 2/6 + 實戰數據 + forge-self-verify skill 全升級（修 Stage 56→59 port 5052 + X-Api-Key 跨 Stage 踩坑根因）。
+- **下個動作候選**：① **Trial_v7 重跑 Trial_v6**（量化 v4 framework hierarchical static 真實 ROI — 給 FF 三十六 Phase B 評估提供對照基線）② **FF 五十四子項 2/3 評估動工**（ButtonCallbackRouter 1091 / DevAgentService 958，依 Stage 59 ROI 確認後排）③ **FF 三十六 Phase B 動態流程架構評估啟動**（Trial_v7 後）
+- **v4 漸進遷移完整路線 9/9 達成 + Trial_v6 production-ready 邊界 3 🔴 補強完整 + Stage 36 後怪物大檔復發第 1 拆解 ✅**（estimated 標記 + tooltip）
 
 ---
+
+## [3.48.0] — 2026-05-10 — [Stage 59](docs/planning/Stage_59_Roadmap.md) FF 五十四子項 1 — TaskGroupService 怪物大檔拆解 -54% 瘦身（4 子 service / Boss/Epic/Routing 3 子目錄）
+
+Stage 59 = FF 五十四子項 1（最痛 + 最大）— Stage 36 後 v4 漸進遷移路線（49-58）一路加 routing / NotifyBoss / TryRoute 累積 +1043 行 → TaskGroupService 從拆解後 baseline 716 漲到 **1759 行**超 refactor-sop.md 警戒線 1.3x。對齊 Stage 34-36 FF 二十系列既有拆解 SOP 全 6 項。**子項拆分**：① 主檔 1759 → **808 行 -54%**（保留 dispatch / guard / 路由 3 主入口 method）② **BossNotificationService**（5 NotifyBoss helpers + FindChannel，208 行）③ **BossResponseHandlerService**（D 區段 4 case body，267 行）④ **EpicChainService**（Epic 自動拆任務 5 method，372 行）⑤ **PipelineRoutingService**（7 type-specific TryRoute + TryGetPipelineGroup，204 行）⑥ Boss/Epic/Routing 3 子目錄（single-theme pattern 對齊 Stage 35）。**Forge spike 揭露 3 踩坑全 SOP 升級**：① **C# child namespace shadow 規則**（namespace 與 entity 同名衝突 → TaskGroup/ 統一目錄改 Boss/Epic/Routing 3 子目錄）② **caller 改動成本評估三層分**（ctor 注入 vs IServiceProvider field vs scope.GetRequiredService — 22+ call site / 0 ctor 改動）③ **dispatch / guard / 路由型主檔瘦身典型 -50%~-60%**（vs 純拆 -73%~-85%）。**Aria 結案第二段 step 0 升級首次實踐**：refactor-sop.md SOP 2/6 + 實戰數據 v1.1 升級 + forge-self-verify skill port 5051→5052 + X-Api-Key 補（修 Stage 56→59 跨 Stage 踩坑根因）+ workflow_aria.md 第三節 A 加第 7 條「環境細節 reference 標 source of truth 不憑印象寫」。**Forge V1-V6 自驗全綠**（build / 131 tests pass / 7 routing Mock 4 type 觸發確認 dispatch + 3 type Mock scenario 範圍邊界非 regression / framework_pipeline_happy_path 完整 pipeline 跑通 / 行數驗證 / DI 啟動 0 exception）。**Aria 校準錨 ×1.09**（402K vs 預估 370K，混合型第 13 資料點 mid 中段，接近 Stage 50 ×1.09 / Stage 56 ×0.92）— **戰略結論：FF 二十系列拆解倍率從 Stage 34-36 平均 ×1.58 降到 ×1.09（-31%）**證明 SOP 累積 + workflow_aria.md 第 5+6+7 條紀律持續生效（Stage 59 計劃書 203 行 -65% vs Stage 58 v1.1 580 行 — 新立紀律首次驗證大幅超預期）。**0 follow-up commits**。**FF 五十四子項 2/3** 評估動工依 Stage 59 ROI（ButtonCallbackRouter 1091 / DevAgentService 958）— Trial_v7 後排程。詳見 Stage 59 Roadmap。commits：`acda735`(規劃) + `c7a68eb`(主實作) + `a89b700`(自驗結案)。
 
 ## [3.47.0] — 2026-05-10 — [Stage 58](docs/planning/Stage_58_Roadmap.md) v4 framework production-ready 補強第二波 — API 餘額容錯性 ⭐ Trial_v6 揭露 3 🔴 全收口 🎉
 

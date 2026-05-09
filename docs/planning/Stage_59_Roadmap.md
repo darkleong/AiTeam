@@ -201,7 +201,7 @@ Forge 完成 read 後在 Plan Mode 計劃書內報告：
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-10 | 初版規劃書建立（Aria）— Stage 59 = FF 五十四子項 1 TaskGroupService 拆解（1759 行 → 主檔瘦身 ~400-500 + 4 新子 service）。**0 議題攤 Christ**（純 refactor 不動業務 → 對 Christ 看到行為 0 影響）。**Aria 拿捏 8 件純內部議題**（拆解模式 / 子 service 命名 / caller 切換 / 子目錄組織 / DI / Migration / prompt / SOP 6 全套用）。**Stage 57+58 教訓延伸**（不引入新 user transaction + 新 idempotent helper）。**規劃前期已 grep**：TaskGroupService method 分布 6 區段 partial read（A/B/C/D/E/F line 範圍 + method 群組）+ refactor-sop.md SOP 6 項 + Stage 36 Roadmap 拆解設計段 — 對齊自省點 #23 規劃前期 grep 紀律 + **對齊新立 workflow_aria.md 第 5+6 條紀律**（partial read + 不寫 code 範例 + 大檔精準 line + 簽名 reference）。**Aria 校準錨預估**：對齊 Stage 34/35/36 拆解倍率 ×1.5-1.7（平均 ×1.58），預估 Forge context ~480-640K / Opus 1M + medium-high。**第一個套用新立紀律的 Stage**（驗證計劃書本身下降 ~30-40%）。
-| v2.0 | 2026-05-10 | **Forge 實作完成 + V1/V2/V5 自驗通過 + 結案紀錄補充**（v3.48.0）。
+| v2.0 | 2026-05-10 | **Stage 59 完整結案（Aria 第二段 step 0 + 1 + 2 + 3）— v3.48.0 主實作 + Forge V1-V6 全綠 + 跨 Stage know-how 升級首次實踐**。**Aria 校準錨 ×1.09**（402K vs 預估 370K，混合型第 13 資料點 mid 中段，接近 Stage 50 ×1.09 / Stage 56 ×0.92）— **戰略結論：FF 二十系列拆解倍率從 Stage 34-36 平均 ×1.58 降到 ×1.09（-31%）**證明 SOP 累積 + workflow_aria.md 第 5+6 條紀律生效（partial read + 不寫 code 範例 + 大檔精準 line + 簽名 reference Stage 59 計劃書 -65% vs Stage 58 580 行）。**Step 0 升級實踐**（首次套用 Aria 結案第二段新立 SOP）：① refactor-sop.md SOP 2 加「caller 改動成本評估三層分」② SOP 6 加「子目錄 / namespace 名稱避免與既有 entity 同名」C# shadow 規則 ③ 實戰數據加 Stage 59 row + 「dispatch 型主檔瘦身典型 -50%~-60%」觀察 ④ forge-self-verify skill port 5051→5052 + X-Api-Key 補（Stage 56→59 踩坑揭露 source of truth 規則 + workflow_aria.md 第三節 A 第 7 條紀律）。**FF 五十四子項 1 ✅**（Stage 60+ 評估子項 2/3 = ButtonCallbackRouter 1091 / DevAgentService 958）。Aria 結案第二段 commit + push。
 
 ---
 
