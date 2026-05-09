@@ -149,6 +149,9 @@ public class InteractionService(
                         "dev_plan_unable"         => "devplan_unable_skip",
                         // Stage 57-FF 五十二：Reviewer fix loop ×3 達 limit — default 走完整 QA 路徑（mark_done → QaStageBridge）
                         "reviewer_fix_loop_limit" => "fix_loop_mark_done",
+                        // Stage 57 自驗揭露 pre-Stage 57 既有 bug：epic_partial_paused 沒有 ack action（buttons: epic_resume / epic_abort）
+                        // 預設 epic_resume 觸發 HandleEpicPartialPausedAsync handler idempotent 路徑（驗 FF 五十一第二層防線）
+                        "epic_partial_paused"     => "epic_resume",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
                         _                     => "ack",
                     };
