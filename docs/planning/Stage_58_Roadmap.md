@@ -3,8 +3,8 @@
 > 對應 Future Feature：FF 五十三（API 餘額用盡時容錯性缺口）— Trial_v6 揭露 3 🔴 戰略級議題最後一個（前兩個 Stage 57 v3.46.0 + v3.46.1 已修）
 > 對應版本：**v3.47.0**（Stage 57 v3.46.1 + minor bump）
 > 建立日期：2026-05-09
-> 狀態：📋 規劃中（v1.1 — Forge spike + Aria 4 議題拍板後 bump，二檢通過）
-> 文件版本：v1.1
+> 狀態：✅ 已完成（2026-05-10）
+> 文件版本：v2.0
 
 ---
 
@@ -413,6 +413,7 @@ public Task ResumeAfterDevAgentApiFailureAsync(TaskGroup group, string action, C
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-09 | 初版規劃書建立（Aria）— Stage 58 = Trial_v6 揭露 3 🔴 戰略級議題最後一個（FF 五十三 API 餘額容錯性）。**Christ 拍板 3 議題**（B 容錯模式 / 真三選 / 一個 session 跑）。**Aria 拿捏 12 件純內部議題**。**Stage 57 教訓主動套入**。**Aria 校準錨預估**：×1.2-1.5。 |
+| **v2.0** | 2026-05-10 | **Stage 58 結案（Aria 第二段）— v3.47.0 主實作 + Forge 自驗 V1-V8 全 PASS + Trial_v6 揭露 3 🔴 全收口 🎉**。CHANGELOG / Future_Feature 三檔同步：FF 五十三 ✅ 移入 completed + FF changelog v7.81 + Top 5 更新（FF 三十六 上 #1 啟動條件達成 / FF 五十四 #2 / 七重回 #5）。**Aria 校準錨 ×0.94**（439K vs 預估 465K，混合型第 12 資料點 mid 中段，接近 Stage 51 ×0.96 / Stage 56 ×0.92）— **戰略結論：Stage 57 ×1.36 → 58 ×0.94 大幅下降推翻「production-ready 補強性質倍率系統性偏高」假設**（Stage 58 0 self-diag fix vs Stage 57 4 self-diag + 1 patch race，證明 Aria 教訓主動套入 + Forge spike 揭露 callback boundary 紀律生效大幅降低 Aria 設計疏忽）。**1 follow-up backlog**（Dev_plan stage API failure 走既有 dev_plan_unable routing graceful — 不擴 Stage 58 範圍 + 不立 FF，未來真要做時再評估）。Aria 結案第二段 commit + push。
 | **v1.1** | 2026-05-10 | **Forge spike 後 + Aria 4 議題拍板 bump（二檢通過）**。① 🔴 議題 1 路線 A 架構修正：v1.0「4 Stage Executor catch」設計疏忽（Stage Executor 與 AgentQueueProcessor 是不同 async path，throw 從未跨 callback boundary）改為 marker pattern — AgentQueueProcessor +1 specific catch build `[API_FAILURE]` summary 前綴 result + call HandleAgentCompletedAsync 走正常 callback flow → 4 stage executor `HandleResponseAsync` 第一行 marker check → fire interaction + yield（對齊 Stage 53B `[BLOCKED]` 既有 pattern 不破壞 AgentExecutionResult record 簽名）② 議題 13：MockMode auto-approve 預設 `api_failure_continue`（反 Forge 提案 retry — Aria 理由：retry 預設無限迴圈 + continue 對齊「auto-approve 推進精神」+ 4 agent 一次跑通驗 fire interaction）③ 議題 14：`string RawError capped 500` + `LlmProviderType` enum（Anthropic/Gemini/Unknown）④ 議題 16：單 alias `framework_pipeline_agent_api_failure`。**子項規模重估**：1 從 M 升 M+S（多 AgentQueueProcessor catch）/ 2 從 M 降 S（marker check 比 catch 簡單）。**驗收情境 V1 描述更新**（marker pattern → fire 不是 catch → fire）。**技術約束加 marker pattern 紀律**。**計劃書硬規則升級（Stage 58 揭露 Aria 設計疏忽 #3）**：Aria 設計新 helper / transaction / catch handler 時，先 grep codebase 既有相關 architecture boundary 用法（atomic primitive / async flow / callback boundary / state propagation 等）— Stage 56 起 Forge Plan Mode 主動揭露 Aria 預掃缺口的累積成果（55A 3 / 55B 6 / 57 0 / 58 1 🔴）。**Aria 二檢通過 3 實作期提醒**：① AgentQueueProcessor catch 對齊 generic pattern ② retry case re-invoke 注意 task duplication + state cleanup ③ ResumeWithResponseAsync 路線 a 拆 4 typed thin wrapper（不動既有簽名）。**Aria 校準錨預估維持 ×1.2-1.5**（路線 A 改動相對輕，預估 Forge context 400-550K 落區間下緣）。 |
 
 ---
