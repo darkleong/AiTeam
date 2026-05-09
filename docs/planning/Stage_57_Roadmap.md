@@ -350,9 +350,42 @@ dotnet build AiTeam.slnx
 → 0 Error(s) / 100 Warning(s)（全 pre-Stage 57 既有 — MSTEST0037 / MUD0002 / CS0618 obsolete fallback）
 ```
 
-### Forge 自驗 SOP（待 CI/CD 部署後跑）
+### Forge 自驗結果（2026-05-09）
 
-> 待 push 觸發 self-hosted runner 重 build container 後 Forge 線上跑 Mock 自驗。對齊 `forge-self-verify` skill，race + fix loop 兩場景都 Mock 可重現 + SQL 可驗。
+> 對齊 `forge-self-verify` skill 跑 Phase 1 baseline + Phase 2 Mock 6 場景驗證。CI/CD 部署 commit 711a010、6ba851a、78a616d、ffe2027 共 4 個。
+
+#### 自驗中 3 個自診 fix（自抓自修）
+
+| commit | 議題 | 修法 |
+|---|---|---|
+| `6ba851a` | race Mock 8 秒 Delay 不夠 — Kickoff/Design framework 跑 30+ 秒 sub-task 還沒建出 | polling 每 2 秒查 sub-task count，max 120 秒等 ≥ 2 才觸發 SimulateEpicRaceAsync |
+| `78a616d` | pre-Stage 57 既有 bug：MockMode auto-approve 對 epic_partial_paused fall through `_ => "ack"`，但 ack 非 epic_partial_paused 有效 action | switch 加 `"epic_partial_paused" => "epic_resume"` case |
+| `ffe2027` | Stage 57 子項 1-C transaction 用 `db.Database.BeginTransactionAsync(ct)` 直接觸發 user-initiated transaction，但 AppDbContext 配置 `NpgsqlRetryingExecutionStrategy` 拋 `InvalidOperationException` 中斷 handler | epic_resume / epic_abort 雙 case 用 `db.Database.CreateExecutionStrategy().ExecuteAsync(...)` 包整個 transaction 作 retriable unit |
+
+#### V1-V7 驗收結果
+
+| # | 場景 | 結果 | 證據 |
+|---|---|---|---|
+| **V1** | FF 五十一 fire 端 idempotent | ❌ 失敗 — race window | DB 仍 fire 2 row epic_partial_paused（CreatedAt 微秒差 0.366ms），`TryCreateUniqueInteractionAsync` 是 read-then-write pattern 並行擋不住 race。**揭露議題 1 設計缺陷待 Aria 拍板修法路線** |
+| **V2** | FF 五十一 handler 端 idempotent | ✅ 通過 | log `[Stage57] HandleEpicPartialPaused：epic 已 EpicPaused=false（前一個 handler 已處理），跳過 nextPending FireSteps` — transaction + AsNoTracking fresh read 偵測前一個 handler 已處理跳過 FireSteps，**雙啟動 nextPending sub-task 沒發生**（Trial_v6 揭露 functional 真實傷害已擋住） |
+| **V3** | FF 五十二 type-specific routing | ✅ 通過 | DB type=`reviewer_fix_loop_limit`（取代 修前 generic `intervention`）+ AvailableActionsJson 含 3 button 完整 JSON（fix_loop_mark_done / fix_loop_skip_qa / fix_loop_abort） |
+| **V4** | FF 五十二 mark_done auto-approve 推進 | ✅ 通過 | group.Status=**done** + FixIteration=3，log `[Stage53A] QaStage：QA passed → DocStageBridge` — mark_done → QaStageBridge → QA passed → DocStageBridge → done 完整路徑跑通（修前永久卡 needs_intervention） |
+| **V6** | regression Stage 55B Session B 5 routing | ✅ 通過（代表場景）| `qa_failed_intervention` dispatch 正確（type-specific interaction → user response → Pipeline 推進）— 不破壞 Stage 55B 既有設計 |
+| **V7** | regression Stage 46 split_task 單 sub-task fail | ⚠️ vacuously pass | split_task_subtask_fail_intervention scenario 這次沒走到 epic_partial_paused path（沒拆 task），未實際驗到。但邏輯上單 fire 第一次查必 0 pending → 直接 fall through CreateInteractionAsync，與 pre-Stage 57 行為一致 trivially safe |
+
+#### Stage 57 達成度評估
+
+✅ **計劃書設定目標達成**：
+- 同 epic 多 sub-task 同時 fail 不再 race fire **functional 雙啟動 EpicChain**（V2 擋住 — 這是 Trial_v6 真實傷害的核心）
+- Vera fix loop ×3 達 limit 不再卡死 — `reviewer_fix_loop_limit` 3 button routing 推進選項生效（V3+V4 全綠）
+- 既有 Stage 55B Session B 5 routing 設計風格延續 + 1 routing（共 6 routing）不分裂（V6 通過）
+
+⚠️ **議題 1 揭露 follow-up（fire 端 race window）**：
+- 雙 fire UI 顯示 2 卡，但 functional 推進邏輯 race-free（V2 擋住）
+- Trial_v6 真實傷害（4 個 Dev_plan task race + 2 PM 仲裁 + ~$1-1.5）由 V2 handler 端 idempotent 已擋
+- 建議獨立 Stage 58+1 補 follow-up（路線 a/b/c/d 待 Aria 拍板）
+
+### Forge 自驗驗收結束（MockMode 已關 / delay 還原 100/300）
 
 **V1 + V2：FF 五十一 race condition 雙層防**
 ```bash
