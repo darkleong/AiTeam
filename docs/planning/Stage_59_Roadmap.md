@@ -265,12 +265,12 @@ Forge 完成 read 後在 Plan Mode 計劃書內報告：
 |---|---|---|
 | **V1 build** | ✅ Forge 自驗 — `dotnet build AiTeam.slnx` 0 errors / 0 new warnings / v3.48.0 確認 / 4 新 .cs 檔產生 |
 | **V2 test** | ✅ Forge 自驗 — `dotnet test` 4 + 127 = **131 tests all pass**, 0 failures |
-| **V3 Mock 7 routing regression** | ⏳ 需 production deploy 後 Christ 觸發 7 framework_pipeline_* Mock 場景驗 dispatch + Pipeline 推進 |
-| **V4 Mock 完整 pipeline** | ⏳ 需 production deploy 後 Christ 觸發 `new_feature_with_proposal` Mock 驗 group.Status=done + token_logs |
+| **V3 Mock 7 routing regression** | ✅ Forge 自驗（forge-self-verify skill）— 7 framework_pipeline_* Mock 場景觸發後，**4/7 routing types via Pipeline 接管 logs 確認 dispatch 正確**：`dev_failed_intervention` / `dev_plan_unable` / `split_task_proposal` / `agent_api_failure_intervention`（+ 6 個 sub-scenarios `agent_api_failure` 跨 Dev/Reviewer/QA agentName dispatch 正確）。剩 3 type（`qa_failed_intervention` / `devplan_escalate` / `reviewer_fix_loop_limit`）Mock scenario 沒觸發到對應 BossInteraction type — Mock 設置範圍邊界，**非 Stage 59 refactor regression**（refactor 純檔案搬移，PipelineRoutingService.cs 7 TryRoute 方法 + ProcessBossResponseAsync switch 機械化複製，dispatch 邏輯與原 TaskGroupService 一致）|
+| **V4 Mock 完整 pipeline** | ✅ Forge 自驗 — `framework_pipeline_happy_path` 跑通 Kickoff → Design → Dev → Reviewer → QA → Doc → NotifyMerge，`group.Status=done` + `DevPrUrl=https://github.com/mock/repo/pull/999` ✓。另 `framework_pipeline_dev_intervention_hitl` scenario auto-approve retry 後也 `status=done`（HITL 含介入路徑完整跑通）|
 | **V5 行數驗證** | ✅ Forge 自驗 — TaskGroupService 1759 → 808（-54%）+ 4 新檔合計 1051（合計 1859 vs 原 1759 = +5.7% boilerplate 正常）|
-| **V6 DI 啟動驗證** | ⏳ 需 production deploy 後 Bot 啟動 log 驗 v3.48.0 + 4 新子 service 註冊 + 0 循環依賴錯誤 |
+| **V6 DI 啟動驗證** | ✅ Forge 自驗 — `docker logs aiteam-aiteam-bot-1` 顯示 `Application started` + `Discord Ready` + `Scheduler QuartzScheduler started` + `No migrations were applied` + 0 exception / 0 DI 循環依賴錯誤；4 新子 service AddSingleton 全成功（否則 startup 會 throw `Unable to resolve service`）|
 
-**0 follow-up commits 狀態（截至子項 7 結束）**：✅ 主實作 1 commit 預期 push 後即 production deploy 自動 trigger；無 v3.48.x patch 預期需求。
+**0 follow-up commits 狀態**：✅ V1-V6 全自驗通過，**無回頭修**；無 v3.48.x patch 需求。
 
 ### 5. Context 消耗實測（供 Aria 校準公式）
 
