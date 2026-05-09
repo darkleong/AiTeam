@@ -1,10 +1,9 @@
 # MudBlazor 使用規範
 
 > 適用版本：MudBlazor 8.x
-> 建立日期：2026-04-11
+> 建立日期：2026-04-11 / 精簡日期：2026-05-10（577 → ~400 行 / -30%）
 
-本文件記錄 AiTeam Dashboard 使用 MudBlazor 的標準做法與已驗證的踩坑規則。  
-實作前請先閱讀，避免重踏覆轍。
+本文件記錄 AiTeam Dashboard 使用 MudBlazor 的標準做法與已驗證的踩坑規則。
 
 ---
 
@@ -15,36 +14,24 @@
 本專案採用 **全域 InteractiveServer** 架構：
 
 ```
-App.razor
-  └── <Routes />              ← Routes.razor 宣告 @rendermode InteractiveServer
-        └── MainLayout.razor  ← Static SSR（接收 @Body，不可加 rendermode）
-              └── 各頁面      ← 共享同一 Circuit，可使用所有 Interactive 功能
+App.razor → Routes.razor 宣告 @rendermode InteractiveServer
+  → MainLayout.razor（Static SSR，不可加 rendermode）
+    → 各頁面（共享同一 Circuit）
 ```
 
-**關鍵限制：`MainLayout` 永遠是 Static SSR。**
+⚠️ **`MainLayout` 永遠是 Static SSR**（接收 `@Body` RenderFragment delegate，加 `@rendermode` 會拋 `Cannot pass the parameter 'Body'`）。
 
-`MainLayout` 因為接收 `@Body`（型別為 `RenderFragment`，本質是 C# delegate），加上 `@rendermode` 會收到：
-
-```
-System.InvalidOperationException: Cannot pass the parameter 'Body' to component
-'MainLayout' with rendermode 'InteractiveServerRenderMode'.
-```
-
-**後果：**
+**後果**：
 - `MainLayout` 無法持有 C# 狀態
-- `MudThemeProvider` 的 `@bind-IsDarkMode` 在 Layout 裡**無法動態更新**
-- Dark Mode 改用 CSS 變數 + JS 方案（見第五節）
+- `MudThemeProvider` 的 `@bind-IsDarkMode` 在 Layout 無法動態更新 → Dark Mode 改用 CSS 變數 + JS 方案（見第五節）
 
-**各頁面不需要宣告 `@rendermode`**（全域已設定），也不需要加 `prerender: false`。
-
----
+各頁面**不需要**宣告 `@rendermode`（全域已設）+ 不需 `prerender: false`。
 
 ### MudProviders 放置位置
 
-`MudThemeProvider`、`MudDialogProvider`、`MudSnackbarProvider`、`MudPopoverProvider` 統一放在 `MudProviders.razor`：
+`MudThemeProvider` / `MudDialogProvider` / `MudSnackbarProvider` / `MudPopoverProvider` 統一放 `Components/Layout/MudProviders.razor`：
 
 ```razor
-@* Components/Layout/MudProviders.razor *@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 <MudThemeProvider />
 <MudDialogProvider />
@@ -52,17 +39,9 @@ System.InvalidOperationException: Cannot pass the parameter 'Body' to component
 <MudPopoverProvider />
 ```
 
-由 `MainLayout.razor` 引用：
+`MainLayout.razor` 引用 `<MudProviders />`（Interactive Island）。
 
-```razor
-@* MainLayout.razor *@
-<MudProviders />   @* Interactive Island，讓 scoped services 在正確 Circuit 中運作 *@
-<MudLayout>
-    ...
-</MudLayout>
-```
-
-> ⚠️ **不可直接把 Providers 寫在 MainLayout 裡**。MainLayout 是 Static SSR，直接放 Providers 會導致 `IDialogService` 等 scoped services 在 Interactive 頁面中找不到正確的 Provider 實例。
+⚠️ **不可直接把 Providers 寫在 MainLayout 裡** — Static SSR 直接放 Providers 會導致 `IDialogService` 等 scoped services 在 Interactive 頁面找不到正確 Provider 實例。
 
 ---
 
@@ -70,27 +49,21 @@ System.InvalidOperationException: Cannot pass the parameter 'Body' to component
 
 ### Persistent Sidebar（主側邊欄）
 
-主側邊欄使用 `DrawerVariant.Persistent`，固定顯示，不遮蓋主內容：
-
 ```razor
 <MudLayout>
-    <MudAppBar Elevation="1" Color="Color.Default" Dense="true">
-        ...
-    </MudAppBar>
+    <MudAppBar Elevation="1" Color="Color.Default" Dense="true">...</MudAppBar>
     <MudDrawer Open="true" Variant="DrawerVariant.Persistent"
                Elevation="2" ClipMode="DrawerClipMode.Always">
         <NavMenu />
     </MudDrawer>
-    <MudMainContent>
-        <div class="pa-4">@Body</div>
-    </MudMainContent>
+    <MudMainContent><div class="pa-4">@Body</div></MudMainContent>
 </MudLayout>
 ```
 
-**Persistent Drawer 收合：** 因 `MainLayout` 是 Static SSR，無法用 C# `@bind-Open` 切換，改用 JS 直接操作 DOM class：
+**Persistent Drawer 收合**：因 MainLayout Static SSR 無法用 C# `@bind-Open`，改用 JS 直接操作 DOM class：
 
 ```js
-// MudBlazor Persistent Drawer 使用兩組 class 控制開合：
+// 兩組 class 都要切：
 // - drawer 本身：mud-drawer--open / mud-drawer--closed
 // - layout：mud-drawer-open-persistent-left（控制 MudMainContent margin-left）
 window.aiteamToggleSidebar = function () {
@@ -99,73 +72,47 @@ window.aiteamToggleSidebar = function () {
     if (!drawer || !layout) return;
     var isOpen = drawer.classList.contains('mud-drawer--open');
     drawer.classList.remove('mud-drawer--initial');
-    if (isOpen) {
-        drawer.classList.remove('mud-drawer--open');
-        drawer.classList.add('mud-drawer--closed');
-        layout.classList.remove('mud-drawer-open-persistent-left');
-        localStorage.setItem('sidebarOpen', '0');
-    } else {
-        drawer.classList.remove('mud-drawer--closed');
-        drawer.classList.add('mud-drawer--open');
-        layout.classList.add('mud-drawer-open-persistent-left');
-        localStorage.setItem('sidebarOpen', '1');
-    }
+    drawer.classList.toggle('mud-drawer--open', !isOpen);
+    drawer.classList.toggle('mud-drawer--closed', isOpen);
+    layout.classList.toggle('mud-drawer-open-persistent-left', !isOpen);
+    localStorage.setItem('sidebarOpen', isOpen ? '0' : '1');
 };
 ```
 
-> ⚠️ **兩個 class 都要同時切換**，只切 drawer 本身不切 layout 的話，`MudMainContent` 的 margin-left 不會變，畫面會錯位。
-
----
+⚠️ **兩個 class 都要同時切換** — 只切 drawer 不切 layout 會讓 MudMainContent margin-left 不變、畫面錯位。
 
 ### Temporary Drawer（右側 Detail Panel）
 
-各頁面的詳情抽屜使用 `DrawerVariant.Temporary`：
-
 ```razor
 <MudDrawer @bind-Open="_isDrawerOpen"
-           Anchor="Anchor.End"
-           Variant="DrawerVariant.Temporary"
-           Width="480px"
-           OverlayAutoClose="true">
-    @if (_selectedItem is not null)
-    {
-        ...
-    }
+           Anchor="Anchor.End" Variant="DrawerVariant.Temporary"
+           Width="480px" OverlayAutoClose="true">
+    @if (_selectedItem is not null) { ... }
 </MudDrawer>
 ```
 
-**標準設定：**
-- `Anchor="Anchor.End"` — 從右側滑出
-- `OverlayAutoClose="true"` — 點擊 overlay 自動關閉
-- `Width="480px"` — 統一寬度
-- 內容加 null guard（`@if (_selectedItem is not null)`）
-
----
+**標準設定**：`Anchor.End` 從右側滑出 / `OverlayAutoClose="true"` 點擊 overlay 自動關 / `Width="480px"` 統一寬度 / 內容加 null guard。
 
 ### Drawer 作為共用子元件（含 EventCallback）
 
-當 Drawer 封裝為共用元件（如 `TaskLogDrawer.razor`），**不可使用 `@bind-Open`**，必須拆開寫：
+當 Drawer 封裝為共用元件（如 `TaskLogDrawer.razor`），**不可使用 `@bind-Open`**：
 
 ```razor
-@* ❌ 錯誤：@bind-Open 展開後只 mutate 參數，不呼叫父元件的 EventCallback *@
+@* ❌ @bind-Open 展開後只 mutate 參數，不呼叫父元件 EventCallback *@
 <MudDrawer @bind-Open="IsOpen" ...>
 
-@* ✅ 正確：明確接線 EventCallback *@
-<MudDrawer Open="@IsOpen"
-           OpenChanged="IsOpenChanged"
-           ...>
+@* ✅ 明確接線 EventCallback *@
+<MudDrawer Open="@IsOpen" OpenChanged="IsOpenChanged" ...>
 ```
 
 ```csharp
-// 子元件 .razor.cs
 [Parameter] public bool IsOpen { get; set; }
 [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
 
-private async Task CloseAsync()
-    => await IsOpenChanged.InvokeAsync(false);
+private async Task CloseAsync() => await IsOpenChanged.InvokeAsync(false);
 ```
 
-**原因：** `@bind-Open="IsOpen"` 展開為 `OpenChanged="(v) => IsOpen = v"`，只直接賦值參數，不會呼叫 `IsOpenChanged` EventCallback，導致父元件狀態不同步。
+⚠️ **原因**：`@bind-Open="IsOpen"` 展開為 `OpenChanged="(v) => IsOpen = v"`，只直接賦值參數，不呼叫 `IsOpenChanged` EventCallback → 父元件狀態不同步。
 
 ---
 
@@ -174,43 +121,23 @@ private async Task CloseAsync()
 ### 標準設定
 
 ```razor
-<MudTable Items="@_items"
-          Dense="true"
-          Hover="true"
-          Height="600px"
-          FixedHeader="true"
-          RowsPerPage="10"
-          T="MyDto">
-    <HeaderContent>
-        <MudTh>欄位一</MudTh>
-        <MudTh>欄位二</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>@context.Field1</MudTd>
-        <MudTd>@context.Field2</MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>尚無資料</MudText>
-    </NoRecordsContent>
-    <PagerContent>
-        <MudTablePager PageSizeOptions="new int[]{10, 25, 50}" />
-    </PagerContent>
+<MudTable Items="@_items" Dense="true" Hover="true"
+          Height="600px" FixedHeader="true" RowsPerPage="10" T="MyDto">
+    <HeaderContent><MudTh>欄位</MudTh>...</HeaderContent>
+    <RowTemplate><MudTd>@context.Field</MudTd>...</RowTemplate>
+    <NoRecordsContent><MudText>尚無資料</MudText></NoRecordsContent>
+    <PagerContent><MudTablePager PageSizeOptions="new int[]{10, 25, 50}" /></PagerContent>
 </MudTable>
 ```
 
-**規則：**
-- `Height="600px"` + `FixedHeader="true"` — Scrollbar 限制在元件內，不用瀏覽器 Scrollbar
-- `RowsPerPage="10"` — 預設 10 筆
-- `PageSizeOptions="new int[]{10, 25, 50}"` — 統一選項
+**規則**：`Height="600px"` + `FixedHeader="true"` 讓 Scrollbar 限制元件內 / `RowsPerPage="10"` 預設 / `PageSizeOptions` 統一。
 
 ### Server-side 分頁
 
-資料量大或需要即時篩選時使用 `ServerData`：
+資料量大或需即時篩選時用 `ServerData`：
 
 ```razor
-<MudTable @ref="_tableRef"
-          ServerData="LoadServerDataAsync"
-          ...>
+<MudTable @ref="_tableRef" ServerData="LoadServerDataAsync" ...>
 ```
 
 ```csharp
@@ -218,82 +145,59 @@ private MudTable<MyDto> _tableRef = null!;
 
 private async Task<TableData<MyDto>> LoadServerDataAsync(TableState state, CancellationToken ct)
 {
-    var result = await _service.GetPagedAsync(
-        page: state.Page,
-        pageSize: state.PageSize,
-        statusFilters: _statusFilters.ToHashSet(),
-        cancellationToken: ct);
-
-    return new TableData<MyDto>
-    {
-        Items = result.Items,
-        TotalItems = result.TotalCount
-    };
+    var result = await _service.GetPagedAsync(state.Page, state.PageSize, _statusFilters.ToHashSet(), ct);
+    return new TableData<MyDto> { Items = result.Items, TotalItems = result.TotalCount };
 }
 
-// 篩選條件變更時，呼叫此方法強制重新載入
-private async Task OnFilterChangedAsync()
-    => await _tableRef.ReloadServerData();
+// 篩選變更時呼叫此方法強制重新載入
+private async Task OnFilterChangedAsync() => await _tableRef.ReloadServerData();
 ```
 
 ### 可點擊列
 
 ```razor
-<MudTable OnRowClick="OnRowClickAsync"
-          RowClass="cursor-pointer"
-          ...>
+<MudTable OnRowClick="OnRowClickAsync" RowClass="cursor-pointer" ...>
 ```
 
 ---
 
 ## 四、MudSelect
 
-### 單選
+### 單選 + 多選（含觸發 side effect）
 
 ```razor
-<MudSelect T="string" @bind-Value="_selectedValue"
-           Label="選項" Dense="true">
+@* 單選 *@
+<MudSelect T="string" @bind-Value="_selectedValue" Label="選項" Dense="true">
     <MudSelectItem Value="@("option1")">選項一</MudSelectItem>
-    <MudSelectItem Value="@("option2")">選項二</MudSelectItem>
 </MudSelect>
-```
 
-### 多選（含觸發 side effect）
-
-```razor
-@* ✅ 用 @bind-SelectedValues:after 觸發重載 *@
+@* 多選 — 用 @bind-SelectedValues:after 觸發重載 *@
 <MudSelect T="string" MultiSelection="true"
            @bind-SelectedValues="_statusFilters"
            @bind-SelectedValues:after="OnFilterChangedAsync"
            Label="篩選狀態" Dense="true" Style="max-width:300px"
            AdornmentIcon="@Icons.Material.Filled.FilterList">
     <MudSelectItem Value="@("running")">執行中</MudSelectItem>
-    <MudSelectItem Value="@("done")">已完成</MudSelectItem>
-    ...
 </MudSelect>
 ```
 
 ```csharp
-// 型別必須是 IEnumerable<string>，不是 List<string>
+// 型別必須 IEnumerable<string>，不是 List<string>
 private IEnumerable<string> _statusFilters = [];
-
-private async Task OnFilterChangedAsync()
-    => await _tableRef.ReloadServerData();
-    // 注意：@bind-SelectedValues 已自動同步值，這裡只需觸發 side effect
 ```
 
-> ⚠️ **`@bind-SelectedValues` 不會自動觸發 side effect**（如重新載入資料）。必須加上 `:after` 事件或 `SelectedValuesChanged` 參數。
+⚠️ **`@bind-SelectedValues` 不會自動觸發 side effect**（如重新載入資料）→ 必須加 `:after` 事件或 `SelectedValuesChanged` 參數。
 
 ---
 
 ## 五、Dark Mode
 
-本專案 Dark Mode 使用 **CSS 變數 + JS 方案**，而非 `MudThemeProvider` 的 `@bind-IsDarkMode`（因 Layout 限制無法使用 C# binding）。
+本專案 Dark Mode 使用 **CSS 變數 + JS 方案**（因 Layout Static SSR 限制無法用 `@bind-IsDarkMode`）。
 
 ### 運作方式
 
 ```js
-// App.razor 的 inline script（頁面載入前執行，避免閃白）
+// App.razor inline script（頁面載入前執行避免閃白）
 (function(){
     var t = localStorage.getItem('theme') || 'light';
     document.documentElement.dataset.theme = t;
@@ -314,13 +218,12 @@ html[data-theme="dark"] {
     --mud-palette-background: #121212;
     --mud-palette-surface: #1e1e1e;
     --color-bg-primary: #1e1e1e;
-    /* ...其他覆寫 */
 }
 ```
 
 ### 切換按鈕
 
-因 Layout 是 Static SSR，切換按鈕用 `onclick` JS 呼叫（不用 `@onclick` C# handler）：
+因 Layout Static SSR，按鈕用 `onclick` JS 呼叫（不用 `@onclick` C# handler）：
 
 ```razor
 <span class="theme-btn-dark" onclick="window.appTheme.setDark(true)">
@@ -348,10 +251,7 @@ html[data-theme="light"] .theme-btn-light { display: none; }
 <MudDialog>
     <DialogContent>
         <MudTextField @bind-Value="_content" Label="內容" Required="true" />
-        @if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
-        }
+        @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">取消</MudButton>
@@ -363,11 +263,8 @@ html[data-theme="light"] .theme-btn-light { display: none; }
 </MudDialog>
 
 @code {
-    [CascadingParameter]
-    private IMudDialogInstance MudDialog { get; set; } = null!;
-
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
     private void Cancel() => MudDialog.Cancel();
-
     private async Task SubmitAsync()
     {
         // 驗證 + 呼叫 Service
@@ -390,13 +287,13 @@ private async Task OpenCreateDialogAsync()
     var dialog = await DialogService.ShowAsync<RuleFormDialog>("新增規則", parameters);
     var result = await dialog.Result;
 
-    // result 可能為 null（視 MudBlazor 版本）；用 pattern matching 安全取值
+    // ⚠️ result 可能 null（視 MudBlazor 版本）；用 pattern matching 安全取值
     if (result is { Canceled: false } && result.Data is Rule created)
         _rules.Add(created);
 }
 ```
 
-> ⚠️ **`await dialog.Result` 回傳 `DialogResult?`**（nullable），直接取 `.Canceled` 或 `.Data` 會有 CS8602 警告。必須用 `result is { Canceled: false }` pattern matching。
+⚠️ **`await dialog.Result` 回傳 `DialogResult?`**（nullable），直接取 `.Canceled` 或 `.Data` 會 CS8602 警告 → 必須用 `result is { Canceled: false }` pattern matching。
 
 ---
 
@@ -416,17 +313,13 @@ private async Task OpenCreateDialogAsync()
 </MudList>
 ```
 
-> ⚠️ **`@bind-SelectedValue` 和 `SelectedValueChanged` 不可共存。**  
-> `@bind-SelectedValue` 展開後已自動包含 `SelectedValueChanged`，若再手動加一個 `SelectedValueChanged` 參數，會收到：  
-> `The component parameter 'SelectedValueChanged' cannot be set more than once.`  
-> 只需要 `@bind-SelectedValue`，不需要額外的 handler 方法。
+⚠️ **`@bind-SelectedValue` 和 `SelectedValueChanged` 不可共存** — `@bind-SelectedValue` 展開後已自動包含 `SelectedValueChanged`，再手動加會收到 `cannot be set more than once` 錯誤。只需要 `@bind-SelectedValue`。
 
 ---
 
 ## 八、MudSwitch
 
 ```razor
-@* ✅ 標準寫法 *@
 <MudSwitch T="bool"
            Value="@context.IsActive"
            ValueChanged="@((bool v) => ToggleIsActiveAsync(context, v))"
@@ -434,19 +327,17 @@ private async Task OpenCreateDialogAsync()
            Label="@(context.IsActive ? "啟用中" : "已停用")" />
 ```
 
-> ⚠️ 在 `MudTable RowTemplate` 中使用 MudSwitch 時，若點擊 Switch 也會觸發 `OnRowClick`，需在外層加 `@onclick:stopPropagation="true"`：
->
-> ```razor
-> <MudTd @onclick:stopPropagation="true">
->     <MudSwitch ... />
-> </MudTd>
-> ```
+⚠️ 在 `MudTable RowTemplate` 中使用 MudSwitch 時，若點 Switch 也會觸發 `OnRowClick` → 外層加 `@onclick:stopPropagation="true"`：
+
+```razor
+<MudTd @onclick:stopPropagation="true">
+    <MudSwitch ... />
+</MudTd>
+```
 
 ---
 
 ## 九、MudChip（狀態 Badge）
-
-用於顯示類型、標籤等彩色小徽章：
 
 ```razor
 <MudChip T="string" Size="Size.Small" Color="@GetColor(context.Type)">
@@ -464,13 +355,13 @@ private static Color GetColor(string? type) => type switch
 };
 ```
 
-> 使用 `Color` enum 而非 inline `style="background:..."` 硬編碼色碼，Dark Mode 下自動適配。
+> 使用 `Color` enum 而非 inline `style="background:..."` 硬編碼色碼，Dark Mode 自動適配。
 
 ---
 
 ## 十、MudStack 與 MudGrid
 
-**以 MudBlazor 元件取代 inline flex style：**
+**以 MudBlazor 元件取代 inline flex style**：
 
 ```razor
 @* ❌ 避免 *@
@@ -480,24 +371,12 @@ private static Color GetColor(string? type) => type switch
 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
 ```
 
-```razor
-@* ❌ 避免 *@
-<div style="display:flex; gap:12px">
-
-@* ✅ 改用 MudStack（純水平排列） *@
-<MudStack Row="true" Spacing="3">
-```
-
-**Grid 佈局：**
+**Grid 佈局**：
 
 ```razor
 <MudGrid>
-    <MudItem xs="12" md="4">
-        @* 左欄 *@
-    </MudItem>
-    <MudItem xs="12" md="8">
-        @* 右欄 *@
-    </MudItem>
+    <MudItem xs="12" md="4">@* 左欄 *@</MudItem>
+    <MudItem xs="12" md="8">@* 右欄 *@</MudItem>
 </MudGrid>
 ```
 
@@ -511,28 +390,17 @@ private static Color GetColor(string? type) => type switch
 /* ✅ 正確：使用 MudBlazor 調色盤變數，Dark Mode 自動適配 */
 color: var(--mud-palette-text-primary);
 background: var(--mud-palette-background);
-border-color: var(--mud-palette-primary);
 
 /* ✅ 可用：自訂語意變數（在 app.css 同時定義 light/dark 兩版） */
 color: var(--color-text-secondary);
-background: var(--color-bg-primary);
 
-/* ❌ 避免：硬編碼色碼（Dark Mode 不會自動切換） */
+/* ❌ 避免：硬編碼色碼（Dark Mode 不會切換） */
 color: #333333;
-background: #f59e0b;
 ```
 
 ### 不依賴 MudBlazor 內部 class
 
-MudBlazor 內部 class（如 `.mud-icon-button`、`.mud-button-root`）可能隨版本改名，避免在 `app.css` 直接 target：
-
-```css
-/* ❌ 避免 */
-.theme-btn-dark:hover .mud-icon-button { ... }
-
-/* ✅ 改用容器層級 */
-.theme-btn-dark:hover { opacity: 0.8; }
-```
+MudBlazor 內部 class（`.mud-icon-button` / `.mud-button-root` 等）可能隨版本改名，避免在 `app.css` 直接 target → 改用容器層級 selector。
 
 ### `:deep()` 穿透元件樣式
 
@@ -540,9 +408,7 @@ MudBlazor 內部 class（如 `.mud-icon-button`、`.mud-button-root`）可能隨
 
 ```css
 /* MyComponent.razor.css */
-:deep(.mud-table-container) {
-    border-radius: 8px;
-}
+:deep(.mud-table-container) { border-radius: 8px; }
 ```
 
 ---
@@ -553,9 +419,7 @@ MudBlazor 內部 class（如 `.mud-icon-button`、`.mud-button-root`）可能隨
 
 ```razor
 <div class="empty-state">
-    <MudIcon Icon="@Icons.Material.Filled.Inbox"
-             Size="Size.Large"
-             Color="Color.Default" />
+    <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Default" />
     <p class="empty-state-title">尚無資料</p>
     <p class="empty-state-hint">說明文字</p>
 </div>
@@ -565,8 +429,8 @@ MudBlazor 內部 class（如 `.mud-icon-button`、`.mud-button-root`）可能隨
 
 ## 十三、提交前檢查
 
-- [ ] MudDrawer 子元件使用 `Open` + `OpenChanged`，不用 `@bind-Open`
-- [ ] MudList 只用 `@bind-SelectedValue`，沒有額外的 `SelectedValueChanged`
+- [ ] MudDrawer 子元件用 `Open` + `OpenChanged`，不用 `@bind-Open`
+- [ ] MudList 只用 `@bind-SelectedValue`，沒有額外 `SelectedValueChanged`
 - [ ] MudSelect 多選有 `:after` 事件觸發 side effect
 - [ ] `DialogResult` 用 pattern matching 取值，不直接存取 `.Data`
 - [ ] 所有顏色使用 CSS 變數或 `Color` enum，無硬編碼色碼
