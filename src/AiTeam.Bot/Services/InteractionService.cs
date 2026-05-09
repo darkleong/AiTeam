@@ -173,6 +173,16 @@ public class InteractionService(
 
             return interaction.Id;
         }
+        // Stage 57-fix（FF 五十一 fire 端 race window 補強，路線 a Christ 拍板）：
+        // 23505-specific catch 必須在 generic Exception catch 之前 — DB partial unique index 攔住雙 fire race
+        // 對應 ix_boss_interactions_pending_per_group_type，emit fix-specific log 區別 race 防線生效 vs 真正寫入錯誤
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException pg && pg.SqlState == "23505")
+        {
+            logger.LogInformation(
+                "[Stage57-fix] BossInteraction unique constraint 攔住雙 fire race（Type={Type}, GroupId={Id}）— functional race-free + UI 1 卡",
+                interactionType, taskGroupId);
+            return null;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "BossInteraction 寫入失敗（Type={Type}），略過（non-critical）", interactionType);
@@ -219,21 +229,11 @@ public class InteractionService(
         }
 
         // Stage 57-fix（FF 五十一 fire 端 race window 補強，路線 a Christ 拍板）：
-        // catch DbUpdateException SqlState 23505（unique_violation）— DB partial unique index 攔住雙 fire race
+        // 23505 DbUpdateException catch 在 CreateInteractionAsync 內處理（generic Exception catch 之前的 specific 23505）—
         // 雙保險：上方 fast-path early check 避免 DB exception 開銷；DB constraint 攔 read-then-write TOCTOU window
-        try
-        {
-            return await CreateInteractionAsync(
-                interactionType, title, description, project, agentName, availableActionsJson,
-                contextJson, discordMessageId, taskGroupId, taskItemId);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException pg && pg.SqlState == "23505")
-        {
-            logger.LogInformation(
-                "[Stage57-fix] TryCreateUniqueInteraction：DB unique constraint 攔住雙 fire race（groupId={Id}, type={Type}）— functional race-free + UI 1 卡",
-                taskGroupId, interactionType);
-            return null;
-        }
+        return await CreateInteractionAsync(
+            interactionType, title, description, project, agentName, availableActionsJson,
+            contextJson, discordMessageId, taskGroupId, taskItemId);
     }
 
     // ─── Discord 回覆時同步更新 ───────────────────────────────────────────────
