@@ -143,6 +143,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.DiscordMessageId);
             e.HasOne(x => x.TaskGroup).WithMany().HasForeignKey(x => x.TaskGroupId).IsRequired(false);
             e.HasOne(x => x.TaskItem).WithMany().HasForeignKey(x => x.TaskItemId).IsRequired(false);
+
+            // Stage 57-fix（FF 五十一 fire 端 race window 補強，路線 a Christ 拍板）：
+            // partial unique index — 同 (TaskGroupId, InteractionType) 只允許 1 row Status='pending'
+            // DB-level race-free，補 TryCreateUniqueInteractionAsync read-then-write TOCTOU window
+            e.HasIndex(x => new { x.TaskGroupId, x.InteractionType })
+                .HasFilter("\"Status\" = 'pending'")
+                .IsUnique()
+                .HasDatabaseName("ix_boss_interactions_pending_per_group_type");
         });
     }
 }

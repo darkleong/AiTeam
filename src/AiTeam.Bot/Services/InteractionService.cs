@@ -1,5 +1,6 @@
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AiTeam.Bot.Services;
@@ -217,9 +218,22 @@ public class InteractionService(
             // 失敗 fallback CreateInteractionAsync — 寧可雙 fire 也不要漏 fire
         }
 
-        return await CreateInteractionAsync(
-            interactionType, title, description, project, agentName, availableActionsJson,
-            contextJson, discordMessageId, taskGroupId, taskItemId);
+        // Stage 57-fix（FF 五十一 fire 端 race window 補強，路線 a Christ 拍板）：
+        // catch DbUpdateException SqlState 23505（unique_violation）— DB partial unique index 攔住雙 fire race
+        // 雙保險：上方 fast-path early check 避免 DB exception 開銷；DB constraint 攔 read-then-write TOCTOU window
+        try
+        {
+            return await CreateInteractionAsync(
+                interactionType, title, description, project, agentName, availableActionsJson,
+                contextJson, discordMessageId, taskGroupId, taskItemId);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException pg && pg.SqlState == "23505")
+        {
+            logger.LogInformation(
+                "[Stage57-fix] TryCreateUniqueInteraction：DB unique constraint 攔住雙 fire race（groupId={Id}, type={Type}）— functional race-free + UI 1 卡",
+                taskGroupId, interactionType);
+            return null;
+        }
     }
 
     // ─── Discord 回覆時同步更新 ───────────────────────────────────────────────
