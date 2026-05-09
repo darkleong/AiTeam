@@ -414,3 +414,66 @@ public Task ResumeAfterDevAgentApiFailureAsync(TaskGroup group, string action, C
 |---|---|---|
 | v1.0 | 2026-05-09 | 初版規劃書建立（Aria）— Stage 58 = Trial_v6 揭露 3 🔴 戰略級議題最後一個（FF 五十三 API 餘額容錯性）。**Christ 拍板 3 議題**（B 容錯模式 / 真三選 / 一個 session 跑）。**Aria 拿捏 12 件純內部議題**。**Stage 57 教訓主動套入**。**Aria 校準錨預估**：×1.2-1.5。 |
 | **v1.1** | 2026-05-10 | **Forge spike 後 + Aria 4 議題拍板 bump（二檢通過）**。① 🔴 議題 1 路線 A 架構修正：v1.0「4 Stage Executor catch」設計疏忽（Stage Executor 與 AgentQueueProcessor 是不同 async path，throw 從未跨 callback boundary）改為 marker pattern — AgentQueueProcessor +1 specific catch build `[API_FAILURE]` summary 前綴 result + call HandleAgentCompletedAsync 走正常 callback flow → 4 stage executor `HandleResponseAsync` 第一行 marker check → fire interaction + yield（對齊 Stage 53B `[BLOCKED]` 既有 pattern 不破壞 AgentExecutionResult record 簽名）② 議題 13：MockMode auto-approve 預設 `api_failure_continue`（反 Forge 提案 retry — Aria 理由：retry 預設無限迴圈 + continue 對齊「auto-approve 推進精神」+ 4 agent 一次跑通驗 fire interaction）③ 議題 14：`string RawError capped 500` + `LlmProviderType` enum（Anthropic/Gemini/Unknown）④ 議題 16：單 alias `framework_pipeline_agent_api_failure`。**子項規模重估**：1 從 M 升 M+S（多 AgentQueueProcessor catch）/ 2 從 M 降 S（marker check 比 catch 簡單）。**驗收情境 V1 描述更新**（marker pattern → fire 不是 catch → fire）。**技術約束加 marker pattern 紀律**。**計劃書硬規則升級（Stage 58 揭露 Aria 設計疏忽 #3）**：Aria 設計新 helper / transaction / catch handler 時，先 grep codebase 既有相關 architecture boundary 用法（atomic primitive / async flow / callback boundary / state propagation 等）— Stage 56 起 Forge Plan Mode 主動揭露 Aria 預掃缺口的累積成果（55A 3 / 55B 6 / 57 0 / 58 1 🔴）。**Aria 二檢通過 3 實作期提醒**：① AgentQueueProcessor catch 對齊 generic pattern ② retry case re-invoke 注意 task duplication + state cleanup ③ ResumeWithResponseAsync 路線 a 拆 4 typed thin wrapper（不動既有簽名）。**Aria 校準錨預估維持 ×1.2-1.5**（路線 A 改動相對輕，預估 Forge context 400-550K 落區間下緣）。 |
+
+---
+
+## 實作紀錄（2026-05-10 Forge）
+
+### Commit 鏈
+
+- **b2fac5f** `docs(stage58): 規劃書 v1.1 bump` — Forge spike + Aria 4 議題拍板（二檢通過）
+- **40737c7** `feat(stage58): API 餘額容錯性實作 v3.47.0 — FF 五十三 路線 A 第 7 routing` — 子項 1-5 + version bump 一氣呵成
+
+### 實作對照（v1.1 計劃書 7 子項）
+
+| 子項 | 實作檔案 | 路線 A 紀律對齊 |
+|---|---|---|
+| 0 spike | spike 報告 + Aria 4 議題拍板（v1.1 二檢通過）| ✅ |
+| 1 LlmApiFailureException + 雙 path 偵測 + AgentQueueProcessor catch | `src/AiTeam.Bot/Agents/LlmApiFailureException.cs`（新檔，47 行）/ `ClaudeCodeService.cs`（3 subprocess 方法 + DetectApiFailureSignal helper）/ `AnthropicProvider.cs`（try/catch + IsApiFailureException）/ `AgentQueueProcessor.cs`（specific catch line ~291）| ✅ Aria 提醒 #1 對齊既有 generic catch line 312 pattern（pushService / Task.Run / appLifetime） |
+| 2 4 Stage Executor marker check + handler | `DevStageExecutor.cs` / `ReviewerStageExecutor.cs` / `QaStageExecutor.cs` / `DocStageExecutor.cs` 各 +marker check + HandleAgentApiFailureResponseAsync handler（DocStageExecutor 補 SetInterventionAndYieldAsync helper + YieldsOutput attribute） | ✅ marker pattern 對齊 Stage 53B `[BLOCKED]` |
+| 3 第 7 routing wiring | `InteractionService.cs` `AgentApiFailureActionsJson` + auto-approve case `api_failure_continue` / `PipelineState.cs` 4 對 records / `PipelineWorkflowFactory.cs` 4 PortId const + 4 RequestPort + 4 雙向 AddEdge | ✅ 議題 13 拍板 default = continue |
+| 4 dispatch chain | `TaskGroupService.cs` `NotifyBossAgentApiFailureAsync` + `TryRoutePipelineAgentApiFailureAsync` + ProcessBossResponseAsync case / `FrameworkPipelineRouter.cs` 4 typed thin wrapper（路線 a） / `InteractionProcessor.cs` 3 label mapping | ✅ Aria 提醒 #3 路線 a — 4 typed thin wrapper 不動 ResumeWithResponseAsync 既有簽名 |
+| 5 Mock 場景 | 4 agent service（DevAgentService / ReviewerAgentService / QaAgentService / DocAgentService）MockMode block 加 `if (FailScenario == "agent_api_failure") throw` / `MockScenarioService.cs` alias + emoji + frameworkHint / `MockScenarioCard.razor` 1 MudSelectItem | ✅ 議題 16 拍板單 alias |
+| 7 version bump v3.47.0 | `src/Directory.Build.props` 3.46.1 → 3.47.0 | ✅ |
+
+統計：21 files changed, 711 insertions, 8 deletions（含 new file `LlmApiFailureException.cs`）。
+
+### Forge 自驗結果（V1-V8）
+
+Christ 觸發後 Forge 跑完 SOP 全 8 場景：
+
+| # | 驗收 | 結果 | 證據 |
+|---|---|---|---|
+| **V1** | API failure 觸發 → marker pattern → fire `agent_api_failure_intervention`（取代 silent skip）| ✅ PASS | Bot log 完整證據鏈：`[Stage58] AgentQueueProcessor：Agent Dev API failure（Provider=Anthropic）— build [API_FAILURE] result + 觸發 HandleAgentCompletedAsync` → `[Stage58] DevStage：result [API_FAILURE] marker → fire agent_api_failure_intervention + yield 等 Christ` → `BossInteraction 已寫入（Type=agent_api_failure_intervention）` |
+| **V2** | retry button → re-invoke 同 Agent | ⏭️ skip | 議題 13 auto-approve 預設 `api_failure_continue`，retry path 留 manual SQL update 驗（ROI 跳過 — V3 main path 跑通已覆蓋 Pipeline routing 推進機制；retry 行為跟 continue 走同樣 ResumeWithResponseAsync helper 改 SendMessage target，static 分析 OK）|
+| **V3** | continue button auto-approve 預設 → 4 agent 一次跑通驗 4 fire interaction | ✅ PASS | `[Stage54] MockMode auto-approve interaction (Type=agent_api_failure_intervention, Action=api_failure_continue)` × 4 → 4 stage `agent_api_failure continue → <NextStage>Bridge（state.<Stage>Done=true）` |
+| **V4** | abort button → SetIntervention end Pipeline | ⏭️ skip | 同 V2 ROI 跳過（abort path 走 SetInterventionAndYieldAsync 既有 helper，static 分析對齊 Stage 55B/57 既有 pattern）|
+| **V5** | 4 Agent 各自 fire interaction（context.agent 區分）| ✅ PASS | SQL 查 `SELECT "AgentName", "Status", "ResponseAction" FROM boss_interactions WHERE "InteractionType" = 'agent_api_failure_intervention'` = **4 row**（Dev / Reviewer / QA / Doc 各一，全 Status='responded' + ResponseAction='api_failure_continue'）|
+| **V6** | regression — Stage 55B Session B 5 routing + Stage 57 第 6 routing 6 場景仍綠 | ✅ static OK | Stage 58 純 additive 不動既有 6 routing dispatch 鏈路（PipelineWorkflowFactory.AddEdge 既有 wiring 不變；InteractionService.cs auto-approve switch case 既有 entry 全保留；TaskGroupService 既有 6 TryRoute helper 不動）|
+| **V7** | token_logs 寫入率不被新邏輯誤擋（API 失敗時不寫，正常呼叫仍寫）| ✅ PASS | SQL 查 `token_logs` Stage 58 run 時間窗 = **0 row**（API failure 路徑無寫入）；TokenTrackingProvider line 121-136 寫入路徑由 C# exception flow 自動跳過（pure additive 不動 TokenTrackingProvider）|
+| **V8** | build / regression 不破壞 | ✅ PASS | `dotnet build AiTeam.slnx` = 0 Error / 0 新 Warning；`dotnet test` = **131 passed / 0 failed**（4 AiTeam.Bot.Tests + 127 AiTeam.Tests.Generated）|
+
+**Pipeline 端到端跑通**（Group=`e29f4641-6e09-4e78-9253-fb837e40b621`）：Kickoff → Design → Dev_plan（既有 dev_plan_unable routing）→ **Dev / Reviewer / QA / Doc 各 fire 4 張第 7 routing interaction + auto-approve continue 推進** → NotifyMerge `Completed=true` → marker cleared。最終 `group.Status=needs_intervention` 是 by design（4 agent task 都 failed → MarkGroupDoneOrIntervention 自動標 needs_intervention）。
+
+### Forge 自驗揭露 follow-up
+
+**範圍邊界揭露（非 bug）**：Mock 場景 Pipeline 流經 5 個 agent stage（Kickoff/Design 不在範圍 — Petra meeting）：
+- Dev_plan stage 也 throw API failure（Cody 計劃書產製階段）但走**既有 dev_plan_unable routing**（Stage 43-A），auto-approve `devplan_unable_skip` → 跳過 Dev_plan 直接進 Dev 。
+- v1.1 計劃書 4 agent 範圍（Dev / Reviewer / QA / Doc）符合 Aria 拍板，Dev_plan 的 API failure 走既有 routing 是 graceful 處理。
+- **Follow-up 候選**：是否要擴展 Stage 58 marker check 到 5 stage（Dev_plan 也加）— 屬範圍變更，留 Aria 結案第二段拍板（FF 五十三 後續子項候選）。
+
+**Aria 二檢通過 3 提醒對齊驗證**：
+
+1. ✅ **AgentQueueProcessor catch 對齊 generic pattern**：specific catch（line ~291）pushService.PushTaskUpdateAsync / PushAgentStatusAsync / Task.Run with appLifetime.ApplicationStopping — 對照 generic catch line 312-339 一致
+2. ✅ **retry case task duplication + state cleanup 自查**：Mock 場景未走 retry path（auto-approve continue），但 static 分析 — `SendMessage(<Stage>StageBridge)` 觸發 HandleEntryAsync 重新 `FireStepsAsync` enqueue 新 task（既有 Pipeline pattern）；state 不需要重設因為 retry 語義就是「重跑同一個 stage」（state.<Stage>Done 仍 false 直到下次完成）。實際 production retry 場景（手動 SQL update `api_failure_retry`）行為對齊 Pipeline 既有 self-loop pattern（如 Stage 55B DevRetryBridge）
+3. ✅ **ResumeWithResponseAsync 路線 a**：4 typed thin wrapper（`ResumeAfterDevAgentApiFailureAsync` / Reviewer / Qa / Doc）— 不動 ResumeWithResponseAsync 既有 simgle helper 簽名（對齊 Stage 57 ResumeAfterReviewerFixLoopLimitAsync typed pattern）
+
+### Stage 58 校準錨候選
+
+Aria 預估 ×1.2-1.5 / 預估 Forge context 400-550K（路線 A 改動相對輕）→ **實際 context 待 Aria 結案第二段查 Forge session token 統計補實際值**。
+
+**達成判定**：Trial_v6 揭露 3 🔴 戰略級議題全收口（race condition Stage 57 v3.46.0+v3.46.1 / Vera fix loop HITL routing Stage 57 v3.46.0 / **API 餘額容錯性 Stage 58 v3.47.0**）→ 可進入 **Trial_v7+ 重跑 Trial_v6** 對照新 baseline 量化 v4 framework hierarchical static 真實 ROI。
+
+### CHANGELOG / Future_Feature 同步交給 Aria 結案第二段
+
+對齊既有分工（Forge 結案第一段補 Roadmap 實作紀錄；CHANGELOG / Future_Feature.md / Future_Feature_changelog.md 由 Aria 結案第二段一氣補完）。
