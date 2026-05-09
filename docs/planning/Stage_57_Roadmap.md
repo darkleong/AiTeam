@@ -387,6 +387,49 @@ dotnet build AiTeam.slnx
 
 ### Forge 自驗驗收結束（MockMode 已關 / delay 還原 100/300）
 
+---
+
+### 驗收後修正 v3.46.1（FF 五十一 fire 端 race window 補強，Christ 拍板路線 a）
+
+> Stage 57 自驗 V1 揭露 `TryCreateUniqueInteractionAsync` TOCTOU race window：`HasPending → Create` 是兩個 transaction，並行 thread 都 read 0 pending → 都 create → DB 真出 2 卡。functional 由 V2 handler idempotent 擋住，但 UI 層 race 沒擋。Christ 拍板路線 a 趁熱併入 Stage 57 fix patch。
+
+#### 修法（路線 a：partial unique index + DB constraint 雙保險）
+
+| 變更 | 檔案 | 內容 |
+|---|---|---|
+| Migration | `Migrations/20260509141007_Stage57BossInteractionPendingUniqueIndex.cs` | partial unique index `ix_boss_interactions_pending_per_group_type` on `(TaskGroupId, InteractionType) WHERE Status='pending'` |
+| OnModelCreating | `AppDbContext.cs:135` BossInteraction entity | EF Core fluent API 配對 partial filter index |
+| Catch 23505 | `InteractionService.CreateInteractionAsync` | `catch (DbUpdateException ex) when ex.InnerException is Npgsql.PostgresException pg && pg.SqlState == "23505"` 在 generic Exception catch 之前 specific 23505 → emit `[Stage57-fix] BossInteraction unique constraint 攔住雙 fire race` info log + return null |
+| version bump | `Directory.Build.props` | v3.46.0 → **v3.46.1**（patch — 驗收期 fix 性質）|
+
+實作前 grep DB 確認 0 row 殘留 pending 重複（無 Migration apply 衝突風險）。
+保留既有 `HasPendingForGroupAndTypeAsync` fast-path early check（避免 DB exception 開銷）— DB constraint 是雙保險擋 read-then-write race window。
+
+#### Forge V1 fix 自驗結果（commit `c12ae21`）
+
+| 項目 | 結果 |
+|---|---|
+| partial unique index Migration apply | ✅ `\d boss_interactions` 顯示 `ix_boss_interactions_pending_per_group_type UNIQUE WHERE Status='pending'` |
+| DB epic_partial_paused row count per epic | ✅ **1 row**（修前 2 row）|
+| log 證據 | ✅ `[Stage57-fix] BossInteraction unique constraint 攔住雙 fire race（Type=epic_partial_paused, GroupId=...）— functional race-free + UI 1 卡` |
+| V7 regression | ⚠️ vacuously pass（split_task scenario 沒走到 epic_partial_paused path，邏輯上單 fire 第一次 INSERT 必過 trivially safe）|
+
+#### 驗收後修正自診 fix（log 訊號修正，commit `c12ae21`）
+
+V1 fix 第一次 commit `62afaf8` 自驗發現 23505 catch 位置在 `TryCreateUniqueInteractionAsync` outer 是 dead code（`CreateInteractionAsync` 內既有 generic Exception catch 先吃掉 exception），log 是 generic warning 非 fix-specific info。修法：catch 移到 `CreateInteractionAsync` 內 generic Exception catch 之前，emit 正確 fix-specific log（functional 行為不變，純 log 訊號修正）。
+
+#### Stage 57 完整 commit 序列
+
+| commit | 性質 | 內容 |
+|---|---|---|
+| `711a010` | 主實作 | Stage 57 計劃書 v2 完整套入（FF 五十一 + FF 五十二，6 子項）|
+| `6ba851a` | 自驗自診 fix | race Mock 8s Delay 不夠 → polling 60×2s |
+| `78a616d` | 自驗自診 fix | auto-approve epic_partial_paused → epic_resume case（pre-Stage 57 既有 bug 順手）|
+| `ffe2027` | 自驗自診 fix | HandleEpicPartialPaused CreateExecutionStrategy.ExecuteAsync wrap（NpgsqlRetryingExecutionStrategy 不允許 user-initiated transaction）|
+| `500158a` | docs | Forge 自驗結果章節 |
+| `62afaf8` | 驗收後修正 v3.46.1 | partial unique index + 23505 catch（路線 a）|
+| `c12ae21` | 驗收後修正自診 | 23505 catch 移到 inner emit 正確 fix-specific log |
+
 **V1 + V2：FF 五十一 race condition 雙層防**
 ```bash
 curl -X POST http://localhost:5051/internal/mock/scenario \
