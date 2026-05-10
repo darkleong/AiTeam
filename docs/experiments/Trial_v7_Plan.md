@@ -249,3 +249,204 @@ Trial_v7 結案分**成功 / 部分成功 / 失敗**三級：
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-10 | 初版計劃書建立（Aria）— Trial_v7 = Trial_v6 對照重跑（v3.48.0 三 🔴 全收口 + Stage 59 拆解後 codebase）；對照基線升級 v3.45.0 → v3.48.0；16 維度三向對照（Trial_v5 / v6 / v7）含 3 新增（race fix 真實觸發 / Vera fix loop routing / API failure routing）+ Stage 59 0 regression 驗證；任務原文沿用 Trial_v6（Dashboard 全域錯誤通知 Toast 機制 — 對照組精準度最高）；3 🔴 收口驗證列為核心試驗目的；FF 三十六 Phase B 動態架構評估**仍不在本次範圍**；Aria 自驗 SOP + 健檢報告格式對齊 Trial_v6 5.3/5.4 改三向對照；環境細節 reference 標 source of truth（port 5052 / X-Api-Key 取值 — 對齊 workflow_aria.md 第三節 A 第 7 條紀律）。 |
+| v2.0 | 2026-05-10 | **試驗結案 + 觀察紀錄**（Aria）— Trial_v7 = Kickoff 階段 ModifyTaskPlan path 卡死中斷，task cancelled / total cost **$1.5233** / 17 LLM call。揭露 5 議題（**1 🔴 戰略級新類型** + 3 🟡 + 1 🟢）—— 🔴 揭露「v4 framework 邊角 user actions 還在 legacy + Petra subprocess silent failure 沒 fail-fast + Stage 58 第 7 routing 沒 catch」**直接推翻 Trial_v6 結案宣稱「3 🔴 收口 = v4 production-ready」假設**。**戰略級成功 vs 業務級失敗（雙面，同 Trial_v6 模式）**：戰略目的「量化 v4 真實 ROI」超預期達成（cost -90% vs Trial_v6 揭聚焦新類型）+ 「Mock 全綠 ≠ production 全綠」自省點 #25 第二次驗證；deliverable 0（Phase 1 沒推進）。詳見下方「結案紀錄」章節。 |
+
+---
+
+## 試驗結案紀錄（Aria 2026-05-10 結案第二段）
+
+### 試驗任務原文
+
+完全照搬 Trial_v6 同 prompt（Dashboard 錯誤處理體驗升級：雙軌通知 Inline + Toast）— 對照組精準度最高，原文見 v1.0 三、任務需求段。Christ 在 Discord #victoria-ceo 14:19 送出。
+
+### 流程觀察 Checkpoints（5 個 milestone — 比 Trial_v6 14 個少，因 Kickoff modify 卡死中斷）
+
+#### Checkpoint 1：Victoria 分類 ✅ 一次成功 + cost +224% 異常
+
+| 項目 | Trial_v5 | Trial_v6 | Trial_v7 | 解讀 |
+|---|---|---|---|---|
+| 嘗試次數 | 3 次 | 1 次 | **1 次** ✅ | 對照通過 |
+| Cost | $0.62 累計 | $0.0567 | **$0.1838** | **+224% vs v6** ⚠️ |
+| Output tokens | — | 1,400 | **2,807** | +101% |
+| Title | 「Dashboard 錯誤處理 UX 打磨」 | 「Dashboard 全域錯誤通知 Toast 機制」 | 「Dashboard 錯誤處理體驗升級：雙軌通知（Inline + Toast）」 | 更冗長 |
+
+**🟡 議題 #A**：Victoria CEO 階段 cost +224% — 提案內含「已掃描 codebase」分析（5 受影響元件 + MudBlazor ISnackbar 基礎設施已到位），可能 codebase scan 範圍變大或 Victoria prompt 演進。單點觀察，未在 Kickoff 階段放大（對照 Kickoff +2%）→ 整體 cost 可控。
+
+#### Checkpoint 2：Kickoff 5 人會議 ✅ 8 分 36 秒 / max_iter 強制收尾
+
+| 項目 | Trial_v5 | Trial_v6 | Trial_v7 | 解讀 |
+|---|---|---|---|---|
+| 持續時間 | 11 分 11 秒 | 9 分 12 秒 | **8 分 36 秒** | -7% vs v6 ✅ |
+| Decision | — | reach_consensus | **max_iter** | ⚠️ 不同 path |
+| LLM call | 16 | 16 | 16 | 同 |
+| Cost | $1.72 | $1.31 | **$1.34** | +2% vs v6 ✅ |
+| TaskPlan 字數 | 7,222 | 7,072 | 6,279 | -11% vs v6 |
+
+Petra 達 KickoffMaxRounds 3 後 decision = max_iter 強制收尾，TaskPlan DB 寫入正常 6,279 字實質內容（8 共識 + 5 待拍板議題 + 7 風險清單 + Phase 1+2 規劃）。但 BossInteraction embed 顯示「無計劃書」。
+
+**🟡 議題 #B**：Pipeline `KickoffStageExecutor.CreateKickoffConfirmationAsync` 在 max_iter path 沒注入 TaskPlan 摘要進 BossInteraction `ContextJson` → Discord embed + Dashboard 操作中心都顯示「無計劃書」。Trial_v6 走 reach_consensus path 正常 → Trial_v7 max_iter path 才踩到。同類根因群組對齊 Trial_v6 議題 #5/#6/#11（Pipeline framework UI 注入缺口）。
+
+**🟡 議題 #C**：Petra「給 Christ 決策包」行為 — TaskPlan 內列「5 待拍板議題」+ 給 A/B/C 三選讓 Christ 拍。對照 Aria 之前被 Christ 校正的「議題層次篩選紀律」+「給定見不攤議題」精神，Petra prompt 同類根因。Christ 親自點破：「Petra 她現在就有點像前不久的 Aria，請我拍板很多細節」。
+
+**🟡 議題 #D（再現 — Trial_v6 議題 #2）**：Petra 工時估算泛濫 — 「2-3 週 Cody / 1 週 Quinn / 1-2 天 決策樹」等。FF 二十五 / 四十八 系統性議題群組未修，Trial_v7 實證再現 → 系統性議題確認。
+
+#### Checkpoint 2.5：Christ Discord 點「需要修改」🔴 戰略級揭露
+
+Christ 點 Kickoff 確認 embed Discord「需要修改」按鈕 → 貼修改 prompt（5 議題答案 + 砍工時 + 反丟決策包）→ 期望 Petra 跑 revise round 整合答案產 TaskPlan v2。
+
+**真實行為**：
+- Bot log: `KickoffMeetingService.ModifyTaskPlan` ← **legacy path**（不是 Stage 50/51 framework）
+- Bot log: `MeetingCommons：Petra session 執行失敗` ← Petra subprocess failure
+- Bot log: `KickoffMeetingService：ModifyTaskPlan Petra 回應完成` ← **silent failure 沒 fail-fast**
+- DB UPDATE: TaskPlan 從 6,279 字 → **5 字（空回應蓋掉）**
+- token_logs: 0 row（Petra LLM 沒成功 billing）
+- 流程繼續 fire 新 BossInteraction kickoff `f46203bb`「無輸出」給 Christ
+
+#### Checkpoint 2.6：Christ Dashboard 點「需要修改」對照 — A 同 path 同失敗
+
+Christ 對 pending BossInteraction `f46203bb` 從 Dashboard 點「需要修改」貼相同 prompt → 控變因驗證雙通道差異。
+
+**對照三向結果（Discord vs Dashboard）**：
+
+| 維度 | Discord 來源 14:33 | Dashboard 來源 14:42 | 對照 |
+|---|---|---|---|
+| Path | `KickoffMeetingService.ModifyTaskPlan` | `KickoffMeetingService.ModifyTaskPlan` | 同 legacy ✓ |
+| Petra subprocess | 失敗 | 失敗 | 同失敗 ✓ |
+| token_logs | 0 row | 0 row | 同 |
+| TaskPlan 字數 | 6,279 → 5 | 5 → 5（noop）| 同失敗 |
+| ResponseSource | discord | dashboard | 雙通道路由正確 |
+| ResponseAction 字串 | `kickoff_modify_<groupid>` | `kickoff_modify`（無後綴）| ⚠️ 小差異 |
+
+**結論**：Petra subprocess failure **source-agnostic** — 不是雙通道差異，是 ModifyTaskPlan path 本身的 bug。雙通道架構正確 ✓ 但 ResponseAction 字串格式有小差異（解析端用 prefix match 抓得到所以無實質傷害）。
+
+**🟢 議題 #E**：BossInteraction `ResponseAction` 字串格式雙通道不一致（Discord 含 group_id 後綴 / Dashboard 純動作名）— 低嚴重，不影響實質 routing。
+
+#### Checkpoint 3：Christ 點「停止任務」🛑
+
+Christ 拍板停止任務 14:49+ → task_groups Status = cancelled → Trial_v7 結束。
+
+---
+
+### 試驗結果矩陣（16 維度 vs Trial_v6 / Trial_v5 baseline — 部分維度因任務中斷無數據）
+
+| # | 維度 | Trial_v5 | Trial_v6 | Trial_v7 | 差異 |
+|---|---|---|---|---|---|
+| 1 | Pipeline framework path 走通率 | N/A | 100% | **100%**（KickoffFrameworkStateJson 寫入 ✓ 在 modify 失敗前）| ✅ 主路徑健全 |
+| 2 | **總 cost** | $8.78 | $15.81 | **$1.5233** | **-90% vs v6**（任務中斷）|
+| 3 | TotalCostUsd 寫入率 | 0.3% | 100% | **100%**（17/17 成功 call）| ✅ Stage 56 修法持續 |
+| 4 | IsEstimated count | N/A | 11/72 | 0/17（全 IsEstimated=false）| 同等比例 |
+| 5 | Cody Dev_plan 完成度 | 1-2 輪通過 | 3 phase 都 escalate | **未到 Dev_plan 階段** | 無數據 |
+| 6 | Quinn 測試 | 30 + 6 all passed | 0 | **未到 QA 階段** | 無數據 |
+| 7 | Vera 審查精準度 | 9 處裸 catch 1 輪通過 | Phase 2 fix loop ×3 卡死 | **未到 Reviewer 階段** | 無數據 |
+| 8 | Sage escalate 速度 | 13:30 → 14 秒 | Phase 1 escalate | **未到 Doc 階段** | 無數據 |
+| 9 | Petra 仲裁次數 | 4-5 次 | 10 PM task | **2 次（modify failure）** | 任務中斷 |
+| 10 | Crash Recovery 觸發 | N/A | 0 | 0 | 同 |
+| 11 | HITL routing 真實觸發 | N/A | 5 種全觸發 | **2 種（kickoff proposal_approval + kickoff modify）** | 未到後續 stage |
+| 12 | **揭露議題數量** | 13 bug（5 🔴）| 15 議題（3 🔴）| **5 議題（1 🔴 + 3 🟡 + 1 🟢）** | 戰略級新類型 |
+| 13 | race condition fix 真實觸發 | N/A | 1 race | **未到 sub-task chain 階段** | 無數據 |
+| 14 | Vera fix loop limit routing | N/A | N/A 卡死 | **未到 Vera fix loop 階段** | 無數據 |
+| 15 | agent_api_failure_intervention routing | N/A | API 爆無 routing | **未觸發**（cost 才 $1.52 沒爆 + 走 legacy path 不接 framework routing）| ⚠️ 無 catch |
+| 16 | Stage 59 拆解 regression check | N/A | N/A | **0 regression**（Victoria + Kickoff main path 行為對齊 Trial_v6）| ✅ 純機械化拆解驗證 |
+
+---
+
+### 揭露議題清單（5 個）
+
+| # | 嚴重 | 分類 | 議題 |
+|---|---|---|---|
+| 1 | **🔴** | **v4 framework 邊角 legacy 缺口戰略級** | **「需要修改」action 走 legacy `KickoffMeetingService.ModifyTaskPlan` + Petra subprocess silent failure 沒 fail-fast + Stage 58 第 7 routing `agent_api_failure_intervention` 沒 catch（因走 legacy path 不接 framework routing）→ 推翻 Trial_v6「3 🔴 收口 = v4 production-ready」假設** |
+| 2 | 🟡 | Pipeline framework UI 注入（同類群組 v6 #5/#6/#11）| Pipeline `KickoffStageExecutor.CreateKickoffConfirmationAsync` max_iter path 沒注入 TaskPlan 摘要進 BossInteraction `ContextJson` → Discord embed + Dashboard 都顯示「無計劃書」 |
+| 3 | 🟡 | Petra prompt（議題層次篩選紀律延伸）| Petra「給 Christ 決策包」行為 — TaskPlan 列 5 待拍板議題 + 三選讓 Christ 拍。對齊 Aria 被 Christ 校正過的「給定見不攤議題」精神，Petra prompt 應同步學 |
+| 4 | 🟡 | Petra prompt（再現 v6 議題 #2）| Petra 工時估算泛濫「2-3 週 / 1 週 / 1-2 天」— FF 二十五 / 四十八 系統性議題群組未修，Trial_v7 實證再現 |
+| 5 | 🟢 | 雙通道一致性（小破口）| BossInteraction `ResponseAction` 字串格式不一致（Discord `kickoff_modify_<groupid>` / Dashboard `kickoff_modify` 純動作名）— 解析端 prefix match 抓得到無實質傷害 |
+
+**漏揭觀察（Trial_v6 揭過但 Trial_v7 任務中斷未到階段）**：race condition fix（議題 v6 #10）/ Vera fix loop limit routing（v6 #12）/ API failure routing（v6 #15）— 三 🔴 收口驗證未在 Trial_v7 真實任務驗證，需 Trial_v8+ 重跑或下次真實任務驗證。
+
+---
+
+### 結案類型判定：⭐ 戰略級成功 vs 業務級失敗（雙面，同 Trial_v6 模式）
+
+| 維度 | 結果 |
+|---|---|
+| Pipeline framework path 端到端 | ❌ 任務 Kickoff 階段中斷未到端到端 |
+| cost ±50% 範圍 | N/A（任務中斷無對照基準）— 但截至中斷 cost $1.52 極省 |
+| Christ UAT 通過 | ❌ 不適用（試驗目的揭露議題，非 deliver feature）|
+| 揭露議題收斂 follow-up FF | ✅ 5 議題（含 1 🔴 戰略級新類型）|
+| **試驗主目的（量化 v4 framework 真實 ROI）** | ✅ **超預期達成 — 推翻 v4 production-ready 假設** |
+| 「Mock 全綠 ≠ production 全綠」自省點 #25 第二次驗證 | ✅ Trial_v7 證明「3 🔴 收口」也不等於「v4 全 path 健全」 |
+
+→ **判定：⭐ 戰略級成功**（試驗目的超預期達標 + cost -90% vs Trial_v6 揭聚焦新類型）/ **業務級失敗**（deliverable 0，Phase 1 沒推進）。
+
+---
+
+### 戰略結論
+
+#### v4 framework 真實 ROI 量化（修正 Trial_v6 結論）
+
+| 維度 | Trial_v6 結案宣稱 | Trial_v7 修正結論 |
+|---|---|---|
+| v4 主路徑 | 9/9 達成 + 真實任務跑通 | ✅ 持續驗證（Victoria + Kickoff main path 0 regression）|
+| 3 🔴 缺口收口 | Stage 57/58 全收口 → production-ready | ⚠️ **未在 Trial_v7 真實驗證**（任務中斷未到對應階段）|
+| **v4 邊角 user actions 健全度** | 未顯性評估 | 🔴 **「需要修改」action 還在 legacy + silent failure** |
+| production-ready 邊界 | Stage 57/58 補完 = ready | ❌ **推翻** — 需再補 v4 邊角遷移（FF 候選）才 ready |
+
+#### 「Mock 全綠 ≠ production 全綠」自省點 #25 第二次驗證
+
+- **第一次驗證**（Trial_v6）：揭 race condition / Vera fix loop / API 容錯三 🔴 — Mock 場景沒涵蓋
+- **第二次驗證**（Trial_v7）：揭 ModifyTaskPlan legacy path silent failure — Mock 場景 + Trial_v6 都沒涵蓋（Trial_v6 沒測「需要修改」action）
+
+**戰略意義**：Mock 場景設計本質上是「正向流程 + 已知失敗模式」覆蓋，**邊角 user actions（modify / rerun / pause / 等）+ subprocess failure / 環境級失敗 都很難 Mock 涵蓋**。Trial 模式的核心價值持續驗證 — 必須持續跑真實任務揭新類型。
+
+#### Petra「給 Christ 決策包」對齊 Aria 議題層次篩選紀律
+
+Christ 親自點破「Petra 她現在就有點像前不久的 Aria，請我拍板很多細節」— 這是 user_christ.md「議題層次篩選紀律」+ workflow_aria.md「給定見不攤議題」精神**從 Aria 推廣到 AI Agent prompt 層**的訊號。後續 Petra prompt（含 Kickoff Petra / Design Petra / Pipeline Petra）都應同步學這條紀律。
+
+---
+
+### 後續行動清單
+
+#### 立即（試驗結案後動作）
+
+- [x] Christ 點「停止任務」結束 Trial_v7（task_groups Status = cancelled ✓ verified 14:49）
+- [x] Trial_v7_Plan.md 升 v2.0（本檔）
+- [ ] 新立 FF 五十五（v4 framework 邊角 user actions legacy 遷移 + silent failure → fail-fast 統一）
+- [ ] 新立 FF 五十六（Petra prompt 對齊「議題層次篩選紀律」— 從 Aria 推廣到 AI Agent）
+- [ ] Future_Feature_changelog v7.83 entry
+- [ ] calibration_anchors 加 Trial_v7 校準錨段
+- [ ] memory 寫入：workflow_aria_session_lessons.md 自省點延伸（Petra prompt 同 Aria 紀律）+ user_christ.md 互動觀察（Christ 親自點破 AI Agent prompt 層議題層次紀律）
+- [ ] commit + push 結案文件
+
+#### Stage 候選（按議題嚴重度排序）
+
+**🔴 戰略級必修（1 個）**：
+1. **FF 五十五 v4 邊角 user actions legacy 遷移 + silent failure 統一**（本 Trial 議題 #1）— 規模 M-L / 可拆 Stage 60A（ModifyTaskPlan path 遷 framework）+ Stage 60B（subprocess failure → Stage 58 第 7 routing 統一接管）
+
+**🟡 中（3 個）**：
+2. Pipeline KickoffStageExecutor max_iter path TaskPlan 注入修法（議題 #2）— 對齊 Trial_v6 #5/#6/#11 群組可合併 Stage
+3. **FF 五十六 Petra prompt 議題層次篩選紀律**（議題 #3）— 規模 S-M / 與 FF 二十五 / 四十八 / 四十六 系統性 prompt 對齊群組合併修
+4. BossInteraction ResponseAction 字串格式統一（議題 #5）— 🟢 規模 XS
+
+#### Trial_v7 之後評估 backlog
+
+- **Trial_v8+** 排程：FF 五十五 修完後重跑「需要修改」path 真實驗證 + 推進到 Phase 1 完整 deliver 對照 Trial_v5/v6
+- **Trial_v6 三 🔴 收口真實驗證**：race / Vera fix loop / API 容錯三議題在 Trial_v7 任務中斷未到對應階段，需 Trial_v8 推進到後續 stage 驗證
+- **FF 三十六 Phase B 動態架構評估**：Trial_v8 補完 v4 邊角後再評估啟動條件（不是 Trial_v7）
+
+---
+
+### 對 v4 framework 戰略的最終判斷（Trial_v7 修正版）
+
+**v4 framework 主路徑 9/9 達成是戰略級成功**（持續驗證），**3 🔴 收口是 Stage 57/58 名義完成**（未在 Trial_v7 真實驗證），但 **production-ready 邊界仍有 1 個 🔴 戰略級新類型缺口**待 Stage 60+ 補強：v4 邊角 user actions（modify / rerun / pause 等）legacy 遷移 + silent failure → fail-fast 統一。
+
+Trial_v7 對照 Trial_v6 量化結論：
+- **cost 極省**（$1.52 vs $15.81，-90%）— 因任務 Kickoff 階段中斷
+- **戰略價值聚焦**（1 🔴 新類型 vs 3 🔴 同類）— Trial_v7 揭的是 Trial_v6 沒涵蓋的新邊角，戰略 ROI 不對 Trial_v6 對照下降
+- **「Mock 全綠 ≠ production 全綠」自省點 #25 第二次驗證** — Trial 模式核心價值持續
+
+**Trial_v7 獨特戰略價值**：
+- 首次「v4 邊角 user actions legacy 缺口」揭露
+- 首次 Petra「給 Christ 決策包」行為點破 → AI Agent prompt 層對齊 Aria 議題層次紀律
+- 首次 Discord vs Dashboard 雙通道對照測試（同 source-agnostic ✓）
+- 首次驗證「3 🔴 收口」≠「v4 全 path 健全」（推翻 Trial_v6 樂觀結論）
+
+→ Trial_v7 為 **Stage 60+ 路線提供具體行動清單**（1 🔴 + 3 🟡 + 1 🟢）。

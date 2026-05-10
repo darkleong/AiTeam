@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.82
+> 版本：v7.83
 > 建立日期：2026-04-01
 > 最後更新：2026-05-10
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -18,6 +18,7 @@
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
 > **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
+> **2026-05-10 v7.83：Trial_v7 結案 ⭐ 戰略級成功 vs 業務級失敗（雙面）**— Kickoff 階段 ModifyTaskPlan path 卡死中斷 / total cost **$1.5233**（-90% vs Trial_v6 $15.81）/ 17 LLM call。揭露 5 議題（**1 🔴 戰略級新類型** + 3 🟡 + 1 🟢）— **🔴 揭露「v4 framework 邊角 user actions 還在 legacy + Petra subprocess silent failure 沒 fail-fast + Stage 58 第 7 routing 沒 catch」直接推翻 Trial_v6 結案宣稱「3 🔴 收口 = v4 production-ready」假設**。**「Mock 全綠 ≠ production 全綠」自省點 #25 第二次驗證**（第一次 Trial_v6 揭 3 🔴 / 第二次 Trial_v7 揭 v4 邊角 legacy + silent failure）。**新立 FF**：FF 五十五（v4 邊角 user actions legacy 遷移 + silent failure → fail-fast 統一 — 🔴 戰略級必修 Stage 60+ 第一順位）+ FF 五十六（Petra prompt 議題層次篩選紀律 — Christ 親自點破「Petra 像之前的 Aria」AI Agent prompt 層對齊 Aria 紀律）。**Top 5 重排**：FF 五十五 升 #1（推翻 v3-ready 假設）/ FF 三十六 降 #2（待 Stage 60 補完才評估）/ FF 五十六 #4（合併 prompt 對齊群組）。Trial_v6 三 🔴 收口真實驗證 + Trial_v7 揭 1 🔴 收口待 Trial_v8+ 重跑驗證。詳見 [Trial_v7_Plan.md](../experiments/Trial_v7_Plan.md) v2.0 結案紀錄。
 > **2026-05-10 v7.82：Stage 59 完成（v3.48.0）— FF 五十四子項 1 ✅ TaskGroupService 怪物大檔拆解 -54% 瘦身**（1759 → 主檔 808 + 4 新子 service Boss/Epic/Routing 3 子目錄）。**Aria 校準錨 ×1.09**（FF 二十系列倍率從 ×1.58 → ×1.09 -31%，SOP 累積 + workflow_aria.md 第 5+6+7 條紀律生效 — Stage 59 計劃書 -65% vs Stage 58）。**Aria 結案第二段 step 0 升級首次實踐**（refactor-sop.md SOP 2/6 + 實戰數據 + forge-self-verify skill port 修正 + workflow_aria.md 第 7 條 source of truth 紀律）。FF 五十四子項 2/3 評估動工依 Stage 59 ROI（ButtonCallbackRouter 1091 / DevAgentService 958） — Trial_v7 後排程。
 > **2026-05-10 v7.81：Stage 58 完成（v3.47.0）— v4 framework production-ready 補強第二波 ✅ FF 五十三 ✅ 收口 = Trial_v6 揭露 3 🔴 戰略級議題全完成 🎉** — 路線 A marker pattern（AgentQueueProcessor specific catch [API_FAILURE] summary 前綴 + 4 Stage Executor HandleResponseAsync marker check + HandleAgentApiFailureResponseAsync 真三選 continue/retry/abort）+ LlmApiFailureException + LlmProviderType enum + 統一 type agent_api_failure_intervention + per-stage 4 PortId + 第 7 routing wiring。**Aria 校準錨 ×0.94**（439K vs 預估 465K，混合型第 12 資料點 mid 中段，接近 Stage 51 ×0.96 / Stage 56 ×0.92） — **戰略結論：Stage 57 ×1.36 → 58 ×0.94 大幅下降推翻「production-ready 補強性質倍率系統性偏高」假設，真正關鍵是 Aria 教訓套入完整度 + Forge spike 揭露架構盲點紀律生效**（Stage 58 0 self-diag fix vs Stage 57 4 self-diag + 1 patch race）。**Forge 自驗 V1-V8 全 PASS**（V2/V4 ROI skip + V3 4 agent 一次跑通驗 4 fire + dotnet test 131 passed）+ 1 follow-up backlog（Dev_plan stage API failure 走既有 dev_plan_unable routing graceful，不擴 Stage 58 範圍）。**Trial_v7+ 重跑 Trial_v6 候選排程**。
 > **2026-05-10 v7.80：新立 FF 五十四 — Stage 36 後怪物大檔復發追蹤**（Christ 觀察 Forge Plan context 漸漲根因之一）。3 候選 ≥ 800 行警戒線：TaskGroupService 1591 行（Stage 57 後超 Stage 36 拆解前 baseline）/ ButtonCallbackRouter 1091 行（Stage 36 後新觀察）/ DevAgentService 958 行（Stage 36 後新觀察）。立 FF 追蹤等 Trial_v7 重跑後評估動工（治本對齊 Stage 34-36 FF 二十系列拆解 SOP）。**配套治標**：workflow_aria.md 第三節 A 加第 6 條紀律「大檔 reference 標精準 line + method 簽名」（Stage 59+ 立刻生效）+ 第 5 條「不寫整段 code 範例」（Stage 56→57→58 計劃書漸漲反例修根因）。
@@ -39,17 +40,17 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-10 v7.82 — Stage 59 結案後 = FF 五十四子項 1 ✅）
+## 當前優先級 Top 5（2026-05-10 v7.83 — Trial_v7 結案後 = 推翻 v3-ready 假設 + 新立 FF 五十五/五十六）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **三十六** ⭐ | v4 動態流程架構 — Phase B | 🟢 啟動條件達成 — Stage 58 完成 = Trial_v6 3 🔴 全收口 | Trial_v6 揭露的 3 🔴 戰略級議題已全完成（Stage 57+58），可進入動態架構評估啟動。**建議先 Trial_v7 重跑 Trial_v6 量化新 baseline 後再啟動 Phase B spike**（對照新 baseline 才知道 hierarchical static 真實 ROI vs 動態架構潛在 gain）|
-| 2 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — **子項 1 TaskGroupService ✅ Stage 59（v3.48.0，-54% 瘦身）/ 子項 2/3 待**（ButtonCallbackRouter 1091 / DevAgentService 958）| 🟡 中 — Trial_v7 後評估動工子項 2/3 | Stage 59 ×1.09 ROI 確認 SOP 累積 + workflow_aria.md 紀律生效 — 子項 2/3 預估倍率類似 ×1.0-1.3，依 Trial_v7 後 codebase 痛點再排 |
-| 3 | **二十五** | Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）| 🟡 中 — Stage 58+ 候選 | Trial_v6 揭露 Cody/Petra prompt 對齊群組（與 FF 四十六/四十八 同性質），影響面廣 |
-| 4 | **五十** | Dashboard token 統計頁 IsEstimated 視覺區分 | 🟡 中 — Stage 56 follow-up | Trial_v6 觀察期 follow-up，小規模 Dashboard razor 改動 |
-| 5 | **七** | 客戶專案交付流程與驗收閘門 | 🟡 中 | 業務級需求，與 v4 路線無關 |
+| 1 | **五十五** ⭐ | v4 framework 邊角 user actions legacy 遷移 + silent failure → fail-fast 統一 | 🔴 戰略級必修 — Stage 60+ 候選 | **Trial_v7 結案揭露 — 推翻 Trial_v6「3 🔴 收口 = v4 production-ready」假設**。Kickoff 「需要修改」action 走 legacy `KickoffMeetingService.ModifyTaskPlan` + Petra subprocess silent failure 沒 fail-fast + Stage 58 第 7 routing 沒 catch。影響任何走 legacy modify path 的 user action。|
+| 2 | **三十六** ⭐ | v4 動態流程架構 — Phase B | 🟡 啟動條件**降級** — 待 Stage 60（FF 五十五）補完才評估 | Trial_v7 推翻 v3-ready 假設後 — Phase B 評估啟動條件需先補完 v4 邊角遷移。新 baseline = Stage 60（FF 五十五）完成後。|
+| 3 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — **子項 1 TaskGroupService ✅ Stage 59 / 子項 2/3 待** | 🟡 中 — Stage 60 後評估動工子項 2/3 | Stage 59 ×1.09 ROI 確認 SOP 累積 — 子項 2/3 預估倍率類似 ×1.0-1.3 |
+| 4 | **五十六** | Petra prompt 議題層次篩選紀律（Trial_v7 揭露） | 🟡 中 — 與 FF 二十五 / 四十八 / 四十六 群組合併修 | Trial_v7 Christ 親自點破「Petra 像之前的 Aria 一樣請 Christ 拍板太多細節」— AI Agent prompt 層對齊 Aria 紀律的訊號 |
+| 5 | **二十五** | Self-implement 試驗 prompt 設計守則（Cody 繞道傾向）| 🟡 中 — 與 FF 五十六 / 四十六 / 四十八 群組合併 | Trial_v6+v7 系統性議題群組（Petra 工時泛濫 + 給決策包 + Cody 繞道）影響面廣 |
 
-> ⚠️ **戰略主軸**：**Trial_v6 揭露 3 🔴 戰略級議題全收口 🎉**（Stage 57 race + Vera fix loop + Stage 58 API 容錯）→ **下一階段戰略決策點**：① Trial_v7 重跑 Trial_v6 量化 v4 framework hierarchical static 真實 ROI（建議先做，給 FF 三十六 Phase B 評估提供對照基線）② FF 五十四怪物大檔拆解（Trial_v7 後評估動工，對齊 Stage 34-36 拆解節奏）③ FF 三十六 Phase B 動態架構評估啟動（Trial_v7 後）。Trial_v6 揭露的 12 🟡 中議題併入既有 backlog 排程處理。
+> ⚠️ **戰略主軸**：**Trial_v7 結案揭露第 4 🔴 戰略級新類型議題 — v4 邊角 user actions legacy 缺口推翻 Trial_v6「v4 production-ready」假設**。下一階段戰略決策點：① Stage 60（FF 五十五）補完 v4 邊角遷移 + silent failure → fail-fast 統一（Stage 60+ 第一順位）② Trial_v8 重跑驗證 Trial_v6 三 🔴 收口 + Trial_v7 揭露 1 🔴 收口 + 推進到 Phase 1 完整 deliver ③ FF 三十六 Phase B 動態架構評估（Trial_v8 後）。Petra prompt 對齊群組（FF 五十六 / 二十五 / 四十六 / 四十八）建議併單一 Stage 處理。
 
 ---
 
@@ -357,6 +358,87 @@ Stage 59+ 立刻生效，預期 Forge Plan context 下降 ~30-40%。
 ### v4 兼容性
 
 純 refactor，不動業務邏輯，不影響 v4 framework 行為。
+
+---
+
+## 五十五、v4 framework 邊角 user actions legacy 遷移 + silent failure → fail-fast 統一 ⭐ 🔴
+
+> 狀態：🔴 戰略級必修 — Stage 60+ 候選
+> 提出日期：2026-05-10（Trial_v7 結案揭露 — 推翻 Trial_v6 結案宣稱「3 🔴 收口 = v4 production-ready」假設）
+
+### 背景（Trial_v7 揭露）
+
+Trial_v6 結案宣稱 v4 framework 9/9 達成 + Stage 57/58 收口 3 🔴 = production-ready。但 Trial_v7 在 Kickoff「需要修改」action 觸發時揭露：
+
+- Bot log: `KickoffMeetingService.ModifyTaskPlan` ← **legacy path**（不是 Stage 50/51 framework）
+- Petra subprocess 失敗 → `MeetingCommons：Petra session 執行失敗`
+- 但 KickoffMeetingService 沒 fail-fast → `ModifyTaskPlan Petra 回應完成` silent skip → DB UPDATE TaskPlan = "" 空字串（從 6,279 字 → 5 字）
+- Stage 58 第 7 routing `agent_api_failure_intervention` **沒 catch** — 因為走 legacy path 不接 framework routing
+
+雙通道對照（Discord vs Dashboard）兩源都走相同 legacy path 同失敗 — source-agnostic root cause = ModifyTaskPlan path 本身。
+
+### 戰略意義
+
+**v4 framework 漸進遷移完整路線「主路徑」9/9 達成 ≠「邊角 user actions」全遷移**：
+- 主路徑：proposal_approved → Kickoff → Design → Dev_plan → Dev → Reviewer → QA → Doc → done（已遷 framework）
+- **邊角 user actions（modify / rerun / pause 等）：仍在 legacy path** ← 未盤點
+- silent failure 沒 fail-fast：對照 Trial_v6 議題 #15 Sage silent skip 同類根因 — Stage 58 第 7 routing 設計範圍只 cover Agent API failure 不 cover meeting subprocess failure
+
+### 修法方向
+
+**Stage 60A**：盤點 + 遷移 v4 邊角 user actions legacy paths 到 framework
+- grep 找出所有 `ResponseAction` 對應 handler 走 legacy path 的（KickoffMeetingService.ModifyTaskPlan / 其他 modify 路徑）
+- 對齊 Stage 50/51 framework Kickoff 既有 pattern 遷移到 framework path
+
+**Stage 60B**：subprocess failure → Stage 58 第 7 routing 統一接管
+- MeetingCommons + 各 Service 的 subprocess failure catch 點補 fail-fast
+- 對齊 Stage 58 路線 A marker pattern：build `[SUBPROCESS_FAILURE]` summary 前綴 result → call HandleAgentCompletedAsync 走正常 callback flow → Stage Executor marker check → fire `agent_subprocess_failure_intervention` BossInteraction（或重用 `agent_api_failure_intervention` 第 7 routing）
+
+### 規模 / 風險
+
+**規模**：M-L（盤點 + 兩 Stage 拆解）
+**風險**：中（Stage 50/51 framework Kickoff 既有 pattern 範本可複用，但邊角 actions 範圍未明確需先 spike 盤點）
+
+### 優先級
+
+🔴 戰略級必修 — Stage 60+ 候選（Stage 59 結案後第一順位）。Trial_v7 揭露 v4 production-ready 邊界仍有缺口，影響面廣（任何走 legacy modify path 的 user action 都同類踩坑）。
+
+### v4 兼容性
+
+本 FF 是 v4 漸進遷移的補強段，對齊 Stage 49-58 路線繼續推進。
+
+---
+
+## 五十六、Petra prompt「議題層次篩選紀律」+「給定見不攤議題」推廣到 AI Agent prompt 層 🟡
+
+> 狀態：🟡 中 — Stage 60+ 候選 / 與 FF 二十五 / 四十八 / 四十六 系統性 prompt 對齊群組合併修
+> 提出日期：2026-05-10（Trial_v7 結案揭露 — Christ 親自點破 Petra「給 Christ 決策包」行為）
+
+### 背景（Trial_v7 揭露）
+
+Trial_v7 Kickoff Petra 產出 TaskPlan 內含 5 待拍板議題 + 給 A/B/C 三選讓 Christ 拍。Christ 親自點破：「Petra 她現在就有點像前不久的 Aria，請我拍板很多細節」。
+
+對照 user_christ.md「議題層次篩選紀律」+ workflow_aria.md「給定見不攤議題」精神 — 這兩條是 Aria 之前被 Christ 校正過的工作風格紀律，Petra prompt 同類根因應該同步學。
+
+### 修法方向
+
+對齊既有 Aria 紀律精神，更新 Petra prompt（含 Kickoff Petra / Design Petra / Pipeline Petra）：
+- 純技術 / 內部設計議題 → Petra 自決（不丟給 Christ）
+- 對 Christ 看到行為 / 業務邏輯 / spec 有影響的議題 → 才丟拍板
+- 拍板議題給定見（推薦 A 方案 + 理由），不只列三選
+
+### 規模 / 風險
+
+**規模**：S-M（純 prompt 修改，可與 FF 二十五 / 四十八 / 四十六 系統性 prompt 對齊群組合併修）
+**風險**：低（prompt 修改 + Mock 場景驗證即可）
+
+### 優先級
+
+🟡 中 — Stage 60+ 候選。建議與 FF 二十五（Cody 繞道傾向）+ FF 四十八 + FF 四十六 合併成「AI Agent prompt 對齊紀律統一」一個 Stage 處理。
+
+### v4 兼容性
+
+純 prompt 修改不動 framework 路徑，全 v4 兼容。
 
 ---
 
