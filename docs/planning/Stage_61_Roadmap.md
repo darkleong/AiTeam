@@ -218,8 +218,73 @@ Forge spike 階段對 CLAUDE_Cody.md vs CLAUDE_Petra.md 做 audit — 找出 Cod
 
 ---
 
+## 實作紀錄（v2.0 — 2026-05-10 Forge 結案）
+
+### 實作概況
+
+- **Commit**：`218f150` — feat(stage61): v3.50.0
+- **本機驗證**：dotnet build 0 error / dotnet test 131 passed（Bot.Tests 4 + Tests.Generated 127）
+- **Push**：`628a52e..218f150 HEAD -> main`，CI/CD self-hosted runner success（run id 25625351905）
+- **規模**：27 files changed / +403 / -46（純 prompt + UI + Reload + alias，無 EF Migration）
+
+### 7 子項實作對照表
+
+| 子項 | 內容 | 真實修法 |
+|---|---|---|
+| 1 | Petra prompt 5 位置同步紀律段（FF 五十六） | CLAUDE_Petra.md「議題層次紀律 + 給定見紀律 + 工時禁字紀律」段 + 4 個 prompt builder 共用 `AppendPetraDisciplineSection` helper（KickoffPrompts.cs / DesignPrompts.cs 各自有同名 helper）。`BuildPetraPlanPrompt` line 191「待 Christ 決定」→「已確認 / 已記錄」 |
+| 2-A | CLAUDE_Cody.md Dev_plan 結構規範 + ImplementationNote 強制 | 加新段「Dev_plan 結構規範（強制）」+ ImplementationNote 標題改「強制（不論是否走 Dev_plan）」 |
+| 2-B | Sage 備援 source（FF 四十六） | DocAgentService prompt 引導 Sage 走 PR Body / git log fallback + CLAUDE_Sage.md 品質下限改 fallback path（兩備援皆失敗才 escalate）— 規模 ~25 LOC ≤ 100 條件納入 ✅ |
+| 2-C | Cody Dev_plan maxTurns 提升 80（FF 四十八） | IClaudeCodeService.RunReadOnlyAsync 加 `int? maxTurns = null` + 4 處同步擴 + DevAgentService caller 傳 `maxTurns: 80` + 3 處既有 caller（Designer/Requirements/PmReview）加 named `ct:` 對齊 |
+| 3 | 議題 #B Reload 修根因 | KickoffStageExecutor.HandleEntryAsync line 99 加 `db.Entry(group).ReloadAsync` + try/catch graceful → intervention helper。Stage 60 modify path audit ✓ 不踩同類根因（同 scope 同 entity reference） |
+| 4 | Dashboard token IsEstimated 視覺（FF 五十） | TokenAgentSummaryDto 加 `HasEstimated` + 2 處聚合查詢加 `BOOL_OR("IsEstimated")` + razor 卡片 MudIcon Warning + Tooltip + 表格 row icon + cost「~」前綴 |
+| 5 | Christ action supersede + intervention 動態化（FF 四十五） | ButtonCallbackRouter SupersedePriorFailedTasks helper（escalate_devplan_skip / abort 2 處呼叫）+ TaskGroupService.MarkGroupDoneOrInterventionAsync InterventionReason 動態列出真實 escalate source — 規模 ~8 LOC ≤ 50 條件納入 ✅ |
+| 6 | Dashboard epic UI 接線（FF 四十） | PipelineList row IsEpic / sub-task 視覺標 + EpicPaused chip；PipelineView Epic section 顯示 sub-task 列表 + ⏸️ 暫停 epic / ▶️ 恢復 epic 按鈕（呼叫既有 DashboardBotService.PauseEpicAsync / ResumeEpicAsync） |
+| 7 | Mock 場景 7 alias | MockScenarioService 加 7 alias + MockScenarioCard.razor 補 7 SelectItem |
+| 8 | Version bump | Directory.Build.props 3.49.0 → 3.50.0 |
+
+### 範圍縮小揭露（Aria 結案備註對齊）
+
+**ButtonCallbackRouter SupersedePriorFailedTasks 範圍**：
+- 計劃書原意對齊「Stage 30 既有 5 申訴方法 button callback」，實作只 cover Dev_plan path 兩處（`escalate_devplan_skip` / `escalate_devplan_abort`）
+- **YAGNI 範圍縮小理由**：Trial_v6 議題 #9 是 Dev_plan path 具體場景；其他 3 申訴 path（Review Appeal escalate / QA fix loop escalate / Sage escalate）**沒實證同類 cross-Agent supersede needs intervention 誤判**
+- **Trial_v8 後重新評估**：是否其他 path 也踩同類問題 candidate（可立 FF 五十八）— 真實使用揭露才動工
+
+### Forge 自驗 7 Mock 場景結果
+
+| # | 場景 | 結果 | 驗證範圍 |
+|---|---|---|---|
+| 1 | `petra_decision_pack_check` | ✅ PASS | DB TaskPlan 329 字 / 8 個禁字全 NOT FOUND（Mock 流程，真實 LLM 紀律生效待 Trial_v8） |
+| 2 | `cody_devplan_structured_check` | ✅ 0 regression | Pipeline 跑通 done / DevPlanRevision=0；DevPlan 為空是 Mock 預期（Mock 走 PR 直接產出，prompt 真實效果待 Trial_v8） |
+| 3 | `cody_implementationnote_written_check` | ✅ 0 regression | Pipeline 跑通 done；ImplementationNote 為空是 Mock 預期（真實 Cody LLM 才寫） |
+| 4 | `framework_modify_taskplan_display_check` | ✅ PASS（議題 #B 真實驗證） | DB TaskPlan **10302 字** + BossInteraction Description **124 字**（kickoff consensus）+ **504 字**（modify path）+ 7 stage Pipeline 跑通 — Reload 修根因真實生效（否則 Description 顯示「無計劃書」） |
+| 5 | `christ_action_supersede_check` | ⚠️ Mock 設計限制 | dev_plan_escalate_loop 跑通 / 3 BossInteraction 全 responded；**SupersedePriorFailedTasks + 動態化 intervention 真實效果 Mock 物理上無法驗** — MockMode auto-approve 走 dashboard source（不踩 Discord button callback）+ MarkGroupDoneOrIntervention 動態化用 `??=` 不踩 specific InterventionReason 場景。Trial_v8 真實 Christ 點 Discord button 才驗 |
+| 6 | `dashboard_isestimated_visual_check` | ⏳ Christ 視覺驗收 | Dashboard `/tokens` 頁面 — Agent 卡片 + 表格 HasEstimated row 顯示 MudIcon Warning + Tooltip + cost「~」前綴 |
+| 7 | `epic_chain_dashboard_ui_check` | ⏳ Christ 視覺驗收 | Dashboard `/pipeline` 頁面 — IsEpic row 顯示 📦 Epic icon + sub-task chip + EpicPaused chip；PipelineView 內 Epic section 顯示 sub-task 列表 + 暫停 / 恢復 epic 按鈕 |
+
+### 0 regression 確認
+
+- Stage 60 既有 `framework_modify_taskplan_happy` 場景：✅ 7 stage Pipeline 全跑通 + TaskPlan 10302 字 + Status done
+- dotnet build 0 error / dotnet test 131 passed
+
+### Forge 自驗能力限制揭露（給 Trial_v8 排程參考）
+
+本 Stage 涉及兩個修法 Mock 場景物理上無法直接驗，必待 Trial_v8 真實 Christ 互動驗：
+1. **SupersedePriorFailedTasks**（FF 四十五）— ButtonCallbackRouter 內 helper 依賴 Discord button callback path，MockMode auto-approve 走 dashboard source 不踩
+2. **generic intervention 訊息動態化**（FF 四十五）— `??=` operator 設計，已 set specific InterventionReason 場景（如 dev_plan_escalate_loop）不會 override，只在 generic / fallback 場景生效
+
+→ Trial_v8 重跑時關注：① Discord 真實點「跳過審核」/「放棄」button → 前置 [Petra→Dev_plan] failed task 是否標 cancelled；② cross-Agent supersede 場景是否誤觸 needs_intervention（理應已修根因）
+
+### Christ 視覺驗收待辦
+
+請 Christ 開 Dashboard 兩處驗收（Forge 已 Mock 場景準備好資料）：
+- **`/tokens`**：場景 6 — 任一個有 IsEstimated=true 的 Agent row 應顯示 ⚠️ MudIcon Warning + Tooltip + cost「~」前綴
+- **`/pipeline`**：場景 7 — 觸發 `epic_chain_dashboard_ui_check` Mock 後，parent group row 顯示 📦 Epic + sub-task chip；點開 Drawer Epic section 顯示 sub-task 列表 + 暫停 / 恢復 epic 按鈕
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-10 | 結案實作紀錄補強（Forge）— 7 子項實作對照表 + 範圍縮小揭露（SupersedePriorFailedTasks 只 cover Dev_plan path 兩處 YAGNI / Trial_v8 重新評估其他 3 申訴 path）+ Forge 自驗 7 Mock 場景結果（5 PASS / 2 Christ 視覺待辦 / Mock 設計限制揭露：場景 5 真實效果待 Trial_v8 真實 Discord button click 驗）+ 0 regression 確認（Stage 60 modify path）。**自驗能力限制 2 處揭露給 Trial_v8 排程參考**：① SupersedePriorFailedTasks 依賴 Discord button callback path（MockMode auto-approve 走 dashboard source 不踩）② generic intervention 動態化 `??=` 不踩已 set specific reason 場景。 |
 | v1.0 | 2026-05-10 | 初版計劃書建立（Aria）— Stage 61 = Trial_v8 開跑前最後一塊清掃（Petra/Cody prompt 對齊群組 + Pipeline UI refresh entity 修根因 + Dashboard 補強 + Trial_v6 揭露 🟡 中議題群組全清）。範圍 7 子項：① Petra prompt 議題層次篩選紀律延伸（FF 五十六 + 工時砍紀律 — 三處同步 CLAUDE_Petra.md + KickoffPrompts.cs + DesignState.cs）② Cody prompt 對齊群組（FF 二十五 Dev_plan 結構規範 + FF 四十六 ImplementationNote 強制寫 + Sage 備援 source + FF 四十八 maxTurns 提升）③ 議題 #B Pipeline KickoffStageExecutor max_iter path 「無計劃書」修根因（refresh entity 確保 freshGroup.TaskPlan 拿最新）④ FF 五十 Dashboard token 統計頁 IsEstimated 視覺區分 ⑤ FF 四十五 Christ action 標 cancelled + generic intervention 訊息模板動態化（Trial_v6 議題 #9 直接踩）⑥ FF 四十 Stage 46 Dashboard razor UI 接線（epic 折疊 + sub-task 進度條 + 暫停按鈕 — Trial_v6 議題 #5 Christ 體驗痛點）⑦ Mock 場景補強 6 場景 + ⑧ v3.50.0 bump。**設計決策 5 條**：合併 Stage 61 全 7 子項（vs 拆 61A/61B）/ 純 prompt 改動不動 schema 結構 / 議題 #B refresh entity 戰術 Forge spike 自決 / Cody prompt audit Forge spike 自決 / Cody Dev_plan maxTurns 靜態 vs 動態 Forge spike 評估。**規劃前期已 grep 驗證**：CLAUDE_Petra.md 既有「審核紀律」段（line 19-50 已寫「以下不是 Petra 該審的」+「以下情況不構成 revise 理由」延伸 Kickoff/Design 場景）+ FrameworkKickoffRouter.CreateKickoffConfirmationAsync `:856-905` embed 構造邏輯（line 875-879 planPreview 取 freshGroup.TaskPlan — 確認真實 root cause = entity 沒 refresh）+ Petra prompt 三處同步位置（CLAUDE_Petra.md + KickoffPrompts.cs + DesignState.cs）+ Framework Petra Executor（KickoffPetraExecutor / DesignPetraExecutor）+ FF 二十五/四十六/四十八 真實內容對齊 Trial_v6 揭露議題群組。**規模 M-L** / Opus 1M + medium / 預估 ~350-500K（對齊 Stage 60 ×0.80 範圍延伸略小，純 prompt + UI 改動 + Forge spike 自決多項細節）。Mock 全綠 + Forge 自驗 6 場景 + Christ 視覺驗收 Dashboard 兩處（IsEstimated + epic UI）。 |
