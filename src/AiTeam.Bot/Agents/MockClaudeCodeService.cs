@@ -387,7 +387,9 @@ public class MockClaudeCodeService(
                                                       or "framework_design_needs_adjustment_approved"
                                                       or "framework_design_needs_adjustment_needs_meeting"
                                                       or "framework_design_no_demi"
-                                                      or "framework_design_crash_recovery_during_round";
+                                                      or "framework_design_crash_recovery_during_round"
+                                                      // Stage 60：modify_designplan_happy 場景走 Design escalate path 開 BossInteraction → MockMode auto-approve design_modify → RunDesignModifyAsync
+                                                      or "framework_modify_designplan_happy";
 
         if (isFrameworkDesignScenario)
         {
@@ -448,6 +450,8 @@ public class MockClaudeCodeService(
                     ("framework_design_needs_adjustment_needs_meeting", _) => "consensus",        // 外層 loop back round+1 後 consensus
                     ("framework_design_no_demi", _)                        => "consensus",
                     ("framework_design_crash_recovery_during_round", _)    => "needs_discussion", // Round 1+2 推進，Christ 線下 restart 觀察 Recovery
+                    // Stage 60：modify_designplan_happy 觸發 escalate → Pipeline DesignStageExecutor 收 EscalateConfirmationOpened → 開 design BossInteraction → MockMode auto-approve design_modify
+                    ("framework_modify_designplan_happy", _)               => "escalate",
                     _                                                      => "consensus",
                 };
 
