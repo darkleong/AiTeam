@@ -19,7 +19,7 @@ grep -rn <symbol> --include="*.cs"  # 對齊既有 pattern 確認（不 full rea
 
 ---
 
-## 吸收（v5 動態架構不需）— ~14,500 LoC
+## 吸收（v5 動態架構不需）— ~16,061 LoC
 
 > 對齊 5 挑戰拍板 #5（重啟重跑 + 不做 Checkpointing）+ Petra orchestrator 全程動態調度（不照固定 pipeline）+ FF 三十六既有「議題 A/B 在動態架構下自動消失」。
 
@@ -95,7 +95,7 @@ find src/AiTeam.Bot/Workflows -name "*.cs" -exec wc -l {} +
 | `Orchestration/Appeal/AppealOrchestrationService.cs` | 898 | v5 Petra Tool Set 動態 review/appeal |
 | `Orchestration/Appeal/FrameworkAppealRouter.cs` | 477 | 同 framework Routers — Petra 動態 |
 
-### 吸收總計 — ~15,061 LoC
+### 吸收總計 — ~16,061 LoC
 
 | 子類 | LoC |
 |---|---|
