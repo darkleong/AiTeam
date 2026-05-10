@@ -326,6 +326,9 @@ public class ButtonCallbackRouter(
                     // FF 三十七：清 status / interventionReason，避免 Dashboard UI 顯示「需介入」誤導
                     groupRepo.UpdateGroupStatus(group, "running");
                     group.InterventionReason = null;
+                    // Stage 61-FF 四十五：Christ 「跳過審核」action 標前置 failed task cancelled，
+                    // 避免後續 MarkGroupDoneOrIntervention 跨 Agent 看到舊 failed task 誤判 needs_intervention（Trial_v6 議題 #9）
+                    SupersedePriorFailedTasks(group, "Christ 跳過 Dev_plan 審核");
                     await groupRepo.SaveAsync();
 
                     await taskGroupService.FireStepsAsync(
@@ -346,6 +349,8 @@ public class ButtonCallbackRouter(
                     var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
                     if (group is not null)
                     {
+                        // Stage 61-FF 四十五：abort 也標前置 failed task cancelled（避免 Dashboard / 後續邏輯誤判）
+                        SupersedePriorFailedTasks(group, "Christ 放棄 Dev_plan 流程");
                         groupRepo.UpdateGroupStatus(group, "failed");
                         await groupRepo.SaveAsync();
                     }
@@ -1079,6 +1084,32 @@ public class ButtonCallbackRouter(
             .AddField("任務 ID", taskId.ToString())
             .WithFooter("確認後開始執行，取消則中止。")
             .Build();
+
+    /// <summary>
+    /// Stage 61-FF 四十五：Christ「跳過審核」/「放棄」action 標前置 failed task 為 cancelled。
+    /// 修根因 Trial_v6 議題 #9 — MarkGroupDoneOrIntervention 跨 Agent 看到舊 failed task（如 [Petra→Dev_plan] failed）
+    /// 誤判 needs_intervention + 建 generic intervention BossInteraction 訊息誤導實際根因。
+    /// 標 cancelled 後 MarkGroupDoneOrIntervention line 489-494 既有 supersede 邏輯仍會 cover（cancelled 不是 failed/needs_intervention 不踩過濾）。
+    /// </summary>
+    private void SupersedePriorFailedTasks(TaskGroup group, string reason)
+    {
+        if (group.Tasks is null) return;
+        var supersededCount = 0;
+        foreach (var t in group.Tasks)
+        {
+            if (t.Status is "failed" or "needs_intervention")
+            {
+                t.Status = "cancelled";
+                supersededCount++;
+            }
+        }
+        if (supersededCount > 0)
+        {
+            logger.LogInformation(
+                "[Stage61-FF45] SupersedePriorFailedTasks：group {Id} 標 {Count} 個前置 failed/needs_intervention task → cancelled（reason={Reason}）",
+                group.Id, supersededCount, reason);
+        }
+    }
 
     internal static Embed BuildRequirementsPreviewEmbed(string taskTitle, IReadOnlyList<RequirementIssuePreview> issues)
     {

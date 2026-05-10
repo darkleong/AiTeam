@@ -162,7 +162,7 @@ public class DesignerAgentService(
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
             var result = await claudeCodeService.RunReadOnlyAsync(
-                repoLocalPath, prompt, model, apiKey, cancellationToken);
+                repoLocalPath, prompt, model, apiKey, ct: cancellationToken);
             // Stage 44：寫 token_logs（AgentName=Demi / Stage=Designer，Aria 閘門一拍板納入正式範圍）
             await tokenLogService.LogCliUsageAsync(
                 "Demi", model, "Designer", round: null, taskId: null, result.Usage, cancellationToken);

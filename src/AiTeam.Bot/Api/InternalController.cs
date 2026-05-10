@@ -158,7 +158,9 @@ public class InternalController(
                     TotalInputTokens   = totalInput,
                     TotalOutputTokens  = totalOutput,
                     EstimatedCostUsd   = Math.Round(
-                        (totalInput / 1000m) * inputRate + (totalOutput / 1000m) * outputRate, 4)
+                        (totalInput / 1000m) * inputRate + (totalOutput / 1000m) * outputRate, 4),
+                    // Stage 61-FF 五十：任一筆 IsEstimated=true → 整 Agent 標 HasEstimated（Dashboard 視覺區分）
+                    HasEstimated       = g.Any(l => l.IsEstimated)
                 };
             })
             .OrderBy(s => s.AgentName)

@@ -253,6 +253,39 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "meeting_modify_during_subprocess_failure";
             MockClaudeCodeService.ResetScenarioRoundCounters();
         }
+        // ── Stage 61：Petra/Cody prompt 對齊 + Pipeline UI refresh + Dashboard 補強 7 alias 場景 ──
+        // 機制：純 alias — 對應既有 Mock 邏輯，prompt 修法 / Reload / 視覺 / supersede / epic UI 由 production code 行為改變自動生效
+        // 驗證範圍：DB 字串 check（Petra/Cody prompt 紀律）/ Discord embed display（議題 #B refresh）/ Dashboard UI（IsEstimated / epic）/ task supersede 邏輯
+        //   - petra_decision_pack_check：Kickoff 跑通 → DB TaskPlan 不含「待 Christ 拍板」「A/B/C 三選」「X 天/Y 週」字串（紀律 prompt 生效）
+        //   - cody_devplan_structured_check：Pipeline Dev_plan → DB DevPlan 含「Step 1/Step 2/改哪些檔案」結構（FF 二十五）
+        //   - cody_implementationnote_written_check：Pipeline Dev/Dev_fix → DB ImplementationNote ≥ 200 字（FF 四十六）
+        //   - framework_modify_taskplan_display_check：modify path → Discord embed planPreview ≥ 100 字（議題 #B Reload 修根因驗證 — Stage 60 場景 A 延伸）
+        //   - dashboard_isestimated_visual_check：Dashboard token 統計頁 HasEstimated 視覺驗收（Christ 視覺，FF 五十）
+        //   - christ_action_supersede_check：mock failed task → Christ 跳過審核 → 前置 failed task 標 cancelled + intervention 訊息含真實 escalate source（FF 四十五）
+        //   - epic_chain_dashboard_ui_check：拆 task chain → Dashboard 顯示 epic 折疊 + sub-task 列表 + 暫停 epic 按鈕（Christ 視覺，FF 四十）
+        else if (scenario == "petra_decision_pack_check")
+            MockClaudeCodeService.FailScenario = "framework_kickoff_consensus_round1";  // 對齊 Stage 50 既有 Kickoff Mock，驗 Petra 紀律 prompt
+        else if (scenario == "cody_devplan_structured_check")
+            MockClaudeCodeService.FailScenario = "framework_pipeline_happy_path";  // Pipeline 跑通 Dev_plan，驗 Dev_plan 結構
+        else if (scenario == "cody_implementationnote_written_check")
+            MockClaudeCodeService.FailScenario = "framework_pipeline_happy_path";  // Pipeline 跑通 Dev，驗 ImplementationNote
+        else if (scenario == "framework_modify_taskplan_display_check")
+        {
+            MockClaudeCodeService.FailScenario = "framework_modify_taskplan_happy";  // 對齊 Stage 60 場景 A，驗 Reload 後 embed 顯示
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "dashboard_isestimated_visual_check")
+            MockClaudeCodeService.FailScenario = null;  // 純 Christ 視覺驗收，跑任意場景累積 token_logs 即可
+        else if (scenario == "christ_action_supersede_check")
+        {
+            MockClaudeCodeService.FailScenario = "dev_plan_escalate_loop";  // 觸發 Dev_plan escalate → BossInteraction → Christ 點跳過審核
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "epic_chain_dashboard_ui_check")
+        {
+            MockClaudeCodeService.FailScenario = "split_task_propose_accept";  // 觸發拆 task chain → Dashboard 顯示 epic UI
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -337,6 +370,14 @@ public class MockScenarioService(
             "framework_modify_designplan_happy"                 => (WorkflowType.NewFeature, "Stage60-ModifyDesignPlanHappy",      "Kickoff"),
             "meeting_subprocess_failure"                        => (WorkflowType.NewFeature, "Stage60-MeetingSubprocessFailure",   "Kickoff"),
             "meeting_modify_during_subprocess_failure"          => (WorkflowType.NewFeature, "Stage60-ModifyDuringSubprocessFail", "Kickoff"),
+            // Stage 61：Petra/Cody prompt 對齊 + Pipeline UI refresh + Dashboard 補強 7 場景
+            "petra_decision_pack_check"                         => (WorkflowType.NewFeature, "Stage61-PetraDecisionPackCheck",     "Kickoff"),
+            "cody_devplan_structured_check"                     => (WorkflowType.NewFeature, "Stage61-CodyDevPlanStructured",      "Kickoff"),
+            "cody_implementationnote_written_check"             => (WorkflowType.NewFeature, "Stage61-CodyImplNoteWritten",        "Kickoff"),
+            "framework_modify_taskplan_display_check"           => (WorkflowType.NewFeature, "Stage61-ModifyTaskPlanDisplay",      "Kickoff"),
+            "dashboard_isestimated_visual_check"                => (WorkflowType.NewFeature, "Stage61-IsEstimatedVisual",          "Dev_plan"),
+            "christ_action_supersede_check"                     => (WorkflowType.NewFeature, "Stage61-ChristActionSupersede",      "Kickoff"),
+            "epic_chain_dashboard_ui_check"                     => (WorkflowType.NewFeature, "Stage61-EpicChainDashboardUI",       "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

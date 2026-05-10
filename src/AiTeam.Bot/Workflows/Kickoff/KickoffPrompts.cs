@@ -164,13 +164,14 @@ internal static class KickoffPrompts
         sb.AppendLine("整理以上所有意見，判斷是否有需要進一步討論的重大分歧。");
         sb.AppendLine("你可以讀取 codebase 確認技術細節的準確性。");
         sb.AppendLine();
+        AppendPetraDisciplineSection(sb);
         sb.AppendLine("在回應最後，輸出以下 JSON（單獨一行，不要包在 code block 中）：");
         sb.AppendLine("{\"decision\":\"consensus|needs_discussion|escalate\",\"summary\":\"整理摘要\",\"discussion_points\":[\"需要進一步討論的點\"]}");
         sb.AppendLine();
         sb.AppendLine("decision 說明：");
-        sb.AppendLine("- consensus：沒有重大分歧，可以繼續");
-        sb.AppendLine("- needs_discussion：有需要討論的分歧，進行下一輪");
-        sb.AppendLine("- escalate：有無法在團隊內解決的問題，需要老闆決定");
+        sb.AppendLine("- consensus：純技術 / 內部設計議題自決，無重大分歧 → 繼續（不丟老闆）");
+        sb.AppendLine("- needs_discussion：團隊內可解決的分歧 → 進入下一輪");
+        sb.AppendLine("- escalate：對 Christ 看到行為 / 業務邏輯 / spec 有影響無法團隊內解決 → 上呈老闆（給推薦答案 + 理由，不只列三選）");
         return sb.ToString();
     }
 
@@ -179,6 +180,7 @@ internal static class KickoffPrompts
         var sb = new StringBuilder();
         sb.AppendLine("Kick-off 會議已結束。請基於完整的會議討論，產出任務計劃書。");
         sb.AppendLine();
+        AppendPetraDisciplineSection(sb);
         sb.AppendLine("格式如下：");
         sb.AppendLine("# 任務計劃書");
         sb.AppendLine("## 任務摘要");
@@ -188,12 +190,30 @@ internal static class KickoffPrompts
         sb.AppendLine("## 各角色意見摘要");
         sb.AppendLine("| 角色 | 主要意見 | 結論 |");
         sb.AppendLine("|------|---------|------|");
-        sb.AppendLine("| Rosa | ... | 已確認 / 待 Christ 決定 |");
+        sb.AppendLine("| Rosa | ... | 已確認 / 已記錄 |");
         sb.AppendLine("## 風險與注意事項");
         sb.AppendLine("- {Kick-off 中提出但未完全解決的項目}");
         sb.AppendLine("## 建議實作方向");
         sb.AppendLine("{基於討論結果的技術方向建議}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Stage 61-FF 五十六：Petra 議題層次紀律 + 給定見紀律 + 工時禁字紀律共用注入段。
+    /// SoT 對齊（5 位置維護）：CLAUDE_Petra.md「議題層次紀律 + 給定見紀律 + 工時禁字紀律」段
+    /// + KickoffPrompts.BuildPetraRoundPrompt + BuildPetraPlanPrompt
+    /// + DesignPrompts.BuildDesignPetraRoundPrompt + BuildDesignPetraPlanPrompt（DesignPrompts 內各自有同名 helper）。
+    /// 修一處要全部對齊（commit message 標 SoT 維護筆記，避免漂移）。
+    /// </summary>
+    public static void AppendPetraDisciplineSection(StringBuilder sb)
+    {
+        sb.AppendLine("## 紀律（議題層次 + 給定見 + 工時禁字）");
+        sb.AppendLine("- 純技術 / 內部設計議題 → consensus 自決（不丟老闆）");
+        sb.AppendLine("- 對 Christ 看到行為 / 業務邏輯 / spec 有影響 → escalate（給推薦答案 + 理由，不只列 A/B/C 三選）");
+        sb.AppendLine("- 禁出現「X 天 / Y 週 / X.X 天」工時估算（AiTeam 是 AI Session 模式無「天」概念）");
+        sb.AppendLine("- 禁出現「待 Christ 拍板 / 待老闆拍板 / 待 Christ 決定」決策包字串");
+        sb.AppendLine("- 規模可用「S / M / L」或「~N00 LOC」表達，不換算工時");
+        sb.AppendLine();
     }
 
     /// <summary>

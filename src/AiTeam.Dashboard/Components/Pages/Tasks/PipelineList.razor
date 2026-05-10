@@ -47,7 +47,39 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd><StatusBadge Status="@context.Status" /></MudTd>
-        <MudTd>@context.Title</MudTd>
+        <MudTd>
+            @if (context.IsEpic)
+            {
+                <MudTooltip Text="@($"Epic 主任務 — {context.SubTasks!.Count} 個 sub-task")">
+                    <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Color="Color.Primary" Class="mr-1" />
+                </MudTooltip>
+                <span><b>📦 Epic</b> — @context.Title</span>
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Class="ml-2">
+                    @context.SubTasks!.Count sub-task
+                </MudChip>
+                @if (context.EpicPaused == true)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled" Class="ml-1">⏸️ Paused</MudChip>
+                }
+            }
+            else if (context.ParentGroupId is not null)
+            {
+                <MudTooltip Text="Sub-task（隸屬於某 Epic）">
+                    <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Color="Color.Secondary" Class="mr-1" />
+                </MudTooltip>
+                @if (context.PhaseNumber is not null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Class="mr-1">
+                        Phase @context.PhaseNumber
+                    </MudChip>
+                }
+                <span>@context.Title</span>
+            }
+            else
+            {
+                @context.Title
+            }
+        </MudTd>
         <MudTd>
             <MudChip T="string" Size="Size.Small" Color="@WorkflowTypeColor(context.WorkflowType)">
                 @WorkflowTypeLabel(context.WorkflowType)

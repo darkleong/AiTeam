@@ -75,9 +75,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string prompt,
         string model,
         string anthropicApiKey,
+        int? maxTurns = null,
         CancellationToken ct = default)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: 10, ct);
+            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: maxTurns ?? 10, ct);
 
     /// <summary>
     /// QA 模式：開放所有工具（含 Write / Edit / Bash），供 Quinn 產生測試並以 dotnet build 驗證。

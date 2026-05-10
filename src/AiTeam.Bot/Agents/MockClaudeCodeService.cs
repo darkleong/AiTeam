@@ -86,9 +86,10 @@ public class MockClaudeCodeService(
     /// Demi / Dev 直接取 Output 字串使用，不影響功能。
     /// </summary>
     public async Task<ClaudeCodeResult> RunReadOnlyAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        int? maxTurns = null, CancellationToken ct = default)
     {
-        logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果");
+        logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果（maxTurns={MaxTurns}）", maxTurns ?? 10);
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
 
         const string output =

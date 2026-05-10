@@ -111,7 +111,7 @@ public class PmReviewService(
                       ?? "claude-haiku-4-5";
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
-            var result = await claudeCodeService.RunReadOnlyAsync(repoLocalPath, prompt, model, apiKey, ct);
+            var result = await claudeCodeService.RunReadOnlyAsync(repoLocalPath, prompt, model, apiKey, ct: ct);
             // Stage 44：寫 token_logs（AgentName=Petra / Stage=Petra_review，service 無 task ref → null）
             await tokenLogService.LogCliUsageAsync(
                 "Petra", model, "Petra_review", round: null, taskId: null, result.Usage, ct);

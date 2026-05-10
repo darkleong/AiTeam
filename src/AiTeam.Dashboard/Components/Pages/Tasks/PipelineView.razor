@@ -35,6 +35,54 @@
     </div>
 </div>
 
+@* Stage 61-FF 四十：Epic 主 group section（IsEpic=true 時顯示 sub-task 列表 + 暫停 epic / 恢復 epic 按鈕） *@
+@if (Group.IsEpic)
+{
+    <MudPaper Elevation="1" Class="pa-3 mb-3 mt-2" Style="background:var(--mud-palette-info-lighten);">
+        <MudText Typo="Typo.subtitle1" Class="mb-2"><b>📦 Epic</b> — 共 @Group.SubTasks!.Count 個 sub-task</MudText>
+        @if (Group.EpicPaused == true)
+        {
+            <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Pause" Class="mb-2">
+                ⏸️ Epic 暫停中 — sub-task 不會自動啟動下個 Phase
+            </MudAlert>
+            <MudButton StartIcon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Variant="Variant.Filled"
+                       Size="Size.Small" Class="mb-2"
+                       OnClick="HandleResumeEpicClickAsync" Disabled="@_pauseBusy">
+                ▶️ 恢復 Epic（觸發下個 sub-task）
+            </MudButton>
+        }
+        else
+        {
+            <MudButton StartIcon="@Icons.Material.Filled.Pause" Color="Color.Warning" Variant="Variant.Outlined"
+                       Size="Size.Small" Class="mb-2"
+                       OnClick="HandlePauseEpicClickAsync" Disabled="@_pauseBusy">
+                ⏸️ 暫停 Epic（sub-task 不啟動下個 Phase）
+            </MudButton>
+        }
+        <MudList T="TaskGroupDto" Dense="true">
+            @foreach (var sub in Group.SubTasks!)
+            {
+                <MudListItem T="TaskGroupDto">
+                    <div class="d-flex align-center gap-2">
+                        @if (sub.PhaseNumber is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">
+                                Phase @sub.PhaseNumber
+                            </MudChip>
+                        }
+                        <StatusBadge Status="@sub.Status" />
+                        <MudText Typo="Typo.body2"><b>@sub.Title</b></MudText>
+                        @if (!string.IsNullOrEmpty(sub.PhaseDescription))
+                        {
+                            <MudText Typo="Typo.caption" Class="text-muted">— @sub.PhaseDescription</MudText>
+                        }
+                    </div>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+
 @* Stage 45：TaskGroup 流程暫停 / 恢復 *@
 @if (Group.IsPaused)
 {

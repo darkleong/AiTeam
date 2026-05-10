@@ -816,8 +816,9 @@ public class DevAgentService(
                       ?? "claude-opus-4-6";
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
+            // Stage 61-FF 四十八：Cody Dev_plan maxTurns 從 default 10 提升至 80（Trial_v6 ×3 phase 觸到上限踩 100% 反例修根因）
             var result = await claudeCodeService.RunReadOnlyAsync(
-                localPath, prompt, model, apiKey, cancellationToken);
+                localPath, prompt, model, apiKey, maxTurns: 80, cancellationToken);
             // Stage 44：寫 token_logs（AgentName=Cody / Stage=Dev_plan / Round=DevPlanRevision）
             await tokenLogService.LogCliUsageAsync(
                 "Cody", model, "Dev_plan", task.Group?.DevPlanRevision, task.Id, result.Usage, cancellationToken);

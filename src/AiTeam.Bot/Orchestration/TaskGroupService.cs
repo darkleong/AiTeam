@@ -505,9 +505,14 @@ public class TaskGroupService(
         if (anyBad)
         {
             taskRepo.UpdateGroupStatus(group, TaskStatus.NeedsIntervention);
-            group.InterventionReason ??= "存在未處理的 failed / needs_intervention task";
-            logger.LogWarning("MarkGroupDoneOrIntervention：group {Id} 有 failed/needs_intervention task → needs_intervention",
-                group.Id);
+            // Stage 61-FF 四十五：generic intervention 訊息動態化 — 列出真實 escalate source
+            // （之前是寫死「存在未處理的 failed / needs_intervention task」誤導 Christ 看不到實際根因 — Trial_v6 議題 #9）
+            group.InterventionReason ??=
+                $"存在 {unresolved.Count} 個未處理任務：" +
+                string.Join(" / ", unresolved.Take(5).Select(t =>
+                    $"[{t.AssignedAgent} {t.Status}] {(t.Title.Length > 50 ? t.Title[..50] + "..." : t.Title)}"));
+            logger.LogWarning("MarkGroupDoneOrIntervention：group {Id} 有 failed/needs_intervention task → needs_intervention（reason={Reason}）",
+                group.Id, group.InterventionReason);
             await taskRepo.SaveAsync(ct);
 
             // Stage 46-FF 三十五：sub-task needs_intervention → epic 標 EpicPaused + 建 BossInteraction

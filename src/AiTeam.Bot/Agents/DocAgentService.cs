@@ -193,9 +193,21 @@ public class DocAgentService(
             sb.AppendLine();
 
             sb.AppendLine("## implementation_note（Cody 實作說明）");
-            sb.AppendLine(string.IsNullOrWhiteSpace(implementationNote)
-                ? "（無實作說明）"
-                : implementationNote);
+            if (string.IsNullOrWhiteSpace(implementationNote))
+            {
+                // Stage 61-FF 四十六：implementation_note 缺漏時 prompt 引導 Sage 自取備援 source（PR Body / git log），
+                // 而非直接 escalate — 對齊 CLAUDE_Sage.md「品質下限判準」備援 fallback path
+                sb.AppendLine("（無實作說明 — 請走備援 source）");
+                sb.AppendLine();
+                sb.AppendLine("> ⚠️ implementation_note 缺漏。請走以下備援來源探索並產出歸檔（標註「備援來源」）：");
+                sb.AppendLine($"> 1. `gh pr view {prNumber}` — 讀 PR Body / description");
+                sb.AppendLine("> 2. `git log -n 5 --pretty=format:'%h %s%n%b'` — 讀最近 commit message 摘要");
+                sb.AppendLine("> 3. 若兩備援來源皆空 / 內容過短 → 才 escalate");
+            }
+            else
+            {
+                sb.AppendLine(implementationNote);
+            }
             sb.AppendLine();
 
             sb.AppendLine("## vera_review_summary（Vera 審查摘要）");

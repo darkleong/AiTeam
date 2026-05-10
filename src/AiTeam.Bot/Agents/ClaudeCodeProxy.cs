@@ -28,14 +28,15 @@ public class ClaudeCodeProxy(
     }
 
     public async Task<ClaudeCodeResult> RunReadOnlyAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        int? maxTurns = null, CancellationToken ct = default)
     {
         if (await IsMockModeAsync(ct))
         {
             logger.LogInformation("[MockMode] ClaudeCodeProxy → RunReadOnlyAsync");
-            return await mock.RunReadOnlyAsync(workingDir, prompt, model, anthropicApiKey, ct);
+            return await mock.RunReadOnlyAsync(workingDir, prompt, model, anthropicApiKey, maxTurns, ct);
         }
-        return await real.RunReadOnlyAsync(workingDir, prompt, model, anthropicApiKey, ct);
+        return await real.RunReadOnlyAsync(workingDir, prompt, model, anthropicApiKey, maxTurns, ct);
     }
 
     public async Task<ClaudeCodeResult> RunVictoriaAsync(

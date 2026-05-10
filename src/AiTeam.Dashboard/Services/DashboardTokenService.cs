@@ -40,7 +40,9 @@ public class DashboardTokenService(AppDbContext db)
                     TotalOutputTokens = totalOutput,
                     EstimatedCostUsd  = Math.Round(
                         (totalInput / 1000m) * inputRatePer1k +
-                        (totalOutput / 1000m) * outputRatePer1k, 4)
+                        (totalOutput / 1000m) * outputRatePer1k, 4),
+                    // Stage 61-FF 五十：任一筆 IsEstimated=true → 整 Agent 標 HasEstimated（Dashboard 視覺區分）
+                    HasEstimated      = g.Any(l => l.IsEstimated)
                 };
             })
             .OrderBy(s => s.AgentName)

@@ -180,7 +180,7 @@ public class RequirementsAgentService(
             var apiKey = configuration["Anthropic:ApiKey"] ?? "";
 
             var result = await claudeCodeService.RunReadOnlyAsync(
-                repoLocalPath, prompt, model, apiKey, cancellationToken);
+                repoLocalPath, prompt, model, apiKey, ct: cancellationToken);
             // Stage 44：寫 token_logs（AgentName=Rosa / Stage=Requirements，Aria 閘門一拍板納入正式範圍）
             await tokenLogService.LogCliUsageAsync(
                 "Rosa", model, "Requirements", round: null, task.Id, result.Usage, cancellationToken);

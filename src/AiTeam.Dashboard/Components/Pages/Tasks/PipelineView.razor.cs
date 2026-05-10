@@ -241,6 +241,36 @@ public partial class PipelineView : IAsyncDisposable
         finally { _pauseBusy = false; }
     }
 
+    /// <summary>Stage 61-FF 四十：暫停整個 epic（Dashboard 操作）— sub-task 不再啟動下個 Phase。</summary>
+    private async Task HandlePauseEpicClickAsync()
+    {
+        if (Group is null || _pauseBusy) return;
+        _pauseBusy = true;
+        try
+        {
+            var ok = await BotService.PauseEpicAsync(Group.Id);
+            Snackbar.Add(ok ? "Epic 已暫停 — sub-task 不再啟動下個 Phase" : "暫停 Epic 失敗",
+                ok ? Severity.Success : Severity.Error);
+            if (ok) Group.EpicPaused = true;
+        }
+        finally { _pauseBusy = false; }
+    }
+
+    /// <summary>Stage 61-FF 四十：恢復 epic（Dashboard 操作）— 觸發下個 pending sub-task fire Dev_plan。</summary>
+    private async Task HandleResumeEpicClickAsync()
+    {
+        if (Group is null || _pauseBusy) return;
+        _pauseBusy = true;
+        try
+        {
+            var ok = await BotService.ResumeEpicAsync(Group.Id);
+            Snackbar.Add(ok ? "Epic 已恢復 — 觸發下個 pending sub-task" : "恢復 Epic 失敗",
+                ok ? Severity.Success : Severity.Error);
+            if (ok) Group.EpicPaused = false;
+        }
+        finally { _pauseBusy = false; }
+    }
+
     /// <summary>Stage 51：framework HITL 中途介入按鈕（v4 漸進遷移第三步試點）— Christ 觸發 trigger flag，
     /// 下個 Petra Round 邊界 MidInterruptCheckExecutor emit RequestInfoEvent 開 BossInteraction。</summary>
     private async Task HandleMidInterruptClickAsync()

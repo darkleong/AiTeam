@@ -62,6 +62,7 @@ internal sealed partial class KickoffStageExecutor : Executor
         await PipelineStateHelpers.SaveAsync(context, state);
 
         await using var scope = _scopeFactory.CreateAsyncScope();
+        var db          = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
         var kickoffRouter = scope.ServiceProvider.GetRequiredService<FrameworkKickoffRouter>();
@@ -96,13 +97,20 @@ internal sealed partial class KickoffStageExecutor : Executor
         }
 
         // Pipeline 接管 finalize：自己 call CreateKickoffConfirmationAsync 開 BossInteraction
-        var freshGroup = await taskRepo.GetGroupByIdAsync(bridge.GroupId, default);
-        if (freshGroup is null)
+        // Stage 61 議題 #B 修根因：inner Workflow 子 executor 各自 scope 寫 group.TaskPlan + SaveAsync DB UPDATE，
+        // 但 outer scope DbContext 仍 track line 70 fetch 的舊 entity reference → tracking cache 內 group.TaskPlan 為空
+        // → embed 顯示「無計劃書」。Reload 從 DB 重抓覆寫 entity 全 property（EF Core 標準 idiom，最少 surgery）
+        try
         {
-            _logger.LogError("[Stage55A] KickoffStage：finalize 前找不到 Group={Id}，intervention", bridge.GroupId);
-            await SetInterventionAndYieldAsync(context, bridge.GroupId, "Kickoff finalize 前 Group 消失", null);
+            await db.Entry(group).ReloadAsync(default);
+        }
+        catch (Exception reloadEx)
+        {
+            _logger.LogError(reloadEx, "[Stage61] KickoffStage：Reload group 失敗（Group={Id}），intervention", bridge.GroupId);
+            await SetInterventionAndYieldAsync(context, bridge.GroupId, "Kickoff finalize 前 Reload group 失敗", null);
             return;
         }
+        var freshGroup = group;
 
         _logger.LogInformation("[Stage55A] KickoffStage：Pipeline 接管 CreateKickoffConfirmationAsync（Group={Id}）", bridge.GroupId);
         await kickoffRouter.CreateKickoffConfirmationAsync(

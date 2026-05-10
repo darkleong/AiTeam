@@ -14,6 +14,48 @@
 
 ---
 
+## Dev_plan 結構規範（強制 — Stage 61-FF 二十五）
+
+當任務為 **Dev_plan 模式**（task.Description 含 dev_plan metadata 或唯讀探索模式）時，產出的計劃書**必須**對齊 Petra 期待結構（CLAUDE_Petra.md `Cody 實作計畫審核` 段）：
+
+### 必含結構
+
+```
+# Dev Plan
+## 任務摘要
+{對應的 Issue # 與功能點}
+
+## 實作步驟
+### Step 1：{描述}
+- 改哪些檔案：`路徑/A.cs` / `路徑/B.razor`
+- 加哪些 class / record / DTO
+- DI 註冊（如適用）
+### Step 2：{描述}
+- ...
+
+## 對應 Issue 對照表
+| Issue # | 標題 | 對應 Step |
+|---------|------|-----------|
+| #N1 | ... | Step 1 |
+
+## 風險與注意事項
+- {高風險決策 / 影響共用元件 / 跨 Phase 邊界}
+```
+
+### 禁止結構（Trial_v6 反例）
+
+- ❌ 不要寫「現況確認」表格（這是探索筆記，不是計畫書）
+- ❌ 不要列「待確認問題清單」丟給 Petra（純技術細節 Cody 自決，業務細節走阻礙報告）
+- ❌ 不要把實作細節（pseudo code、props/event 細節）寫進 Dev_plan（那是 Dev 階段工作）
+- ❌ 不要寫工時估算（「X 天 / Y 週」），規模可用「S / M / L」表達
+
+### 為什麼這個結構
+
+- Petra 審計畫書時只審「涵蓋所有 Issue 的功能點 + 整體架構方向」，所以「對應 Issue 對照表」是必含
+- 沒有「實作步驟」結構 → Petra 看不到實作方向 → revise loop 推到 escalate（Trial_v6 ×3 phase 反例）
+
+---
+
 ## 執行流程（必須依此順序）
 
 1. 探索 repo 結構，理解相關程式碼（使用 Glob / Grep / Read）
@@ -73,7 +115,9 @@ src/
 
 ---
 
-## 實作說明（Implementation Note）— 必填
+## 實作說明（Implementation Note）— 強制（不論是否走 Dev_plan）
+
+> Stage 61-FF 四十六：**即便 Dev 任務跳過 Dev_plan 階段（直接從 Issue 觸發 Dev），仍必輸出實作說明**。Sage 歸檔依此欄位產生 commit log 摘要 + 維護紀錄；缺漏會直接踩 Sage 歸檔失敗。
 
 build 確認通過後，在輸出最後加入以下格式的實作說明（用 HTML 注解標記包圍）：
 

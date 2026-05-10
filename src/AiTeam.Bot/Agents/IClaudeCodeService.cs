@@ -14,12 +14,16 @@ public interface IClaudeCodeService
         string anthropicApiKey,
         CancellationToken ct = default);
 
-    /// <summary>以唯讀模式執行 Claude Code（僅 Glob / Grep / Read）。</summary>
+    /// <summary>
+    /// 以唯讀模式執行 Claude Code（僅 Glob / Grep / Read）。
+    /// Stage 61-FF 四十八：maxTurns 可選參數（default=10 不變；Cody Dev_plan 探索 caller 傳 80）。
+    /// </summary>
     Task<ClaudeCodeResult> RunReadOnlyAsync(
         string workingDir,
         string prompt,
         string model,
         string anthropicApiKey,
+        int? maxTurns = null,
         CancellationToken ct = default);
 
     /// <summary>以 Victoria CEO 模式執行 Claude Code（讀 repo、寫 docs/、git commit）。可選傳入圖片附件（走 stream-json stdin）。</summary>
