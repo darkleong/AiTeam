@@ -166,6 +166,13 @@ public class PipelineRoutingService(
             case "Doc":
                 await router.ResumeAfterDocAgentApiFailureAsync(group, actionShort, ct);
                 return true;
+            // Stage 60-FF 五十五：Meeting subprocess failure 接管（Petra-{Stage} 命名區分當前 stage）
+            case "Petra-Kickoff":
+                await router.ResumeAfterKickoffAgentApiFailureAsync(group, actionShort, ct);
+                return true;
+            case "Petra-Design":
+                await router.ResumeAfterDesignAgentApiFailureAsync(group, actionShort, ct);
+                return true;
             default:
                 logger.LogWarning("[Stage58] TryRoutePipelineAgentApiFailureAsync：未知 agentName={Agent}（Group={Id}），略過",
                     agentName, group.Id);

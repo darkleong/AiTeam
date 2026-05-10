@@ -9,6 +9,10 @@ namespace AiTeam.Bot.Orchestration.Meeting;
 /// Stage 44：RunAgentTurnAsync 新增 meetingType / round / tokenLogService 三個 optional 參數，
 /// 提供時將 token 寫入 token_logs 並歸到 AgentName="Meeting-{type}"（會議當獨立 Agent 計，
 /// 避免 Petra 個人 token 看起來爆量）。預設 null = 不寫 token（既有行為相容）。
+/// Stage 60 (FF 五十五)：三條 silent failure 路徑全改 throw MeetingSubprocessFailureException
+/// — Trial_v7 結案揭露 silent failure 真實 root cause 治本。caller（Pipeline KickoffStageExecutor /
+/// DesignStageExecutor / legacy ModifyTaskPlanAsync 等）catch 後 fire 第 7 routing
+/// agent_api_failure_intervention（agent="Petra-{Stage}"）。
 /// </summary>
 public class MeetingCommons(
     IClaudeCodeService claudeCode,
@@ -59,17 +63,42 @@ public class MeetingCommons(
                     $"Meeting-{meetingType}", model, meetingType, round, taskId: null, result.Usage, ct);
             }
 
+            // Stage 60：fail-fast — 三條 swallow 路徑全改 throw MeetingSubprocessFailureException（治本 Trial_v7 silent failure）
             if (!result.Success)
-                logger.LogWarning("MeetingCommons：{Agent} session 執行失敗（sessionId={Id}）", agentDisplayName, sessionId);
+            {
+                logger.LogWarning("[Stage60] MeetingCommons subprocess failure → throw MeetingSubprocessFailureException（Agent={Agent}, sessionId={Id}）", agentDisplayName, sessionId);
+                throw new MeetingSubprocessFailureException(agentDisplayName, sessionId,
+                    $"subprocess !result.Success（output={(result.Output?.Length ?? 0)} chars）");
+            }
 
-            return string.IsNullOrWhiteSpace(result.Output)
-                ? $"（{agentDisplayName} 無回應）"
-                : result.Output;
+            if (string.IsNullOrWhiteSpace(result.Output))
+            {
+                logger.LogWarning("[Stage60] MeetingCommons 空 output → throw MeetingSubprocessFailureException（Agent={Agent}, sessionId={Id}）", agentDisplayName, sessionId);
+                throw new MeetingSubprocessFailureException(agentDisplayName, sessionId,
+                    "Agent 無回應（subprocess Success=true 但 output 空）");
+            }
+
+            return result.Output;
+        }
+        catch (MeetingSubprocessFailureException)
+        {
+            // 已是 Stage 60 業務 exception — 直接 re-throw 給上層（Pipeline KickoffStageExecutor / DesignStageExecutor 接 / legacy modify caller 接）
+            throw;
+        }
+        catch (LlmApiFailureException)
+        {
+            // Stage 58 既有 marker pattern：保留 type 不誤包，由上層 catch path（AgentQueueProcessor / Pipeline Stage Executor）處理
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation 正常傳播（不視為 subprocess failure）
+            throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "MeetingCommons：{Agent} session 例外（sessionId={Id}）", agentDisplayName, sessionId);
-            return $"（{agentDisplayName} 執行失敗：{ex.Message}）";
+            logger.LogError(ex, "[Stage60] MeetingCommons：{Agent} session 例外 → wrap 成 MeetingSubprocessFailureException（sessionId={Id}）", agentDisplayName, sessionId);
+            throw new MeetingSubprocessFailureException(agentDisplayName, sessionId, ex.Message, ex);
         }
     }
 }

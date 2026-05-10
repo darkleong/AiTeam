@@ -646,10 +646,12 @@ public class MeetingOrchestrationService(
         // Stage 55A（議題 G3 解法）：Pipeline path 接管 continue / stop button
         // 條件：① group.PipelineFrameworkStateJson != null（Pipeline 仍 yield 在 KickoffStage RequestPort 等 callback）
         //       ② feature flag UseFrameworkPipeline=true
-        // modify / restart 仍走 legacy 邏輯（Pipeline 仍 yield 等下一輪 button — modify 重開卡 / restart fire 新 Kickoff）
+        // Stage 60-FF 五十五（議題 C2 收口）：modify + restart 也擴入 Pipeline path 接管 — modify 走 KickoffStageExecutor 新 case "modify" + RunKickoffModifyAsync；
+        // restart 走 KickoffStageExecutor 新 case "restart" + KickoffStageBridge re-entry。
         var lowerDecision = decision.ToLower();
         if (group.PipelineFrameworkStateJson != null
-            && (lowerDecision == "continue" || lowerDecision == "stop"))
+            && (lowerDecision == "continue" || lowerDecision == "stop"
+                || lowerDecision == "modify" || lowerDecision == "restart"))
         {
             var workflowResolver = scope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
             if (await workflowResolver.GetUseFrameworkPipelineAsync(ct))
@@ -826,10 +828,11 @@ public class MeetingOrchestrationService(
         var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
         var tgs   = serviceProvider.GetRequiredService<TaskGroupService>();
 
-        // Stage 55A（議題 G3 解法）：Pipeline path 接管 continue / stop button — modify 走 legacy
+        // Stage 55A（議題 G3 解法）：Pipeline path 接管 continue / stop button
+        // Stage 60-FF 五十五（議題 H1 收口）：modify 也擴入 Pipeline path 接管 — DesignStageExecutor 新 case "modify" + RunDesignModifyAsync。
         var lowerDecision = decision.ToLower();
         if (group.PipelineFrameworkStateJson != null
-            && (lowerDecision == "continue" || lowerDecision == "stop"))
+            && (lowerDecision == "continue" || lowerDecision == "stop" || lowerDecision == "modify"))
         {
             var workflowResolver = scope.ServiceProvider.GetRequiredService<Configuration.WorkflowSettingsResolver>();
             if (await workflowResolver.GetUseFrameworkPipelineAsync(ct))

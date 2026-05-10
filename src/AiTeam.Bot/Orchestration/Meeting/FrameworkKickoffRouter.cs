@@ -1,10 +1,12 @@
 using System.Text.Json;
+using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Orchestration.Hitl;
 using AiTeam.Bot.Services;
 using AiTeam.Bot.Workflows.Kickoff;
+using AiTeam.Bot.Workflows.Pipeline;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
@@ -243,6 +245,37 @@ public class FrameworkKickoffRouter(
             }
 
             return new KickoffMeetingOutcome(loopResult, kickoffTask.Id);
+        }
+        // Stage 60：Agent 不可恢復失敗 specific catch（在 generic catch 之前）— 先寫 task failed log + cleanup workspace + clear marker，
+        // 再 re-throw 讓 KickoffStageExecutor catch fire 第 7 routing（agent="Petra-Kickoff"）。
+        catch (Exception bizEx) when (bizEx is MeetingSubprocessFailureException or LlmApiFailureException)
+        {
+            logger.LogWarning(bizEx, "[Stage60] Kick-off Workflow Agent 不可恢復失敗（Group={Id}）— 將 re-throw 給 KickoffStageExecutor 接 routing", group.Id);
+
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = kickoffTask.Id,
+                Agent  = AgentNames.Kickoff,
+                Step   = $"Kick-off Agent 不可恢復失敗（framework path）：{bizEx.Message}",
+                Status = "failed"
+            });
+            taskRepo.UpdateStatus(kickoffTask, "failed");
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = kickoffTask.Id,
+                GroupId   = group.Id,
+                Title     = kickoffTask.Title,
+                AgentName = AgentNames.Kickoff,
+                Status    = "failed"
+            });
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = AgentNames.Pm,
+                Status           = "error",
+                CurrentTaskTitle = $"Kick-off Agent 不可恢復失敗：{bizEx.Message}"
+            });
+            throw;  // re-throw — KickoffStageExecutor.HandleEntryAsync 外圍 catch 接 → fire routing
         }
         catch (Exception ex)
         {
@@ -521,6 +554,12 @@ public class FrameworkKickoffRouter(
                 logger.LogError(
                     "[Stage50] WorkflowErrorEvent: sessionId={Id}, exception={Exception}",
                     sessionId, errorEvent.Exception?.ToString() ?? "(null)");
+
+                // Stage 60：偵測 Agent 不可恢復失敗業務 exception → throw 出讓上層 HandleKickoffMeetingAsync catch fire 第 7 routing
+                var subprocessFail = WorkflowExceptionHelper.FindInner<MeetingSubprocessFailureException>(errorEvent.Exception);
+                if (subprocessFail is not null) throw subprocessFail;
+                var apiFail = WorkflowExceptionHelper.FindInner<LlmApiFailureException>(errorEvent.Exception);
+                if (apiFail is not null) throw apiFail;
             }
             else if (ev is ExecutorFailedEvent failedEvent)
             {
@@ -612,6 +651,136 @@ public class FrameworkKickoffRouter(
         logger.LogInformation(
             "[Stage51] FinishKickoffAsync 完成（Group={Id}，decision={Decision}，rounds={Rounds}）",
             groupId, loopResult.Decision, loopResult.TotalRounds);
+    }
+
+    // ============================================================
+    //  Stage 60-FF 五十五：Modify path 真切遷 framework Pipeline
+    // ============================================================
+
+    /// <summary>
+    /// Stage 60：framework Pipeline KickoffStageExecutor.HandleResponseAsync case "modify" 呼叫此 method 跑 modify 一輪。
+    ///
+    /// 設計（議題 C2 收口 — Roadmap 拍板「真切遷移」實質意義 = entry 改走 Pipeline framework lifecycle）：
+    ///   - 內部委派既有 KickoffMeetingService.ModifyTaskPlanAsync — 共用 Petra session resume + modify prompt + JSON parse 邏輯（避免雙寫漂移）
+    ///   - 「真切 framework」體現：entry 在 Pipeline KickoffStageExecutor（不再經 MeetingOrchestrationService.HandleKickoffConfirmedAsync legacy switch case "modify"），
+    ///     subprocess 失敗自動 fail-fast throw MeetingSubprocessFailureException → KickoffStageExecutor 外圍 catch fire 第 7 routing
+    ///   - 對齊 Roadmap 開場提醒「Stage 51 KickoffMidInterrupt 是 Round 邊界中途介入 vs Stage 60 modify 是 finalize 後 Christ 主動 modify」— 不盲抄 Stage 51 pattern
+    ///
+    /// throw：subprocess 失敗 / API 失敗時 propagate MeetingSubprocessFailureException / LlmApiFailureException 給上層 KickoffStageExecutor 接 routing。
+    /// </summary>
+    public async Task<ModifyResult> RunKickoffModifyAsync(
+        TaskGroup group, string christFeedback, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var kickoffMeeting = scope.ServiceProvider.GetRequiredService<KickoffMeetingService>();
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        logger.LogInformation("[Stage60] Framework Kickoff modify executor 啟動（Group={Id}）", group.Id);
+
+        // 委派 KickoffMeetingService.ModifyTaskPlanAsync — Petra session resume + modify prompt + JSON parse + ModifyResult 回傳
+        // MeetingCommons fail-fast throw 自動 propagate 給呼叫方（KickoffStageExecutor）
+        return await kickoffMeeting.ModifyTaskPlanAsync(group, christFeedback, owner, repo, ct);
+    }
+
+    /// <summary>
+    /// Stage 60：modify 完成後 re-open BossInteraction（小 impact 重開 kickoff embed / 大 impact 重開 restart embed）。
+    /// 由 KickoffStageExecutor.HandleResponseAsync case "modify" 在寫 DB 後呼叫。
+    /// </summary>
+    public async Task CreateKickoffConfirmationAfterModifyAsync(
+        TaskGroup freshGroup, ModifyResult modifyResult, CancellationToken ct)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null)
+        {
+            logger.LogError("[Stage60] CreateKickoffConfirmationAfterModifyAsync: 找不到 CEO 頻道（Group={Id}）", freshGroup.Id);
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var commandHandler = scope.ServiceProvider.GetRequiredService<CommandHandler>();
+
+        if (modifyResult.Impact == "large")
+        {
+            // large-impact 路徑：重開 restart embed + buttons（對齊 legacy MeetingOrchestrationService line 715-748）
+            var embed = new EmbedBuilder()
+                .WithTitle("⚠️ Petra 評估：建議重新召開 Kick-off")
+                .WithColor(Color.Orange)
+                .AddField("任務", freshGroup.Title)
+                .AddField("Petra 評估", modifyResult.PetraFullOutput.Length > 800
+                    ? modifyResult.PetraFullOutput[..800] + "..." : modifyResult.PetraFullOutput)
+                .WithFooter("請選擇：重新開會 或 取消任務")
+                .WithTimestamp(DateTimeOffset.UtcNow)
+                .Build();
+
+            var buttons = new ComponentBuilder()
+                .WithButton("🔄 重新召開 Kick-off", $"kickoff_restart_{freshGroup.Id}", ButtonStyle.Primary)
+                .WithButton("⏹️ 取消任務",          $"kickoff_stop_{freshGroup.Id}",    ButtonStyle.Danger)
+                .Build();
+
+            var reMsg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+            commandHandler.RegisterKickoffConfirmation(reMsg.Id, freshGroup.Id,
+                modifyResult.RevisedPlan ?? freshGroup.TaskPlan ?? "");
+
+            _ = interactionService.CreateInteractionAsync(
+                "kickoff",
+                title:                $"Kickoff 確認：{freshGroup.Title}",
+                description:          modifyResult.RevisedPlan ?? freshGroup.TaskPlan ?? "",
+                project:              freshGroup.Project,
+                agentName:            AgentNames.Pm,
+                availableActionsJson: InteractionService.KickoffActionsJson,
+                contextJson:          JsonSerializer.Serialize(new
+                {
+                    channelId = ceoChannel.Id.ToString(),
+                    groupId   = freshGroup.Id.ToString()
+                }),
+                discordMessageId: (decimal)reMsg.Id,
+                taskGroupId:      freshGroup.Id);
+        }
+        else
+        {
+            // small-impact：重開 kickoff embed + 3 buttons（對齊 legacy line 752-789）
+            var planPreview = (modifyResult.RevisedPlan ?? freshGroup.TaskPlan ?? "").Length > 500
+                ? (modifyResult.RevisedPlan ?? freshGroup.TaskPlan ?? "")[..500] + "\n..."
+                : (modifyResult.RevisedPlan ?? freshGroup.TaskPlan ?? "");
+
+            var embed = new EmbedBuilder()
+                .WithTitle("✏️ 任務計劃書已更新")
+                .WithColor(Color.Green)
+                .AddField("任務", freshGroup.Title)
+                .AddField("更新後計劃書摘要", planPreview)
+                .WithFooter("▶️ 繼續 = 進入開發；⏹️ 停止 = 取消；✏️ 修改 = 繼續調整")
+                .WithTimestamp(DateTimeOffset.UtcNow)
+                .Build();
+
+            var buttons = new ComponentBuilder()
+                .WithButton("▶️ 繼續開發",  $"kickoff_continue_{freshGroup.Id}", ButtonStyle.Success)
+                .WithButton("⏹️ 停止任務",  $"kickoff_stop_{freshGroup.Id}",     ButtonStyle.Danger)
+                .WithButton("✏️ 修改計劃書", $"kickoff_modify_{freshGroup.Id}",  ButtonStyle.Secondary)
+                .Build();
+
+            var reMsg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+            commandHandler.RegisterKickoffConfirmation(reMsg.Id, freshGroup.Id, planPreview);
+
+            _ = interactionService.CreateInteractionAsync(
+                "kickoff",
+                title:                $"Kickoff 確認：{freshGroup.Title}",
+                description:          planPreview,
+                project:              freshGroup.Project,
+                agentName:            AgentNames.Pm,
+                availableActionsJson: InteractionService.KickoffActionsJson,
+                contextJson:          JsonSerializer.Serialize(new
+                {
+                    channelId = ceoChannel.Id.ToString(),
+                    groupId   = freshGroup.Id.ToString()
+                }),
+                discordMessageId: (decimal)reMsg.Id,
+                taskGroupId:      freshGroup.Id);
+        }
+
+        logger.LogInformation("[Stage60] Framework Kickoff modify 確認 BossInteraction 已重開（Group={Id}, impact={Impact}）",
+            freshGroup.Id, modifyResult.Impact);
     }
 
     private async Task<TaskGroup?> GetFreshGroupAsync(Guid groupId, CancellationToken ct)

@@ -1,9 +1,11 @@
 using System.Text.Json;
+using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Bot.Workflows.Design;
+using AiTeam.Bot.Workflows.Pipeline;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
@@ -262,6 +264,36 @@ public class FrameworkDesignRouter(
 
             return new DesignMeetingOutcome(loopResult, designTask.Id, workingDir);
         }
+        // Stage 60：Agent 不可恢復失敗 specific catch（在 generic catch 之前）— 寫 task failed log + re-throw 給 DesignStageExecutor 接 routing
+        catch (Exception bizEx) when (bizEx is MeetingSubprocessFailureException or LlmApiFailureException)
+        {
+            logger.LogWarning(bizEx, "[Stage60] Design Workflow Agent 不可恢復失敗（Group={Id}）— 將 re-throw 給 DesignStageExecutor 接 routing", group.Id);
+
+            taskRepo.AddLog(new TaskLog
+            {
+                TaskId = designTask.Id,
+                Agent  = AgentNames.Design,
+                Step   = $"設計規劃 Agent 不可恢復失敗（framework path）：{bizEx.Message}",
+                Status = "failed"
+            });
+            taskRepo.UpdateStatus(designTask, "failed");
+            await taskRepo.SaveAsync(CancellationToken.None);
+            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
+            {
+                TaskId    = designTask.Id,
+                GroupId   = group.Id,
+                Title     = designTask.Title,
+                AgentName = AgentNames.Design,
+                Status    = "failed"
+            });
+            await pushService.PushAgentStatusAsync(new AgentStatusViewModel
+            {
+                AgentName        = AgentNames.Pm,
+                Status           = "error",
+                CurrentTaskTitle = $"設計規劃 Agent 不可恢復失敗：{bizEx.Message}"
+            });
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[Stage52] Design Workflow 失敗（Group={Id}）", group.Id);
@@ -475,6 +507,12 @@ public class FrameworkDesignRouter(
                 logger.LogError(
                     "[Stage52] WorkflowErrorEvent: sessionId={Id}, exception={Exception}",
                     sessionId, errorEvent.Exception?.ToString() ?? "(null)");
+
+                // Stage 60：偵測 Agent 不可恢復失敗業務 exception → throw 出讓上層 HandleDesignMeetingAsync catch fire 第 7 routing
+                var subprocessFail = WorkflowExceptionHelper.FindInner<MeetingSubprocessFailureException>(errorEvent.Exception);
+                if (subprocessFail is not null) throw subprocessFail;
+                var apiFail = WorkflowExceptionHelper.FindInner<LlmApiFailureException>(errorEvent.Exception);
+                if (apiFail is not null) throw apiFail;
             }
             else if (ev is ExecutorFailedEvent failedEvent)
             {
@@ -703,6 +741,90 @@ public class FrameworkDesignRouter(
 
         logger.LogInformation(
             "[Stage55A] CleanupWorkingDirAndMarkerAsync 完成（Group={Id}）", groupId);
+    }
+
+    // ============================================================
+    //  Stage 60-FF 五十五：Modify path 真切遷 framework Pipeline
+    // ============================================================
+
+    /// <summary>
+    /// Stage 60：framework Pipeline DesignStageExecutor.HandleResponseAsync case "modify" 呼叫此 method 跑 modify 一輪。
+    ///
+    /// 設計（議題 H1 收口 — FrameworkDesignRouter `:34` 註解既有 TODO「Stage 55+ 真切 framework HITL」此 Stage 收口）：
+    ///   - 內部委派既有 DesignMeetingService.ModifyDesignPlanAsync — 共用 Petra session resume + modify prompt + JSON parse 邏輯（避免雙寫漂移）
+    ///   - 「真切 framework」體現：entry 在 Pipeline DesignStageExecutor，subprocess 失敗自動 fail-fast throw → 接 routing
+    ///
+    /// throw：subprocess 失敗 / API 失敗時 propagate 給上層 DesignStageExecutor 接 routing。
+    /// </summary>
+    public async Task<ModifyResult> RunDesignModifyAsync(
+        TaskGroup group, string christFeedback, string petraSessionId, CancellationToken ct)
+    {
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var designMeeting = scope.ServiceProvider.GetRequiredService<DesignMeetingService>();
+
+        var owner = _gitHub.Owner;
+        var repo  = string.IsNullOrWhiteSpace(group.Project) ? _gitHub.DefaultRepo : group.Project;
+
+        logger.LogInformation("[Stage60] Framework Design modify executor 啟動（Group={Id}）", group.Id);
+
+        return await designMeeting.ModifyDesignPlanAsync(group, christFeedback, petraSessionId, owner, repo, ct);
+    }
+
+    /// <summary>
+    /// Stage 60：modify 完成後 re-open BossInteraction（Design 對齊 legacy line 904-937 行為，3 buttons continue/stop/modify）。
+    /// </summary>
+    public async Task CreateDesignConfirmationAfterModifyAsync(
+        TaskGroup freshGroup, ModifyResult modifyResult, string petraSessionId, CancellationToken ct)
+    {
+        var ceoChannel = FindChannel(_discord.Channels.CeoChannel);
+        if (ceoChannel is null)
+        {
+            logger.LogError("[Stage60] CreateDesignConfirmationAfterModifyAsync: 找不到 CEO 頻道（Group={Id}）", freshGroup.Id);
+            return;
+        }
+
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var commandHandler = scope.ServiceProvider.GetRequiredService<CommandHandler>();
+
+        var planPreview = (modifyResult.RevisedPlan ?? freshGroup.DesignPlan ?? "").Length > 600
+            ? (modifyResult.RevisedPlan ?? freshGroup.DesignPlan ?? "")[..600] + "\n..."
+            : (modifyResult.RevisedPlan ?? freshGroup.DesignPlan ?? "");
+
+        var embed = new EmbedBuilder()
+            .WithTitle("✏️ 設計規劃書已修改")
+            .WithColor(Color.Green)
+            .AddField("任務", freshGroup.Title)
+            .AddField("修改後設計規劃書摘要", planPreview)
+            .WithFooter("▶️ 繼續 = 進入 Dev_plan；⏹️ 停止 = 取消；✏️ 修改 = 繼續調整")
+            .WithTimestamp(DateTimeOffset.UtcNow)
+            .Build();
+
+        var buttons = new ComponentBuilder()
+            .WithButton("▶️ 繼續開發", $"design_continue_{freshGroup.Id}", ButtonStyle.Success)
+            .WithButton("⏹️ 停止任務", $"design_stop_{freshGroup.Id}",    ButtonStyle.Danger)
+            .WithButton("✏️ 修改設計", $"design_modify_{freshGroup.Id}",  ButtonStyle.Secondary)
+            .Build();
+
+        var reMsg = await ceoChannel.SendMessageAsync(embed: embed, components: buttons);
+        commandHandler.RegisterDesignConfirmation(reMsg.Id, freshGroup.Id, petraSessionId, null);
+
+        _ = interactionService.CreateInteractionAsync(
+            "design",
+            title:                $"設計確認：{freshGroup.Title}",
+            description:          planPreview,
+            project:              freshGroup.Project,
+            agentName:            AgentNames.Pm,
+            availableActionsJson: InteractionService.DesignActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId     = ceoChannel.Id.ToString(),
+                groupId       = freshGroup.Id.ToString(),
+                petraSessionId
+            }),
+            discordMessageId: (decimal)reMsg.Id,
+            taskGroupId:      freshGroup.Id);
+
+        logger.LogInformation("[Stage60] Framework Design modify 確認 BossInteraction 已重開（Group={Id}）", freshGroup.Id);
     }
 }
 

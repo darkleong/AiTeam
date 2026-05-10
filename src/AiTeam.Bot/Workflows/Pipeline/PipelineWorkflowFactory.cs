@@ -106,6 +106,10 @@ public sealed class PipelineWorkflowFactory
         var qaAgentApiFailurePort       = RequestPort.Create<QaAgentApiFailureRequest,       QaAgentApiFailureResponse>      (QaAgentApiFailurePortId);
         var docAgentApiFailurePort      = RequestPort.Create<DocAgentApiFailureRequest,      DocAgentApiFailureResponse>     (DocAgentApiFailurePortId);
 
+        // Stage 60-FF 五十五：Meeting subprocess failure per-stage 2 RequestPort（Petra-Kickoff / Petra-Design）對齊 Stage 58 per-stage pattern
+        var kickoffAgentApiFailurePort  = RequestPort.Create<KickoffAgentApiFailureRequest,  KickoffAgentApiFailureResponse> (KickoffAgentApiFailurePortId);
+        var designAgentApiFailurePort   = RequestPort.Create<DesignAgentApiFailureRequest,   DesignAgentApiFailureResponse>  (DesignAgentApiFailurePortId);
+
         return new WorkflowBuilder(start)
             // Stage 55A：Start → KickoffStage（parent group） / DevPlanStage（sub-task）— 兩出口
             .AddEdge(start, kickoffStage)                  // Stage 55A：parent group 入口
@@ -176,6 +180,11 @@ public sealed class PipelineWorkflowFactory
             .AddEdge(qaAgentApiFailurePort,       qaStage)       // QaAgentApiFailureResponse → QaStageExecutor.HandleAgentApiFailureResponseAsync
             .AddEdge(docStage,      docAgentApiFailurePort)      // DocAgentApiFailureRequest → port
             .AddEdge(docAgentApiFailurePort,      docStage)      // DocAgentApiFailureResponse → DocStageExecutor.HandleAgentApiFailureResponseAsync
+            // Stage 60-FF 五十五：Meeting subprocess failure per-stage 2 RequestPort 雙向（KickoffStage / DesignStage Petra subprocess fail-fast 接 routing）
+            .AddEdge(kickoffStage,  kickoffAgentApiFailurePort)  // KickoffAgentApiFailureRequest → port
+            .AddEdge(kickoffAgentApiFailurePort,  kickoffStage)  // KickoffAgentApiFailureResponse → KickoffStageExecutor.HandleAgentApiFailureResponseAsync
+            .AddEdge(designStage,   designAgentApiFailurePort)   // DesignAgentApiFailureRequest → port
+            .AddEdge(designAgentApiFailurePort,   designStage)   // DesignAgentApiFailureResponse → DesignStageExecutor.HandleAgentApiFailureResponseAsync
             // 終結 — NotifyMerge（happy path）/ fallback / 55A：含 Kickoff/Design Stage Executor 都可 YieldOutput PipelineLoopResult intervention
             .WithOutputFrom(notifyMerge, fallback, kickoffStage, designStage, devPlanStage, devStage, reviewerStage, qaStage, devFixStage)
             .Build();
@@ -208,6 +217,10 @@ public sealed class PipelineWorkflowFactory
     public const string ReviewerAgentApiFailurePortId = "Pipeline-ReviewerAgentApiFailure";
     public const string QaAgentApiFailurePortId       = "Pipeline-QaAgentApiFailure";
     public const string DocAgentApiFailurePortId      = "Pipeline-DocAgentApiFailure";
+
+    // Stage 60-FF 五十五：Meeting subprocess failure per-stage 2 RequestPort PortId（重用第 7 routing — agent="Petra-Kickoff" / "Petra-Design" 區分）
+    public const string KickoffAgentApiFailurePortId  = "Pipeline-KickoffAgentApiFailure";
+    public const string DesignAgentApiFailurePortId   = "Pipeline-DesignAgentApiFailure";
 
     /// <summary>建立 framework CheckpointManager（綁 PipelineCheckpointStore）。
     /// FrameworkPipelineRouter 用此 manager 跑 InProcessExecution.RunStreamingAsync(...) / ResumeStreamingAsync(...)。

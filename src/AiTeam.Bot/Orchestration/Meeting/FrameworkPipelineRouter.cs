@@ -401,6 +401,26 @@ public sealed class FrameworkPipelineRouter
             $"DocAgentApiFailure(action={action})",
             ct);
 
+    // Stage 60-FF 五十五：Meeting subprocess failure per-stage 2 typed thin wrapper（agent="Petra-Kickoff" / "Petra-Design" 區分）
+
+    /// <summary>Stage 60：Kickoff Petra subprocess 失敗 button callback resume。</summary>
+    public Task ResumeAfterKickoffAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.KickoffAgentApiFailurePortId,
+            new KickoffAgentApiFailureResponse(action),
+            $"KickoffAgentApiFailure(action={action})",
+            ct);
+
+    /// <summary>Stage 60：Design Petra subprocess 失敗 button callback resume。</summary>
+    public Task ResumeAfterDesignAgentApiFailureAsync(TaskGroup group, string action, CancellationToken ct)
+        => ResumeWithResponseAsync(
+            group,
+            PipelineWorkflowFactory.DesignAgentApiFailurePortId,
+            new DesignAgentApiFailureResponse(action),
+            $"DesignAgentApiFailure(action={action})",
+            ct);
+
     /// <summary>
     /// Stage 55A：Pipeline ResumeStreamingAsync 共用 helper — ResumeAfterAgentAsync / ResumeAfterKickoff/DesignAsync 共用核心邏輯。
     /// 流程：LoadFromDb → ResumeStreamingAsync from latest → 找 expectedPortId 的 RequestInfoEvent → SendResponseAsync → 繼續 watch 直到下個 yield/finalize。

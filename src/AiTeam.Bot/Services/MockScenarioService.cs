@@ -226,6 +226,33 @@ public class MockScenarioService(
             MockClaudeCodeService.FailScenario = "agent_api_failure";
             MockClaudeCodeService.ResetScenarioRoundCounters();
         }
+        // ── Stage 60-FF 五十五：v4 邊角 user actions legacy 遷移 + meeting subprocess fail-fast 4 alias 場景 ──
+        // 機制：① framework_modify_taskplan_happy / framework_modify_designplan_happy — Christ 點 modify → KickoffStageExecutor / DesignStageExecutor case "modify"
+        //       → RunKickoffModifyAsync / RunDesignModifyAsync → MockClaudeCodeService.RunMeetingSessionAsync 開頭 modify prompt 偵測回 ≥ 4000 字 mock plan
+        //       → DB TaskPlan / DesignPlan 更新 ≥ 4000 字 + BossInteraction 重開（非 silent skip placeholder）
+        //   ② meeting_subprocess_failure — MeetingCommons.RunAgentTurnAsync 三條 swallow path fail-fast throw 治本（Trial_v7 silent failure 收口）→ KickoffStageExecutor / DesignStageExecutor 外圍
+        //      catch → fire BossInteraction agent_api_failure_intervention agent="Petra-Kickoff"（重用 Stage 58 第 7 routing）→ MockMode auto-approve api_failure_continue 推進
+        //   ③ meeting_modify_during_subprocess_failure — Christ 點 modify 同時 subprocess 失敗 → 走第 7 routing 不 silent skip（Trial_v7 反例修根因）
+        else if (scenario == "framework_modify_taskplan_happy")
+        {
+            MockClaudeCodeService.FailScenario = "framework_modify_taskplan_happy";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "framework_modify_designplan_happy")
+        {
+            MockClaudeCodeService.FailScenario = "framework_modify_designplan_happy";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "meeting_subprocess_failure")
+        {
+            MockClaudeCodeService.FailScenario = "meeting_subprocess_failure";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
+        else if (scenario == "meeting_modify_during_subprocess_failure")
+        {
+            MockClaudeCodeService.FailScenario = "meeting_modify_during_subprocess_failure";
+            MockClaudeCodeService.ResetScenarioRoundCounters();
+        }
 
         var (workflowType, workflowLabel, initialStep) = scenario switch
         {
@@ -305,6 +332,11 @@ public class MockScenarioService(
             "framework_pipeline_reviewer_fix_loop_limit"        => (WorkflowType.NewFeature, "Stage57-ReviewerFixLoopLimit",       "Kickoff"),
             // Stage 58：FF 五十三 Agent API 失敗容錯性
             "framework_pipeline_agent_api_failure"              => (WorkflowType.NewFeature, "Stage58-AgentApiFailure",            "Kickoff"),
+            // Stage 60-FF 五十五：v4 邊角 user actions legacy 遷移 + meeting subprocess fail-fast 4 場景
+            "framework_modify_taskplan_happy"                   => (WorkflowType.NewFeature, "Stage60-ModifyTaskPlanHappy",        "Kickoff"),
+            "framework_modify_designplan_happy"                 => (WorkflowType.NewFeature, "Stage60-ModifyDesignPlanHappy",      "Kickoff"),
+            "meeting_subprocess_failure"                        => (WorkflowType.NewFeature, "Stage60-MeetingSubprocessFailure",   "Kickoff"),
+            "meeting_modify_during_subprocess_failure"          => (WorkflowType.NewFeature, "Stage60-ModifyDuringSubprocessFail", "Kickoff"),
             _                               => (WorkflowType.NewFeature,      "新功能",                    "Dev_plan")
         };
 

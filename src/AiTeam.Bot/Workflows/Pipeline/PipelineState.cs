@@ -314,6 +314,29 @@ public sealed record DocAgentApiFailureRequest(
 public sealed record DocAgentApiFailureResponse(
     [property: JsonPropertyName("action")] string Action);
 
+// ── Stage 60-FF 五十五：Meeting subprocess failure per-stage 2 RequestPort records（Petra-Kickoff / Petra-Design） ──
+//
+// Trial_v7 結案揭露 silent failure 治本 — MeetingCommons.RunAgentTurnAsync 三條 swallow path 改 throw MeetingSubprocessFailureException
+// → KickoffStageExecutor / DesignStageExecutor sync await router 外圍 catch → fire agent_api_failure_intervention BossInteraction
+// （agent="Petra-Kickoff" / "Petra-Design"）+ SendMessage Kickoff/DesignAgentApiFailureRequest yield 等 Christ 真三選（continue / retry / abort）。
+// 對齊 Stage 58 既有 4 RequestPort per-stage pattern + framework type-bound dispatch 紀律（避免 collision）。
+
+/// <summary>Stage 60：Kickoff stage Petra subprocess 失敗 RequestPort 請求 payload。對應 BossInteraction type "agent_api_failure_intervention" + context.agent="Petra-Kickoff"。</summary>
+public sealed record KickoffAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 60：Kickoff stage Petra subprocess 失敗回傳 payload。Action = "continue" / "retry" / "abort"（從 api_failure_continue / _retry / _abort 去前綴）。</summary>
+public sealed record KickoffAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
+/// <summary>Stage 60：Design stage Petra subprocess 失敗 RequestPort 請求 payload。對應 BossInteraction type "agent_api_failure_intervention" + context.agent="Petra-Design"。</summary>
+public sealed record DesignAgentApiFailureRequest(
+    [property: JsonPropertyName("groupId")] Guid GroupId);
+
+/// <summary>Stage 60：Design stage Petra subprocess 失敗回傳 payload。Action = "continue" / "retry" / "abort"。</summary>
+public sealed record DesignAgentApiFailureResponse(
+    [property: JsonPropertyName("action")] string Action);
+
 /// <summary>Stage 55B：Split task proposal RequestPort 請求 payload（Stage 46 Petra 拆 task 機制）。
 /// 對應既有 BossInteraction type "split_task_proposal" — buttons: split_accept / _modify / _reject / _abort。</summary>
 public sealed record SplitTaskProposalRequest(

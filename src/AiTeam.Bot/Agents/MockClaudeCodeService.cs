@@ -161,6 +161,51 @@ public class MockClaudeCodeService(
             sessionId, isFirstMessage);
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
 
+        // Stage 60-FF 五十五：meeting subprocess failure mock injection
+        // 機制：FailScenario="meeting_subprocess_failure" → RunMeetingSessionAsync 開頭回 Success=false → MeetingCommons.RunAgentTurnAsync 改 throw
+        // MeetingSubprocessFailureException → KickoffStageExecutor 外圍 catch → fire agent_api_failure_intervention agent="Petra-Kickoff"。
+        // 一次性消耗（throw 後重設 null）— 對齊 split_task_subtask_fail_intervention 等 mock 場景模式，避免 retry path 重複觸發。
+        if (FailScenario == "meeting_subprocess_failure")
+        {
+            logger.LogWarning("[MockMode][Stage60] meeting_subprocess_failure 觸發 — 回 Success=false 模擬 subprocess 失敗（一次性，sessionId={Id}）", sessionId);
+            FailScenario = null;
+            return new ClaudeCodeResult(false, "[MOCK] subprocess failure simulated（meeting_subprocess_failure）", 0, "");
+        }
+        // Stage 60：modify path subprocess 失敗 — 只在 modify prompt 觸發（prompt 含「老闆要求修改」）
+        // 對應場景 D meeting_modify_during_subprocess_failure：modify happy 走完後 inject failure
+        if (FailScenario == "meeting_modify_during_subprocess_failure"
+            && prompt.Contains("老闆要求修改"))
+        {
+            logger.LogWarning("[MockMode][Stage60] meeting_modify_during_subprocess_failure 觸發 — modify path 回 Success=false（一次性，sessionId={Id}）", sessionId);
+            FailScenario = null;
+            return new ClaudeCodeResult(false, "[MOCK] modify subprocess failure simulated", 0, "");
+        }
+        // Stage 60：framework_modify_taskplan_happy / framework_modify_designplan_happy
+        // 觸發點 — modify prompt（prompt 含「老闆要求修改」）回完整 modify result（≥ 4000 字）
+        if ((FailScenario == "framework_modify_taskplan_happy" || FailScenario == "framework_modify_designplan_happy")
+            && prompt.Contains("老闆要求修改"))
+        {
+            logger.LogInformation("[MockMode][Stage60] {Scenario} modify path 回完整 modify result（sessionId={Id}）", FailScenario, sessionId);
+            // 一次性消耗（modify 完成後 BossInteraction 重開，不再觸發此分支）
+            FailScenario = null;
+            // build ≥ 4000 字 mock revised plan 文字（驗 DB TaskPlan / DesignPlan ≥ 4000）
+            var bigPlan = new System.Text.StringBuilder();
+            bigPlan.AppendLine("# [MOCK] Petra 修改後計劃書（Stage 60 framework modify path）");
+            bigPlan.AppendLine();
+            bigPlan.AppendLine("根據老闆修改意見全面更新如下：");
+            bigPlan.AppendLine();
+            for (var i = 1; i <= 80; i++)
+            {
+                bigPlan.AppendLine($"## 章節 {i}：詳細內容說明（mock）");
+                bigPlan.AppendLine($"這是 Stage 60 mock 修改 Round 後的第 {i} 章節，涵蓋完整變更說明、影響面分析、執行策略、風險評估。對齊 framework Pipeline modify lifecycle。");
+                bigPlan.AppendLine();
+            }
+            var revisedPlan = bigPlan.ToString().Replace("\"", "\\\"").Replace("\n", "\\n");
+            var modifyOutput = "[MOCK] Petra modify 完成（Stage 60 framework path）\n" +
+                $"{{\"impact\":\"small\",\"revised_plan\":\"{revisedPlan}\"}}";
+            return new ClaudeCodeResult(true, modifyOutput, 0, "");
+        }
+
         // Stage 30：申訴環節 mock 分支（優先於 agentName 判斷）
         // FailScenario 失敗路徑已在 Pm/ 各 service 早返回，不會到達此處
         //
