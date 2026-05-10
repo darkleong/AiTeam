@@ -223,9 +223,51 @@ public class DashboardTaskService(AppDbContext db)
                 })
                 .ToListAsync(cancellationToken);
 
+            // Stage 61-FF 四十：補 SubTasks 給 epic 主 group（Stage 46 後端漏 paged query 補強，揭露於 Stage 61 場景 7 自驗）
+            // paged 範圍可能跨 page（epic 在 page 1 / sub-task 在 page 2）→ 額外 query ParentGroupId IN (...) 取 sub-task
+            await PopulateSubTasksForEpicsAsync(items, cancellationToken);
+
             return new PagedResult<TaskGroupDto>(items, total);
         }
         finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// Stage 61-FF 四十：對 items 中的 epic 主 group（ParentGroupId is null）— 額外 query sub-task by ParentGroupId IN (...)
+    /// 組裝進 SubTasks 集合。讓 IsEpic 計算欄位生效。
+    /// </summary>
+    private async Task PopulateSubTasksForEpicsAsync(
+        List<TaskGroupDto> items, CancellationToken cancellationToken)
+    {
+        var epicIds = items.Where(g => g.ParentGroupId is null).Select(g => g.Id).ToList();
+        if (epicIds.Count == 0) return;
+
+        var subs = await db.TaskGroups
+            .AsNoTracking()
+            .Where(g => g.ParentGroupId != null && epicIds.Contains(g.ParentGroupId.Value))
+            .OrderBy(g => g.PhaseNumber)
+            .Select(g => new TaskGroupDto
+            {
+                Id               = g.Id,
+                Title            = g.Title,
+                Status           = g.Status,
+                ParentGroupId    = g.ParentGroupId,
+                PhaseNumber      = g.PhaseNumber,
+                PhaseDescription = g.PhaseDescription,
+                EpicPaused       = g.EpicPaused,
+                CreatedAt        = g.CreatedAt,
+            })
+            .ToListAsync(cancellationToken);
+
+        if (subs.Count == 0) return;
+
+        var subsByParent = subs.GroupBy(s => s.ParentGroupId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        foreach (var top in items.Where(g => g.ParentGroupId is null))
+        {
+            if (subsByParent.TryGetValue(top.Id, out var bag))
+                top.SubTasks = bag;
+        }
     }
 
     /// <summary>取得單一 TaskGroup 的最新快照（Pipeline View 折疊面板即時更新用）。</summary>
@@ -236,7 +278,7 @@ public class DashboardTaskService(AppDbContext db)
         await _lock.WaitAsync(cancellationToken);
         try
         {
-            return await db.TaskGroups
+            var group = await db.TaskGroups
                 .AsNoTracking()
                 .Where(g => g.Id == id)
                 .Select(g => new TaskGroupDto
@@ -276,6 +318,14 @@ public class DashboardTaskService(AppDbContext db)
                     PhaseDescription    = g.PhaseDescription,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
+
+            // Stage 61-FF 四十：對 epic 主 group 補抓 sub-task（Drawer PipelineView Epic section 顯示用）
+            if (group is not null && group.ParentGroupId is null)
+            {
+                await PopulateSubTasksForEpicsAsync([group], cancellationToken);
+            }
+
+            return group;
         }
         finally { _lock.Release(); }
     }
