@@ -217,6 +217,27 @@ Christ 提出 **Capability-based Multi-Agent Architecture** 構想（受 MCP 啟
 
 ⭐ Victoria **只接觸 Petra**（不直接呼叫 Cody/Vera/Quinn/Sage/Rosa/Demi），Workers 是 Petra 的 pool。
 
+#### Trial_v7 揭露補強：Victoria scan lazy 化具體 ROI 量化（2026-05-10）
+
+Trial_v7 觀察 Victoria CEO 階段 cost **+224% vs Trial_v6 baseline**（$0.0567 → $0.1838 / output tokens 1,400 → 2,807 / 同 1 次成功 + 同 prompt + 同模型），根因是 Victoria proposal 內含「已掃描 codebase 確認受影響範圍 5 個主要元件 + MudBlazor ISnackbar 基礎設施已到位但 Error 路徑尚未接入 toast」這層 codebase scan 結果。
+
+**當前 hierarchical static 架構下 Victoria scan 的三個系統性問題**：
+1. **eager scan 浪費 cost** — Victoria 不知道下游真正要哪個面向就先全掃
+2. **scan 結果重複** — Kickoff 5 人會議 4 Agent + Petra 又各自 clone repo 重 scan
+3. **scan 範圍隨 codebase 線性擴大** — Stage 49-58 codebase 變大後 Victoria cost 持續漲（cost +224% 訊號）
+
+**動態架構（本 FF）天生解這三個問題**：
+| 問題 | 動態架構解法 |
+|---|---|
+| eager scan 浪費 | Lazy scan — 第一個被 Petra orchestrator 派工的 Agent 才 scan |
+| scan 重複 | 單一 scan 結果由 orchestrator broadcast |
+| 線性擴大 | scan 範圍隨任務需要 lazy 擴大，不被 codebase 大小拖累 |
+
+**ROI 量化維度**（Phase B spike 啟動時 evaluation criteria 之一）：
+- **單任務省 cost 估算**：~$0.1-0.3 / 任務（Victoria scan 移除）
+- **隨 codebase 持續變大線性擴大** — 長期 ROI 隨 codebase 規模放大
+- 對齊「挑戰 1 Victoria 角色 = Discord 秘書 / Router 純 facade」拍板既有方向，但補強具體 ROI 數字而非僅 design 方向
+
 #### 5 個關鍵挑戰拍板（2026-05-01）
 
 | 挑戰 | Christ 拍板 |
