@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.86
+> 版本：v7.87
 > 建立日期：2026-04-01
-> 最後更新：2026-05-10
+> 最後更新：2026-05-11
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
@@ -18,6 +18,8 @@
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
 > **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
+> **2026-05-11 v7.87：Stage 62 ✅ 完成（v3.51.0）— FF 三十六 Phase B Charter spike（v5 動態架構規劃文件 deliverable）** — 純文件 deliverable / main branch / 0 production code 改動 / 0 EF Migration / 0 DI 結構改動。**4 deliverable 完整**：① `01_Spike_Plan.md` 7 驗證項細節（Victoria Router / Petra 自主調度 / per-task session / Crash Recovery / Mock Gemini Flash / 遷移成本量化 / Hybrid 會議 trigger）+ 預測項（強信心 5 / 中信心 1 / 未知 1）② `02_Architecture_Wire.md` 4 層 Hierarchy 落具體 service / DI（含 per-task session 多 row table schema 候選 + Tool Set Capability attribute+interface hybrid 候選 + 9 Worker capability mapping）③ `03_v4_Code_Audit.md` 三類分類 + LoC 量化（**吸收 ~16,061 LoC ~26%** / 重寫 ~3,991 LoC + 925 prompt 行 ~7% / 全保留 ~38,700+ LoC ~67% — v4 投資保留 + 重寫 = 73% 對齊「換引擎不換車身」精神 + Aria 規劃預估吸收 ~6K 自省揭露補強對齊 +167% 超預估）④ `04_Stage_63_PoC_Roadmap_Draft.md` PoC 6 子項 + 5 向對照 + 規模 L / cost ~600-1000K / 驗收標準。**FF 動態**：✅ FF 五十七 / FF 五十八 / FF 五十九 / FF 六十（4 個 close 不做 — v5 動態架構吸收）+ FF 三十六 status 升「🟡 進行中 Phase B Charter spike」+ FF 五十四子項 2/3 「保留評估」（v5 重寫後哪些大檔仍存在）+ FF 二十五/四十六/四十八 「保留」（Cody Worker prompt 仍適用）。**8 條 Christ 拍板對齊**（Charter 文件 only / Charter main + PoC branch / 保留 v4 不動 / 保留 10 Agent / 同 prompt 任務 / Forge spike healthy 模式 / Stage 51 spike Charter 模板 / minor bump）。**5 Forge spike 自決點 Aria gate1 全通過**（per-task session 多 row table / Petra prompt 全砍 / Tool Set hybrid / wc -l Glob 量化 / docs/architecture/v5_charter/ 新資料夾）。**Top 5 重排**：FF 三十六 升 #1（進行中 Charter spike）/ Stage 63 PoC 候選 #2 / FF 五十四子項 2/3 #3 / 戰略大重評估候選 #4（Charter+PoC 後再啟動）/ 二十五/四十六/四十八 保留群組 #5。**戰略主軸**：Stage 62 Charter 通過 → Stage 63 PoC spike feature/v5-poc branch + 5 向對照 + 7 驗證項實證 = v5 動態架構 ROI 拍板實證。詳見 [Stage_62_Roadmap.md](Stage_62_Roadmap.md) + [v5_charter/](../architecture/v5_charter/) + [CHANGELOG v3.51.0](../../CHANGELOG.md#3510)。
+
 > **2026-05-10 v7.86：Trial_v8 結案 ⭐ 戰略級成功（連續 3 Trial 揭 6 🔴）vs 業務級失敗** — Kickoff Petra Round 1 escalate → Christ 點需要修改 → Petra modify subprocess `!result.Success` → **Stage 60 第 7 routing 真實首次觸發**（fire BossInteraction + 三選 actions ✓ 5 件全綠 — Trial_v7 揭 1 🔴 收口完整循環驗證）→ Christ 點 retry → **Stage 60 retry/abort path silent 卡死** → Aria SQL cancel 結案 / cost $1.2023 / 13 LLM call。**揭 2 🔴 戰略級新類型**：① Trial 試驗框架 AI Team 認知錯位升級（Trial_v6 議題 #3 升級 — Petra 看到 codebase 已含 Stage 60+61 痕跡 + Stage 61 prompt「Stage 61」字樣 → 困惑 escalate Christ）② Stage 60 第 7 routing api_failure_retry/abort path 真實處理 silent 卡死（Mock 只驗 continue path — Forge 自驗物理限制範疇延伸 + 「Mock 全綠 ≠ production 全綠」自省點 #25 第三次驗證）。**FF 動態**：**新立 FF 五十九**（Trial 試驗框架 AI Team 認知錯位升級紀律 — 同任務 codebase 已含試驗痕跡的試驗模式設計）+ **新立 FF 六十**（Stage 60 第 7 routing api_failure_retry/abort path 真實處理 silent 卡死收口）。**結案第二段 step 0 升級 1 處 + 立自省點 #30**（Aria 給 Christ 的 prompt 草稿必須對齊 Christ 對話 register — Christ 親自點破 modify prompt 第一版「太細節不像老闆風格」對齊既有自省點 #26 AI Agent prompt 議題層次紀律延伸到 Aria 給人類使用者 prompt 草稿層）。**戰略結論**：連續 3 Trial 揭 6 🔴 + deliver 度持續倒退（11/12 → 部分 → 0 → 0 卡死更前置）= **infinite loop pattern 真實實證 = 戰略大重評估時機到**。**Aria 主動進戰略大重評估深度討論**（Christ 2026-05-10 拍板對齊）。詳見 [Trial_v8_Plan.md](../experiments/Trial_v8_Plan.md) v2.0 結案紀錄。
 > **2026-05-10 v7.85：Stage 61 ✅ 完成（v3.50.0）— Petra/Cody prompt 對齊群組 + Pipeline UI refresh + Dashboard 補強（Trial_v8 開跑前最後清掃）** — 7 子項收口 6 🟡 系統性議題群組（FF 五十六 + 二十五 + 四十六 + 四十八 + 五十 + 四十五 + 四十 + 議題 #B）。**FF 動態**：✅ FF 五十六 / FF 二十五 / FF 四十六 / FF 四十八 / FF 五十 / FF 四十五 / FF 四十（7 個 ✅ 移完成）+ **新立 FF 五十七**（Petra prompt 5 位置 SoT 維護紀律 / 是否抽 prompt template helper — candidate standby Stage 61 揭露 5 位置同步首次任務）+ **新立 FF 五十八**（其他 3 申訴 path supersede 評估 — candidate standby Stage 61 範圍縮小 YAGNI 揭露）。Forge 自驗 5 PASS + Christ 視覺驗收 2 PASS（含場景 7 follow-up fix Stage 46 後端 SubTasks 漏填 自抓自修）。Aria 校準錨 **×0.99**（419K vs 預估 mid 425K，混合型第 15 資料點 mid 中段 — production-ready 補強 4 Stage 區間 ×0.78-0.99 完整驗證）。**結案第二段 step 0 升級 4 處**：① **workflow_aria.md 第 7 條延伸範圍段**（加「prompt builder 檔名 + method 數量 + config default value」進 source of truth 範圍 — 同類根因第三次累積修根因 Stage 56→59 + Stage 57+58 + Stage 61）② **自省點 #29**（Aria 規劃 prompt builder / config 數值漏 grep 同類根因第三次累積具體化原因紀律）③ FF 五十七 ④ FF 五十八。**Top 5 重排**：戰略大重評估候選升 #1（Christ 提出 — Aria 主動於 Trial_v8 結案後提醒）/ FF 三十六 #2（待 Trial_v8 + 戰略大重評估後）/ FF 五十四 #3 / FF 五十七 #4 / FF 五十八 #5。**戰略主軸**：Trial_v8 前置條件全綠 — Trial_v8 是路線 A/B/C 拍板關鍵實證。詳見 [Stage_61_Roadmap.md](Stage_61_Roadmap.md) v2.1 + [CHANGELOG v3.50.0](../../CHANGELOG.md#3500)。
 > **2026-05-10 v7.84：Stage 60 FF 五十五 ✅ 完成（v3.49.0）— v4 framework 邊角 user actions legacy 遷移 + meeting subprocess fail-fast 統一** — Trial_v7 結案揭露 1 🔴 戰略級新類型議題收口（推翻 Trial_v6「3 🔴 收口 = production-ready」假設）。子項 7 全 PASS（MeetingCommons 三條 swallow path 改 throw / Kickoff+Design ModifyTaskPlan/DesignPlan 遷 framework 議題 C2+H1 收口 / [SUBPROCESS_FAILURE] catch path 命名語意 / 第 7 routing 擴 Petra-{Stage} per-stage Port + 命名 / 4 Mock 場景全 PASS）。Forge spike 揭露 3 議題 Aria gate 通過全 Forge 自決（catch 點 / marker 命名 / per-stage Port）+ Forge 自加 WorkflowExceptionHelper unwrap framework 1.x event 細節 + 自驗 4 commits 健康自診修。Aria 校準錨 **×0.80**（438K vs 預估 mid 550K，混合型第 14 資料點 mid 帶下半，接近 Stage 56 ×0.78 / Stage 58 ×0.94）— **production-ready 補強 Stage 區間 ×0.78-0.94 三資料點驗證**。**結案第二段 step 0 升級 3 處**：① workflow_aria_session_lessons.md 自省點 #27（Aria 規劃 framework Workflow decision routing 必連帶 grep Stage Executor BossInteraction 開卡行為 + Pipeline 接管條件擴範圍配對紀律 — Stage 60 踩坑 #4+#5 修根因）② 自省點 #28（aria-prep-session skill 開場 prompt 模板必對齊既有 skill 觸發紀律 — Stage 60 揭露漏對齊 forge-self-verify 觸發紀律 + 已立修紀律 2）③ workflow_aria.md 第三節 A 第 8 條（Pipeline 接管 decision 擴展時計劃書必明列「Stage Executor case 處理 + decision 拓撲 BossInteraction 開卡行為」配對檢查）。Top 5 重排：FF 五十五 ✅ 移除 / FF 五十六+二十五+四十六+四十八+五十 群組升 #1（Stage 61 候選）/ FF 三十六 #2（待 Stage 61 + Trial_v8 後評估）/ Trial_v8 後戰略大重評估候選 #5（Christ 提出 — Aria 主動提醒）。詳見 [Stage_60_Roadmap.md](Stage_60_Roadmap.md) v2.0 + [CHANGELOG v3.49.0](../../CHANGELOG.md#3490)。
@@ -43,17 +45,26 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-10 v7.85 — Stage 61 ✅ 完成後 = Trial_v8 前置條件全綠）
+## 當前優先級 Top 5（2026-05-11 v7.87 — Stage 62 ✅ Charter spike 完成後 = Phase B PoC 啟動條件達成待 Christ 拍板）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | （Trial_v8 後候選） ⭐ | **戰略大重評估**（AiTeam 是否過度設計 / 路線 B 大砍複雜度 vs 路線 A 繼續 v4 漸進修補） | 🟡 戰略級候選 — Christ 2026-05-10 提出 — **Aria 主動於 Trial_v8 結案後提醒進戰略討論** | Trial_v5→v6→v7 deliver 度倒退（92% → 部分 → 0）+ Trial_v6/v7 系統性揭新類型 🔴（infinite loop 風險）+ AiTeam 10 Agent + 7 routing 對照業界主流 1-3 Agent 過度設計訊號。**Trial_v8 是路線 A/B/C 拍板關鍵實證**（前置條件 Stage 60+61 全綠就位）|
-| 2 | **三十六** ⭐ | v4 動態流程架構 — Phase B | 🟡 啟動條件**降級** — 待 Trial_v8 + 戰略大重評估後 | 對齊路線 A vs B/C 拍板 — 若路線 A 繼續修補才啟動 Phase B；若路線 B/C 大砍複雜度則 Phase B 自動失效。**Trial_v7 揭露補強**：Victoria scan lazy 化具體 ROI 量化（單任務省 ~$0.1-0.3 + 隨 codebase 變大放大）|
-| 3 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — **子項 1 TaskGroupService ✅ Stage 59 / 子項 2/3 待** | 🟡 中 — Trial_v8 + 戰略大重評估後 | Stage 59 ×1.09 ROI 確認 SOP 累積 — 子項 2/3 預估倍率類似 ×1.0-1.3。對齊路線 A 才動工（路線 B/C 大砍複雜度可能直接吸收）|
-| 4 | **五十七** | Petra prompt 5 位置 SoT 維護紀律 / 是否抽 prompt template helper | ⚪ candidate standby — Stage 61 揭露 5 位置同步首次任務 | 5 位置漂移風險（CLAUDE_Petra.md + 4 prompt builder method）— 累積到必要時拆 Stage（未來改 Petra 紀律時若漂移踩坑就動工）|
-| 5 | **五十八** | 其他 3 申訴 path supersede 評估（Review Appeal / QA Fix / Sage escalate）| ⚪ candidate standby — Stage 61 範圍縮小 YAGNI 揭露 | Stage 61 SupersedePriorFailedTasks 只 cover Dev_plan path 兩處 — 其他 3 申訴 path 沒實證同類，Trial_v8 真實使用揭露才動工 |
+| 1 | **三十六** ⭐ | v4 動態流程架構 — Phase B（**Charter spike ✅ Stage 62 / PoC spike 待 Stage 63**）| 🟡 **進行中 — Charter spike 完成 / PoC spike 啟動條件達成待 Christ 拍板** | Stage 62 ✅ Charter Plan 4 deliverable 完整（spike Plan + 架構 wire + v4 audit + PoC Roadmap 草稿）+ 8 條 Christ 拍板 + 80% 既有設計拍板成熟 + 5 Forge spike 自決點 Aria gate1 通過。**Stage 63 PoC**：feature/v5-poc branch / 跑 Trial_v6/v7/v8 同 prompt + 5 向對照 / 規模 L / cost ~600-1000K |
+| 2 | （Stage 63 PoC 候選） ⭐ | **Stage 63 PoC spike**（v5 動態架構小範圍真實任務驗證）| 🟡 啟動條件達成 — 待 Christ 拍板 | Stage 62 Charter 通過後啟動 — 7 驗證項預期通過 ≥5 項 / cost 對齊 Trial_v5 baseline ±50% / 0 🔴 新類型議題 / Phase 1 完整 deliver = 路線 A 採用拍板實證 |
+| 3 | **五十四** ⭐ | Stage 36 後怪物大檔復發 — **子項 1 TaskGroupService ✅ Stage 59 / 子項 2/3 保留評估** | 🟡 中 — Stage 63 PoC 後 | Stage 63 PoC 重寫範圍可能自然吸收 ButtonCallbackRouter / DevAgentService 部分 LoC（v5 重寫後哪些大檔仍存在 Stage 63 PoC 後重評估）— 對齊路線 A 才動工 |
+| 4 | （Charter+PoC 後候選） | **戰略大重評估**（AiTeam 是否過度設計 / 路線 B 大砍複雜度 vs 路線 A 繼續 v4/v5）| 🟡 戰略級候選 — Christ 提出 — **Stage 63 PoC 結案後再啟動評估** | Charter + PoC 兩階段 spike 後若 ROI 為負 → 啟動戰略大重評估 / 若 ROI 為正 → v5 全量遷移路線 |
+| 5 | （多項保留群組）| FF 二十五 / 四十六 / 四十八（Cody Worker prompt 對齊）| 🟡 保留 — Cody Worker v5 仍存在 prompt 仍適用 | v5 動態架構 Cody Worker 角色保留（與 framework 無關）— Cody prompt 教訓 v5 PoC 階段繼續累積 |
 
-> ⚠️ **戰略主軸**：**Stage 61 ✅（v3.50.0）— Trial_v8 前置條件全綠**（Stage 60 v4 邊角 legacy 收口 + Stage 61 6 🟡 系統性議題群組清完 + production-ready 補強 4 Stage 區間 ×0.78-0.99 完整驗證）。下一階段戰略決策點：① **Trial_v8 重跑 Trial_v6 + 推進 Phase 1 完整 deliver**（cost baseline 因 maxTurns 提升上修為 ~$6-15）② **戰略大重評估**（Trial_v8 後 — Christ 拍板路線 A/B/C，Aria 主動提醒）③ **FF 三十六 Phase B 動態架構評估**（戰略大重評估後若路線 A 才啟動）。Trial_v6 三 🔴 收口真實驗證 + Trial_v7 揭 1 🔴 收口 + Stage 61 7 🟡 群組修法效果 — Trial_v8 一次驗證所有前置條件 + 推進 Phase 1 完整 deliver = 路線拍板實證。
+> ⚠️ **戰略主軸**：**Stage 62 ✅ Charter spike 完成（v3.51.0）— FF 三十六 Phase B 動態架構規劃文件 deliverable 4 件完整 + 8 條 Christ 拍板 + 5 Forge spike 自決點 Aria gate1 通過**。下一階段戰略決策點：① **Christ 視覺驗收 Charter Plan 4 deliverable** ② **Christ 拍板 Charter 通過 → Stage 63 PoC spike 啟動條件達成** ③ **Stage 63 PoC spike**（feature/v5-poc branch / 5 向對照 / 7 驗證項實證 / 規模 L / cost ~600-1000K）④ **Charter + PoC 後路線 A 採用 vs 戰略大重評估拍板**。Trial_v6/v7/v8 連續揭 6 🔴 + deliver 度持續倒退 = infinite loop 真實實證 = v4 hierarchical static 補強 ROI 為負 → v5 動態架構 spike 路線 D（Christ 2026-05-10 拍板）。詳見 [Stage_62_Roadmap.md](Stage_62_Roadmap.md) + [v5_charter/ README](../architecture/v5_charter/README.md)。**FF 動態**：FF 五十七 / 五十八 / 五十九 / 六十 全 ✅ close 不做（v5 動態架構吸收）。
+
+### 2026-05-11 close FF 補充紀錄（Stage 62 Charter spike v5 吸收）
+
+| FF | 原議題 | close 不做原因 |
+|---|---|---|
+| **五十七** | Petra prompt 5 位置 SoT 維護紀律 | v5 prompt 重寫 — CLAUDE_Petra.md 全砍重寫 + 4 prompt builder method 全砍重寫對齊 Petra orchestrator（v5 動態架構勝過 SoT helper 抽 — 不再有 5 位置漂移風險）|
+| **五十八** | 其他 3 申訴 path supersede 評估 | v5 動態架構 Petra Tool Set 動態 review/appeal — 不需固定 supersede helper（Pm/* 4 services 1415 LoC 吸收）|
+| **五十九** | Trial 試驗框架 AI Team 認知錯位升級紀律 | v5 Petra prompt 重寫吸收 — CLAUDE_Petra.md 全砍重寫不再含「Stage 61 follow-up」字樣困惑（Trial_v8 揭露根因 = Petra prompt 累積層偏見根除）|
+| **六十** | Stage 60 第 7 routing api_failure_retry/abort path silent 卡死 | v4 修法 ROI 負 — v5 動態架構 Petra orchestrator 捕捉 LLM API 失敗動態決策（不依賴固定 routing path）|
 
 ---
 
@@ -157,10 +168,17 @@ Sage 作為獨立定期任務（非 pipeline 內），掃描整個專案：
 
 ---
 
-## 三十六、AiTeam v4 動態流程架構 — Phase B（FF 四十九 後續）
+## 三十六、AiTeam v5 動態流程架構 — Phase B（FF 四十九 後續）⭐ 進行中
 
-> 狀態：⚪ 待觀察 — **FF 四十九 Phase A 已通過（採用結論，Stage 48 完成 2026-05-02）**，Phase B 啟動條件解除但 Christ 拍板「Stage 49+ 漸進遷移過半（Stage 52 後）再評估」是否有獨立價值
-> 提出日期：2026-04-28（Trial_v4 結案戰略討論）；2026-05-01 拆分為 Phase B（架構評估獨立於工具評估）；2026-05-02 Phase A 通過解鎖但延後評估
+> 狀態：🟡 **進行中 — Phase B Charter spike ✅ Stage 62 完成（v3.51.0，2026-05-11）/ Phase B PoC spike 啟動條件達成待 Christ 拍板 → Stage 63**
+> 提出日期：2026-04-28（Trial_v4 結案戰略討論）；2026-05-01 拆分為 Phase B（架構評估獨立於工具評估）；2026-05-02 Phase A 通過解鎖但延後評估；2026-05-10 Christ 拍板路線 D（Trial_v8 結案後 — Trial_v6/v7/v8 連續揭 6 🔴 + deliver 度持續倒退 = infinite loop 真實實證 = v4 hierarchical static 補強 ROI 為負）；2026-05-11 Stage 62 Charter spike 完成 — 4 deliverable + 8 條 Christ 拍板 + 5 Forge spike 自決點 Aria gate1 通過。
+
+### Charter spike deliverable（Stage 62 ✅ 完成 — 詳見 [v5_charter/](../architecture/v5_charter/)）
+
+- **`01_Spike_Plan.md`** — 7 驗證項細節（Victoria Router / Petra 自主調度 / per-task session / Crash Recovery / Mock Gemini Flash / 遷移成本量化 / Hybrid 會議 trigger）+ 預測項（強信心 5 / 中信心 1 / 未知 1）
+- **`02_Architecture_Wire.md`** — 4 層 Hierarchy 落具體 service / DI（含 per-task session 多 row table schema 候選 + Tool Set Capability attribute+interface hybrid 候選 + 9 Worker capability mapping）
+- **`03_v4_Code_Audit.md`** — 三類分類 + LoC 量化（**吸收 ~16,061 LoC ~26%** / 重寫 ~3,991 LoC + 925 prompt 行 ~7% / 全保留 ~38,700+ LoC ~67%）
+- **`04_Stage_63_PoC_Roadmap_Draft.md`** — PoC 6 子項 + 5 向對照 + 規模 L / cost ~600-1000K / 驗收標準
 
 ### 拆分說明（2026-05-01）
 
@@ -281,16 +299,16 @@ Trial_v7 觀察 Victoria CEO 階段 cost **+224% vs Trial_v6 baseline**（$0.056
 
 ### 啟動觸發條件（Christ 拍板）
 
-⏰ **Stage 52 完成後**（v4 漸進遷移過半）評估：framework Magentic Orchestration 是否已解大部分動態調度需求？若已解 → 永久 ⚪ 待觀察；若仍有獨立價值（per-task session 持久記憶 / Capability-based 調度）→ 啟動 Phase B spike。**不在 Stage 49-51 期間啟動**（避免架構級變動疊加風險）。Stage 49-54 路線詳見 CHANGELOG / Spike v1 報告節 7。
+✅ **2026-05-10 Christ 拍板路線 D 啟動**（Trial_v8 結案後 — Trial_v6/v7/v8 連續揭 6 🔴 + deliver 度持續倒退 = infinite loop 真實實證 = v4 hierarchical static 補強 ROI 為負 → 對齊 6 個月前 brainstorm 既有 roadmap 第 4 選項）。**兩階段拆分**：Stage 62 Charter spike（純文件 deliverable）→ Stage 63 PoC spike（feature/v5-poc branch + 5 向對照）— Charter 通過才 commit PoC 投資。
 
 ### 規模 / 風險
 
-**規模**：**XL**（架構級躍進）  
-**風險**：**高**（架構級改動風險最大，但 Phase B 設計拍板已 80% 成熟降低 spike 風險）
+**規模**：**XL**（架構級躍進）— Stage 62 Charter spike M / Stage 63 PoC spike L / Stage 64+ 全量遷移 XL 累積
+**風險**：**中-高**（架構級改動風險，但 Charter spike + 80% 既有設計拍板降低 spike 風險）
 
 ### 優先級
 
-⚪ 待觀察 — **依賴 FF 四十九 Phase A 結論**。
+🟡 **進行中 #1（Top 5）** — Stage 62 Charter spike ✅ 完成 / Stage 63 PoC spike 啟動條件達成待 Christ 拍板。
 
 ---
 
@@ -473,9 +491,9 @@ Trial_v7 Kickoff Petra 產出 TaskPlan 內含 5 待拍板議題 + 給 A/B/C 三�
 
 ---
 
-## 五十七、Petra prompt 5 位置 SoT 維護紀律 / 是否抽 prompt template helper（Stage 61 揭露）⚪
+## 五十七、Petra prompt 5 位置 SoT 維護紀律 / 是否抽 prompt template helper（Stage 61 揭露）✅ close 不做
 
-> 狀態：⚪ candidate standby — Stage 61 揭露 5 位置同步首次任務
+> 狀態：✅ **close 不做（Stage 62 Charter spike 2026-05-11）** — v5 動態架構吸收：CLAUDE_Petra.md 全砍重寫 + 4 prompt builder method 全砍重寫對齊 Petra orchestrator（v5 動態架構勝過 SoT helper 抽 — 不再有 5 位置漂移風險）
 > 提出日期：2026-05-10（Stage 61 結案揭露 — Petra prompt 三處同步實際是五處同步首次踩到）
 
 ### 背景
@@ -511,9 +529,9 @@ Forge 自決路線：直接 inline 紀律段文字到 5 位置 + 兩 prompts cla
 
 ---
 
-## 五十九、Trial 試驗框架 AI Team 認知錯位升級紀律（Trial_v8 揭 🔴）⚪
+## 五十九、Trial 試驗框架 AI Team 認知錯位升級紀律（Trial_v8 揭 🔴）✅ close 不做
 
-> 狀態：⚪ candidate standby — Trial_v8 結案揭 1 🔴 戰略級新類型
+> 狀態：✅ **close 不做（Stage 62 Charter spike 2026-05-11）** — v5 動態架構吸收：CLAUDE_Petra.md 全砍重寫不再含「Stage 61 follow-up」字樣困惑（Trial_v8 揭露根因 = Petra prompt 累積層偏見根除 — Stage 63 PoC 用 5 向對照數據組驗證）
 > 提出日期：2026-05-10（Trial_v8 結案揭露 — Trial_v6 議題 #3 升級 🟢 → 🔴）
 
 ### 背景
@@ -543,9 +561,9 @@ Trial_v8 v3.50.0 跑同任務 prompt（沿用 Trial_v6/v7 對照組精準度最�
 
 ---
 
-## 六十、Stage 60 第 7 routing api_failure_retry/abort path 真實處理 silent 卡死收口（Trial_v8 揭 🔴）⚪
+## 六十、Stage 60 第 7 routing api_failure_retry/abort path 真實處理 silent 卡死收口（Trial_v8 揭 🔴）✅ close 不做
 
-> 狀態：⚪ candidate standby — Trial_v8 結案揭 1 🔴 戰略級新類型
+> 狀態：✅ **close 不做（Stage 62 Charter spike 2026-05-11）** — v4 修法 ROI 負：v5 動態架構 Petra orchestrator 動態決策 LLM API 失敗（不依賴固定 routing path 的 retry/abort case body — Petra Tool Set 收到 Worker exception 動態評估 retry 拆段 / 換 model / abort）
 > 提出日期：2026-05-10（Trial_v8 結案揭露 — Stage 60 第 7 routing 真實首次觸發後 retry path silent 卡死）
 
 ### 背景
@@ -580,9 +598,9 @@ Trial_v8 揭露 Stage 60 第 7 routing `agent_api_failure_intervention` 三選 a
 
 ---
 
-## 五十八、其他 3 申訴 path supersede 評估（Review Appeal / QA Fix / Sage escalate）⚪
+## 五十八、其他 3 申訴 path supersede 評估（Review Appeal / QA Fix / Sage escalate）✅ close 不做
 
-> 狀態：⚪ candidate standby — Stage 61 範圍縮小 YAGNI 揭露
+> 狀態：✅ **close 不做（Stage 62 Charter spike 2026-05-11）** — v5 動態架構吸收：Petra Tool Set 動態 review/appeal（Pm/* 4 services 1415 LoC + Appeal Orchestration 1375 LoC 全納吸收 — 不需固定 supersede helper / SupersedePriorFailedTasks pattern 在 v5 動態架構自然消失）
 > 提出日期：2026-05-10（Stage 61 結案揭露 — SupersedePriorFailedTasks 只 cover Dev_plan path 兩處）
 
 ### 背景
