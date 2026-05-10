@@ -140,8 +140,18 @@ public class InteractionService(
                 {
                     // ResponseAction 對齊 InteractionType 的 Continue / Ack action key
                     // InteractionProcessor 會 ProcessBossResponseAsync(type, action, ...) → 推進流程
-                    var autoAction = interactionType switch
+                    // Stage 60-FF 五十五：FailScenario 切到 modify path 的 scenario-aware auto-approve（一次性消耗）
+                    // - framework_modify_taskplan_happy：kickoff 第一次回應 kickoff_modify（觸發 RunKickoffModifyAsync）→ FailScenario 改 framework_modify_taskplan_happy_finalize 第二次回應 kickoff_continue
+                    // - framework_modify_designplan_happy：design 第一次回應 design_modify → finalize 後 design_continue
+                    // - meeting_modify_during_subprocess_failure：kickoff 點 modify 觸發 subprocess failure path（複用 modify 觸發器）
+                    var currentScenario = Agents.MockClaudeCodeService.FailScenario;
+                    var autoAction = (interactionType, currentScenario) switch
                     {
+                        ("kickoff", "framework_modify_taskplan_happy") => "kickoff_modify",
+                        ("design", "framework_modify_designplan_happy") => "design_modify",
+                        ("kickoff", "meeting_modify_during_subprocess_failure") => "kickoff_modify",
+                        _ => interactionType switch
+                        {
                         "kickoff"             => "kickoff_continue",
                         "design"              => "design_continue",
                         "proposal"            => "propose_yes",
@@ -164,8 +174,13 @@ public class InteractionService(
                         "epic_partial_paused"     => "epic_resume",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
                         _                     => "ack",
+                        }
                     };
-                    var approved = await repo.RespondAsync(interaction.Id, autoAction, "dashboard");
+                    // Stage 60：modify 路徑需要 ResponseContent 帶修改指引（Christ 真實使用情境）— 從 KickoffStageExecutor.HandleKickoffModifyAsync 取
+                    string? modifyContent = (autoAction is "kickoff_modify" or "design_modify")
+                        ? "[MOCK] 請將計劃書的字數加倍 + 補強驗收條件章節（Stage 60 modify path 自驗）"
+                        : null;
+                    var approved = await repo.RespondAsync(interaction.Id, autoAction, "dashboard", modifyContent);
                     if (approved)
                     {
                         logger.LogInformation(

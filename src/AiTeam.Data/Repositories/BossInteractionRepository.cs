@@ -63,14 +63,19 @@ public class BossInteractionRepository(AppDbContext db)
     /// 回傳 true 代表本次回覆成功，false 代表另一通道已先回覆。
     /// </summary>
     public async Task<bool> RespondAsync(Guid id, string action, string source, CancellationToken ct = default)
+        => await RespondAsync(id, action, source, responseContent: null, ct);
+
+    /// <summary>Stage 60-FF 五十五：擴 ResponseContent 參數（modify path 帶修改指引文字必填）— 對齊 MockMode auto-approve scenario-aware 設計。</summary>
+    public async Task<bool> RespondAsync(Guid id, string action, string source, string? responseContent, CancellationToken ct = default)
     {
         var affected = await db.BossInteractions
             .Where(x => x.Id == id && x.Status == "pending")
             .ExecuteUpdateAsync(s => s
-                .SetProperty(x => x.Status,         "responded")
-                .SetProperty(x => x.ResponseAction, action)
-                .SetProperty(x => x.ResponseSource, source)
-                .SetProperty(x => x.RespondedAt,    DateTime.UtcNow), ct);
+                .SetProperty(x => x.Status,          "responded")
+                .SetProperty(x => x.ResponseAction,  action)
+                .SetProperty(x => x.ResponseContent, responseContent)
+                .SetProperty(x => x.ResponseSource,  source)
+                .SetProperty(x => x.RespondedAt,     DateTime.UtcNow), ct);
         return affected > 0;
     }
 
