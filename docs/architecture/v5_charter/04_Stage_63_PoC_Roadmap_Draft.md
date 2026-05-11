@@ -32,7 +32,10 @@ PoC spike 目標：**小範圍真實任務驗證 v5 動態架構 ROI** — 跑 T
 ### 1. Petra Orchestrator service 實作
 
 - **新建** `src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs`
-- ~~MS Agent Framework Magentic Orchestration class wire~~ **errata（Stage 63A spike 揭露 — 詳 [05_Stage_63A_Spike_Notes.md 第 1 段](./05_Stage_63A_Spike_Notes.md#第-1-段--magentic-orchestration-nuget-130-真實-api-grep-紀錄)）**：「Magentic」命名空間在 nuget 1.3.0 不存在 — 真實 pattern 走 `GroupChatManager` subclass override `SelectNextAgentAsync` + `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` 或替代 `HandoffWorkflowBuilder`（兩種動態 pattern 都支援，Stage 63B 子項 4 評估擇一）。**跨 assembly override 紀律**：3 個 hook 在 nuget assembly 內為 `protected internal`，跨 assembly subclass 只能宣告 `protected override`（避免 CS0507 — Stage 63A 實作首發踩坑）
+- ~~MS Agent Framework Magentic Orchestration class wire~~ **errata（Stage 63A spike 揭露 — 詳 [05_Stage_63A_Spike_Notes.md 第 1+2 段](./05_Stage_63A_Spike_Notes.md)）**：
+  - 「Magentic」命名空間在 nuget 1.3.0 不存在 — 真實 pattern 候選有 (A) `HandoffWorkflowBuilder` / (B) **Petra 自寫 orchestrator + `BuildSequential`**
+  - **Stage 63A 揭 framework limitation (a)** — base `GroupChatManager` subclass 透過 `CreateGroupChatBuilderWith` 建構的 workflow，manager hook 全 0 invoke / 1 superstep 結束 → Stage 63B **先走候選 (B) 自寫 orchestrator path**（spike 已驗），候選 (A) Handoff 留 fallback
+  - **跨 assembly override 紀律**：GroupChatManager 3 個 hook 跨 assembly subclass 須宣告 `protected override`（不是 `protected internal override` — Stage 63A 實作首發踩坑）
 - per-task session 持久化包 EF Core read/write `petra_sessions` + `petra_session_messages` 兩表
 - Tool Set 接 9 Workers + Capability-based 標籤（Worker-as-Tool 真實 API = `AIAgentExtensions.AsAIFunction(this AIAgent, ...)` — Stage 63A spike 補釘）
 
@@ -53,6 +56,7 @@ PoC spike 目標：**小範圍真實任務驗證 v5 動態架構 ROI** — 跑 T
 - 新建 `[AgentCapability("...")]` attribute
 - 9 Worker Service 加 `IAgentTool` 介面實作（包既有 RunReadOnlyAsync / RunWriteAsync）+ class-level capability attribute
 - DI multi-registration（每個 Worker 兩重註冊：service interface + IAgentTool — Petra orchestrator 透過 `IEnumerable<IAgentTool>` DI scan）
+- **Stage 63A errata：framework limitation (b)** — base `AIAgent` subclass 不被 framework workflow dispatch（`BuildSequential` ExecutorInvoked 但 `RunCoreAsync`/`RunCoreStreamingAsync` 0 invoke）→ **Stage 63B 必走 `ChatClientAgent(IChatClient, ...)` ctor + 新建 `ClaudeCodeChatClientAdapter : IChatClient`**（包既有 ClaudeCodeService.RunReadOnlyAsync/RunWriteAsync + 把 IList<ChatMessage> 轉 subprocess CLI prompt）— 不是「可選」而是「必走」
 
 ### 5. Mock 模式
 
