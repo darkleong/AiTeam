@@ -3,10 +3,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Octokit;
 
@@ -18,7 +20,9 @@ namespace AiTeam.Bot.Agents;
 /// - .razor / .css 變更 → Playwright 視覺截圖測試
 /// Claude Code 負責：探索 codebase → 寫入測試檔 → dotnet build 驗證 → 修錯直到通過。
 /// 不 commit / push（由呼叫端 GitHubService 負責）。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC）。
 /// </summary>
+[AgentCapability("qa_testing")]
 public class QaAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
@@ -27,9 +31,17 @@ public class QaAgentService(
     AppSettingsService appSettings,
     IConfiguration configuration,
     TokenLogService tokenLogService,
-    ILogger<QaAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<QaAgentService> logger) : IAgentExecutor, IAgentTool
 {
     private const string AgentName = "QA";
+
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Quinn";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<QaAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "qa_testing", "Quinn",
+            "你是 Quinn — QA Testing Worker。負責執行測試、產出測試報告。", ctx, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
