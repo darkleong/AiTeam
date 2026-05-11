@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -26,6 +27,8 @@ public class CeoAgentService(
     IOptions<GitHubSettings> gitHubSettings,
     IConfiguration configuration,
     TokenLogService tokenLogService,
+    WorkflowSettingsResolver workflowResolver,
+    PetraOrchestratorService petraOrchestrator,
     ILogger<CeoAgentService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -93,6 +96,18 @@ public class CeoAgentService(
         IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<string>? availableProjects = null)
     {
+        // ── Stage 63B：v5 動態架構 PoC flag forward（path simplified — Victoria 純 facade Router + RouteToPetra Tool Set 完整化留 Stage 64+）
+        if (await workflowResolver.GetUsePetraOrchestratorV5Async(cancellationToken))
+        {
+            logger.LogInformation("Victoria flag UsePetraOrchestratorV5=true → forward 到 PetraOrchestratorService（v5 動態架構 PoC）");
+            var petraResult = await petraOrchestrator.StartAsync(taskGroupId: null, userInput, cancellationToken);
+            return new CeoResponse
+            {
+                Reply = $"[v5 PoC] Petra 已動態調度：{petraResult.Summary}（session={petraResult.SessionId} dispatched={petraResult.DispatchedWorkerCount}）",
+                Action = "petra_v5_dispatched"
+            };
+        }
+
         // ── 1. Session 解析 ──────────────────────────────────────────────
         var sessionId = await conversationRepository.GetActiveSessionIdAsync(userId, cancellationToken);
 

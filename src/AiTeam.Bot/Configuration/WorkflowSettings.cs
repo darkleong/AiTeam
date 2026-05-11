@@ -61,4 +61,11 @@ public class WorkflowSettings
     /// fix loop / appeal / QA fix loop / intervention 子流程留 Stage 53B 範圍 — 53A 5 個 fallback 點主動 call legacy method
     /// 接手（I2 反向設計，Stage 55 收尾統一移除）。</summary>
     public bool UseFrameworkPipeline { get; set; } = false;
+
+    /// <summary>Stage 63B：v5 動態架構 PoC — 是否啟用 PetraOrchestratorService 接管 CeoAgentService 入口。
+    /// 預設 false（保留既有 v4 path），切 true 後 CeoAgentService.ProcessWithClaudeCodeAsync 開頭直接 forward
+    /// 到 PetraOrchestratorService.StartAsync（v5 動態決策 + BuildSequential + 7 Worker IAgentTool dispatch）。
+    /// AppSettings 表 key = "Workflow:UsePetraOrchestratorV5"，DB 優先，appsettings.json fallback。
+    /// 與 Stage 49-53A 五 framework flag 完全獨立 — v4 / v5 兩條路線並行（feature/v5-poc branch 開發，Stage 64+ 全量遷移）。</summary>
+    public bool UsePetraOrchestratorV5 { get; set; } = false;
 }

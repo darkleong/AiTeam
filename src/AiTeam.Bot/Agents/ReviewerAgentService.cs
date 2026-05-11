@@ -4,10 +4,12 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Octokit;
@@ -21,7 +23,9 @@ namespace AiTeam.Bot.Agents;
 /// 單一 Claude Code session（RunReviewAsync），只帶 patch 不帶完整檔案內容，
 /// 根本解決 LLM 混淆 diff 舊/新程式碼造成 Critical 誤判的問題。
 /// Stage 23：加入 WorkflowSettings 注入（版本號檢查）。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC）。
 /// </summary>
+[AgentCapability("code_review")]
 public class ReviewerAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
@@ -31,8 +35,16 @@ public class ReviewerAgentService(
     IConfiguration configuration,
     IOptions<WorkflowSettings> workflowSettings,
     TokenLogService tokenLogService,
-    ILogger<ReviewerAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<ReviewerAgentService> logger) : IAgentExecutor, IAgentTool
 {
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Vera";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<ReviewerAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "code_review", "Vera",
+            "你是 Vera — Code Review Worker。負責審查程式碼變更，發現問題與改進機會。", ctx, loggerFactory);
+
     private const string AgentName = "Reviewer";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
