@@ -32,9 +32,9 @@ PoC spike 目標：**小範圍真實任務驗證 v5 動態架構 ROI** — 跑 T
 ### 1. Petra Orchestrator service 實作
 
 - **新建** `src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs`
-- MS Agent Framework Magentic Orchestration class wire — **真實 nuget 1.3.0 API grep 驗證**（Charter spike 階段只寫 candidate signature — Stage 63 PoC 落實 grep 驗證）
+- ~~MS Agent Framework Magentic Orchestration class wire~~ **errata（Stage 63A spike 揭露 — 詳 [05_Stage_63A_Spike_Notes.md 第 1 段](./05_Stage_63A_Spike_Notes.md#第-1-段--magentic-orchestration-nuget-130-真實-api-grep-紀錄)）**：「Magentic」命名空間在 nuget 1.3.0 不存在 — 真實 pattern 走 `GroupChatManager` subclass override `SelectNextAgentAsync` + `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` 或替代 `HandoffWorkflowBuilder`（兩種動態 pattern 都支援，Stage 63B 子項 4 評估擇一）。**跨 assembly override 紀律**：3 個 hook 在 nuget assembly 內為 `protected internal`，跨 assembly subclass 只能宣告 `protected override`（避免 CS0507 — Stage 63A 實作首發踩坑）
 - per-task session 持久化包 EF Core read/write `petra_sessions` + `petra_session_messages` 兩表
-- Tool Set 接 9 Workers + Capability-based 標籤
+- Tool Set 接 9 Workers + Capability-based 標籤（Worker-as-Tool 真實 API = `AIAgentExtensions.AsAIFunction(this AIAgent, ...)` — Stage 63A spike 補釘）
 
 ### 2. Victoria Router prompt 重寫
 
@@ -65,6 +65,7 @@ PoC spike 目標：**小範圍真實任務驗證 v5 動態架構 ROI** — 跑 T
 - 寫 EF Migration：`dotnet ef migrations add Stage63PetraSessionTables --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext`
 - 兩新 entity：`PetraSession` + `PetraSessionMessage`（schema 對齊 Charter `02_Architecture_Wire.md` 候選）
 - Repository pattern + DbSet 註冊（對齊既有 EF Core entity pattern）
+- **Stage 63A errata**：spike 階段走 Christ 拍板路線 (c) in-memory `List<ChatMessage>` 0 Migration（詳 [05_Stage_63A_Spike_Notes.md 第 3 段](./05_Stage_63A_Spike_Notes.md#第-3-段--ef-migration-跨-branch-策略拍板紀錄)）— Stage 63B production-ready 才寫 Migration 維持不變
 
 ---
 
