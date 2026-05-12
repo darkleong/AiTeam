@@ -43,7 +43,7 @@ public class ReviewerAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<ReviewerAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "code_review", "Vera",
-            "你是 Vera — Code Review Worker。負責審查程式碼變更，發現問題與改進機會。", ctx, loggerFactory);
+            "你是 Vera — Code Review Worker。負責審查程式碼變更，發現問題與改進機會。", ctx, tokenLogService, loggerFactory);
 
     private const string AgentName = "Reviewer";
 

@@ -34,7 +34,7 @@ public class DevAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DevAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "code_implementation", "Cody",
-            "你是 Cody — Code Implementation Worker。負責依任務 input 寫程式碼。", ctx, loggerFactory);
+            "你是 Cody — Code Implementation Worker。負責依任務 input 寫程式碼。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

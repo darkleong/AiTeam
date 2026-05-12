@@ -23,6 +23,7 @@ public class ReleaseAgentService(
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
     IClaudeCodeService claudeCodeService,
+    TokenLogService tokenLogService,
     ILoggerFactory loggerFactory,
     ILogger<ReleaseAgentService> logger) : IAgentExecutor, IAgentTool
 {
@@ -33,7 +34,7 @@ public class ReleaseAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<ReleaseAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "release_publishing", "Release",
-            "你是 Release — Release Publishing Worker。負責 Changelog / Release Notes / Tag 發佈。", ctx, loggerFactory);
+            "你是 Release — Release Publishing Worker。負責 Changelog / Release Notes / Tag 發佈。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

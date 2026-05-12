@@ -34,7 +34,7 @@ public class DesignerAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DesignerAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "ui_design", "Demi",
-            "你是 Demi — UI Design Worker。負責產出 MudBlazor UI 規格與設計。", ctx, loggerFactory);
+            "你是 Demi — UI Design Worker。負責產出 MudBlazor UI 規格與設計。", ctx, tokenLogService, loggerFactory);
 
     /// <inheritdoc />
     public async Task<AgentExecutionResult> ExecuteTaskAsync(

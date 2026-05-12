@@ -27,14 +27,17 @@ internal static class PetraWorkerHelper
         string workerName,
         string instructions,
         PetraSessionContext ctx,
+        AiTeam.Bot.Services.TokenLogService tokenLogService,
         ILoggerFactory loggerFactory)
     {
         var adapter = new ClaudeCodeChatClientAdapter(
             claudeCode,
             capability,
+            workerName,
             ctx.Model,
             ctx.ApiKey,
             ctx.WorkingDir,
+            tokenLogService,
             loggerFactory.CreateLogger<ClaudeCodeChatClientAdapter>());
 
         return new ChatClientAgent(

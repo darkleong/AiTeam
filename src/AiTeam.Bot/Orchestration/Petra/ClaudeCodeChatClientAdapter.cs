@@ -26,9 +26,11 @@ namespace AiTeam.Bot.Orchestration.Petra;
 internal sealed class ClaudeCodeChatClientAdapter(
     IClaudeCodeService claudeCode,
     string capability,
+    string workerName,
     string model,
     string apiKey,
     string workingDir,
+    AiTeam.Bot.Services.TokenLogService tokenLogService,
     ILogger<ClaudeCodeChatClientAdapter> logger) : IChatClient
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
@@ -39,9 +41,20 @@ internal sealed class ClaudeCodeChatClientAdapter(
         CancellationToken cancellationToken = default)
     {
         var prompt = FlattenMessages(messages);
-        logger.LogDebug("ClaudeCodeChatClientAdapter dispatch capability={Capability} promptLen={Len}", capability, prompt.Length);
+        logger.LogInformation("ClaudeCodeChatClientAdapter dispatch worker={Worker} capability={Capability} promptLen={Len}", workerName, capability, prompt.Length);
 
         var result = await DispatchAsync(prompt, cancellationToken);
+
+        // Trial_v9 修：對齊 v4 既有 caller 寫 token_logs pattern（DevAgentService.cs:288-291）— v5 走 adapter 沒走 v4 caller path → 自寫 token_logs
+        try
+        {
+            await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, result.Usage, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker}", workerName);
+        }
+
         var responseMessage = new ChatMessage(ChatRole.Assistant, result.Output ?? "");
         return new ChatResponse(responseMessage);
     }

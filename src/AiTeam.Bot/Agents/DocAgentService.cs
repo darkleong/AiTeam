@@ -40,7 +40,7 @@ public class DocAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DocAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "documentation", "Sage",
-            "你是 Sage — Documentation Worker。負責產出與更新文件、歸檔紀錄。", ctx, loggerFactory);
+            "你是 Sage — Documentation Worker。負責產出與更新文件、歸檔紀錄。", ctx, tokenLogService, loggerFactory);
 
     /// <inheritdoc />
     public async Task<AgentExecutionResult> ExecuteTaskAsync(
