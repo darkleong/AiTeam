@@ -36,7 +36,7 @@ public class RequirementsAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<RequirementsAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "requirements_extraction", "Rosa",
-            "你是 Rosa — Requirements Extraction Worker。負責解析需求並拆出 Issues。", ctx, loggerFactory);
+            "你是 Rosa — Requirements Extraction Worker。負責解析需求並拆出 Issues。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

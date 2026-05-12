@@ -41,7 +41,7 @@ public class QaAgentService(
     public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<QaAgentService>();
     public AIAgent CreateAgent(PetraSessionContext ctx)
         => PetraWorkerHelper.BuildAgent(claudeCodeService, "qa_testing", "Quinn",
-            "你是 Quinn — QA Testing Worker。負責執行測試、產出測試報告。", ctx, loggerFactory);
+            "你是 Quinn — QA Testing Worker。負責執行測試、產出測試報告。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

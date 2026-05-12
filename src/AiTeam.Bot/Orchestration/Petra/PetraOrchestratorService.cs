@@ -173,23 +173,59 @@ public class PetraOrchestratorService(
         return (caps, picks);
     }
 
+    // Trial_v9 修：對齊官方 doc Sequential Orchestration 範例 — fire 真實 events 是 AgentResponseUpdateEvent（intermediate worker output）+ ExecutorInvokedEvent + ExecutorCompletedEvent + WorkflowOutputEvent（terminal）
+    // accumulator 累積每個 worker streaming update text，executor complete 時 flush 寫 tool message
+    private readonly Dictionary<string, System.Text.StringBuilder> _executorAccumulators = new();
+
     private void LogWorkflowEvent(Guid sessionId, WorkflowEvent ev)
     {
         var typeName = ev.GetType().Name;
+
+        // AgentResponseUpdateEvent: intermediate worker streaming output（對齊官方 doc 範例 evt is AgentResponseUpdateEvent）
+        if (ev is AgentResponseUpdateEvent aru)
+        {
+            var execId = aru.ExecutorId ?? "(unknown)";
+            if (!_executorAccumulators.TryGetValue(execId, out var sb))
+            {
+                sb = new System.Text.StringBuilder();
+                _executorAccumulators[execId] = sb;
+            }
+            sb.Append(aru.Update.Text);
+            logger.LogTrace("Workflow event AgentResponseUpdate executor={Exec} delta={Len}", execId, aru.Update.Text?.Length ?? 0);
+            return;
+        }
+
+        // ExecutorCompletedEvent: flush accumulator 寫 tool message + 清 buffer
         if (ev is ExecutorCompletedEvent ece)
         {
-            // 記錄 worker 完成 — 寫 assistant message log
-            var output = ece.Data?.ToString();
-            if (!string.IsNullOrWhiteSpace(output))
+            var execId = ece.ExecutorId ?? "(unknown)";
+            string toolText;
+            if (_executorAccumulators.TryGetValue(execId, out var sb) && sb.Length > 0)
             {
-                sessionRepo.AppendMessage(sessionId, "tool", $"[{ece.ExecutorId}] {output}");
+                toolText = sb.ToString();
+                _executorAccumulators.Remove(execId);
             }
-            logger.LogDebug("Workflow event {Type} executor={Exec}", typeName, ece.ExecutorId);
+            else
+            {
+                toolText = ece.Data?.ToString() ?? "";
+            }
+
+            if (!string.IsNullOrWhiteSpace(toolText))
+            {
+                sessionRepo.AppendMessage(sessionId, "tool", $"[{execId}] {toolText}");
+            }
+            logger.LogInformation("Workflow event ExecutorCompleted executor={Exec} outputLen={Len}", execId, toolText.Length);
+            return;
         }
-        else
+
+        // ExecutorInvokedEvent / WorkflowStartedEvent / WorkflowOutputEvent / 其他 — log only
+        if (ev is ExecutorInvokedEvent eie)
         {
-            logger.LogTrace("Workflow event {Type}", typeName);
+            logger.LogInformation("Workflow event ExecutorInvoked executor={Exec}", eie.ExecutorId);
+            return;
         }
+
+        logger.LogInformation("Workflow event {Type}", typeName);
     }
 
     private async Task<string> BuildResumeInputAsync(PetraSession session, CancellationToken ct)
