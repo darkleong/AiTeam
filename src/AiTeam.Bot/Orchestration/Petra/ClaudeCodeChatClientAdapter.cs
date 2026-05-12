@@ -30,7 +30,7 @@ internal sealed class ClaudeCodeChatClientAdapter(
     string model,
     string apiKey,
     string workingDir,
-    AiTeam.Bot.Services.TokenLogService tokenLogService,
+    AiTeam.Bot.Services.TokenLogService? tokenLogService,   // nullable: production DI 必注入 / xUnit test 可傳 null（adapter dispatch 驗 不驗 token_logs 寫入）
     ILogger<ClaudeCodeChatClientAdapter> logger) : IChatClient
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
@@ -46,13 +46,16 @@ internal sealed class ClaudeCodeChatClientAdapter(
         var result = await DispatchAsync(prompt, cancellationToken);
 
         // Trial_v9 修：對齊 v4 既有 caller 寫 token_logs pattern（DevAgentService.cs:288-291）— v5 走 adapter 沒走 v4 caller path → 自寫 token_logs
-        try
+        if (tokenLogService is not null)
         {
-            await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, result.Usage, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker}", workerName);
+            try
+            {
+                await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, result.Usage, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker}", workerName);
+            }
         }
 
         var responseMessage = new ChatMessage(ChatRole.Assistant, result.Output ?? "");

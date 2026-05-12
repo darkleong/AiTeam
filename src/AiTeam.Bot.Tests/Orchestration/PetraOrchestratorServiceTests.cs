@@ -131,7 +131,8 @@ public class PetraOrchestratorServiceTests
     {
         var stub = new StubClaudeCodeService();
         var adapter = new ClaudeCodeChatClientAdapter(
-            stub, capability, "mock-model", "mock-key", "/tmp/wd",
+            stub, capability, "TestWorker", "mock-model", "mock-key", "/tmp/wd",
+            tokenLogService: null,    // Trial_v9 修：adapter 加 TokenLogService 注入 — test 純驗 dispatch 不驗 token_logs 寫入，傳 null 對齊 adapter null check fallback
             NullLogger<ClaudeCodeChatClientAdapter>.Instance);
 
         var input = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "test input") };
