@@ -30,10 +30,11 @@ internal static class PetraSpikePrototype
         // Petra LLM 動態決策（核心命題）— 看任務規模 + trigger 條件 prompt 真實分流不同序列。
         var sequence = await DecideAsync(scenarioInput, agents, petraProvider, log, ct);
 
-        // 建 workflow + 跑（揭 framework limitation (b) — workflow 結束但 agent.RunCoreAsync 不 invoke / Stage 63B IChatClient adapter 解決）
+        // 建 workflow + 跑（Trial_v9 修：sequence 必須走 TrySendMessageAsync(new TurnToken) 才會 fire executor — Stage 63A spike notes 第 1 段「limitation (b)」結論誤判實為「漏 TurnToken trigger」）
         var workflow = AgentWorkflowBuilder.BuildSequential(sequence);
         var initial = new ChatMessage(ChatRole.User, scenarioInput);
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, initial, cancellationToken: ct);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
         {
             log.Events.Add(ev.GetType().Name);
