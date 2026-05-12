@@ -71,6 +71,8 @@ public class PetraOrchestratorService(
             var initial = new ChatMessage(ChatRole.User, taskInput);
 
             await using var run = await InProcessExecution.RunStreamingAsync(workflow, initial, cancellationToken: ct);
+            // Trial_v9 揭：BuildSequential workflow 需要 TurnToken 觸發 first turn 才會 fire executor — 對齊官方 doc Sequential Orchestration 範例（learn.microsoft.com/agent-framework/workflows/orchestrations/sequential）。沒這條 → 0 worker 真實 dispatch + 7 秒 idle 完成。
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
             await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
             {
                 LogWorkflowEvent(session.Id, ev);
