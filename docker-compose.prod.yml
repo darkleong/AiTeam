@@ -39,6 +39,8 @@ services:
       Discord__Channels__DesignerChannel: "demi-designer"
       Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
       Gemini__ApiKey: "${AITEAM_GEMINI_KEY}"
+      # Stage 63B Trial_v9 揭：v1 stable Gemini API 不支援 systemInstruction 欄位（400 BadRequest），改用 v1beta 對齊 Stage 63A spike 已驗 path
+      Gemini__BaseUrl: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
       GitHub__DefaultRepo: "AiTeam"
