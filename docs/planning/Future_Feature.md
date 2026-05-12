@@ -1,6 +1,6 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.89
+> 版本：v7.90
 > 建立日期：2026-04-01
 > 最後更新：2026-05-12
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
@@ -18,6 +18,7 @@
 > **2026-05-04 v7.74**：Stage 55B Session A 完成（v3.43.0，**首次拆 Session B**）— PipelineHitlHelper + AppealOrchestrationService 11 + QaCoordination 5 = 16 處 skip 精簡（dead code 全清，AppealOrchestration -25% / QaCoordination -28%）+ F-α 排除條件 4 處移除 + 8 處 calling site comment + Version bump。**4 戰略議題 Christ 拍板**：① **1A** proposal 留 Stage 56（Forge spike F6 揭露 ProposalConfirmationService 入口流程 group lifecycle 整合衝突）② **2C** Pattern A 主 + Stage 51 試點 mid_interrupt 獨立保留（Forge 揭露 Stage 55A 已採 Pattern A）③ **3A** intervention/merge_notify 留 fire-and-forget（ack only no routing 切 yield-resume 收益 = 0）④ **4A** 拆 Session B（Forge spike 揭露 5 routing HITL 規模 ~600-900 LOC，首次拆 session）。**Production DB pre-check**（Forge 主動執行 — 96 done + 54 cancelled + 14 failed + 1 stuck mock，PipelineFrameworkStateJson IS NULL 無 Pipeline path 干擾 → dead code 移除 production safe）。Aria 校準錨 Session A **×0.73**（450K vs Stage 55B 整體中位 615K，**半 Stage 校準錨計算非典型** — 完整 Stage 55B 校準錨等 Session B 結案後重新評估）。**Stage 55B 整體 8.5/9 達成**，Session B 5 routing HITL refactor 留待 v3.44.0 → Stage 55B 完整結案 → v4 路線 9/9 達成。
 > **🎉🎉🎉 2026-05-05 v7.75：v4 漸進遷移完整路線 9/9 達成 🎉🎉🎉** — Stage 55B Session B 完成（v3.44.0）— 5 routing types HITL refactor（dev_failed_intervention / qa_failed_intervention / devplan_escalate / dev_plan_unable / split_task_proposal）+ Pipeline executor 從 SetIntervention end 改 yield-resume + legacy handler 加 Pipeline 分支（議題 5 = 5A 對齊 Stage 55A kickoff/design pattern）。**核心戰略級 Forge 缺口 6 揭露**：5 type-specific BossInteraction 在 Pipeline path 下**部分已 fire**（不是統一 generic intervention）— Pipeline 不 yield 而是 SetIntervention end → refactor 策略**比預期更輕**（不需新加 type-specific BossInteraction）。**首次拆 Session 戰術完整實踐 + Compact know-how 揭露**：Forge 用 Compact 模式（vs 新開 Forge session）完成 Session A → Compact → Session B — Session A 4 戰略議題拍板脈絡保留 + 對話連貫 + Aria 工作量單線程，**比新開 Forge session 更乾淨**。Aria 校準錨 Stage 55B 整體 **×1.42**（876K = Session A 450K + Session B 426K vs 中位 615K — **混合型新上界**：拆 Session + Compact 戰術 trade-off 跨 session 加總比一個 session 跑 + 1M compact 風險低）。**v4 漸進遷移完整路線 9/9 達成** — Stage 51 試點 framework HITL pattern 全面 wire 完成 + Pipeline framework 完整化 + Crash Recovery 全切 + sub-task 整合 + 16 處 skip 精簡 + F-α 移除。剩 Stage 56 Trial v6 前置條件統包（Dashboard MockScenarioCard 補 22+ framework_* 場景 + FF 四十二 + FF 四十三 + Stage 48 候選 FF + WorkflowEngine.cs enum/record 殘留評估）後可進入 Trial_v6 v4 動態架構驗證。
 > **2026-05-05 v7.76：Stage 56 完成（v3.45.0）— Trial_v6 前置條件統包 ✅** — Dashboard MockScenarioCard 補全 33 framework_* 場景（Stage 49-55B 全到位）+ **FF 四十三 ✅**（路線 b + 議題 spike-2 選項 B：兩 path 修 — Path A CLI single-shot TryParseUsage 多欄位兼容 + LogDebug dump fallback / Path B Anthropic API direct TokenTrackingProvider 中央寫入點補 cost 估算 + 新建 TokenCostEstimator hardcoded per-model 4 欄位 dict 12 數字 + IsEstimated flag + Migration `Stage56TokenLogsIsEstimated`）+ **FF 四十二 ✅**（line-iteration + try-deserialize pattern 對齊既有 helper + 新建 AiTeam.Bot.Tests xUnit project 4 case all pass）+ conventions 補 2 段（WorkflowType/WorkflowStep fundamental type 不可移除 + Windows PATHEXT 解法落地 Stage 48 候選 FF）。**Aria 閘門一 4 critical 揭露**（Stage 47 model pricing 設施前提錯誤 / API path 修法位置模糊 / AiTeam.Bot.Tests 不存在 / 兩 path 根因混淆）→ Forge Plan Mode 二輪修正 + 議題 spike-2 三選項 escalate Christ 拍 B（hardcoded dict）。**範圍變更**：子項 7 Dashboard token 統計頁 IsEstimated 視覺區分跳過（4 處 razor + DTO + SQL 改動超出 1 處 grid cell 上限）→ **新立 FF 五十** Trial_v6 觀察期 follow-up。**0 follow-up bug**。Aria 校準錨 **×0.78**（混合型第 10 資料點 mid 帶下半，10 資料點區間穩定 ×0.73-1.42 — 觀察類整理 + Forge spike + 修一氣呵成 + 0 follow-up bug + Plan Mode 二輪 Aria gate1 修正充分四因素疊加）。**Trial_v6 開跑前工具完備**。
+> **2026-05-12 v7.90：立 FF 六十一 — v5 PoC → production-ready simplification 補強清單**（Stage 63B Aria spot check 揭露 — Stage 64+ 處理）— Christ question「Context 偏低 ×0.49 是否該做沒做」拍板 Aria spot check 後揭 30% 隱性 production simplification（4 點）：① 🔴 PetraOrchestratorService.StartAsync 端對端 xUnit 漏測（7 test 真實覆蓋組件單元 / 沒測 BuildSequential + InProcessExecution + ChatClientAgent + adapter 完整 chain — 「組件單元測試全綠 ≠ 端對端整合測試全綠」對齊 Stage 60 自省點 #25 第 N 次精神延伸）② 🟡 ResumeAsync「PoC 簡化：mark 既有 session done + 開新 session」not「同 session 繼續」③ 🟡 BuildSessionContext fallback hardcode `Agents:Dev:Model` 給 7 Worker 共用（沒走 per-Worker AgentConfig DB Stage 38 pattern）④ 🟡 PetraSessionRepository.AppendMessage 同步 method（既有 BossInteractionRepository 是 async）。**全 Mock 階段足夠 / production 階段需要** — Stage 64+ 全量遷移時補。**Aria gate1 補強紀律候選不立自省點**（第一次資料點不夠 — 等 Stage 64+ 同類型再驗）：gate1 commit 檢查考慮加「spot check 1-2 個 critical service production-ready vs Mock 階段簡化」。**FF 三十六 status 不變**（Charter ✅ + API spike ✅ + PoC ✅ + Trial 待 Trial_v9）/ FF 六十一 standby ⚪ 不進 Top 5。詳見 [Future_Feature.md FF 六十一](Future_Feature.md#六十一v5-poc--production-ready-simplification-補強清單stage-63b-aria-spot-check-揭露--stage-64-處理)。
 > **2026-05-12 v7.89：Stage 63B ✅ 完成（v3.53.0）— FF 三十六 Phase B PoC spike v5 動態架構 production-ready 實作 + Mock 全綠** — 9 子項全部完成 / feature/v5-poc branch + main 0 動 + feature flag default=false v4 production 0 影響 / dotnet test 153 passed（+19 new Petra test）。**路線 A 拍板對應實作**（對齊 Stage 63A spike 已驗 path + framework 投資保留）：限制 (a) workaround 自寫 PetraOrchestratorService.DecideAsync + BuildSequential + InProcessExecution events 訂閱 + 限制 (b) workaround Worker.CreateAgent factory pattern 包 ChatClientAgent + ClaudeCodeChatClientAdapter : IChatClient（三層 wrapper 真實生效 / 7 capability dispatch IClaudeCodeService 7 真實 method）。**12 新建檔**：PetraSession + PetraSessionMessage entity + Repository + EF Migration Stage63PetraSessionTables + IAgentTool factory pattern + AgentCapabilityAttribute + PetraSessionContext + ClaudeCodeChatClientAdapter + PetraOrchestratorService + PetraOrchestratorResult + PetraSessionRecoveryService hosted service + xUnit 26 case。**修改檔**：AppDbContext +25 / WorkflowSettings +7 / Resolver +5 / CeoAgentService +15（flag forward）/ 7 Worker 各 +14-15（IAgentTool factory）/ Program.cs +15（DI multi-registration）/ CLAUDE_Petra.md 全砍 -206+255（FF 五十九 hand-off v5 PoC 期間紀律段）/ 7 partial CLAUDE_*.md 各 +2（FF 五十九 hand-off only — Victoria +7）/ Directory.Build.props v3.53.0。**FF 動態**：FF 三十六 status 升「🟡 進行中 Charter ✅ + API spike ✅ + PoC ✅ + Trial 待 Trial_v9」+ FF 五十九 hand-off ✅ 落實到 CLAUDE_Petra.md 全砍重寫開頭 + 7 partial 各 +2 行。**Aria gate1 第二輪通過放行**（v1.1 修正三點全完整：critical 路線 A + important Victoria 簡化 + nice-to-have xUnit only）+ **2 點 healthy 範圍變更**：① 7 partial CLAUDE_*.md 簡化為 FF 五十九 hand-off only（Mock 階段足夠 / 完整 partial 重寫留 Stage 64+ 全量遷移） ② Forge 揭 PetraWorkerHelper.cs 抽 helper 對齊 Stage 36+ refactor-sop 精神。**Charter 04 inconsistency 揭露補釘**（Aria grep source of truth 紀律）：「9 Worker」實際 7 個 AgentService / 「RunWriteAsync」實際 `RunAsync`。**dotnet test baseline 漂移 134 → 153**（+19 new Petra test — 未來新 Stage 對齊本 entry 紀錄）。**Aria 校準錨 待 Christ 補 Forge context 數字**（規模 L 預估 mid 750K — 對齊 production-ready 補強 4 Stage 區間 ×0.78-0.99 mid 中段 + Stage 63A 早期 derisk 範圍可控）。**Top 5 重排**：Trial_v9 升 #1（啟動條件達成 — 建議 Christ 儲值 ≥ $30 buffer 才開跑）/ FF 三十六 #2（Charter ✅ + API spike ✅ + PoC ✅ + Trial 待）/ FF 五十四 #3 / 戰略大重評估 #4（Trial_v9 結案後拍板路線 A vs B vs C vs D）/ 保留群組 #5。**戰略主軸**：Stage 63B PoC 架構基底 ✅ Mock 全綠 → Trial_v9 啟動條件達成（feature/v5-poc branch + 5 向對照 + 7 驗證項 #4 Crash Recovery + #6 遷移成本量化 真實任務驗證 + LLM cost ~$5-15 / 建議 Christ 儲值至 ≥ $30 buffer）→ Trial_v9 結案後 Christ 拍板戰略大重評估關鍵實證。詳見 [Stage_63B_Roadmap.md](Stage_63B_Roadmap.md) v2.0 + [CHANGELOG v3.53.0](../../CHANGELOG.md#3530)。
 > **2026-05-11 v7.88：Stage 63A ✅ 完成（v3.52.0）— FF 三十六 Phase B 動態決策 API spike ✅ 硬通過 + 揭 2 framework limitation**（Stage 63B 戰略級早期 derisk）— Stage 62→63 拆 Stage 模式延伸到 63A→63B（廉價先驗驗證項 #2 unknown 過了才 commit 63B 大投資）。**✅ 硬通過**（Christ AI Studio Gemini 2.5 Flash key 真打 3 場景 trigger 命中率 100% / 真實 cost $0 免費 tier + 1 次 503 retry success）：① 修 typo → `Cody`（1 agent）→ 1-on-1 trigger ② 跨 5 元件 → `Cody → Vera`（2 agents）→ Design trigger ③ 架構級重構 → `Cody → Vera → Cody → Vera`（4 agents 多輪）→ Kickoff trigger。**核心 finding**：Charter 候選 `MagenticOrchestrator<TState>` **不存在於 nuget 1.3.0** — 動態決策真實 hook = `GroupChatManager.SelectNextAgentAsync` override + `AgentWorkflowBuilder.CreateGroupChatBuilderWith` + `HandoffWorkflowBuilder` 替代 pattern + `AIAgentExtensions.AsAIFunction` Worker-as-Tool 真實 API。**驗證項 #2 失敗條件未命中**（命名落差 ≠ 失敗 — Charter 用 errata 補釘到 spike notes）。**⚠️ 2 framework limitation 揭露**（戰略級對 Stage 63B）：① **Limitation (a)** base `GroupChatManager` subclass 不啟動 manager loop → Stage 63B 走候選 (B) 自寫 PetraOrchestratorService + BuildSequential ② **Limitation (b)** base `AIAgent` subclass 不被 framework workflow dispatch → Stage 63B 必走 `ChatClientAgent(IChatClient, ...)` ctor + 新建 `ClaudeCodeChatClientAdapter : IChatClient`（從「可選」升「必走」）。**範圍變更接受 +13%**：prototype 113 行 throwaway（超 100 行上限 13%）— 揭 framework limitation value 巨大早期 derisk。**5 deliverable**：PetraSpikePrototype.cs 113 行 + PetraSpikePrototypeTests.cs 3 場景 + 05_Stage_63A_Spike_Notes.md 5 段（含實測 log + 2 framework limitation + 結論升「硬通過」）+ 04_Stage_63_PoC_Roadmap_Draft.md errata 子項 1+4（候選 (B) / IChatClient adapter 升「必走」）+ Directory.Build.props v3.52.0。**Christ 拍板補充**：EF Migration 路線 **(c) in-memory session**。**FF 動態**：FF 三十六 status 升「🟡 進行中 Phase B Charter ✅ + API spike ✅ + PoC 待 Stage 63B」+ FF 五十九 落實 hand-off 紀錄到 spike notes 第 5 段。**Aria gate0 揭露 3 點 Forge 全收** + **Forge spike 新增第 6 自決點**（跨 assembly protected override CS0507 修正）。**dotnet test baseline 漂移 131 → 134**（3 spike test silently pass 無 GEMINI key / 真打 PASS）。**Aria 校準錨 待 Christ 補 Forge context 數字**（spike 規模 S 混合型 — 預估 ~200-300K）。**Top 5 重排**：Stage 63B PoC 升 #1（啟動條件達成 — 待 Christ 拍板開跑）/ FF 三十六 #2 / FF 五十四 #3 / 戰略大重評估 #4 / 保留群組 #5。**戰略主軸**：Stage 63A spike ✅ **硬通過 + 2 framework limitation 戰略級早期 derisk** → Stage 63B PoC 啟動條件達成（feature/v5-poc branch + 候選 (B) 自寫 orchestrator + ClaudeCodeChatClientAdapter + 6 子項全量實作 + Trial_v9 5 向對照 / 規模 L / cost ~600-1000K + LLM cost ~$5-15）。詳見 [Stage_63A_Roadmap.md](Stage_63A_Roadmap.md) v2.0 + [v5_charter/05_Stage_63A_Spike_Notes.md](../architecture/v5_charter/05_Stage_63A_Spike_Notes.md) + [CHANGELOG v3.52.0](../../CHANGELOG.md#3520)。
 > **2026-05-11 v7.87：Stage 62 ✅ 完成（v3.51.0）— FF 三十六 Phase B Charter spike（v5 動態架構規劃文件 deliverable）** — 純文件 deliverable / main branch / 0 production code 改動 / 0 EF Migration / 0 DI 結構改動。**4 deliverable 完整**：① `01_Spike_Plan.md` 7 驗證項細節（Victoria Router / Petra 自主調度 / per-task session / Crash Recovery / Mock Gemini Flash / 遷移成本量化 / Hybrid 會議 trigger）+ 預測項（強信心 5 / 中信心 1 / 未知 1）② `02_Architecture_Wire.md` 4 層 Hierarchy 落具體 service / DI（含 per-task session 多 row table schema 候選 + Tool Set Capability attribute+interface hybrid 候選 + 9 Worker capability mapping）③ `03_v4_Code_Audit.md` 三類分類 + LoC 量化（**吸收 ~16,061 LoC ~26%** / 重寫 ~3,991 LoC + 925 prompt 行 ~7% / 全保留 ~38,700+ LoC ~67% — v4 投資保留 + 重寫 = 73% 對齊「換引擎不換車身」精神 + Aria 規劃預估吸收 ~6K 自省揭露補強對齊 +167% 超預估）④ `04_Stage_63_PoC_Roadmap_Draft.md` PoC 6 子項 + 5 向對照 + 規模 L / cost ~600-1000K / 驗收標準。**FF 動態**：✅ FF 五十七 / FF 五十八 / FF 五十九 / FF 六十（4 個 close 不做 — v5 動態架構吸收）+ FF 三十六 status 升「🟡 進行中 Phase B Charter spike」+ FF 五十四子項 2/3 「保留評估」（v5 重寫後哪些大檔仍存在）+ FF 二十五/四十六/四十八 「保留」（Cody Worker prompt 仍適用）。**8 條 Christ 拍板對齊**（Charter 文件 only / Charter main + PoC branch / 保留 v4 不動 / 保留 10 Agent / 同 prompt 任務 / Forge spike healthy 模式 / Stage 51 spike Charter 模板 / minor bump）。**5 Forge spike 自決點 Aria gate1 全通過**（per-task session 多 row table / Petra prompt 全砍 / Tool Set hybrid / wc -l Glob 量化 / docs/architecture/v5_charter/ 新資料夾）。**Top 5 重排**：FF 三十六 升 #1（進行中 Charter spike）/ Stage 63 PoC 候選 #2 / FF 五十四子項 2/3 #3 / 戰略大重評估候選 #4（Charter+PoC 後再啟動）/ 二十五/四十六/四十八 保留群組 #5。**戰略主軸**：Stage 62 Charter 通過 → Stage 63 PoC spike feature/v5-poc branch + 5 向對照 + 7 驗證項實證 = v5 動態架構 ROI 拍板實證。詳見 [Stage_62_Roadmap.md](Stage_62_Roadmap.md) + [v5_charter/](../architecture/v5_charter/) + [CHANGELOG v3.51.0](../../CHANGELOG.md#3510)。
@@ -597,6 +598,62 @@ Trial_v8 揭露 Stage 60 第 7 routing `agent_api_failure_intervention` 三選 a
 ### v4 兼容性
 
 對齊 Stage 60 既有 marker pattern + per-stage Port pattern 延續，全 v4 兼容。
+
+---
+
+## 六十一、v5 PoC → production-ready simplification 補強清單（Stage 63B Aria spot check 揭露 — Stage 64+ 處理）
+
+> 狀態：⚪ candidate standby — Stage 64+ 全量遷移時處理（v5 動態架構 production-ready 補完整 / Trial_v9 真實任務驗證後若採用路線 D 才動工）
+> 提出日期：2026-05-12（Stage 63B 結案 Aria spot check 揭露 — Christ question「Context 偏低是否該做沒做」拍板開 FF 追蹤）
+
+### 背景
+
+Stage 63B PoC ✅ Mock 全綠 + 校準錨 ×0.49（vs Aria 預估 mid 750K 偏低 -51%）— Christ question 拍板 spot check 後揭 **30% 隱性 production simplification 我 Aria gate1 沒揭露**。所有都是 Mock 階段足夠 / production 階段需要 — Stage 64+ 全量遷移時補完整。對齊 Stage 60 揭露「Mock 全綠 ≠ production 全綠」自省點 #25 第 N 次精神延伸到「組件單元測試全綠 ≠ 端對端整合測試全綠」新類型。
+
+### 補強清單（4 點）
+
+**1. 🔴 PetraOrchestratorService.StartAsync 端對端 xUnit 漏測**
+
+xUnit 7 test 真實覆蓋 7 個 critical 組件單元（DecideAsync parse / PetraSessionRepository 持久化 / WorkflowSettings default / Worker capability attribute reflection / ClaudeCodeChatClientAdapter dispatch 7 case）— 但**沒測完整 chain**：
+
+> `PetraOrchestratorService.StartAsync → DecideAsync → BuildSequential → InProcessExecution.RunStreamingAsync → Worker.CreateAgent → ChatClientAgent → ClaudeCodeChatClientAdapter → IChatClient → IClaudeCodeService`
+
+= 路線 A 三層 wrapper **端對端跑通** xUnit 漏做 — 「Mock 全綠 153 passed」實際是「組件單元測試全綠 ≠ 端對端整合測試全綠」。**Trial_v9 真實任務跑時才會驗端對端鏈**。
+
+**2. 🟡 ResumeAsync「PoC 簡化」紀錄補強**
+
+`PetraOrchestratorService.ResumeAsync` 註解寫「PoC 簡化：mark 既有 session done + 開新 session」— 不是真實「同 session 繼續」。production 階段需要切回**同 session 繼續**（rebuild context 不開新 session）對齊 5 挑戰拍板 #5「重啟重跑紀律」+ 不破壞 session_messages 連續性。
+
+**3. 🟡 BuildSessionContext fallback hardcode `Agents:Dev:Model`**
+
+`BuildSessionContext` 取 Worker model fallback hardcode 順序：`Agents:Dev:Model` → `Anthropic:DefaultModel` → `"claude-opus-4-6"` — **所有 7 Worker 共用 Dev model**。沒走 per-Worker AgentConfig DB Stage 38 既有 pattern（Cody=Opus / Vera=Sonnet / Quinn=Sonnet / 等）。production 階段需要 per-Worker model from AgentConfig DB。
+
+**4. 🟡 PetraSessionRepository.AppendMessage 同步 method**
+
+既有 BossInteraction Repository 是 async pattern — PetraSessionRepository.AppendMessage / Start 暴露同步 method 而不是 async。production 真實任務跑時可能踩 EF Core tracking 議題（跨 scope DbContext + 並行寫）— Mock 階段 InMemory DB 不踩。
+
+### 修法方向
+
+- 點 1 端對端 xUnit：加 PetraOrchestratorServiceTests.Test8 — stub ILlmProvider 回 capability 序列 + 跑 PetraOrchestratorService.StartAsync + 驗 BuildSequential events 真實 fire + 真實 worker 被 dispatch（透過 stub IClaudeCodeService LastInvokedMethod 多個）
+- 點 2 ResumeAsync 改同 session 繼續 — 重 rebuild context 但保留 sessionId / 不寫新 PetraSession row
+- 點 3 BuildSessionContext 走 AgentConfig DB query — 對齊 Stage 38 既有 dynamic model resolver pattern
+- 點 4 PetraSessionRepository.AppendMessage / Start 改 async — 對齊既有 BossInteractionRepository pattern
+
+### 規模 / 風險
+
+**規模**：M（架構級 production-ready 補強 / 4 點獨立改 + 1 點端對端 xUnit）/ **風險**：低（feature/v5-poc branch + feature flag default=false 雙保險 + Stage 64+ 全量遷移精神對齊）
+
+### 優先級
+
+⚪ candidate standby — **Stage 64+ 全量遷移時處理**（路線 D 採用拍板後才動工 — Trial_v9 結案是關鍵實證）。若 Trial_v9 揭露其他 production simplification 議題 → 本 FF 擴 cover。
+
+### v4 兼容性
+
+完全在 feature/v5-poc branch + v5 動態架構範疇 — 與 v4 hierarchical static 無關。
+
+### Aria gate1 補強紀律候選（候選自省點不立檔）
+
+Stage 63B 結案揭：Aria gate1 commit 檢查只對照 Plan 子項 LoC + dotnet test pass + commit message — 沒 spot check production simplification flag points。**下次同類型 Stage 結案前考慮 gate1 補強紀律「commit 抽 1-2 個 critical service 看實作真實對齊 production-ready vs Mock 階段簡化」**— 但第一次資料點不立自省點，等 Stage 64+ 同類型再驗（healthy 累積成 baseline）。
 
 ---
 
