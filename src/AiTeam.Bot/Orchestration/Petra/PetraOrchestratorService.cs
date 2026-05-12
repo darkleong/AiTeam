@@ -222,7 +222,9 @@ public class PetraOrchestratorService(
                  ?? configuration["Anthropic:DefaultModel"]
                  ?? "claude-opus-4-6";
         var apiKey = configuration["Anthropic:ApiKey"] ?? "";
-        var workingDir = configuration["GitHub:LocalWorkRoot"] ?? "";
+        // Trial_v9 揭：v4 既有 ClaudeCodeService 真實 config key 是 GitHub:WorkspacePath（docker-compose.prod.yml 設 /tmp/aiteam-workspace）— 不是 GitHub:LocalWorkRoot
+        // 沒對齊 → workingDir 空字串 → ClaudeCodeService subprocess 跑容器 /app dir 不是 git repo → "fatal: not in a git directory" → Cody 卡 retry loop
+        var workingDir = configuration["GitHub:WorkspacePath"] ?? "";
 
         return new PetraSessionContext(
             SessionId: Guid.Empty,   // caller 用 with-expression 補
