@@ -36,6 +36,7 @@ public partial class AgentSettings
     private bool                  _isTogglingActive;
     private bool                  _isSavingLlm;
     private string?               _saveMessage;
+    private string?               _errorMessage;
     private string?               _loadError;
 
     // 重啟 Bot
@@ -104,7 +105,17 @@ public partial class AgentSettings
         _isRestarting = true;
         var success = await BotService.RestartBotAsync();
         _showRestartConfirm = false;
-        _saveMessage = success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定";
+        if (success)
+        {
+            _errorMessage = null;
+            _saveMessage  = "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態";
+        }
+        else
+        {
+            _saveMessage  = null;
+            _errorMessage = "重啟失敗，請確認 Bot 服務設定";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
         _isRestarting = false;
     }
 

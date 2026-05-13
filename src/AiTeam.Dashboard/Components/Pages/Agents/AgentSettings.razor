@@ -193,3 +193,7 @@ else
 {
     <MudAlert Severity="Severity.Success" Class="mt-3">@_saveMessage</MudAlert>
 }
+@if (_errorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-3">@_errorMessage</MudAlert>
+}
