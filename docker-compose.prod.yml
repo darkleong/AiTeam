@@ -51,6 +51,9 @@ services:
       AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
       AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
       AgentSettings__SkipCeoConfirm: "false"
+    volumes:
+      # Stage 64：workspace 持久化（v5 PoC Trial_v9 揭 #5 — Bot recreate workspace 蒸發手動 git clone 缺口）。compose 自動建 named volume 不走 external，self-hosted runner 部署無摩擦。既有 ephemeral 內容遺失（Trial_v9 已驗無 production 數據）。
+      - aiteam-workspace-data:/tmp/aiteam-workspace
     ports:
       - "5052:8080"
 
@@ -76,3 +79,6 @@ volumes:
   postgres_data:
     name: aiteam-postgres-data
     external: true
+  aiteam-workspace-data:
+    # Stage 64：compose 自動建（不走 external — workspace 是 git clone 可重建 ephemeral，不需 external 護身符 vs postgres 真實資料）
+    name: aiteam-workspace-data

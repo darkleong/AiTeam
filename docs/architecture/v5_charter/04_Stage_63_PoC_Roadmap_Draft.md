@@ -56,7 +56,7 @@ PoC spike 目標：**小範圍真實任務驗證 v5 動態架構 ROI** — 跑 T
 - 新建 `[AgentCapability("...")]` attribute
 - 9 Worker Service 加 `IAgentTool` 介面實作（包既有 RunReadOnlyAsync / RunWriteAsync）+ class-level capability attribute
 - DI multi-registration（每個 Worker 兩重註冊：service interface + IAgentTool — Petra orchestrator 透過 `IEnumerable<IAgentTool>` DI scan）
-- **Stage 63A errata：framework limitation (b)** — base `AIAgent` subclass 不被 framework workflow dispatch（`BuildSequential` ExecutorInvoked 但 `RunCoreAsync`/`RunCoreStreamingAsync` 0 invoke）→ **Stage 63B 必走 `ChatClientAgent(IChatClient, ...)` ctor + 新建 `ClaudeCodeChatClientAdapter : IChatClient`**（包既有 ClaudeCodeService.RunReadOnlyAsync/RunWriteAsync + 把 IList<ChatMessage> 轉 subprocess CLI prompt）— 不是「可選」而是「必走」
+- **~~Stage 63A errata：framework limitation (b)~~** — ~~base `AIAgent` subclass 不被 framework workflow dispatch~~（**Stage 64 errata 修正**：真實 root cause = spike 漏 `TurnToken` trigger，非 framework 真限制；詳 [05_Stage_63A_Spike_Notes.md limitation (b) 段 errata block](05_Stage_63A_Spike_Notes.md)）→ **Stage 63B 必走 `ChatClientAgent(IChatClient, ...)` ctor + 新建 `ClaudeCodeChatClientAdapter : IChatClient`**（理由修正：`IClaudeCodeService` 是 CLI subprocess pattern 非 IChatClient 型別需 adapter wrap，包既有 ClaudeCodeService.RunAsync/RunReviewAsync/... + 把 IList<ChatMessage> 轉 subprocess CLI prompt）— 不是「可選」而是「必走」
 
 ### 5. Mock 模式
 

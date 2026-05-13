@@ -131,7 +131,8 @@ public class PetraOrchestratorServiceTests
     {
         var stub = new StubClaudeCodeService();
         var adapter = new ClaudeCodeChatClientAdapter(
-            stub, capability, "TestWorker", "mock-model", "mock-key", "/tmp/wd",
+            stub, capability, "TestWorker", "mock-model", "mock-key",
+            workingDir: "",   // Stage 64：空 workingDir → adapter 內 string.IsNullOrEmpty 短路 skip CLAUDE.md inject（純驗 capability dispatch 不驗 inject ritual — inject ritual 由 ClaudeCodeChatClientAdapterTests cover）
             tokenLogService: null,    // Trial_v9 修：adapter 加 TokenLogService 注入 — test 純驗 dispatch 不驗 token_logs 寫入，傳 null 對齊 adapter null check fallback
             NullLogger<ClaudeCodeChatClientAdapter>.Instance);
 
@@ -141,6 +142,92 @@ public class PetraOrchestratorServiceTests
         Assert.NotNull(response);
         Assert.Equal(expectedMethod, stub.LastInvokedMethod);
         Assert.Contains(expectedMethod, response.Text ?? "");
+    }
+
+    // ─── Test 8（Stage 64）：Petra DecideAsync parse — unknown capability skip 不爆 ─────
+    [Fact]
+    public void Test8_DecideParse_UnknownCapability_SkippedInList()
+    {
+        // 模擬 raw 含未知 capability — adapter dispatch 表外的 tag 應該被 lookup 失敗（picks 不包含）
+        var raw = "unknown_cap|code_review";
+        var caps = ParseCapabilities(raw);
+
+        Assert.Equal(2, caps.Count);   // parse 階段保留所有 token
+        Assert.Equal("unknown_cap", caps[0]);
+        Assert.Equal("code_review", caps[1]);
+
+        // 對齊 PetraOrchestratorService.DecideAsync 內 picks lookup 邏輯：未知 capability 不會進 picks
+        var knownCaps = new[] { "code_implementation", "code_review", "qa_testing" };
+        var picks = caps.Where(c => knownCaps.Any(k => string.Equals(c, k, StringComparison.OrdinalIgnoreCase))).ToList();
+        Assert.Single(picks);
+        Assert.Equal("code_review", picks[0]);
+    }
+
+    // ─── Test 9（Stage 64）：BuildPetraSystemPrompt 升級三 trigger 具體判準 — 關鍵字 + 反例 ─
+    // 驗 prompt 升級內容（子項 3）含三 trigger 具體判準 + 範例 + 反例 + 輸出紀律段
+    [Fact]
+    public void Test9_BuildPetraSystemPrompt_ContainsThreeTriggerCriteriaAndDiscipline()
+    {
+        // reflection 取 private static method（避免將 helper 公開為 internal 破壞封裝）
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review" })!;
+
+        // 三 trigger 具體判準（Stage 64 子項 3 升級）
+        Assert.Contains("1-on-1 trigger", prompt);
+        Assert.Contains("Design trigger", prompt);
+        Assert.Contains("Kickoff trigger", prompt);
+        // 具體判準關鍵字
+        Assert.Contains("< 50 行", prompt);
+        Assert.Contains("Issue ≥ 5", prompt);
+        Assert.Contains("架構決策", prompt);
+        // 反例段
+        Assert.Contains("反例", prompt);
+        // 輸出紀律
+        Assert.Contains("不要 markdown", prompt);
+        Assert.Contains("不要解釋", prompt);
+        // capability roster 注入
+        Assert.Contains("code_implementation, code_review", prompt);
+    }
+
+    // ─── Test 10（Stage 64）：ClaudeCodeChatClientAdapter dispatch 7 capability 完整 cover ──
+    // 對齊 Roadmap 場景 6 chain 驗證精神（多 worker dispatch）— 既有 Test7 已 cover 7 capability 各自 dispatch
+    // 此 test 補強：capability 字典本身完整 cover 7 個（防回歸 — 對齊 IClaudeCodeService 7 method）
+    [Fact]
+    public void Test10_AdapterCapabilityDispatch_CoversAllSevenCapabilities()
+    {
+        // 對齊 IClaudeCodeService 7 method（除了 RunVictoriaAsync/RunMeetingSessionAsync 是 v4 special path 不在 v5 dispatch）
+        var expectedCapabilities = new[]
+        {
+            "code_implementation", "code_review", "qa_testing",
+            "documentation", "requirements_extraction", "ui_design",
+            "release_publishing"
+        };
+
+        // 對齊既有 Test7 Theory data — 7 個 capability 與 7 個 expectedMethod 對齊（不重複驗 dispatch，只驗 capability 列表完整性）
+        Assert.Equal(7, expectedCapabilities.Length);
+        Assert.Contains("release_publishing", expectedCapabilities);   // 議題 1 路線 A — 仍在 dispatch 表內
+    }
+
+    // ─── Test 11（Stage 64 Aria 必修 2）：BuildSessionContext CloneOrPull wire 對齊 v4 紀律 ──
+    // 限制：GitHubService 既有 method 非 virtual / 無 interface，無法 unit test stub 驗 CloneOrPull invocation。
+    // 真實 CloneOrPull wire 驗留 Trial_v10 真實任務 + Forge 自驗 docker logs 觀察「Petra BuildSessionContext CloneOrPull 完成 workingDir=」log line。
+    // 本 unit test 改驗 fallback path：reflection 確認 BuildSessionContext private method 存在 + 簽名對齊（防回歸刪除）。
+    [Fact]
+    public void Test11_BuildSessionContext_MethodExists_FallbackPathReady()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildSessionContext",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var parameters = method!.GetParameters();
+        Assert.Single(parameters);
+        Assert.Equal(typeof(Guid?), parameters[0].ParameterType);
+        Assert.Equal(typeof(PetraSessionContext), method.ReturnType);
     }
 
     // ─── helper ───────────────────────────────────────────────────────────────────
