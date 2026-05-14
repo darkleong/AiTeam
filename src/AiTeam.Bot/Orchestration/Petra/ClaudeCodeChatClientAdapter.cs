@@ -78,6 +78,16 @@ internal sealed class ClaudeCodeChatClientAdapter(
         CancellationToken cancellationToken = default)
     {
         var prompt = FlattenMessages(messages);
+
+        // Stage 66 子項 3：Cody 廣範圍指令範圍對照表 enforce — 路線 A 動態 user prompt 層 prepend（只對 capability=code_implementation 加段）。
+        // 不污染 CLAUDE_Cody.md 跨專案守則（Christ 2026-05-14 拍板 — CLAUDE_Cody.md 是 Cody 跨專案工作守則，未來客戶專案沿用同份）。
+        // 抽 method 留 future prompt DB 化 inject 點（v5 上線後評估 prompt 從檔案搬 DB）。
+        if (string.Equals(capability, "code_implementation", StringComparison.OrdinalIgnoreCase))
+        {
+            var enforceSection = BuildBroadScopeEnforceSection();
+            prompt = enforceSection + "\n\n" + prompt;
+        }
+
         logger.LogInformation("ClaudeCodeChatClientAdapter dispatch worker={Worker} capability={Capability} promptLen={Len}", workerName, capability, prompt.Length);
 
         // Stage 65 子項 1：CLAUDE.md inject ritual 修根因 — 改用 CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
@@ -212,6 +222,21 @@ internal sealed class ClaudeCodeChatClientAdapter(
         "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
         _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 63B PoC 7 capability）"),
     };
+
+    /// <summary>
+    /// Stage 66 子項 3：廣範圍指令處理紀律 enforce 段（generic / 無專案特定 mapping — Christ 2026-05-14 拍板）。
+    /// 只對 capability=code_implementation prepend（不污染 Vera / Quinn / Sage 等其他 worker prompt）。
+    /// </summary>
+    private static string BuildBroadScopeEnforceSection() => """
+【廣範圍指令處理紀律 — 必須執行】
+
+若本任務原文含廣範圍措辭（「整個 X」「所有 Y」「凡是 Z」「之類」「等等」「全部」），必須步驟化處理：
+
+步驟 1：用 `git ls-files` / Glob 在 workspace 內 grep 範圍對應檔案 / 頁面 / 模組
+步驟 2：產出範圍對照表（任務點名項 → 對應實際檔案 → 已 cover ✓ / 待 cover ⏳ / 不適用 ❌）
+步驟 3：commit message 必含「範圍對照表」段 + PR body 必含「範圍對照表」段
+步驟 4：若範圍對照表有 ⏳ 項，commit / PR 前必須 cover 完或在 PR body 註明 deferred 理由
+""";
 
     private static string FlattenMessages(IEnumerable<ChatMessage> messages)
     {

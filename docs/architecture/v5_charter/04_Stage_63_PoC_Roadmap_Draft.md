@@ -185,3 +185,12 @@ PoC 失敗 → `feature/v5-poc` branch 不 merge：
 | Bot Internal API port 5052 / X-Api-Key | `docker-compose.prod.yml` + `docker exec aiteam-aiteam-bot-1 printenv AgentSettings__InternalApiKey` | PoC 自驗時 grep 驗證不憑印象 |
 | Stage 27 DB-as-Queue | `agent_queue` table + `AgentQueueProcessor` | 對齊新 `petra_sessions` 多 row 設計 |
 | BossInteraction 樂觀鎖 | Stage 28a/b 既有 `BossInteractions` table + `Status` enum | Layer 3 重啟流程 grep 驗證 already-responded 條件 |
+
+
+---
+
+## Stage 66 errata（2026-05-14）— BuildSequential framework chain 部分誤判 → 路線 B 自管 chain
+
+> ⚠️ Stage 64 計劃前 WebSearch 結論「framework 自動 chain」**Trial_v11 揭部分誤判** — `AgentWorkflowBuilder.BuildSequential` + `ChatClientAgent` direct chain 在 nuget 1.3.0 不會把 first agent output 餵下個 agent，第二個 agent 收 blank message 立刻 exit success（GitHub [#1308](https://github.com/microsoft/agent-framework/issues/1308) open / [#2696](https://github.com/microsoft/agent-framework/issues/2696) closed 含 fix pattern reference / [#1975](https://github.com/microsoft/agent-framework/issues/1975) open）。
+>
+> **Stage 66 拍板路線 B 修法**：PetraOrchestratorService **自管 chain dispatch**（取代 BuildSequential framework chain）— Petra 自主 orchestrate loop 內順手寫 PetraSessionMessages tool role（議題 1+2 修法位置合併避免時序漏洞）。詳 [05_Stage_63A_Spike_Notes.md Stage 66 errata 段](./05_Stage_63A_Spike_Notes.md#stage-66-errata2026-05-14--stage-64framework-自動-chain結論部分誤判) 完整脈絡。

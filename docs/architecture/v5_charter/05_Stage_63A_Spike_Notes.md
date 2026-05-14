@@ -338,3 +338,20 @@ prototype 用 `List<ChatMessage>` in-memory（`InProcessExecution.RunStreamingAs
   - Directory.Build.props：**4 行 version 元素**
   - **合計 ~474 LoC 新建/修改**（對齊計劃預估 ~450-500 LoC ±5%）
 - **校準錨**：留 Aria gate2 commit 檢查時計算（對齊「純文件 + spike code deliverable」混合型 — Stage 62 ×0.71 純文件 vs Stage 49 ×0.78 spike + production-ready 混合 — 本 Stage 63A 接近 spike 主導 + 文件少量）
+
+---
+
+## Stage 66 errata（2026-05-14）— Stage 64「framework 自動 chain」結論部分誤判
+
+> ⚠️ **Trial_v11 揭真實 root cause（連續第三次 framework 結論誤判同類根因）**：
+>
+> Stage 64 計劃前 WebSearch 結論「`AgentWorkflowBuilder.BuildSequential` + `ChatClientAgent` direct chain 自動把 first agent output 餵下一個 agent」**Trial_v11 揭部分誤判** — 在 nuget `Microsoft.Agents.AI 1.3.0`（穩定版，非 rc3）**framework BuildSequential edge 不會把第一個 agent output 餵下個 agent**，第二個 agent 收 blank message 立刻 exit success。
+>
+> **GitHub issue 對照**：
+> - [microsoft/agent-framework #1308](https://github.com/microsoft/agent-framework/issues/1308)（open）— BuildSequential edges 不傳 output 多 model 驗證
+> - [microsoft/agent-framework #2696](https://github.com/microsoft/agent-framework/issues/2696)（closed 2026-02 含 official fix pattern — Executor + adapter 手動轉接，不是 ChatClientAgent direct chain）
+> - [microsoft/agent-framework #1975](https://github.com/microsoft/agent-framework/issues/1975)（open — Workflow as Agent AgentThread 不更新同根因）
+>
+> **連續第三次 framework 結論誤判**：Stage 63A 限制 (a) 誤判 → Stage 63A 限制 (b) 誤判 → Stage 64「自動 chain」誤判（修根因第六次累積 → workflow_aria.md 第三節 A 第 9 條 WebSearch 紀律延伸觸發點）
+>
+> **Stage 66 拍板路線 B 修法**：PetraOrchestratorService **自管 chain dispatch**（取代 BuildSequential framework chain）— 對齊 v5 動態架構「Petra 自主 orchestrate」精神 + 不依賴 framework open issue 修法時間表 + 未來多 worker chain 場景通用。BuildSequential framework chain 路徑保留 reference（既有 import / xUnit Test 7 三層 wrapper / `LogWorkflowEvent` / `_executorAccumulators` 全保 — 未來 framework 修 #1308 後評估回切）。

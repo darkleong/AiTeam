@@ -271,3 +271,12 @@ Layer 3 Petra ← Tool result → 動態決策下一步（continue / escalate / 
 | BossInteraction 樂觀鎖 | Stage 28a/b 既有 `BossInteractions` table + `Status` enum reference |
 | Stage 27 DB-as-Queue | `agent_queue` table + `AgentQueueProcessor` 既有 reference |
 | Bot Internal API port | `5052`（見 `docker-compose.prod.yml`）— Charter spike 不會用但對齊紀律 |
+
+
+---
+
+## Stage 66 errata（2026-05-14）— BuildSequential framework chain 修法調整 → 自管 chain
+
+> ⚠️ Stage 64 計劃前 WebSearch 結論「framework 自動 chain」Trial_v11 揭部分誤判 — `AgentWorkflowBuilder.BuildSequential` + `ChatClientAgent` direct chain 在 nuget 1.3.0 不會自動把 first agent output 餵下個 agent（GitHub [#1308](https://github.com/microsoft/agent-framework/issues/1308) open / [#2696](https://github.com/microsoft/agent-framework/issues/2696) closed 含 fix pattern / [#1975](https://github.com/microsoft/agent-framework/issues/1975) open）。
+>
+> **Layer 3 真實 wire 調整**：PetraOrchestratorService 內 chain dispatch 改 **自管 loop**（取代 BuildSequential framework chain），既有 `Microsoft.Agents.AI.Workflows` 引用保留 reference（未來 framework 修 #1308 後評估回切）。詳 [05_Stage_63A_Spike_Notes.md Stage 66 errata 段](./05_Stage_63A_Spike_Notes.md#stage-66-errata2026-05-14--stage-64framework-自動-chain結論部分誤判) 完整脈絡。

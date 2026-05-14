@@ -71,19 +71,11 @@ public class PetraOrchestratorService(
                 return PetraOrchestratorResult.Empty(session.Id);
             }
 
-            // 2. BuildSequential + InProcessExecution（對齊 Stage 63A spike 已驗 path）
+            // 2. Stage 66：PetraOrchestratorService 自管 chain dispatch（取代 BuildSequential framework chain — 修 Vera 0 work 根因 GitHub #1308）。
+            //    framework BuildSequential edge 在 nuget 1.3.0 不會把 first agent output 餵下個 agent，自管 chain 完全 bypass。
+            //    BuildSequential 路徑既有 import / LogWorkflowEvent / _executorAccumulators 保留 reference（未來 framework 修 #1308 後評估回切）。
             var workerAgents = picks.Select(t => t.CreateAgent(sessionWithCtx)).ToArray();
-            var workflow = AgentWorkflowBuilder.BuildSequential(workerAgents);
-            var initial = new ChatMessage(ChatRole.User, taskInput);
-
-            await using var run = await InProcessExecution.RunStreamingAsync(workflow, initial, cancellationToken: ct);
-            // Trial_v9 揭：BuildSequential workflow 需要 TurnToken 觸發 first turn 才會 fire executor — 對齊官方 doc Sequential Orchestration 範例（learn.microsoft.com/agent-framework/workflows/orchestrations/sequential）。沒這條 → 0 worker 真實 dispatch + 7 秒 idle 完成。
-            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await foreach (var ev in run.WatchStreamAsync().WithCancellation(ct))
-            {
-                LogWorkflowEvent(session.Id, ev);
-                if (ev is WorkflowOutputEvent) break;
-            }
+            var dispatchSummaries = await DispatchWorkersAsync(session.Id, taskInput, decidedCapabilities, picks, workerAgents, ct);
             await db.SaveChangesAsync(ct);
 
             // Stage 64 子項 2：Workers 完成後 git commit/push/PR 接通（沿用 v4 GitHubService.CommitAll/Push/OpenPullRequestAsync API）。
@@ -237,6 +229,82 @@ public class PetraOrchestratorService(
         }
 
         logger.LogInformation("Workflow event {Type}", typeName);
+    }
+
+    /// <summary>
+    /// Stage 66：自管 chain dispatch — picks 序列改由 Petra 自己跑（取代 framework BuildSequential，修 GitHub #1308 root cause）。
+    /// 同位置同 transaction 寫 PetraSessionMessages tool role（議題 1+2 合併修法位置 — 避免兩段獨立寫入時序漏洞）。
+    /// </summary>
+    private async Task<List<WorkerDispatchSummary>> DispatchWorkersAsync(
+        Guid sessionId,
+        string taskInput,
+        IReadOnlyList<string> decidedCapabilities,
+        IReadOnlyList<IAgentTool> picks,
+        AIAgent[] workerAgents,
+        CancellationToken ct)
+    {
+        var summaries = new List<WorkerDispatchSummary>(workerAgents.Length);
+        for (var i = 0; i < workerAgents.Length; i++)
+        {
+            var workerAgent = workerAgents[i];
+            var workerName = picks[i].Name;
+            // picks 與 decidedCapabilities 同 index 對齊 — DecideAsync 已 filter unknown cap 後保持順序
+            var capability = i < decidedCapabilities.Count ? decidedCapabilities[i] : picks[i].Capabilities.FirstOrDefault() ?? "";
+
+            var inputMessages = i == 0
+                ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
+                : BuildNextWorkerInput(taskInput, summaries);
+
+            logger.LogInformation(
+                "PetraOrchestrator 自管 chain dispatch {Index}/{Total} worker={Worker} capability={Cap} inputMsgs={N} sessionId={SessionId}",
+                i + 1, workerAgents.Length, workerName, capability, inputMessages.Count, sessionId);
+
+            var response = await workerAgent.RunAsync(inputMessages, session: null, options: null, ct);
+            var outputText = response.Text ?? "";
+
+            var toolCallId = Guid.NewGuid().ToString("N");
+            var toolMessage = BuildToolMessage(workerName, capability, outputText);
+            sessionRepo.AppendMessage(sessionId, "tool", toolMessage, toolCallId);
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "PetraOrchestrator 自管 chain dispatch 完成 {Index}/{Total} worker={Worker} outputLen={Len} toolCallId={ToolCallId}",
+                i + 1, workerAgents.Length, workerName, outputText.Length, toolCallId);
+
+            summaries.Add(new WorkerDispatchSummary(workerName, capability, outputText, toolCallId));
+        }
+        return summaries;
+    }
+
+    /// <summary>
+    /// Stage 66：拼後續 worker input — 原 task input + 前面 worker 已做的 capability + 結果摘要。
+    /// 抽 method 留 future prompt DB 化 inject 點（Christ 2026-05-14 拍板）— 未來把 template content 從 method body 換成 DB 讀。
+    /// </summary>
+    private static List<ChatMessage> BuildNextWorkerInput(
+        string taskInput,
+        IReadOnlyList<WorkerDispatchSummary> prev)
+    {
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, taskInput),
+        };
+        foreach (var s in prev)
+        {
+            var summaryText = $"[前一個 worker：{s.WorkerName}（capability={s.Capability}）已完成]\n\n{s.Output}";
+            messages.Add(new ChatMessage(ChatRole.Assistant, summaryText));
+        }
+        return messages;
+    }
+
+    /// <summary>
+    /// Stage 66：產 tool role message content — worker dispatch 結果摘要寫入 PetraSessionMessages。
+    /// 抽 method 留 future prompt DB 化 inject 點（同 BuildNextWorkerInput 紀律）。
+    /// </summary>
+    private static string BuildToolMessage(string workerName, string capability, string output)
+    {
+        const int maxLen = 2000;
+        var truncated = output.Length > maxLen ? output[..maxLen] + "...(truncated)" : output;
+        return $"[{workerName}|{capability}|outputLen={output.Length}]\n{truncated}";
     }
 
     /// <summary>

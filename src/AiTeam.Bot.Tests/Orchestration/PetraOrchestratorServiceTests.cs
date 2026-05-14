@@ -230,6 +230,108 @@ public class PetraOrchestratorServiceTests
         Assert.Equal(typeof(PetraSessionContext), method.ReturnType);
     }
 
+    // ─── Test 12（Stage 66 子項 1+2）：PetraOrchestratorService 自管 chain — worker A output 餵 worker B + tool role 寫入 ─
+    // 修 GitHub #1308 framework BuildSequential edge 不傳 output 根因（Trial_v11 Vera 0 work 對應修法驗證）
+    [Fact]
+    public async Task Test12_DispatchWorkers_PassesPrevWorkerOutputToNext_AndWritesToolRoleMessages()
+    {
+        await using var db = CreateInMemoryDb(nameof(Test12_DispatchWorkers_PassesPrevWorkerOutputToNext_AndWritesToolRoleMessages));
+        await db.Database.EnsureCreatedAsync();
+        var repo = new PetraSessionRepository(db);
+
+        var session = repo.Start(taskGroupId: null);
+        await db.SaveChangesAsync();
+
+        // 兩個 stub IChatClient — worker A 回固定 marker / worker B 對 messages 紀錄
+        var chatA = new RecordingChatClient(returnText: "AAA-MARKER-FROM-WORKER-A");
+        var chatB = new RecordingChatClient(returnText: "BBB-from-worker-B");
+        var agentA = new ChatClientAgent(chatClient: chatA, instructions: null, name: "WorkerA");
+        var agentB = new ChatClientAgent(chatClient: chatB, instructions: null, name: "WorkerB");
+
+        // PetraOrchestratorService 建構：DispatchWorkersAsync 只用 logger / sessionRepo / db，其他 dep 傳 null! / Null logger
+        var orch = new PetraOrchestratorService(
+            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
+            sessionRepo: repo,
+            db: db,
+            providerFactory: null!,
+            gitHubService: null!,
+            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            logger: NullLogger<PetraOrchestratorService>.Instance);
+
+        var picks = new List<AiTeam.Bot.Orchestration.Petra.IAgentTool>
+        {
+            new FakeAgentTool("WorkerA", "code_implementation"),
+            new FakeAgentTool("WorkerB", "code_review"),
+        };
+        var caps = new List<string> { "code_implementation", "code_review" };
+        var workerAgents = new AIAgent[] { agentA, agentB };
+
+        // reflection invoke private DispatchWorkersAsync（保 method 為 private — 對齊 Test 9 既有 pattern）
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "DispatchWorkersAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var task = (Task)method!.Invoke(orch, new object?[]
+        {
+            session.Id, "原始任務 input", caps, picks, workerAgents, CancellationToken.None
+        })!;
+        await task;
+
+        // 1. Worker B 收到的 input messages 含 worker A 的 output marker（chain pass-through 真實生效）
+        Assert.NotEmpty(chatB.LastReceivedMessages);
+        var workerBPromptText = string.Join("\n", chatB.LastReceivedMessages.Select(m => m.Text ?? ""));
+        Assert.Contains("AAA-MARKER-FROM-WORKER-A", workerBPromptText);
+        Assert.Contains("原始任務 input", workerBPromptText);
+
+        // 2. Worker A 收到 1 message（原 task input）
+        Assert.Single(chatA.LastReceivedMessages);
+
+        // 3. PetraSessionMessages tool role 寫入 ≥ 2 條 + ToolCallId 非空（議題 2 修法驗證）
+        var toolMessages = await db.PetraSessionMessages
+            .Where(m => m.SessionId == session.Id && m.Role == "tool")
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync();
+        Assert.Equal(2, toolMessages.Count);
+        Assert.All(toolMessages, m =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(m.ToolCallId));
+            Assert.NotEqual(Guid.Empty.ToString("N"), m.ToolCallId);
+        });
+        Assert.Contains("WorkerA", toolMessages[0].Content);
+        Assert.Contains("WorkerB", toolMessages[1].Content);
+    }
+
+    // ─── Test 13（Stage 66 子項 3）：Cody 廣範圍指令範圍對照表 enforce — 只對 capability=code_implementation prepend ─
+    [Theory]
+    [InlineData("code_implementation", true)]
+    [InlineData("code_review",         false)]
+    [InlineData("qa_testing",          false)]
+    [InlineData("documentation",       false)]
+    public async Task Test13_Adapter_BroadScopeEnforce_PrependsForCodeImplementationOnly(string capability, bool shouldContainEnforce)
+    {
+        var stub = new StubClaudeCodeService();
+        var adapter = new ClaudeCodeChatClientAdapter(
+            stub, capability, "TestWorker", "mock-model", "mock-key",
+            workingDir: "",
+            tokenLogService: null,
+            NullLogger<ClaudeCodeChatClientAdapter>.Instance);
+
+        var input = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "整個 Dashboard 凡是錯誤處理的地方") };
+        await adapter.GetResponseAsync(input);
+
+        Assert.NotNull(stub.LastReceivedPrompt);
+        if (shouldContainEnforce)
+        {
+            Assert.Contains("廣範圍指令處理紀律", stub.LastReceivedPrompt!);
+            Assert.Contains("範圍對照表", stub.LastReceivedPrompt!);
+        }
+        else
+        {
+            Assert.DoesNotContain("廣範圍指令處理紀律", stub.LastReceivedPrompt!);
+        }
+    }
+
     // ─── helper ───────────────────────────────────────────────────────────────────
     private static List<string> ParseCapabilities(string raw)
         => raw.Split('|').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
@@ -237,14 +339,18 @@ public class PetraOrchestratorServiceTests
     private sealed class StubClaudeCodeService : IClaudeCodeService
     {
         public string? LastInvokedMethod { get; private set; }
+        public string? LastReceivedPrompt { get; private set; }
 
-        private Task<ClaudeCodeResult> Make(string method, string input) =>
-            Task.FromResult(new ClaudeCodeResult(
+        private Task<ClaudeCodeResult> Make(string method, string input)
+        {
+            LastReceivedPrompt = input;
+            return Task.FromResult(new ClaudeCodeResult(
                 Success: true,
                 Output: $"[{method}] echo: {input}",
                 ExitCode: 0,
                 RawJson: "{}",
                 Usage: null));
+        }
 
         public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunAsync); return Make(nameof(RunAsync), prompt); }
@@ -263,5 +369,50 @@ public class PetraOrchestratorServiceTests
 
         public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string anthropicApiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunMeetingSessionAsync); return Make(nameof(RunMeetingSessionAsync), prompt); }
+    }
+
+    // Stage 66 Test 12：IChatClient stub 紀錄收到的 messages（驗 chain pass-through）
+    private sealed class RecordingChatClient : Microsoft.Extensions.AI.IChatClient
+    {
+        private readonly string _returnText;
+        public List<Microsoft.Extensions.AI.ChatMessage> LastReceivedMessages { get; private set; } = new();
+
+        public RecordingChatClient(string returnText) { _returnText = returnText; }
+
+        public Task<Microsoft.Extensions.AI.ChatResponse> GetResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            LastReceivedMessages = messages.ToList();
+            var msg = new Microsoft.Extensions.AI.ChatMessage(
+                Microsoft.Extensions.AI.ChatRole.Assistant, _returnText);
+            return Task.FromResult(new Microsoft.Extensions.AI.ChatResponse(msg));
+        }
+
+        public IAsyncEnumerable<Microsoft.Extensions.AI.ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<Microsoft.Extensions.AI.ChatMessage> messages,
+            Microsoft.Extensions.AI.ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException("Test 12 不驗 streaming path");
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
+    }
+
+    // Stage 66 Test 12：IAgentTool stub — DispatchWorkersAsync 只用 Name property，CreateAgent 不會被呼叫到（外部已建好 workerAgents）
+    private sealed class FakeAgentTool : AiTeam.Bot.Orchestration.Petra.IAgentTool
+    {
+        public string Name { get; }
+        public IReadOnlyList<string> Capabilities { get; }
+        public FakeAgentTool(string name, string capability)
+        {
+            Name = name;
+            Capabilities = new[] { capability };
+        }
+        public AIAgent CreateAgent(AiTeam.Bot.Orchestration.Petra.PetraSessionContext ctx)
+            => throw new NotImplementedException("DispatchWorkersAsync 收 workerAgents 不會呼叫 CreateAgent");
     }
 }
