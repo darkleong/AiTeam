@@ -25,7 +25,7 @@
 
 **精神**：Agent 像人類處理事件 — 接到任務後累積思考 / 中間別事打斷不會忘記 / 重啟接著做還記得來龍去脈。
 
-**設計四要素**：
+**設計五要素**（2026-05-15 加第 5 條 Talent-Skill separation）：
 
 1. **Petra 拆解指令** — 把一個指令拆成多個 subtask，不是直接整包丟 worker
 2. **每個 subtask 呼叫 Agent 執行** — Petra 看 subtask 性質決定哪個 worker
@@ -33,6 +33,14 @@
 4. **記憶分層**（業界共識 hybrid 模式）：
    - **共用層**（task-level）：任務目標 / 各 agent 完成的 deliverable 摘要 / 關鍵決策歷史 — 跨 agent 可讀
    - **私有層**（per-agent role）：Cody 自己的 implementation 思考細節 / Vera 自己的 review checklist 進度 — 只該 agent 自己讀寫
+5. **Talent-Skill separation + horizontal scaling**（2026-05-15 Christ 提出 — 對齊業界 OneManCompany / Talent-Skill 主流模式）：
+   - **Skill（職務）= code-defined** — 例如「Coding 職務」「Review 職務」「Discord 職務」是 code 寫死的 capability + 對應 tool wiring
+   - **Talent（Agent）= DB-driven WebUI 動態加** — 例如「Cody-1」「Cody-2」「Cody-Discord」是可動態 CRUD 的 instance
+   - **多對多 assignment**：1 Talent 可擔任 N Skill / 1 Skill 可由 N Talent 擔任
+   - **Horizontal scaling**：「Coding 任務太多 → 加 Cody-2 也擔任 Coding skill」= Christ 擴 Talent pool / 不用寫 code
+   - **新職務還是要走 Stage**：例如「Discord 職務」是 code-defined / WebUI 不能加新職務（避開「Agent role explosion」反模式 + 業界 6% Copilot pilot 撐到 production 雷區）
+   - **對應業界**：Spring AI Skills / OneManCompany Talent / AI Agent Staffing / Agent Identity URI
+   - **AiTeam 既有架構半對齊**：capability registry + IAgentTool factory 已是 skill 抽象 / 差「1 Talent N Skill 多對多 mapping」+「動態 Talent CRUD」
 
 **為什麼 hybrid 比純共用 / 純獨立好**：
 - 純共用 → memory pool 被各 worker 雜訊寫滿 / Vera 看到 Cody 的 implementation 細節會干擾自己 review judgment
@@ -68,6 +76,31 @@
 2. **Compression 主動做**（不等 attention 退化）— 60-70% context 就 compact / 不等自動觸發
 3. **Shared context layer**（central state store）— Agent transient / shared layer persistent
 4. **Stateless orchestrator + Stateful memory** — Orchestrator 不長 running，每次從 DB query
+
+### 3.1.5 Talent-Skill separation + horizontal scaling（2026-05-15 Christ 提出後 WebSearch 驗證）
+
+**Christ 直覺命中業界主流方向**：
+
+- **OneManCompany (OMC) 框架**（arXiv 2026 論文「From Skills to Talent: Organising Heterogeneous Agents as a Real-World Company」）：Talent = portable agent identity（角色 + prompt + skill + tool）/ Skill = 可重用 capability / 同 Talent identity 可跨 execution environment
+- **AI Agent Staffing**（業界正式術語）：「sourcing, deploying, orchestrating, monitoring, and scaling autonomous agents exactly as you would human talent — treating AI agents as hireable 'employees'」
+- **Spring AI Skills**（2026-01）：skills registry 動態 register + asymmetric inspection（routing 看 full skill / agent 看 name + description）
+- **Agent Identity URI（agent:// scheme）**：學術論文「decouples agent identity from capability discovery」業界標準化中
+
+**業界證實 horizontal scaling 價值**：
+- 「Companies can 'Scale Up' their agent workforce during peak seasons like Black Friday and 'Scale Down' instantly」
+- 「Multi-agent architecture decomposes monoliths to enable systems to grow in a reliable, decoupled way, **similar to microservices in software development**」
+
+**Centralized orchestrator 壓制錯誤放大實證**：
+- 「Independent multi-agent systems amplified errors by **17.2x**」
+- 「Centralized systems with an orchestrator contained amplification to just **4.4x**」 — orchestrator 作為 validation bottleneck
+- 對齊 AiTeam Petra orchestrator 設計 ✓
+
+**業界仍有 3 個 critical gaps**（RSAC 2026 揭 — 不是萬能）：
+- 跨框架 agent identity 互操作（單 framework 內 OK）
+- 動態 skill discovery 安全性（governance）
+- Agent 行為 audit / accountability（出事誰負責）
+
+對 AiTeam 影響：個人專案單一 framework — gap 1 不影響 / gap 2-3 對齊 Aria 預檢 + Christ 拍板閘門自然解決。
 
 ### 3.2 多 Agent 討論（kickoff / design meeting pattern）
 
@@ -128,21 +161,74 @@
 
 ---
 
-## 六、啟動條件（不急動工）
+## 六、開發順序建議（2026-05-15 修正 — Christ 拍板「持續開發 / 不等觀察期」）
 
-**短期觀察期（v5 上線後 1-2 週 - 1 個月）**：
-- 看真實業務任務跑下來，「one-shot 沒記憶」這件事**實際**痛不痛
-- 看真實任務複雜度（是不是都「Dashboard 簡單打磨」級 / 還是有「跨多輪 Cody-Vera loop」）
-- 累積 Petra 動態決策真實 trigger 分布（1-on-1 / Design / Kickoff trigger 真實命中率）
+> ⚠️ **取消「v5 production 觀察期」概念**（2026-05-15 Christ 拍板）— 持續開發是預設。Aria 之前反覆推「等觀察期才動工」是錯誤紀律 / 修根因為「持續開發迭代」精神。
 
-**中期啟動條件**（任一達成）：
-1. **真實業務出現「多輪 Cody-Vera loop」場景** — 一輪 Cody → Vera review → 第二輪 Cody 修，第二輪需要記得第一輪做了什麼
-2. **客戶專案進來** — 任務複雜度本身需要長 context + 持久記憶
-3. **單一 Agent 任務跑超過 35 分鐘** — 對齊業界揭的 attention 退化臨界點
-4. **某 agent 0 work 復發** — 對齊 Trial_v11 揭的 Vera 0 work 同類議題（chain wire 不穩或 framework 限制復發）
-5. **Anthropic API 真實踩 quota / 5xx 連續失敗** — 觸發 multi-provider 升級候選（FF 六十一其餘其中一條）
+**從「block 後續 + ROI multiplier + 對齊 Talent-Skill 戰略」三維度排序**，分三個 Phase：
 
-**啟動後規模**：對齊 v5 PoC 二次架構升級 — 預估 3-5 個 Stage / ~1-2 個月工程（M-L 級投資）
+### 🥇 Phase 1：基礎重構（先做這個 block 後續所有升級）
+
+**Step 1 — Spike #6 Agent 收斂評估**（規模 S / 純評估報告 + Christ 拍板）
+- 對齊 Talent-Skill 概念：先 settle「哪些是 Skill（code-defined）」+「Agent 怎麼收斂」
+- 用既有 Trial_v6-v12 真實 dispatch 數據評估
+- 產出：Final Skill list（5-7 個）+ Agent 收斂方案（Rosa/Demi/Maya 砍 vs 合）
+- **可立刻開始 — 不需要等任何前置**
+
+**Step 2 — Talent-Skill separation 重構基底**（規模 L / Stage 級工程 / 後續所有 multiplier）
+- Skill registry 建立（既有 capability 抽象成 Skill）
+- Talent registry DB schema + Migration（既有 7 worker 對應預設 Talent）
+- 多對多 assignment table（Talent ↔ Skill）
+- GenericAgentService 收斂 7 worker class
+- Petra dispatch 改用 Talent pool（看 Skill 找 Talent / 多 Talent 時 round-robin）
+- 範圍守緊：**只做架構基底 + Migration / 不開放動態 CRUD（留 Phase 2/3）**
+
+### 🥈 Phase 2：核心動態化（建立在 Phase 1 上）
+
+**Step 3 — Spike #2 DB 持久記憶 schema 設計 + Spike #3 token budget**（規模 M / 合併實作）
+- 跟 Talent-Skill 整合：per-Talent 私有層 / per-Task 共用層
+- token budget 60-70% 主動 compact 紀律（業界踩坑教訓）
+
+**Step 4 — Spike #1 Petra 拆解指令精準度**（規模 M）
+- v5.5 核心新功能：拆解任務 + 派 Talent
+- 對齊 Talent-Skill：Petra 拆出 subtask 對應 Skill → 找可用 Talent
+
+**Step 5 — Prompt DB 化 + Talent identity 整合**（規模 M）
+- 對齊「Talent identity 含 prompt」原則
+- 同 Skill 不同 Talent 可有不同 prompt 風格（例：Cody-1 嚴謹 / Cody-2 創意）
+- Versioning + rollback 機制（業界踩坑必要）
+
+### 🥉 Phase 3：進階機制 + 動態化開放
+
+**Step 6 — WebUI Talent CRUD**（規模 S-M / Phase 1+2 完整收口後才開）
+- Dashboard 加 Talent 管理頁（新增 / 編輯 / 刪除 Talent）
+- Skill 多選 assignment
+- prompt 編輯器
+- ⚠️ **必須等 Phase 1+2 完整收口才開**（避開業界 6% Copilot pilot 撐到 production 雷區）
+
+**Step 7 — Spike #4 戰略決策層 3 agent debate**（規模 M）
+- 對齊兩層架構（day-to-day orchestrator-worker / 戰略決策 multi-agent debate）
+- 從 Talent pool 選 3 個（2 opposing + 1 synthesizer）
+- 觸發場景：大型新 feature 設計 / 客戶專案啟動
+
+**Step 8 — Spike #5 v4 既有 module 砍 vs 留**（規模 M）
+- 對齊 Talent-Skill 收斂後 — v4 對應 Stage Executor / MeetingService 等可評估
+- 對齊 Phase 3 Step 6 動態化開放 — 既有 v4 hardcoded path 可漸進廢除
+
+### 跨 Phase 紀律
+
+- **每 Phase 結束跑 Trial 驗證**（對齊 Trial_v6-v12 模式 — 真實任務驗 + Aria 9-step 模板）
+- **每個 Stage 加完做 Aria gate1 + Forge 自驗 + 真實任務 Trial**
+- **Phase 1+2 完成前不開放 WebUI Talent CRUD**（避「Agent role explosion」反模式）
+
+### 規模 + 時程預估
+
+| Phase | 工作 | 規模合計 |
+|---|---|---|
+| Phase 1 | Spike #6 + Talent-Skill 重構基底 | S + L = ~2-3 Stage |
+| Phase 2 | DB 持久記憶 + 拆解 + Prompt DB 化 | M + M + M = ~3 Stage |
+| Phase 3 | WebUI Talent CRUD + 3 agent debate + v4 砍 vs 留 | S-M + M + M = ~2-3 Stage |
+| **合計** | | **7-9 Stage**（對齊 v5 PoC 二次架構升級規模 M-L）|
 
 ---
 
