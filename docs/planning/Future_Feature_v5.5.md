@@ -230,6 +230,66 @@
 | Phase 3 | WebUI Talent CRUD + 3 agent debate + v4 砍 vs 留 | S-M + M + M = ~2-3 Stage |
 | **合計** | | **7-9 Stage**（對齊 v5 PoC 二次架構升級規模 M-L）|
 
+### Phase 1 Step 1 Baseline 拍板（2026-05-15 Christ + Aria 對齊業界 finding 拍板）
+
+> ⚠️ **這是 baseline 拍板**（Phase 1 Step 1 Spike #6 真實啟動時可能微調，但結構已 settle）。對齊業界 finding：minimum 2-3 個 high-impact skill 起步 / 5-7 個 sweet spot（MetaGPT 5 / ChatDev 7 / gstack 6+15 skills）。
+
+#### Final 6 個 Skill（從 7 → 6 / 砍 14%）
+
+**核心必備 4 個**（Trial_v10-v12 100% 用）：
+1. **`code_implementation`** — 寫 code
+2. **`code_review`** — review code（找 bug / 對齊 coding style / production safety check）
+3. **`qa_testing`** — 測試 + 寫 test case + Playwright 真實點擊
+4. **`documentation`** — 寫文件 + README + commit message + PR body
+
+**進階場景觸發 2 個**：
+5. **`ui_design`** — UI/UX 設計（特定 UI 任務 Petra dispatch）
+6. **`release_publishing`** — Release notes + version bump + 部署協調
+
+**❌ 砍 1 個**：
+- **`requirements_extraction`** → 合進 Petra orchestrator（Petra 既然要拆解任務，自然就要釐清需求，不需要獨立 skill）
+
+#### 預設 6 個 Talent（從 10 → 6 / 砍 40%）
+
+| Default Talent | Skills 擔任 | 來自 |
+|---|---|---|
+| **Victoria** | (orchestrator — 接 Christ 指令) | 對齊 既有 Victoria |
+| **Petra** | (orchestrator — 拆解任務 / 派 Talent / 吸收 requirements_extraction) | 對齊 既有 Petra |
+| **Cody** | `code_implementation`（主）+ `ui_design` + `release_publishing`（兼） | 對齊 既有 Cody |
+| **Vera** | `code_review`（主） | 對齊 既有 Vera |
+| **Quinn** | `qa_testing`（主） | 對齊 既有 Quinn |
+| **Sage** | `documentation`（主） | 對齊 既有 Sage |
+
+#### ❌ 砍掉 / 合併的 4 個既有 Agent
+
+| 既有 Agent | 處理 | 理由 |
+|---|---|---|
+| **Rosa** (Requirements) | **砍** | requirements_extraction skill 砍 / Petra orchestrator 自然吸收 |
+| **Demi** (UI Design) | **合併進 Cody** | ui_design skill 由 Cody 預設擔任 / Trial_v10-v12 真實 0 Demi 介入 PR 仍出 UI 改動 |
+| **Rena** (Release) | **合併進 Cody** | release_publishing skill 由 Cody 兼任 / git auto deploy + self-hosted runner 已 cover 大部分真實 release 工作 |
+| **Maya** (Ops) | **砍** | git auto deploy + self-hosted runner 已 cover 真實 ops 工作 / 無獨立工作 |
+
+#### Horizontal Scaling 場景（v5.5 Phase 3 動態 Talent CRUD 開放後）
+
+| 場景 | 動作 | 結果 |
+|---|---|---|
+| Coding 任務太多 | WebUI 加 **Cody-2** + assign code_implementation skill | 兩個 Cody 並行接 coding |
+| Review 跟不上 | 加 **Vera-2** | 兩個 Vera 同時 review 不同 PR |
+| 需要 UI 專家 | 加 **Demi-1** 專門擔任 ui_design skill（不兼其他） | 替代「Cody 兼 UI」變成「Demi 專做 UI」 |
+| 多專案並行 | 加 **Cody-ProjectA / Cody-ProjectB**（對齊既有 ProjectId 設計） | per-Project Cody 不混淆 |
+
+#### 未來 Skill 候選（不急 / Phase 3 後評估）
+
+業界揭值得考慮但 AiTeam 短期不急：
+- **`commit_messages`** — 業界共識高 ROI（gstack 有獨立 skill）/ AiTeam 目前 Cody 自己寫已 OK
+- **`planning_review`** — gstack 有 / MetaGPT Architect 部分對應 / Aria 已部分擔任
+- **`security_audit`** — gstack Security Officer / OWASP + STRIDE / 客戶專案才需要
+- **`design_consultation`** — gstack 有 / 對應大型新 feature 設計
+
+#### Baseline 達成的關鍵指標
+
+✅ 砍 40% Agent（10 → 6） / 砍 14% Skill（7 → 6） / 保留所有真實 dispatch 過的 capability / 業界 sweet spot 5-7 個對齊 / 多對多 mapping 預備 horizontal scaling
+
 ---
 
 ## 七、不確定性 + 待驗證
