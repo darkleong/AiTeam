@@ -21,6 +21,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Stage 65 子項 3：workspace named volume permission init（Trial_v10 揭：mount 後 named volume 預設 root-owned，appuser uid 999 寫不進 → 手動 chown 才跑下去）。
+    # 路線 B compose entrypoint：以 root 啟動 → chown workspace → exec gosu 切回 appuser 跑 dotnet（每次 container start 都 init permission）。Dockerfile 已裝 gosu。
+    user: "0:0"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "chown -R appuser:appuser /tmp/aiteam-workspace && exec gosu appuser dotnet AiTeam.Bot.dll"
     environment:
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Discord__BotToken: "${DISCORD_BOT_TOKEN}"

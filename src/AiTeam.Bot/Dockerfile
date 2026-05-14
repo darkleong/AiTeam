@@ -22,11 +22,12 @@ RUN npm install -g @anthropic-ai/claude-code \
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
-# 安裝 libgssapi（Npgsql GSSAPI 支援）+ git（Claude Code 操作 repo 需要）
+# 安裝 libgssapi（Npgsql GSSAPI 支援）+ git（Claude Code 操作 repo 需要）+ gosu（Stage 65 子項 3：compose entrypoint chown 後 drop privilege 到 appuser）
 # 不再需要安裝 Node.js / npm（由下方 COPY 直接帶入）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgssapi-krb5-2 \
     git \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # 從 node:22-slim 複製 Node binary 與 claude-code，避免 apt NodeSource 緩慢問題
