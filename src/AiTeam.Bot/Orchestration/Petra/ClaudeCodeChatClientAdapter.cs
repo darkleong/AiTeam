@@ -22,11 +22,16 @@ namespace AiTeam.Bot.Orchestration.Petra;
 /// - release_publishing         → RunAsync                        + (無 CLAUDE_Release.md — skip inject + warning log)
 ///
 /// Stage 64 補強：
-/// 1. CLAUDE.md 注入儀式（對齊 v4 DevAgentService.cs:239-285 既有 pattern — backup → write template → run → try-finally restore）
-///    避免 CLAUDE.md 內容洩漏被誤 commit 進 PR。release_publishing 無對齊 template → skip inject + warning log（路線 A）。
+/// 1. ~~CLAUDE.md 注入儀式~~（Stage 65 子項 1 修根因 — 移除 ritual 改用 CLI --append-system-prompt，見下方 Stage 65 補強）。
 /// 2. token_logs null-safe — Usage=null 仍寫 cost=0 紀錄保留觀測完整性（TokenLogService 本身 early return null usage）。
 /// 3. Transient 5xx retry — DispatchAsync 結果 Output 含 5xx pattern → 3 次 exponential backoff（1s/2s/4s）。
 ///    不 catch LlmApiFailureException（auth/quota retry 無意義 — 直接 propagate）。
+///
+/// Stage 65 補強：
+/// 1. CLAUDE.md inject ritual 修根因 — 改用 Claude Code CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
+///    template content 讀 Resources/CLAUDE_&lt;X&gt;.md → 透過 IClaudeCodeService.RunXxxAsync(... systemPrompt) 傳 → ClaudeCodeService.BuildArgs 加 conditional flag。
+/// 2. Vera token_logs blind spot 修 — token_logs 寫入移到 try-finally 的 finally（即使 dispatch 拋 LlmApiFailureException / cancel 仍寫 zero TokenUsage 一筆）。
+///    Trial_v10 揭真實 root cause：原 Stage 64 try block 內 dispatch 拋 → token_logs 寫入跳過 = Vera $0.044 / 4.3% blind spot。
 ///
 /// Mock 階段：IClaudeCodeService DI proxy 自動切 MockClaudeCodeService（既有 545 行 fixture）→ adapter 0 改動接管 Mock。
 /// </summary>
@@ -75,73 +80,59 @@ internal sealed class ClaudeCodeChatClientAdapter(
         var prompt = FlattenMessages(messages);
         logger.LogInformation("ClaudeCodeChatClientAdapter dispatch worker={Worker} capability={Capability} promptLen={Len}", workerName, capability, prompt.Length);
 
-        // Stage 64 1：CLAUDE.md inject ritual（對齊 DevAgentService.cs:239-285）。
-        // workingDir 空 → skip inject（spike forward path 或測試環境 fallback — DispatchAsync 仍照走，Mock 階段不依賴 workingDir）。
-        var claudeMdPath = string.IsNullOrEmpty(workingDir) ? null : Path.Combine(workingDir, "CLAUDE.md");
+        // Stage 65 子項 1：CLAUDE.md inject ritual 修根因 — 改用 CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
+        // 取代 Stage 64 backup/write/finally restore 整段：讀 template content → systemPrompt 透傳 → ClaudeCodeService.BuildArgs 加 conditional --append-system-prompt flag。
         var templateName = CapabilityToTemplate.TryGetValue(capability, out var t) ? t : null;
-        var templatePath = templateName is null
-            ? null
-            : Path.Combine(AppContext.BaseDirectory, "Resources", templateName);
-
-        string? originalClaudeMd = null;
-        if (claudeMdPath is not null && File.Exists(claudeMdPath))
+        string? systemPrompt = null;
+        if (templateName is not null)
         {
-            originalClaudeMd = await File.ReadAllTextAsync(claudeMdPath, cancellationToken);
+            var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", templateName);
+            if (File.Exists(templatePath))
+            {
+                systemPrompt = await File.ReadAllTextAsync(templatePath, cancellationToken);
+                logger.LogInformation("CLAUDE template 載入 worker={Worker} template={Template} len={Len}",
+                    workerName, templateName, systemPrompt.Length);
+            }
+            else
+            {
+                logger.LogWarning("CLAUDE template 不存在於 {Path}，dispatch 不附 systemPrompt worker={Worker}", templatePath, workerName);
+            }
+        }
+        else
+        {
+            logger.LogWarning("Capability {Cap} 無對應 CLAUDE template（路線 A — fallback 不附 systemPrompt）worker={Worker}", capability, workerName);
         }
 
-        if (claudeMdPath is not null && templatePath is not null && File.Exists(templatePath))
-        {
-            var content = await File.ReadAllTextAsync(templatePath, cancellationToken);
-            await File.WriteAllTextAsync(claudeMdPath, content, cancellationToken);
-            logger.LogInformation("CLAUDE.md inject 完成 worker={Worker} template={Template}", workerName, templateName);
-        }
-        else if (claudeMdPath is not null && templateName is null)
-        {
-            logger.LogWarning("Capability {Cap} 無對應 CLAUDE template（路線 A — fallback skip inject）worker={Worker}", capability, workerName);
-        }
-        else if (claudeMdPath is not null && templatePath is not null)
-        {
-            logger.LogWarning("CLAUDE template 不存在於 {Path}，略過寫入 worker={Worker}", templatePath, workerName);
-        }
-
+        // Stage 65 子項 2：token_logs 寫入移 finally — 即使 DispatchWithRetryAsync 拋（LlmApiFailureException / cancel）
+        // 仍寫一筆紀錄（zero TokenUsage 保留觀測完整性）。Trial_v10 揭 Vera blind spot root cause：dispatch 拋 → 原 try block 跳過 token_logs。
+        TokenUsage? capturedUsage = null;
+        Exception? capturedException = null;
         try
         {
-            var result = await DispatchWithRetryAsync(prompt, cancellationToken);
-
-            // Stage 64 6a：token_logs null-safe — Usage=null 仍寫 cost=0 紀錄保留觀測完整性。
-            // TokenLogService.LogCliUsageAsync 本身 usage is null → early return（line 35）— adapter 層自製 zero TokenUsage 對齊。
-            if (tokenLogService is not null)
-            {
-                try
-                {
-                    var usageForLog = result.Usage ?? new TokenUsage(0, 0, 0, 0, 0m, false);
-                    await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, usageForLog, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker}", workerName);
-                }
-            }
+            var result = await DispatchWithRetryAsync(prompt, systemPrompt, cancellationToken);
+            capturedUsage = result.Usage;
 
             var responseMessage = new ChatMessage(ChatRole.Assistant, result.Output ?? "");
             return new ChatResponse(responseMessage);
         }
+        catch (Exception ex)
+        {
+            capturedException = ex;
+            throw;
+        }
         finally
         {
-            // Stage 64 1：finally restore CLAUDE.md（對齊 DevAgentService.cs:295-300 紀律）。
-            // CancellationToken.None — 避免 mid-workflow cancel 跳過 restore（plan reviewer 議題 2 補強）。
-            if (claudeMdPath is not null)
+            if (tokenLogService is not null)
             {
                 try
                 {
-                    if (originalClaudeMd is not null)
-                        await File.WriteAllTextAsync(claudeMdPath, originalClaudeMd, CancellationToken.None);
-                    else if (File.Exists(claudeMdPath))
-                        File.Delete(claudeMdPath);
+                    var usageForLog = capturedUsage ?? new TokenUsage(0, 0, 0, 0, 0m, false);
+                    await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, usageForLog, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "ClaudeCodeChatClientAdapter CLAUDE.md restore 失敗 worker={Worker} path={Path}", workerName, claudeMdPath);
+                    logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker} dispatchException={DispatchEx}",
+                        workerName, capturedException?.GetType().Name ?? "none");
                 }
             }
         }
@@ -173,12 +164,12 @@ internal sealed class ClaudeCodeChatClientAdapter(
     /// 非 transient（auth/quota / Mock fail / 真實 logic error）→ 直接 return 不重試。
     /// token_logs 寫入由 caller 負責一次（retry 內部 attempt 不寫 — 對齊「最終 result.Usage 一次寫」契約）。
     /// </summary>
-    private async Task<ClaudeCodeResult> DispatchWithRetryAsync(string prompt, CancellationToken ct)
+    private async Task<ClaudeCodeResult> DispatchWithRetryAsync(string prompt, string? systemPrompt, CancellationToken ct)
     {
         ClaudeCodeResult? last = null;
         for (var attempt = 1; attempt <= RetryDelaysMs.Length + 1; attempt++)
         {
-            last = await DispatchAsync(prompt, ct);
+            last = await DispatchAsync(prompt, systemPrompt, ct);
             if (last.Success) return last;
 
             if (!IsTransient5xx(last.Output))
@@ -208,15 +199,17 @@ internal sealed class ClaudeCodeChatClientAdapter(
         return TransientPatterns.Any(p => lower.Contains(p));
     }
 
-    private Task<ClaudeCodeResult> DispatchAsync(string prompt, CancellationToken ct) => capability switch
+    // Stage 65 子項 1：每個 capability dispatch 透傳 systemPrompt（IClaudeCodeService 6 method default null 對 v4 caller 透明 —
+    // systemPrompt 簽名位置在 ct 之後，v5 adapter 用 named arg `systemPrompt:` 顯式傳）。
+    private Task<ClaudeCodeResult> DispatchAsync(string prompt, string? systemPrompt, CancellationToken ct) => capability switch
     {
-        "code_implementation"     => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct),
-        "code_review"             => claudeCode.RunReviewAsync(workingDir, prompt, model, apiKey, ct),
-        "qa_testing"              => claudeCode.RunQaAsync(workingDir, prompt, model, apiKey, ct),
-        "documentation"           => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, null, ct),
-        "requirements_extraction" => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, null, ct),
-        "ui_design"               => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, null, ct),
-        "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct),
+        "code_implementation"     => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
+        "code_review"             => claudeCode.RunReviewAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
+        "qa_testing"              => claudeCode.RunQaAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
+        "documentation"           => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "requirements_extraction" => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "ui_design"               => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
         _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 63B PoC 7 capability）"),
     };
 

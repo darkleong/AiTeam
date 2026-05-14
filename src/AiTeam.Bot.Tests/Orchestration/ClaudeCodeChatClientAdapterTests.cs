@@ -7,12 +7,20 @@ using Xunit;
 namespace AiTeam.Bot.Tests.Orchestration;
 
 /// <summary>
-/// Stage 64：ClaudeCodeChatClientAdapter 6 test 對齊 Roadmap 場景 1 / 4 / 5 + 議題 1 release_publishing 路線 A 驗證。
+/// Stage 65 子項 1：CLAUDE.md inject ritual 修根因 — 改用 CLI --append-system-prompt。
+/// 改寫對應原 Stage 64 6 test：
+/// - T1 驗 systemPrompt 透傳 template 內容（取代原 T1「workspace CLAUDE.md = template」）
+/// - T2 驗 dispatch 拋例外時 workspace CLAUDE.md 0 動（取代原 T2「finally restore」）
+/// - T3 驗 workspace 原本無 CLAUDE.md → dispatch 後仍 0 動（取代原 T3「inject 後刪除」）
+/// - T4 transient 5xx retry 保留
+/// - T5 null-safe Usage 保留
+/// - T6 release_publishing 走 RunAsync + systemPrompt=null（取代原 T6「skip inject + workspace 0 動」）
+/// - T7 新增：dispatch 拋例外 exception 仍 propagate（驗 Stage 65 子項 2 try-finally 結構正確）
 ///
 /// 設計：
 /// - 用 temp 資料夾模擬 workingDir + 寫假 Resources/CLAUDE_*.md（避免依賴實際 Bot dll 的 Resources）
-/// - StubClaudeCodeService 紀錄被呼叫時 workingDir/CLAUDE.md 的存在性 + 內容
-/// - tokenLogService 一律傳 null（dispatch 驗 不驗 token_logs 寫入）
+/// - RecordingClaudeCodeService 紀錄被呼叫時 systemPrompt 內容（驗 inject 透過 CLI flag 而非 workspace 寫檔）
+/// - tokenLogService 一律傳 null（test 不直接驗 token_logs 寫入；Trial_v11 SQL 驗證真實 production 寫入）
 /// </summary>
 public class ClaudeCodeChatClientAdapterTests : IDisposable
 {
@@ -35,7 +43,7 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         catch { /* best effort cleanup */ }
     }
 
-    // ─── T1：CLAUDE.md inject ritual — dispatch 中 CLAUDE.md = template 內容 + dispatch 後還原 ─────
+    // ─── T1：systemPrompt 透傳 template 內容 + workspace CLAUDE.md 0 動 ─────
     [Theory]
     [InlineData("code_implementation", "CLAUDE_Cody.md")]
     [InlineData("code_review",         "CLAUDE_Vera.md")]
@@ -43,9 +51,9 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
     [InlineData("documentation",       "CLAUDE_Sage.md")]
     [InlineData("requirements_extraction", "CLAUDE_Rosa.md")]
     [InlineData("ui_design",           "CLAUDE_Demi.md")]
-    public async Task T1_InjectsTemplate_AndRestoresOriginal(string capability, string templateName)
+    public async Task T1_SystemPromptForwardsTemplate_WorkspaceClaudeMdUntouched(string capability, string templateName)
     {
-        // arrange: 原 workspace 已有 CLAUDE.md 含特定 marker；template 也寫入特定 marker
+        // arrange: workspace 原已有 CLAUDE.md（不應該被 adapter 動到）
         var claudeMd = Path.Combine(_workingDir, "CLAUDE.md");
         var originalContent = $"[ORIGINAL]-{Guid.NewGuid()}";
         await File.WriteAllTextAsync(claudeMd, originalContent);
@@ -54,21 +62,21 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         var templateContent = $"[TEMPLATE-{templateName}]-{Guid.NewGuid()}";
         await File.WriteAllTextAsync(templatePath, templateContent);
 
-        var stub = new RecordingClaudeCodeService(claudeMd);
+        var stub = new RecordingClaudeCodeService();
         var adapter = NewAdapter(stub, capability);
 
         // act
         await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") });
 
-        // assert: dispatch 中 CLAUDE.md = template
-        Assert.Equal(templateContent, stub.CapturedClaudeMdAtDispatch);
-        // dispatch 後還原 = 原始
+        // assert 1：dispatch 收到的 systemPrompt = template 內容
+        Assert.Equal(templateContent, stub.CapturedSystemPrompt);
+        // assert 2：workspace CLAUDE.md 0 動（前後內容一致 = 0 commit 污染）
         Assert.Equal(originalContent, await File.ReadAllTextAsync(claudeMd));
     }
 
-    // ─── T2：dispatch 拋 exception 仍 finally restore ─────────────────────────────────
+    // ─── T2：dispatch 拋 exception 仍保 workspace CLAUDE.md 0 動 ──────────────
     [Fact]
-    public async Task T2_DispatchThrows_StillRestoresOriginal()
+    public async Task T2_DispatchThrows_WorkspaceClaudeMdUntouched()
     {
         var claudeMd = Path.Combine(_workingDir, "CLAUDE.md");
         var originalContent = $"[ORIGINAL]-{Guid.NewGuid()}";
@@ -82,27 +90,27 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") }));
 
-        // dispatch 拋例外仍 finally restore
+        // dispatch 拋例外 — workspace CLAUDE.md 仍保原始（adapter 0 動）
         Assert.Equal(originalContent, await File.ReadAllTextAsync(claudeMd));
     }
 
-    // ─── T3：原 workspace 無 CLAUDE.md → dispatch 後刪除 ────────────────────────────
+    // ─── T3：原 workspace 無 CLAUDE.md → dispatch 後仍 0 存在（adapter 不寫不刪）────
     [Fact]
-    public async Task T3_OriginalAbsent_DeletesAfterDispatch()
+    public async Task T3_WorkspaceClaudeMdAbsent_RemainsAbsentAfterDispatch()
     {
         var claudeMd = Path.Combine(_workingDir, "CLAUDE.md");
         if (File.Exists(claudeMd)) File.Delete(claudeMd);
         var templatePath = Path.Combine(_resourcesDir, "CLAUDE_Cody.md");
         await File.WriteAllTextAsync(templatePath, "[T3-TEMPLATE]");
 
-        var stub = new RecordingClaudeCodeService(claudeMd);
+        var stub = new RecordingClaudeCodeService();
         var adapter = NewAdapter(stub, "code_implementation");
 
         await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") });
 
-        // dispatch 中應該寫入了 template
-        Assert.Equal("[T3-TEMPLATE]", stub.CapturedClaudeMdAtDispatch);
-        // dispatch 後應該刪除（不留 template 內容洩漏）
+        // dispatch 收到 systemPrompt = template 內容
+        Assert.Equal("[T3-TEMPLATE]", stub.CapturedSystemPrompt);
+        // dispatch 後 workspace CLAUDE.md 仍不存在（adapter 0 寫 = 0 留下蛛絲）
         Assert.False(File.Exists(claudeMd));
     }
 
@@ -110,7 +118,6 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
     [Fact]
     public async Task T4_TransientRetry_OnFifthXxThenSuccess()
     {
-        // 不依賴 template / workingDir 寫檔 — 跑 RunAsync stub 直接控制 result
         var stub = new SequentialResultStub(
             new ClaudeCodeResult(Success: false, Output: "Anthropic API: 503 Internal server error", ExitCode: 1, RawJson: "{}", Usage: null),
             new ClaudeCodeResult(Success: true,  Output: "[recovered]", ExitCode: 0, RawJson: "{}", Usage: null));
@@ -120,14 +127,12 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         var response = await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") });
         sw.Stop();
 
-        Assert.Equal(2, stub.CallCount);                   // retry 一次
+        Assert.Equal(2, stub.CallCount);
         Assert.Contains("[recovered]", response.Text ?? "");
         Assert.True(sw.ElapsedMilliseconds >= 1000, $"exponential backoff first delay 1s — actual {sw.ElapsedMilliseconds}ms");
     }
 
     // ─── T5：null-safe token_logs — Usage=null adapter 不爆 + 仍正常回 ChatResponse ──
-    // 註：TokenLogService 簽名需要 DI scope（複雜）— 此 test 改驗 adapter 流程：Usage=null 結果照樣回 Output，
-    // adapter 不會因為 Usage null 拋例外或 fail（real TokenLogService null-safe 處理由 LogCliUsageAsync 既有 null-check 已 cover）。
     [Fact]
     public async Task T5_NullSafeUsage_AdapterStillReturnsResponse()
     {
@@ -141,30 +146,42 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         Assert.Contains("[ok with null usage]", response.Text ?? "");
     }
 
-    // ─── T6：release_publishing 無 CLAUDE_Release.md → warning log + skip + dispatch 正常 ──
+    // ─── T6：release_publishing 走 RunAsync + systemPrompt=null + workspace CLAUDE.md 0 動 ─
     [Fact]
-    public async Task T6_ReleasePublishing_NoTemplate_SkipsInjectAndDispatches()
+    public async Task T6_ReleasePublishing_NoTemplate_DispatchWithNullSystemPrompt()
     {
-        // arrange: workspace 有 CLAUDE.md，**不**寫 CLAUDE_Release.md template（路線 A：無對應 template）
         var claudeMd = Path.Combine(_workingDir, "CLAUDE.md");
         var originalContent = $"[ORIGINAL-RELEASE]-{Guid.NewGuid()}";
         await File.WriteAllTextAsync(claudeMd, originalContent);
-        // 確保 CLAUDE_Release.md 不存在
         var releaseTpl = Path.Combine(_resourcesDir, "CLAUDE_Release.md");
         if (File.Exists(releaseTpl)) File.Delete(releaseTpl);
 
-        var stub = new RecordingClaudeCodeService(claudeMd);
+        var stub = new RecordingClaudeCodeService();
         var adapter = NewAdapter(stub, "release_publishing");
 
-        var response = await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "release v3.54.0") });
+        var response = await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "release v3.55.0") });
 
-        // dispatch 時 CLAUDE.md 仍為原始內容（路線 A skip inject）
-        Assert.Equal(originalContent, stub.CapturedClaudeMdAtDispatch);
-        // dispatch 後仍是原始內容（路線 A 不刪除 — 原本就在）
+        // release_publishing → 對應 template = null → systemPrompt = null
+        Assert.Null(stub.CapturedSystemPrompt);
+        // workspace CLAUDE.md 0 動
         Assert.Equal(originalContent, await File.ReadAllTextAsync(claudeMd));
-        // dispatch 正常 — release_publishing → RunAsync
         Assert.Equal("RunAsync", stub.LastInvokedMethod);
         Assert.NotNull(response);
+    }
+
+    // ─── T7：dispatch 拋 LlmApiFailureException 仍 propagate（Stage 65 子項 2 try-finally 結構正確）──
+    [Fact]
+    public async Task T7_DispatchThrows_ExceptionStillPropagates()
+    {
+        var stub = new ThrowingClaudeCodeService();
+        var adapter = NewAdapter(stub, "code_review");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "review pls") }));
+
+        Assert.Equal("boom", ex.Message);
+        // 註：tokenLogService=null → 不直接驗 token_logs 真實寫入（Trial_v11 SQL 對 Vera 行存在性驗證 production path）。
+        // 此 test 驗 adapter 改造後的 try { dispatch; capturedUsage } catch { throw } finally { token_logs } 結構不破壞 exception propagation。
     }
 
     // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -180,62 +197,57 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
             tokenLogService: null,
             logger: NullLogger<ClaudeCodeChatClientAdapter>.Instance);
 
-    /// <summary>記錄 dispatch 時 CLAUDE.md 內容（驗 inject 真的在 RunAsync invoke 之前已寫入）。</summary>
+    /// <summary>紀錄 dispatch 時 systemPrompt 參數內容（驗 inject 透過 CLI --append-system-prompt 而非 workspace 寫檔）。</summary>
     private sealed class RecordingClaudeCodeService : IClaudeCodeService
     {
-        private readonly string _claudeMdPath;
-        public RecordingClaudeCodeService(string claudeMdPath) => _claudeMdPath = claudeMdPath;
-
-        public string? CapturedClaudeMdAtDispatch { get; private set; }
+        public string? CapturedSystemPrompt { get; private set; }
         public string? LastInvokedMethod { get; private set; }
 
-        private async Task<ClaudeCodeResult> Capture(string method, string input)
+        private Task<ClaudeCodeResult> Capture(string method, string input, string? systemPrompt)
         {
-            CapturedClaudeMdAtDispatch = File.Exists(_claudeMdPath)
-                ? await File.ReadAllTextAsync(_claudeMdPath)
-                : null;
+            CapturedSystemPrompt = systemPrompt;
             LastInvokedMethod = method;
-            return new ClaudeCodeResult(Success: true, Output: $"[{method}] {input}", ExitCode: 0, RawJson: "{}", Usage: null);
+            return Task.FromResult(new ClaudeCodeResult(Success: true, Output: $"[{method}] {input}", ExitCode: 0, RawJson: "{}", Usage: null));
         }
 
-        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
-            => Capture(nameof(RunAsync), prompt);
+        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunAsync), prompt, systemPrompt);
 
-        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default)
-            => Capture(nameof(RunReadOnlyAsync), prompt);
+        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunReadOnlyAsync), prompt, systemPrompt);
 
-        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
-            => Capture(nameof(RunVictoriaAsync), prompt);
+        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunVictoriaAsync), prompt, systemPrompt);
 
-        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
-            => Capture(nameof(RunQaAsync), prompt);
+        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunQaAsync), prompt, systemPrompt);
 
-        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
-            => Capture(nameof(RunReviewAsync), prompt);
+        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunReviewAsync), prompt, systemPrompt);
 
-        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
-            => Capture(nameof(RunMeetingSessionAsync), prompt);
+        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default, string? systemPrompt = null)
+            => Capture(nameof(RunMeetingSessionAsync), prompt, systemPrompt);
     }
 
-    /// <summary>RunAsync 拋例外驗 finally restore。</summary>
+    /// <summary>RunXxxAsync 一律拋例外（驗 adapter exception propagation）。</summary>
     private sealed class ThrowingClaudeCodeService : IClaudeCodeService
     {
-        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
 
-        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
 
-        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
 
-        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
 
-        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
 
-        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default, string? systemPrompt = null)
             => throw new InvalidOperationException("boom");
     }
 
@@ -257,11 +269,11 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
             return Task.FromResult(r);
         }
 
-        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default) => Next();
-        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default) => Next();
-        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default) => Next();
-        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default) => Next();
-        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default) => Next();
-        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default) => Next();
+        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null) => Next();
+        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string apiKey, int? maxTurns = null, CancellationToken ct = default, string? systemPrompt = null) => Next();
+        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string apiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default, string? systemPrompt = null) => Next();
+        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null) => Next();
+        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string apiKey, CancellationToken ct = default, string? systemPrompt = null) => Next();
+        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string apiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default, string? systemPrompt = null) => Next();
     }
 }

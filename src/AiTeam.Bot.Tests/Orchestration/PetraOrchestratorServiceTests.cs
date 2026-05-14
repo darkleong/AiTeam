@@ -246,22 +246,22 @@ public class PetraOrchestratorServiceTests
                 RawJson: "{}",
                 Usage: null));
 
-        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunAsync); return Make(nameof(RunAsync), prompt); }
 
-        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string anthropicApiKey, int? maxTurns = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunReadOnlyAsync(string workingDir, string prompt, string model, string anthropicApiKey, int? maxTurns = null, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunReadOnlyAsync); return Make(nameof(RunReadOnlyAsync), prompt); }
 
-        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string anthropicApiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunVictoriaAsync(string workingDir, string prompt, string model, string anthropicApiKey, IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunVictoriaAsync); return Make(nameof(RunVictoriaAsync), prompt); }
 
-        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunQaAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunQaAsync); return Make(nameof(RunQaAsync), prompt); }
 
-        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunReviewAsync(string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunReviewAsync); return Make(nameof(RunReviewAsync), prompt); }
 
-        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string anthropicApiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
+        public Task<ClaudeCodeResult> RunMeetingSessionAsync(string workingDir, string sessionId, string prompt, string model, string anthropicApiKey, bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default, string? systemPrompt = null)
         { LastInvokedMethod = nameof(RunMeetingSessionAsync); return Make(nameof(RunMeetingSessionAsync), prompt); }
     }
 }
