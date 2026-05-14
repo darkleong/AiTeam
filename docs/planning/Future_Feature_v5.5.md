@@ -153,6 +153,7 @@
 3. **每次 load 進 subprocess 的記憶 token budget** — 業界推「不超過 context 10%」但 AiTeam 真實場景需要 spike
 4. **戰略決策層的 3 agent 配置** — 哪 2 個 opposing perspective + 哪 1 個 synthesizer 對 AiTeam 場景最有效（Petra vs Demi vs Rosa? 或新 agent role?）
 5. **v4 既有 module 的「砍 vs 留 vs 吸收」拍板** — Crash Recovery / HITL routing / sub-task 整合等 ~16K LoC 的去留
+6. **Agent 數量是否該收斂**（2026-05-15 Christ 自省 question — WebSearch 業界對比後揭）— AiTeam 10 個 agent vs 業界主流（MetaGPT 5 核心 / ChatDev 7 / gstack 6+23 skills）。**Trial_v10-v12 真實只 fire 3 個 agent**（Victoria forward + Petra orchestrator + Cody/Vera workers），剩下 7 個 dormant。**業界共識「Match topology to task shape, not org chart」+「Most teams over-engineer toward multi-agent topologies before single-agent reaches its quality ceiling」** — AiTeam 10 個 agent 是 v4 hierarchical static 設計遺留，可能踩了「照組織模仿」反模式。**真實值得反思 3 個 agent**：① Rosa（Requirements）— Petra LLM 自己拆需求可能更直接 ② Demi（UI Design）— Cody 自己讀 spec 設計 UI 也行（Trial_v10-v12 PR 真實做 UI 改動 0 Demi 介入） ③ Maya（Ops）— git auto deploy + self-hosted runner 已 cover 真實 ops 工作。**gstack 反例值得學**：用「skills（slash commands）取代 agent 細分」— 1 個 Claude Code + N skills > N 個獨立 agent（省 agent 切換 overhead + 共享 context）— 對齊 v5.5「Petra 拆任務 → 派給對的 worker」其實「不一定是不同 agent」可以是「Cody 用不同 mode/skill」。**短期紀律**（v5 production 觀察期）維持 10 個 agent codebase 不動觀察真實 dispatch 分布；**中期評估**對 dispatch 率 0% 持續 1-2 個月的 agent 評估 3 條 path：砍（合進 Petra LLM 範圍）/ 合併（Rosa+Demi 合「Discovery Agent」）/ 保留 reserve（客戶專案才用）。對齊 v5.5 升級時 skill 路線可能取代部分 agent 分工。
 
 ---
 
