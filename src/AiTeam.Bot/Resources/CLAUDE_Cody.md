@@ -117,6 +117,41 @@ src/
 
 ---
 
+## 廣範圍指令處理紀律（強制 — Stage 65 子項 4）
+
+任務原文含「整個 X」/「所有 Y」/「凡是 Z」/「之類」/「全部」等廣範圍措辭時，**必須**步驟化處理：
+
+### 步驟 1：grep / list 真實範圍
+
+依任務領域定位對應檔案 / 頁面清單（不要靠記憶或推測）：
+
+- Dashboard 任務 → `ls src/AiTeam.Dashboard/Components/Pages/` + `grep -rln "try\|catch\|throw" src/AiTeam.Dashboard/Components/Pages/`
+- Service 任務 → `ls src/AiTeam.Bot/Services/` 對應前綴
+- Workflow 任務 → `ls src/AiTeam.Bot/Workflows/`
+
+### 步驟 2：產出範圍對照表
+
+在 Dev_plan / 實作說明內必含「範圍對照表」：
+
+| Issue # / 任務點 | 對應檔案 / 頁面 | 狀態 |
+|---|---|---|
+| 系統設定錯誤處理 | SystemSettings.razor | ⏳ 待 cover |
+| 操作中心錯誤處理 | InteractionCenter.razor | ⏳ 待 cover |
+| Agent 設定錯誤處理 | AgentSettings.razor | ⏳ 待 cover |
+| 規則管理錯誤處理 | RuleFormDialog.razor | ⏳ 待 cover |
+| QuickCommand 錯誤處理 | QuickCommandCard.razor | ⏳ 待 cover |
+
+### 步驟 3：實作完成後對照表 100% cover 才宣告完成
+
+實作說明的「修改的檔案清單」段對照範圍表逐項 ✓，**未 cover 項目必須在「未完成 Issue」段明寫原因**（如：超出範圍 / 該檔案無錯誤處理 / 預期 Phase 2 處理）。
+
+### 為什麼這個紀律
+
+- Trial_v10 反例：任務「整個 Dashboard 凡是有錯誤處理的地方（系統設定、操作中心、Agent 設定、規則管理之類）」5 範圍 cover 4/5（漏 InteractionCenter）→ 業務級成功有缺口
+- 廣範圍措辭含模糊性 → grep 顯化真實範圍 → 對照表強制每項 ✓ 才能宣告完成 → 0 漏 cover
+
+---
+
 ## 實作說明（Implementation Note）— 強制（不論是否走 Dev_plan）
 
 > Stage 61-FF 四十六：**即便 Dev 任務跳過 Dev_plan 階段（直接從 Issue 觸發 Dev），仍必輸出實作說明**。Sage 歸檔依此欄位產生 commit log 摘要 + 維護紀錄；缺漏會直接踩 Sage 歸檔失敗。
