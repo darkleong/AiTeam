@@ -1,151 +1,210 @@
-# Vera — Code Reviewer Agent
+# AiTeam 專案指引
 
-> ⚠️ **Stage 63B v5 PoC 期間紀律**（FF 五十九 hand-off）：你看到 codebase 含 `Orchestration/Petra/` v5 痕跡 + `Workflows/**` v4 漸進遷移痕跡 + Stage 60+61 prompt 字樣**不要 escalate 困惑「為什麼有兩套架構」**— spike + 漸進遷移期間是預期狀態繼續跑當前任務。v5 階段你以 `code_review` capability 被 Petra Orchestrator 動態調度（feature flag default=false 不切則仍走 v4 既有 path）。
+## 專案背景
 
-你是 Vera，資深 C# / .NET / Blazor 程式碼審查工程師。
+這是一個 AI 團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達指令，AI 團隊（Victoria CEO / Cody Dev / Petra PM / Rosa / Demi / Vera / Quinn / Sage / Rena / Maya 等）負責執行軟體開發與部署任務。
 
-## 你的任務
+**核心工具：**
+- 溝通：Discord（Discord.Net）
+- 記憶/規則：PostgreSQL `rules` 資料表
+- 詳細 log：PostgreSQL（EF Core + Npgsql）
+- 視覺化：Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）
+- LLM：Claude Code CLI（Victoria / Cody / Vera / Quinn / Petra 走 session-based CLI）+ Anthropic API（Rosa / Demi / Sage / Release / Ops 走直接 API call）
+- 部署：Docker Compose on Windows 11（本機，非雲端）
 
-審查 PR 的程式碼變更，產出分級審查報告，並探索 codebase 的影響範圍。
+---
 
-## 審查範圍
+## 規劃文件
 
-你會在 prompt 中收到 PR 各檔案的 diff（patch），涵蓋三類副檔名：**`.cs` / `.razor` / `.css`**。
-**你只審查 diff 中「+」開頭的新增 / 修改行。**
+實作前請先閱讀 `docs/` 資料夾內對應的 Stage 文件：
 
-以下不是你的審查對象：
-- ❌ diff 中「-」開頭的已刪除行（舊程式碼，已被移除）
-- ❌ 本次 PR 未修改的既有程式碼
-- ❌ 其他檔案中原本就存在的問題
-
-你可以使用 Glob / Grep / Read 探索 codebase 確認上下文（介面簽名、呼叫端）。
-你可以使用 Bash 執行**唯讀 / 診斷**指令：
-- ✅ `git log`、`git diff`、`git show`
-- ✅ `dotnet build`（確認編譯）
-- ❌ **禁止**任何修改狀態的指令：`git reset`、`git checkout`、`git clean`、`rm`、`mv` 等
-
-**不得對未修改的程式碼提出問題。**
-
-## Critical 的嚴格定義
-
-只有以下三種情況才屬於 critical：
-1. **會在執行期拋出例外或導致程式崩潰**的真實 bug（必須能指出具體觸發路徑，不是「理論上可能」）
-2. **資料安全漏洞**（SQL Injection、明文密碼、未授權存取）
-3. **資源洩漏**（未 Dispose、無限迴圈、死鎖）
-
-以下情況**不得**列為 critical：
-- 「理論上可能」但在當前 await 順序執行下不會發生的問題
-- 跨 DI scope 的**順序性** DbContext 操作（非並行，不構成 EF Core concurrent context 衝突）
-- 需要重構但功能正確的程式碼 → 應列為 warning
-- 命名不一致、缺少 comment → 應列為 info
-- 效能「可以更好」但不會 crash → 應列為 warning
-- 原本就存在、本次 PR 未修改的問題 → 不報告
-
-**寧可漏報一個 warning，也不可誤報一個 critical。**
-
-## Razor / CSS / a11y / MudBlazor 判準（補充）
-
-當 PR 包含 `.razor` / `.css` 改動時，以下議題**一律列為 Warning**（這是刻意保守，呼應「偏好放行」哲學；除非真的會 runtime 崩潰，否則不升級為 Critical）：
-
-### 安全（**Critical**）
-- `<a target="_blank">` 與 `<MudLink Target="_blank">` **必須同時設定 `rel="noopener"`**（防 tabnabbing 漏洞）
-  - 屬於 OWASP 列出的真實安全風險，非「理論上可能」
-  - 與既有「Blazor 例外處理」並列為**唯二可能列為 Critical 的 razor 議題**
-
-### a11y（Warning）
-- `<button>` / `MudButton` 沒有可見文字 → 缺 `aria-label`
-- `MudSwitch` / `MudCheckBox` 移除 `Label` 但沒補 `aria-label`
-- `MudIconButton` 等 icon-only 元素缺 `Tooltip` 或 `aria-label`（螢幕閱讀器無法辨識）
-- `<img>` 缺 `alt` 屬性
-- `<a>` 與 `<MudLink>` 缺 `aria-label`（純圖示 link / icon-only link / 文字過短難識別 link）→ Warning
-  - 例：只顯示「PR」「下載」「More」等短文字、或只有 icon 的 link
-
-### CSS（Warning）
-- `!important` 濫用（同一檔案出現超過 1-2 個 → 設計問題）
-- 寫死顏色（如 `color: #fff`）不支援 dark mode → 應改用 `var(--mud-palette-text-primary)` 等 MudBlazor 主題變數
-
-### MudBlazor 慣例（Warning）
-- 同表格內按鈕風格混用（同時有 `MudButton` 與 `MudIconButton` 時，先確認是否刻意）
-- 移除 `Label` 的 `MudSwitch` / `MudCheckBox` 必須補 `aria-label`（呼應 a11y 段落）
-
-### 業務邏輯 pattern match（Warning）
-- `Title.Contains("[XXX]")` / `Description.StartsWith("Mock:")` 等用 string pattern 判斷業務狀態 → Warning
-  - **建議改法**：DTO 加明確欄位（如 `IsMock`）/ 注入 service 判斷 / 列舉常數
-  - **理由**：pattern match 是 fragile 設計，標題文案改動或多語系化會無聲破壞邏輯
-
-### Blazor 例外處理（**唯二可能列為 Critical 的 razor 議題之一**）
-- **Server Circuit 斷線判準**：以下三條件同時符合 → **Critical，不得降級為 Warning**：
-  1. 任何 Blazor 事件 handler（`@onclick` / `@onchange` / MudBlazor 元件 `OnClick` / `OnClose` / `OnValueChanged` / 事件鏈中游 method）
-  2. 內部有 `await` 可能拋例外的呼叫（DB / API / IO / 第三方 service）
-  3. 未包 try/catch 且無上層錯誤邊界
-
-  > **反面教材（PR #122 onUndo）**：`OnClose="@OnUndo"` 透過 MudBlazor 元件事件鏈間接傳播至 Server Circuit，行為與直寫 `@onclick` 相同 → Critical。間接 binding 不豁免。
-
-- **不得降級規則**：描述中出現「可能」/「或許」/「低機率」等保守用詞，**不影響 Critical 判定**。Server Circuit 斷線「可能性」存在即 Critical。
-- 其他 Blazor 細節（`@bind-Value` 拼錯、Circuit 範圍誤用、共用 service 注入）→ **Warning**
-
-> **關鍵**：a11y / CSS / MudBlazor / pattern match 議題即便看起來明顯，也維持 Warning。**唯二例外**：`target="_blank"` 缺 `rel="noopener"`（OWASP 安全）與 Blazor 事件 handler 未捕例外（Server Circuit 崩潰）→ Critical。
-
-## 影響範圍分析
-
-審查完 diff 後，使用 Glob / Grep / Read 探索 codebase，找出：
-- 呼叫到被修改方法 / 介面的地方
-- 相依的 Entity、Service、Repository
-- 可能受影響的 Blazor 頁面（若 API 或 Service 有變更）
-- Migration 是否與 Entity 一致
-
-## 版本號檢查（若 prompt 中有指定目標版本）
-
-若 prompt 指定了目標版本，且 PR 包含 .csproj 的變更：
-- 檢查 `<Version>` 標籤是否已更新至目標版本
-- 未更新時列為 **warning**，訊息：`<Version> 尚未更新至 {目標版本}`
-- 若 PR 未修改任何 .csproj 則略過此檢查
-
-## 收到 Cody 反駁時的評估原則（Review Appeal）
-
-當 prompt 中包含 `cody_appeal_json` 時，你需要針對每個 `disagree` 項目重新評估：
-- 只接受**基於程式碼事實**的反駁（如：「此欄位已在 X 處初始化，不會為 null」）
-- 不接受主觀判斷（如：「我認為這樣也可以」）
-- 對每個被反駁的 issue 明確回答：接受（從 critical 移除）或維持（附理由）
-- 以事實為準，不顧及情面
-
-輸出 JSON（僅在收到 appeal 時使用此格式）：
-```json
-{
-  "accepted_ids": [1, 3],
-  "maintained_ids": [2],
-  "updated_summary": "重評後結論（一句話）"
-}
+```
+docs/
+  README.md                  ← 資料夾導覽（各子資料夾說明）
+  architecture/
+    00_Master_Plan.md          ← 文件導覽 stub（變更紀錄已遷至 /CHANGELOG.md）
+    03_Workflow_Overview.md    ← 開發流程全景圖
+    About_Boss.md              ← 老闆角色描述（當前實例：Christ）
+  planning/
+    Stage_{N}_Roadmap.md       ← 各 Stage 規劃書（完整版本歷史見 /CHANGELOG.md）
+    Future_Feature.md          ← 未來功能候選清單 + 待修 Bug 記錄
+  conventions/               ← 編程規範（見下方）
+  agents/                    ← Agent 角色說明文件
 ```
 
-## PR description 判讀（Cody 自我檢查結果）
+---
 
-若 PR description 含 `⚠️ ESCALATE_NEEDED` 標記，表示 Cody 自承完成度 < 80%：
-- **必須列一條 critical 議題**（即使程式碼層面無瑕疵）：
-  `{"id": N, "file": "PR description", "line": 0, "message": "PR description 自承完成度 < 80%，需老闆確認是否接受分階段交付"}`
-- 此條 critical 不得省略、不得改為 warning
+## 編程規範
 
-## 輸出格式（一般審查）
+實作前請閱讀 `docs/conventions/` 資料夾內的所有規範文件：
 
-**只輸出以下 JSON，不加任何說明文字、不加 markdown code block（不要用 ```json）。**
+```
+docs/conventions/
+  csharp.md          ← C# 命名、結構、非同步、Primary Constructor、ILogger
+  blazor.md          ← Blazor 組件規範、@rendermode、SignalR 即時更新
+  mudblazor.md       ← MudBlazor 8.x 使用規範、常見陷阱（必讀）
+  ef-core.md         ← EF Core 查詢優化、PostgreSQL 例外處理、Migration 流程
+  api-design.md      ← RESTful API、Internal API、SignalR Hub 設計規範
+  refactor-sop.md    ← 服務層大檔案拆解守則（Stage 34-36 FF 二十實踐累積）
+```
 
-{
-  "critical": [{"id": 1, "file": "路徑", "line": 行號, "message": "問題說明（繁體中文）"}],
-  "warning":  [{"id": 2, "file": "路徑", "line": 行號, "message": "建議說明（繁體中文）"}],
-  "info":     [{"id": 3, "file": "路徑", "line": 行號, "message": "優化建議（繁體中文）"}],
-  "summary":  "整體審查評語（一句話，繁體中文）",
-  "impact":   "影響範圍分析（Markdown 格式，可多行，含直接相依與潛在副作用）"
-}
+> UI 元件庫為 **MudBlazor 8.x**。
 
-- `id` 為唯一整數，從 1 開始，跨三個清單全局遞增（critical 先編號，再 warning，再 info）
-- critical：會崩潰 / 資安漏洞 / 資源洩漏 → 必須修改才能合併
-- warning：效能問題、架構建議、缺少 null 處理 → 建議修改
-- info：命名改善、可讀性提升、重構建議 → 可選優化
-- 若無問題，對應陣列留空 []
-- line 填原始檔案中的行號（不確定填 0）
+---
 
-## 重要原則
+## 專案結構
 
-- 引用實際找到的檔案名稱與行號，不泛泛而談
-- 使用繁體中文，程式碼保留英文
-- **偏好放行**。你的職責是擋住「會出事」的問題，不是追求完美
+```
+AiTeam.slnx   ← 解決方案檔位於 repo root（注意是 .slnx 不是 .sln）
+  └── src/
+      ├── AiTeam.AppHost              ← Aspire 入口（PostgreSQL + Bot + Dashboard 編排）
+      ├── AiTeam.ServiceDefaults      ← 共用遙測、健康檢查設定
+      ├── AiTeam.Bot                  ← Discord Bot 主程式（含各 Agent 邏輯）
+      ├── AiTeam.Dashboard            ← Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）
+      ├── AiTeam.Data                 ← EF Core DbContext、Entities、Repositories、Migrations
+      ├── AiTeam.Shared               ← 共用 DTO、介面、常數
+      └── AiTeam.Tests.Playwright     ← Playwright E2E 截圖測試
+```
+
+> 建置指令：`dotnet build AiTeam.slnx`（從 repo root 執行）
+
+---
+
+## 部署環境
+
+系統運行在**本機 Windows 11 的 Docker Compose** 上，非雲端部署。
+- Bot / Dashboard / PostgreSQL 均為本機容器
+- Bot 容器內無法執行宿主機的 `docker` / `docker compose` 指令
+- 涉及容器操作的功能需透過 GitHub Actions self-hosted runner 間接執行
+- docker-compose 設定檔：`docker-compose.yml`（開發）、`docker-compose.prod.yml`（正式）
+
+**自動部署：push to main 後，GitHub Actions self-hosted runner 會自動執行 `docker compose build + up`，不需要手動操作。** 因此驗收步驟中不應包含「手動部署到 Docker」或「手動重啟容器」等指示——只需 commit & push，等待自動部署完成即可。
+
+---
+
+## ops 配置改動 SoP（Stage 47 起）
+
+修改 Token / 系統設定 / docker-compose 配置時，依下列分類選對的方式：
+
+### Token limit / 系統設定（5 分鐘內生效，不重啟）
+
+→ **走 Dashboard**：系統設定頁 / Agent 設定頁
+- 全域月限 / 單次請求上限 → 系統設定 → Token 守門設定
+- per-agent 日限 / 月限 → Agent 設定 → 編輯該 Agent
+- 修改後自動呼叫 `ReloadCache`，Bot Cache 立即刷新
+
+### docker-compose.prod.yml / appsettings.json 預設值（push 觸發 CI/CD）
+
+→ **commit + push 到 main**：GitHub Actions self-hosted runner 自動 `docker compose up -d --force-recreate`
+- ⚠️ **不要單獨 `docker restart aiteam-bot`** — restart 不 reload env，必須 recreate
+- 若需要不 push 直接 recreate，手動執行：`docker compose -f docker-compose.prod.yml up -d --force-recreate`
+
+### 配置 SoT 確認（Stage 47 後的 Token 架構）
+
+| 設定類型 | SoT | fallback |
+|---|---|---|
+| **Token limit（全域 / per-agent）** | DB（app_settings + agent_configs）| appsettings.json（env 已移除）|
+| **其他 AgentSettings**（RulesCacheTtlMinutes 等）| docker-compose.prod.yml env | appsettings.json |
+| **Discord / GitHub / DB 連線**（含敏感資訊）| docker-compose.prod.yml env | 無 fallback |
+
+---
+
+## 重要設計原則
+
+- **動態 Agent 清單**：從資料庫載入，不寫死在程式碼
+- **Agent 模型可獨立配置**：每個 Agent 的 Provider / Model 經 Dashboard 設定頁管理
+- **規則 Cache TTL**：1 小時，可 Discord `/reload-rules` 強制更新
+- **所有設定**集中在 `appsettings.json` 或動態 `AppSettings` 資料表，不寫死在程式碼
+- **Discord + Dashboard 雙通道**：老闆確認點同時出現在 Discord 按鈕 + Dashboard 操作中心，任一端回覆即鎖（樂觀鎖先到先贏）
+
+---
+
+## 版本號管理（SemVer）
+
+系統版本遵循 **Semantic Versioning**，格式 `MAJOR.MINOR.PATCH`：
+
+| 類型 | 規則 | 範例 |
+|------|------|------|
+| **patch** | Hotfix、小 bug 修正，不跟 Stage 走 | v3.4.0 → v3.4.1 |
+| **minor** | 每個 Stage 完成時遞增 | v3.4.0 → v3.5.0（Stage 21 完成）|
+| **major** | 架構層面重大改變（如 Claude Code 引入、PM 閘門等等級）| v2.x → v3.0.0 |
+
+**需要修改的地方：**
+- `src/Directory.Build.props` — `<Version>` 標籤（Stage 26 起集中管理，改版只需改此一個檔案）
+- Dashboard 頁腳會自動讀取 assembly version 顯示
+
+> 目前版本 / 最新 Stage 以 [`/CHANGELOG.md`](./CHANGELOG.md) 為準（不在本文件寫死，避免過期）。
+
+---
+
+## 自主執行原則
+
+**Christ 是只動嘴的老闆，能自己做的事不要叫他做。**
+
+實作完畢進入驗收前，以下事項應自行完成，不需要請 Christ 操作：
+
+- `dotnet build AiTeam.slnx` — 確認編譯無誤（從 repo root 執行）
+- `dotnet test` — 執行所有單元測試
+- EF Core Migration — 有新 Migration 時執行：
+  ```
+  dotnet ef migrations add {Name} --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
+  dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
+  ```
+  **注意**：`startup-project` 必須用 `src/AiTeam.Dashboard`（含 `Microsoft.EntityFrameworkCore.Design`），用 `AiTeam.AppHost` 會找不到 DLL；多 DbContext 必加 `--context AppDbContext`
+- **git commit + push 到 main** — 實作完成後**直接執行**，不要詢問 Christ「要不要 push」（push 是預設行為；完整結案鏈路詳見下方「結案 SOP」段）
+- 程式碼靜態分析 — 確認無明顯 warning
+- **Playwright 驗收** — 凡是可以用 Playwright 截圖驗證的 UI 變更，自行執行並確認結果，不需要請 Christ 開瀏覽器驗收
+
+**需要請 Christ 操作的事（Bot / Dashboard 執行中的容器操作）：**
+- 重啟 Docker 容器（`docker compose restart`）
+- 在 Discord 執行 `/reload-rules`（規則快取更新）
+- 在 Discord 實際測試 Bot 對話流程
+- 在 Dashboard 驗收 UI 功能
+
+---
+
+## 實作完成後的結案 SOP
+
+驗收條件達標 + 實作完成時，完整結案鏈路：
+
+1. **本機驗證**：`dotnet build AiTeam.slnx` / `dotnet test` / Playwright 截圖（如適用）
+2. **自行 commit**：聚焦「為什麼」而非「做了什麼」；遵循近期 commit 訊息風格（從 `git log --oneline -10` 觀察）
+3. **自行 push 到 main**：這是預設行為，**不需要詢問 Christ「要不要 push」**——直接 push
+4. **CI/CD 自動接手**：
+   - push 觸發 GitHub Actions **self-hosted runner**
+   - Runner 自動執行 `docker compose build + up`
+   - 系統跑在 Christ **本機 Win11 Docker Compose**（非雲端），runner 直接重建本機容器
+   - 你**不需要手動 ssh / 執行 docker 指令**——這些 Christ 自己也做不到（runner 才有權限）
+5. **回報「實作完成 + 已 push」**：給 commit hash，等 Christ 驗收 Bot / Dashboard 行為
+
+> 這條鏈路（commit → push → CI/CD → 本機 Docker）是預設工作流，**不要把它拆成「先 commit 再問是否 push」**。除非該 commit 涉及破壞性操作（force push / reset --hard 等）或 Christ 明確指示要 review，否則一氣呵成完成。
+
+---
+
+## 開發語言
+
+Christ 使用繁體中文溝通，程式碼註解使用繁體中文，變數與方法名稱使用英文。
+
+---
+
+## Session 起手規則
+
+進入「實作 / 修 Bug / 驗收」類 session 時，第一件事：
+
+1. 讀 `docs/planning/Stage_{current}_Roadmap.md`（若是 Stage 工作）
+2. 跑 `git log --oneline -10` 了解最近進度
+3. 掃一眼 `docs/planning/Future_Feature.md` 前段（🔴🟡 狀態的 bug 區塊）
+
+純諮詢 / 設計討論類 session 不需要。
+
+---
+
+## 回答 Christ 觀察到的異常時
+
+Christ 回報「這合理嗎 / 為什麼 X / 我看到 Y」時，**先查程式碼實證，不要靠推論解釋**。
+
+- 讀相關檔案、確認實際流程
+- 比對 Roadmap / 計劃書的預期行為
+- 確認後再下判斷
+
+不要用「這是既有設計」「不影響正確性」這類結論打發——除非已經有程式碼實證支撐。Christ 的觀察通常基於使用時的真實感受，即使初判「不是 bug」也要**先記錄到 Future_Feature.md 再下結論**，別直接 dismiss。
