@@ -64,6 +64,11 @@ public class WorkflowSettingsResolver(
     public Task<bool> GetUseFrameworkPipelineAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseFrameworkPipeline", Defaults.UseFrameworkPipeline, ct);
 
+    /// <summary>Stage 63B：v5 動態架構 PoC feature flag。預設 false（保留 v4 既有 CeoAgentService 入口）。
+    /// 切 true 後 CeoAgentService.ProcessWithClaudeCodeAsync 開頭直接 forward 到 PetraOrchestratorService.StartAsync。</summary>
+    public Task<bool> GetUsePetraOrchestratorV5Async(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UsePetraOrchestratorV5", Defaults.UsePetraOrchestratorV5, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);

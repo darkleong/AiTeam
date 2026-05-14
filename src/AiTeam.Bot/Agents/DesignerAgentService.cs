@@ -1,9 +1,11 @@
 using System.Text;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
@@ -11,7 +13,9 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// Designer Agent（Demi）：將功能需求轉換為 MudBlazor UI 規格文件（Markdown）。
 /// Stage 12：改用 Claude Code 唯讀模式探索現有頁面結構，規格不再 commit 到 GitHub（改存 DB）。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC）。
 /// </summary>
+[AgentCapability("ui_design")]
 public class DesignerAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
@@ -20,9 +24,17 @@ public class DesignerAgentService(
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     TokenLogService tokenLogService,
-    ILogger<DesignerAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<DesignerAgentService> logger) : IAgentExecutor, IAgentTool
 {
     private const string AgentName = "Designer";
+
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Demi";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DesignerAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "ui_design", "Demi",
+            "你是 Demi — UI Design Worker。負責產出 MudBlazor UI 規格與設計。", ctx, tokenLogService, loggerFactory);
 
     /// <inheritdoc />
     public async Task<AgentExecutionResult> ExecuteTaskAsync(

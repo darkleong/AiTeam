@@ -3,6 +3,9 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// Claude Code subprocess 執行介面。
 /// Stage 17：提取此介面以支援 MockMode 的 proxy pattern runtime 切換。
+/// Stage 65 子項 1：6 method 加 string? systemPrompt = null（CLI --append-system-prompt 修根因路徑 —
+/// v5 adapter 改用此參數透傳 CLAUDE_&lt;Worker&gt;.md 內容 / v4 caller 0 動既有走法繼續用 default null）。
+/// systemPrompt 放在 ct 之後 = v4 既有 positional caller `RunXxxAsync(..., cancellationToken)` 0 動仍對應 ct（C# default param 透明）。
 /// </summary>
 public interface IClaudeCodeService
 {
@@ -12,7 +15,8 @@ public interface IClaudeCodeService
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 
     /// <summary>
     /// 以唯讀模式執行 Claude Code（僅 Glob / Grep / Read）。
@@ -24,7 +28,8 @@ public interface IClaudeCodeService
         string model,
         string anthropicApiKey,
         int? maxTurns = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 
     /// <summary>以 Victoria CEO 模式執行 Claude Code（讀 repo、寫 docs/、git commit）。可選傳入圖片附件（走 stream-json stdin）。</summary>
     Task<ClaudeCodeResult> RunVictoriaAsync(
@@ -33,7 +38,8 @@ public interface IClaudeCodeService
         string model,
         string anthropicApiKey,
         IReadOnlyList<ImageAttachment>? images = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 
     /// <summary>以 QA 模式執行 Claude Code（開放所有工具，供 Quinn 產生測試）。</summary>
     Task<ClaudeCodeResult> RunQaAsync(
@@ -41,7 +47,8 @@ public interface IClaudeCodeService
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 
     /// <summary>以 Review 模式執行 Claude Code（Glob / Grep / Read / Bash，供 Vera 程式碼審查）。</summary>
     Task<ClaudeCodeResult> RunReviewAsync(
@@ -49,7 +56,8 @@ public interface IClaudeCodeService
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 
     /// <summary>
     /// Stage 25a：以持續對話 session 模式執行 Claude Code，支援跨輪次 context 累積（Kick-off 會議使用）。
@@ -65,6 +73,7 @@ public interface IClaudeCodeService
     /// <param name="maxTurns">本輪最大 turn 數（建議 10~15）。</param>
     /// <param name="allowedTools">允許的工具集；null 表示開放全部工具（Cody 使用）。</param>
     /// <param name="ct">CancellationToken。</param>
+    /// <param name="systemPrompt">Stage 65 子項 1：可選 system prompt（CLI --append-system-prompt 透傳，default null）。</param>
     Task<ClaudeCodeResult> RunMeetingSessionAsync(
         string workingDir,
         string sessionId,
@@ -74,5 +83,6 @@ public interface IClaudeCodeService
         bool isFirstMessage,
         int maxTurns,
         string[]? allowedTools = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        string? systemPrompt = null);
 }

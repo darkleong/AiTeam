@@ -130,24 +130,35 @@ SuperStepCompletedEvent(Step = 0)
 
 #### Limitation (b)：base `AIAgent` subclass 不被 framework Workflow dispatch
 
-**現象**：透過 `AgentWorkflowBuilder.BuildSequential([cody, vera])` 建構 workflow，跑 `InProcessExecution.RunStreamingAsync`：
+> ⚠️ **Stage 64 errata（2026-05-13 修正）— root cause 誤判**：
+>
+> 原 Stage 63A spike 觀察到的 0 invoke 現象**真實 root cause 是 BuildSequential workflow 需要 `TurnToken` trigger 才 fire first turn**（漏這條 → 0 worker dispatch + workflow idle 完成），**不是「base AIAgent subclass 不被 framework dispatch」的 framework 真限制**。
+>
+> 揭露過程：Trial_v9 真實任務跑 v5 PoC 時，0 deliverable 揭 BuildSequential 鏈下游 worker 0 fire — Aria WebSearch 官方 doc Sequential Orchestration 範例（learn.microsoft.com/agent-framework/workflows/orchestrations/sequential）對齊後揭真實 root cause。Stage 63B PoC commit `ac048ef`（`fix(stage63B): BuildSequential workflow 加 TurnToken trigger`）已修正：在 `InProcessExecution.RunStreamingAsync` 之後加 `await run.TrySendMessageAsync(new TurnToken(emitEvents: true))` 觸發 first turn。
+>
+> 對 Stage 63B PoC 架構決策影響：**0 影響** — `ChatClientAgent(IChatClient, ...)` + `ClaudeCodeChatClientAdapter` 路線仍是 Stage 63B 既有採用（spike 路線 A 對齊），只是「為什麼必走 IChatClient adapter」的 root cause 描述要修正：真實理由是「IClaudeCodeService 是 CLI subprocess pattern，需 adapter 才能 wrap 進 framework IChatClient 型別系統」，不是「base AIAgent subclass 不被 dispatch」。
+>
+> 連帶更正：Layer 4 Worker wire（line 284）+ 結語表 Worker fixture invocation 行（line 314）— 結論「IChatClient adapter 必走」不變，root cause 描述修正。
+
+**現象**（Stage 63A spike 真實觀察 — 解讀已修正見上方 errata block）：透過 `AgentWorkflowBuilder.BuildSequential([cody, vera])` 建構 workflow，跑 `InProcessExecution.RunStreamingAsync`：
 
 - ✅ `ExecutorInvokedEvent(Executor = Cody_<guid>, Data: List<ChatMessage>)` fire
 - ✅ `ExecutorCompletedEvent(Executor = Cody_<guid>)` fire
 - ❌ 但 **`MockWorkerAgent.RunCoreAsync` / `RunCoreStreamingAsync` 兩個 override 都 0 invoke**
 - 等於 framework 「executor wrapper」執行了但底層 AIAgent 沒被透過 RunCore* path 呼叫
 
-**推測根因**：framework 內部 wrap AIAgent 成 Executor 時，可能透過 `ChatClientAgent`-specific code path（depend on `IChatClient` 注入點）— base `AIAgent` subclass 沒有 `IChatClient`，wrapper 走 no-op fallback。
+**~~推測根因~~**（**Stage 64 errata 修正**）：~~framework 內部 wrap AIAgent 成 Executor 時，可能透過 `ChatClientAgent`-specific code path（depend on `IChatClient` 注入點）— base `AIAgent` subclass 沒有 `IChatClient`，wrapper 走 no-op fallback。~~
+→ **真實 root cause**：spike 沒呼叫 `TurnToken` trigger（first turn 不 fire），不是 framework 真限制。詳上方 errata block。
 
-**Stage 63B 應對 path**：
-- **必走** `ChatClientAgent(IChatClient, ChatClientAgentOptions, ...)` ctor wrap Worker — 對應**寫 IChatClient adapter 包既有 ClaudeCodeService / GeminiProvider**：
+**Stage 63B 應對 path**（解讀已修正 — 路線 A 採用結論不變）：
+- 仍走 `ChatClientAgent(IChatClient, ChatClientAgentOptions, ...)` ctor wrap Worker — **理由修正**：因為 `IClaudeCodeService` 是 CLI subprocess pattern（不是 IChatClient 型別），需 adapter 包既有 ClaudeCodeService 才能掛進 framework IChatClient 系統：
   ```
   class ClaudeCodeChatClientAdapter : IChatClient {
-      // 包 ClaudeCodeService.RunReadOnlyAsync / RunWriteAsync
+      // 包 ClaudeCodeService.RunAsync / RunReviewAsync / RunQaAsync / ...
       // 把 IList<ChatMessage> 轉 subprocess CLI prompt
   }
   ```
-- 對齊 Charter `02_Architecture_Wire.md` Layer 3 候選 `ChatClientAgent` ctor — 不算 Charter 重寫，本 spike notes 揭露「**必走** ChatClientAgent」而非「可選」即可
+- 對齊 Charter `02_Architecture_Wire.md` Layer 3 候選 `ChatClientAgent` ctor — 不算 Charter 重寫，本 spike notes 揭露「**必走** ChatClientAgent」而非「可選」即可（**修正後仍為 必走**，理由 = IClaudeCodeService 非 IChatClient 型別需 adapter wrap）
 
 ### 真實 Gemini API cost 紀錄
 
@@ -281,7 +292,7 @@ prototype 用 `List<ChatMessage>` in-memory（`InProcessExecution.RunStreamingAs
 > ⚠️ Charter `02_Architecture_Wire.md` + `04_Stage_63_PoC_Roadmap_Draft.md` 的「Magentic Orchestration class wire」術語不重寫，本 spike notes 第 1+2 段作為 errata 補釘：
 
 - Layer 3 真實 class wire = ~~`MagenticOrchestrator<TState>`~~ → 候選 **(B) 自寫 `PetraOrchestratorService` + `DecideAsync` + `BuildSequential`**（spike 已驗 path / framework limitation (a) 揭露 GroupChatManager base subclass 不啟動 manager loop — 不走 framework GroupChat）
-- Layer 4 Worker wire = ~~base `AIAgent` subclass + `RunCoreAsync` override~~ → **必走 `ChatClientAgent(IChatClient, ...)` + 寫 `ClaudeCodeChatClientAdapter : IChatClient`**（包既有 ClaudeCodeService — framework limitation (b) 揭露 base AIAgent subclass 不被 framework dispatch）
+- Layer 4 Worker wire = ~~base `AIAgent` subclass + `RunCoreAsync` override~~ → **必走 `ChatClientAgent(IChatClient, ...)` + 寫 `ClaudeCodeChatClientAdapter : IChatClient`**（包既有 ClaudeCodeService — **Stage 64 errata 修正**：理由是 `IClaudeCodeService` 是 CLI subprocess pattern 非 IChatClient 型別需 adapter wrap，**非**原誤判「base AIAgent subclass 不被 framework dispatch」— 真實 root cause = spike 漏 `TurnToken` trigger，詳 limitation (b) 段 errata block）
 - Worker-as-Tool 真實 API = `AIAgentExtensions.AsAIFunction(this AIAgent, ...)` 把任一 AIAgent 包成 `Microsoft.Extensions.AI.AIFunction`（Stage 63B 子項 4 走此 API + IAgentTool interface 仍可在自家定義 wrapper pattern）
 - Workflow 執行入口 = `InProcessExecution.RunStreamingAsync<T>(Workflow, T initialState, ...)`（既有 v4 Stage 49+ 已用此 pattern — 對齊既有 `FrameworkKickoffRouter.cs:405` + `FrameworkPipelineRouter.cs:510`）
 - ~~GroupChatManager.SelectNextAgentAsync hook~~ → 不適用 base subclass / Stage 63B 自寫 orchestrator path 替代
@@ -311,7 +322,7 @@ prototype 用 `List<ChatMessage>` in-memory（`InProcessExecution.RunStreamingAs
 |---|---|---|---|
 | prototype 行數 | ≤100 行 | **113 行（超 13%）** | 揭 framework limitation + 適應 `DecideAsync` + `BuildSequential` path + MockWorkerAgent 3 個 session core override 必要 |
 | 動態決策 hook | `GroupChatManager.SelectNextAgentAsync` override | **Petra 一次性 LLM `DecideAsync` + `BuildSequential`** | Framework limitation (a) 揭露 — base GroupChatManager subclass 不啟動 manager loop |
-| Worker fixture invocation | `RunCoreAsync` 真實 fire | **0 invoke（framework limitation (b) 揭露）** | base AIAgent subclass 不被 framework workflow dispatch — Stage 63B IChatClient adapter 必走 |
+| Worker fixture invocation | `RunCoreAsync` 真實 fire | **0 invoke（~~framework limitation (b) 揭露~~ — Stage 64 errata：真實 root cause = spike 漏 `TurnToken` trigger）** | ~~base AIAgent subclass 不被 framework workflow dispatch~~ → Stage 63B PoC commit `ac048ef` 加 `TurnToken` 修正後 worker 真實 fire / IChatClient adapter 結論不變但理由修正為「IClaudeCodeService 非 IChatClient 型別需 adapter wrap」（詳 limitation (b) 段 errata block）|
 | Mock 場景驗 worker call | 預期 worker call count 各場景對應 | **改驗 PetraDecisions 動態分流序列**（核心命題依舊覆蓋）| 適應 framework limitation — assertion 聚焦 spike 真實 deliverable |
 
 ---

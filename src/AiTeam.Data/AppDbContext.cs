@@ -18,6 +18,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<BossInteraction> BossInteractions => Set<BossInteraction>();
     public DbSet<BossCommandLog>  BossCommandLogs  => Set<BossCommandLog>();
 
+    // Stage 63B：Petra Orchestrator session 持久化（v5 動態架構 PoC）
+    public DbSet<PetraSession>        PetraSessions        => Set<PetraSession>();
+    public DbSet<PetraSessionMessage> PetraSessionMessages => Set<PetraSessionMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Team>(e =>
@@ -151,6 +155,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasFilter("\"Status\" = 'pending'")
                 .IsUnique()
                 .HasDatabaseName("ix_boss_interactions_pending_per_group_type");
+        });
+
+        // Stage 63B：Petra Orchestrator session（v5 動態架構 PoC）
+        modelBuilder.Entity<PetraSession>(e =>
+        {
+            e.ToTable("petra_sessions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasOne(x => x.TaskGroup).WithMany().HasForeignKey(x => x.TaskGroupId).IsRequired(false);
+            e.HasIndex(x => x.TaskGroupId);
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<PetraSessionMessage>(e =>
+        {
+            e.ToTable("petra_session_messages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.Content).HasColumnType("text");
+            e.HasOne(x => x.Session).WithMany(s => s.Messages).HasForeignKey(x => x.SessionId);
+            e.HasIndex(x => new { x.SessionId, x.CreatedAt });
         });
     }
 }

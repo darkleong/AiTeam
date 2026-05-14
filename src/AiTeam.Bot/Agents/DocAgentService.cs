@@ -3,11 +3,13 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using TaskStatus = AiTeam.Shared.Constants.TaskStatus;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
@@ -16,7 +18,9 @@ namespace AiTeam.Bot.Agents;
 /// Documentation Agent（Sage）：收尾歸檔員。
 /// Stage 23 重構：不再讀取 .cs 原始碼，改用 Cody 實作說明 + Vera 審查摘要做歸檔。
 /// 建立 docs/archive/pr{N}-archive.md + 更新 CHANGELOG.md。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC）。
 /// </summary>
+[AgentCapability("documentation")]
 public class DocAgentService(
     GitHubService gitHubService,
     TaskRepository taskRepository,
@@ -26,9 +30,17 @@ public class DocAgentService(
     InteractionService interactionService,
     IConfiguration configuration,
     TokenLogService tokenLogService,
-    ILogger<DocAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<DocAgentService> logger) : IAgentExecutor, IAgentTool
 {
     private const string AgentName = "Doc";
+
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Sage";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DocAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "documentation", "Sage",
+            "你是 Sage — Documentation Worker。負責產出與更新文件、歸檔紀錄。", ctx, tokenLogService, loggerFactory);
 
     /// <inheritdoc />
     public async Task<AgentExecutionResult> ExecuteTaskAsync(

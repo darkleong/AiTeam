@@ -9,6 +9,7 @@ using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Ops;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Orchestration.Meeting;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
@@ -82,6 +83,20 @@ builder.Services.AddKeyedScoped<IAgentExecutor, ReleaseAgentService>(AgentNames.
 
 builder.Services.AddScoped<DesignerAgentService>();
 builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames.Designer);
+
+// Stage 63B：Worker IAgentTool multi-registration（v5 動態架構 PoC — Petra Orchestrator 透過 IEnumerable<IAgentTool> DI scan 取所有 7 Worker）
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DevAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReviewerAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<QaAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DocAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<RequirementsAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DesignerAgentService>());
+builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReleaseAgentService>());
+
+// Stage 63B：Petra Orchestrator + Session Repository + Recovery hosted service（v5 動態架構 PoC）
+builder.Services.AddScoped<PetraSessionRepository>();
+builder.Services.AddScoped<PetraOrchestratorService>();
+builder.Services.AddHostedService<PetraSessionRecoveryService>();
 
 // Stage 35：PmAgentService 拆解為 5 個 service + 1 record 檔（Agents/Pm/）
 builder.Services.AddScoped<PmAgentCommons>();

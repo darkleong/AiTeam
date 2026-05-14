@@ -2,10 +2,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 
 namespace AiTeam.Bot.Agents;
@@ -13,7 +15,9 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// Requirements Analyst Agent（Rosa）：將原始需求拆解為 GitHub Issues。
 /// Stage 12：改用 Claude Code 唯讀模式探索 codebase，產出更精確的 Issues。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC）。
 /// </summary>
+[AgentCapability("requirements_extraction")]
 public class RequirementsAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
@@ -22,9 +26,17 @@ public class RequirementsAgentService(
     IClaudeCodeService claudeCodeService,
     IConfiguration configuration,
     TokenLogService tokenLogService,
-    ILogger<RequirementsAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<RequirementsAgentService> logger) : IAgentExecutor, IAgentTool
 {
     private const string AgentName = "Requirements";
+
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Rosa";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<RequirementsAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "requirements_extraction", "Rosa",
+            "你是 Rosa — Requirements Extraction Worker。負責解析需求並拆出 Issues。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

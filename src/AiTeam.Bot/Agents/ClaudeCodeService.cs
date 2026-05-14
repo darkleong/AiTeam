@@ -31,12 +31,13 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
     {
         // 確保 git config 已設定（容器內可能缺少 user.name/email）
         await ConfigureGitAsync(workingDir, ct);
         return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            DefaultTimeout, allowedTools: null, maxTurns: 40, ct);
+            DefaultTimeout, allowedTools: null, maxTurns: 40, systemPrompt, ct);
     }
 
     /// <summary>
@@ -61,13 +62,14 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string model,
         string anthropicApiKey,
         IReadOnlyList<ImageAttachment>? images = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
     {
         await ConfigureGitVictoriaAsync(workingDir, ct);
         if (images is { Count: > 0 })
-            return await RunCoreWithImagesAsync(workingDir, prompt, model, anthropicApiKey, images, VictoriaTimeout, maxTurns: 15, ct);
+            return await RunCoreWithImagesAsync(workingDir, prompt, model, anthropicApiKey, images, VictoriaTimeout, maxTurns: 15, systemPrompt, ct);
         return await RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            VictoriaTimeout, allowedTools: null, maxTurns: 15, ct);
+            VictoriaTimeout, allowedTools: null, maxTurns: 15, systemPrompt, ct);
     }
 
     public Task<ClaudeCodeResult> RunReadOnlyAsync(
@@ -76,9 +78,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string model,
         string anthropicApiKey,
         int? maxTurns = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: maxTurns ?? 10, ct);
+            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read"], maxTurns: maxTurns ?? 10, systemPrompt, ct);
 
     /// <summary>
     /// QA 模式：開放所有工具（含 Write / Edit / Bash），供 Quinn 產生測試並以 dotnet build 驗證。
@@ -90,9 +93,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            DefaultTimeout, allowedTools: null, maxTurns: 20, ct);
+            DefaultTimeout, allowedTools: null, maxTurns: 20, systemPrompt, ct);
 
     /// <summary>
     /// Review 模式：開放 Glob / Grep / Read / Bash，不開放 Write / Edit。
@@ -104,9 +108,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         string prompt,
         string model,
         string anthropicApiKey,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
         => RunCoreAsync(workingDir, prompt, model, anthropicApiKey,
-            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read", "Bash"], maxTurns: 15, ct);
+            ReadOnlyTimeout, allowedTools: ["Glob", "Grep", "Read", "Bash"], maxTurns: 15, systemPrompt, ct);
 
     /// <summary>
     /// Stage 25a：以持續對話 session 模式執行 Claude Code，供 Kick-off 會議的多輪討論使用。
@@ -122,9 +127,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         bool isFirstMessage,
         int maxTurns,
         string[]? allowedTools = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? systemPrompt = null)
         => RunMeetingCoreAsync(workingDir, sessionId, prompt, model, anthropicApiKey,
-            isFirstMessage, maxTurns, allowedTools, ct);
+            isFirstMessage, maxTurns, allowedTools, systemPrompt, ct);
 
     // ────────────── Private ──────────────
 
@@ -141,6 +147,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         IReadOnlyList<ImageAttachment> images,
         TimeSpan timeout,
         int maxTurns,
+        string? systemPrompt,
         CancellationToken ct)
     {
         // 組 stream-json 輸入：text + N 張圖片
@@ -157,8 +164,13 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
             message = new { role = "user", content = contentItems }
         });
 
+        // Stage 65 子項 1：可選 --append-system-prompt（trust source 自家 CLAUDE_<X>.md，escape 對齊既有 prompt pattern）
+        var sysPromptArg = string.IsNullOrEmpty(systemPrompt)
+            ? ""
+            : $"--append-system-prompt \"{systemPrompt.Replace("\"", "\\\"")}\" ";
         var args = $"--input-format stream-json --output-format stream-json --verbose " +
                    $"--dangerously-skip-permissions " +
+                   $"{sysPromptArg}" +
                    $"--max-turns {maxTurns} " +
                    $"--no-session-persistence " +
                    $"--model {model}";
@@ -254,9 +266,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         TimeSpan timeout,
         string[]? allowedTools,
         int maxTurns,
+        string? systemPrompt,
         CancellationToken ct)
     {
-        var args = BuildArgs(prompt, model, allowedTools, maxTurns);
+        var args = BuildArgs(prompt, model, allowedTools, maxTurns, systemPrompt);
 
         logger.LogInformation(
             "ClaudeCodeService 啟動 subprocess（dir={Dir}，model={Model}，readOnly={ReadOnly}）",
@@ -362,9 +375,10 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         bool isFirstMessage,
         int maxTurns,
         string[]? allowedTools,
+        string? systemPrompt,
         CancellationToken ct)
     {
-        var args = BuildMeetingArgs(prompt, model, sessionId, isFirstMessage, maxTurns, allowedTools);
+        var args = BuildMeetingArgs(prompt, model, sessionId, isFirstMessage, maxTurns, allowedTools, systemPrompt);
 
         logger.LogInformation(
             "ClaudeCodeService 啟動會議 session subprocess（dir={Dir}，sessionId={SessionId}，isFirst={IsFirst}）",
@@ -461,7 +475,7 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
     /// 不帶 --no-session-persistence。
     /// </summary>
     private static string BuildMeetingArgs(
-        string prompt, string model, string sessionId, bool isFirstMessage, int maxTurns, string[]? allowedTools)
+        string prompt, string model, string sessionId, bool isFirstMessage, int maxTurns, string[]? allowedTools, string? systemPrompt = null)
     {
         var escapedPrompt = prompt.Replace("\"", "\\\"");
         // 第一輪建立 session；後續輪 resume（UUID 直接傳給 --resume）
@@ -471,10 +485,15 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         var toolsArg = allowedTools?.Length > 0
             ? $"--allowedTools \"{string.Join(",", allowedTools)}\" "
             : "";
+        // Stage 65 子項 1：可選 --append-system-prompt（trust source 自家 CLAUDE_<X>.md，escape 對齊既有 prompt pattern）
+        var sysPromptArg = string.IsNullOrEmpty(systemPrompt)
+            ? ""
+            : $"--append-system-prompt \"{systemPrompt.Replace("\"", "\\\"")}\" ";
 
         return $"-p \"{escapedPrompt}\" " +
                $"--dangerously-skip-permissions " +
                $"{toolsArg}" +
+               $"{sysPromptArg}" +
                $"--output-format json " +
                $"--max-turns {maxTurns} " +
                $"{sessionArg}" +
@@ -482,16 +501,21 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
         // 注意：不帶 --no-session-persistence，session 資料保留於本機
     }
 
-    private static string BuildArgs(string prompt, string model, string[]? allowedTools, int maxTurns)
+    private static string BuildArgs(string prompt, string model, string[]? allowedTools, int maxTurns, string? systemPrompt = null)
     {
         var escapedPrompt = prompt.Replace("\"", "\\\"");
         var toolsArg = allowedTools?.Length > 0
             ? $"--allowedTools \"{string.Join(",", allowedTools)}\" "
             : "";
+        // Stage 65 子項 1：可選 --append-system-prompt（trust source 自家 CLAUDE_<X>.md，escape 對齊既有 prompt pattern）
+        var sysPromptArg = string.IsNullOrEmpty(systemPrompt)
+            ? ""
+            : $"--append-system-prompt \"{systemPrompt.Replace("\"", "\\\"")}\" ";
 
         return $"-p \"{escapedPrompt}\" " +
                $"--dangerously-skip-permissions " +
                $"{toolsArg}" +
+               $"{sysPromptArg}" +
                $"--output-format json " +
                $"--max-turns {maxTurns} " +
                $"--no-session-persistence " +

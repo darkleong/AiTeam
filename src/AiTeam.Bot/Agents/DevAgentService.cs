@@ -1,10 +1,12 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 
 namespace AiTeam.Bot.Agents;
 
@@ -12,7 +14,9 @@ namespace AiTeam.Bot.Agents;
 /// Dev Agent：接收 CEO 分派的任務，驅動 Claude Code CLI 自主探索 repo、實作變更、
 /// 確認 build 通過後，由 GitHubService 負責 commit / push / 開 PR。
 /// Stage 11：核心執行層從「Claude API 一次性產出」升級為「Claude Code CLI 自主開發」。
+/// Stage 63B：加 IAgentTool 介面（v5 動態架構 PoC — Petra Orchestrator 動態 dispatch 用）。
 /// </summary>
+[AgentCapability("code_implementation")]
 public class DevAgentService(
     LlmProviderFactory providerFactory,
     IClaudeCodeService claudeCodeService,
@@ -22,8 +26,16 @@ public class DevAgentService(
     AppSettingsService appSettings,
     IConfiguration configuration,
     TokenLogService tokenLogService,
-    ILogger<DevAgentService> logger) : IAgentExecutor
+    ILoggerFactory loggerFactory,
+    ILogger<DevAgentService> logger) : IAgentExecutor, IAgentTool
 {
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Cody";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<DevAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "code_implementation", "Cody",
+            "你是 Cody — Code Implementation Worker。負責依任務 input 寫程式碼。", ctx, tokenLogService, loggerFactory);
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>

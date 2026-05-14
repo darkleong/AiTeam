@@ -69,7 +69,8 @@ public class MockClaudeCodeService(
     /// </summary>
     [Obsolete("Stage 53B+：Mock 已搬到 DevAgentService MockMode early return（含 dev_blocker_appeal scenario）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
@@ -87,7 +88,7 @@ public class MockClaudeCodeService(
     /// </summary>
     public async Task<ClaudeCodeResult> RunReadOnlyAsync(
         string workingDir, string prompt, string model, string anthropicApiKey,
-        int? maxTurns = null, CancellationToken ct = default)
+        int? maxTurns = null, CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReadOnlyAsync 回傳模擬結果（maxTurns={MaxTurns}）", maxTurns ?? 10);
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
@@ -104,7 +105,7 @@ public class MockClaudeCodeService(
     /// </summary>
     public async Task<ClaudeCodeResult> RunVictoriaAsync(
         string workingDir, string prompt, string model, string anthropicApiKey,
-        IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default)
+        IReadOnlyList<ImageAttachment>? images = null, CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunVictoriaAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
@@ -120,7 +121,8 @@ public class MockClaudeCodeService(
     /// </summary>
     [Obsolete("Stage 53B+：Mock 已搬到 QaAgentService MockMode early return（含 qa_no_tests_dynamic scenario）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunQaAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunQaAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
@@ -137,7 +139,8 @@ public class MockClaudeCodeService(
     /// </summary>
     [Obsolete("Stage 53B+：Mock 已搬到 ReviewerAgentService MockMode early return（含 fix loop / reviewer_fallback / max_iter / crash_recovery scenarios）；保留 method body 作 fallback 文檔與向下相容。")]
     public async Task<ClaudeCodeResult> RunReviewAsync(
-        string workingDir, string prompt, string model, string anthropicApiKey, CancellationToken ct = default)
+        string workingDir, string prompt, string model, string anthropicApiKey,
+        CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation("[MockMode] MockClaudeCodeService.RunReviewAsync 回傳模擬結果");
         await Task.Delay(await appSettings.GetMockDelayMsAsync(ct), ct);
@@ -155,7 +158,8 @@ public class MockClaudeCodeService(
     /// </summary>
     public async Task<ClaudeCodeResult> RunMeetingSessionAsync(
         string workingDir, string sessionId, string prompt, string model, string anthropicApiKey,
-        bool isFirstMessage, int maxTurns, string[]? allowedTools = null, CancellationToken ct = default)
+        bool isFirstMessage, int maxTurns, string[]? allowedTools = null,
+        CancellationToken ct = default, string? systemPrompt = null)
     {
         logger.LogInformation(
             "[MockMode] MockClaudeCodeService.RunMeetingSessionAsync（sessionId={Id}，isFirst={IsFirst}）",

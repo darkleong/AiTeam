@@ -2,25 +2,39 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.ViewModels;
+using Microsoft.Agents.AI;
 
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
 /// Release Agent（Rena）：彙整 commits 與 merged PRs，
 /// 產出 Changelog 與 Release Notes，建立 GitHub Release tag，更新 CHANGELOG.md。
+/// Stage 63B：加 IAgentTool 介面 + IClaudeCodeService injection（v5 動態架構 PoC — v4 production path 不用此 service）。
 /// </summary>
+[AgentCapability("release_publishing")]
 public class ReleaseAgentService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     TaskRepository taskRepository,
     DashboardPushService dashboardPush,
-    ILogger<ReleaseAgentService> logger) : IAgentExecutor
+    IClaudeCodeService claudeCodeService,
+    TokenLogService tokenLogService,
+    ILoggerFactory loggerFactory,
+    ILogger<ReleaseAgentService> logger) : IAgentExecutor, IAgentTool
 {
     private const string AgentName = "Release";
+
+    // Stage 63B：IAgentTool 實作（v5 動態架構 PoC）
+    public string Name => "Release";
+    public IReadOnlyList<string> Capabilities { get; } = PetraWorkerHelper.GetCapabilities<ReleaseAgentService>();
+    public AIAgent CreateAgent(PetraSessionContext ctx)
+        => PetraWorkerHelper.BuildAgent(claudeCodeService, "release_publishing", "Release",
+            "你是 Release — Release Publishing Worker。負責 Changelog / Release Notes / Tag 發佈。", ctx, tokenLogService, loggerFactory);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
