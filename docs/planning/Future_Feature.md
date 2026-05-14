@@ -52,6 +52,7 @@
 | `Future_Feature_archived_v4.md` | 11 個已歸檔 FF（v4 吸收 / framework 內建 / Trial 完成）| 查歷史脈絡 |
 | `Future_Feature_completed.md` | 已完成項目摘要（FF + Stage 對照）| 查 Stage 完成歷史 |
 | `Future_Feature_changelog.md` | 變更紀錄 v1.0 - v7.66 | 追蹤版本演進 |
+| **`Future_Feature_v5.5.md`** ⭐ | **v5.5 升級規劃 reference**（Christ + Aria 2026-05-14/15 討論累積：Petra 拆解指令 + per-task per-agent 持久記憶 hybrid + 兩層架構 / WebSearch 業界 balanced finding 含雷區揭露 / 對齊 FF 三十六 Phase B 進化版）| **v5 production 觀察期累積真實需求後啟動評估時讀** |
 
 ---
 
