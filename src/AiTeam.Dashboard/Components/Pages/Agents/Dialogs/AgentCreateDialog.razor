@@ -53,6 +53,7 @@
         if (string.IsNullOrWhiteSpace(_name))
         {
             _error = "名稱不可為空白。";
+            Snackbar.Add(_error, Severity.Warning);
             return;
         }
 

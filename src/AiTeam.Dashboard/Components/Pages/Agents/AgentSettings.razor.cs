@@ -73,6 +73,7 @@ public partial class AgentSettings
         {
             agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
             _saveMessage = $"{agent.Name} 已{(agent.IsActive ? "啟用" : "停用")}";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -93,6 +94,7 @@ public partial class AgentSettings
             _agents.Add(created);
             _trustLevels[created.Id] = created.TrustLevel;
             _saveMessage = $"Agent「{created.Name}」已新增，重啟 Bot 後生效。";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
     }
 
@@ -105,6 +107,7 @@ public partial class AgentSettings
             await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
             agent.TrustLevel = _trustLevels[agent.Id];
             _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -125,6 +128,7 @@ public partial class AgentSettings
         {
             _errorMessage = null;
             _saveMessage  = "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         else
         {

@@ -124,6 +124,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
             _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -139,6 +140,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
             _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -154,6 +156,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
             _saveMessage = $"「MS Agent Framework Appeal Loop」已{(_useFrameworkAppealLoop ? "啟用" : "停用")}（v4 漸進遷移 Stage 49 首發），5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -169,6 +172,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
             _saveMessage = $"「MS Agent Framework Kickoff Meeting」已{(_useFrameworkKickoff ? "啟用" : "停用")}（v4 漸進遷移 Stage 50 第二步），5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -184,6 +188,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
             _saveMessage = $"「MS Agent Framework HITL（Kickoff 中途介入試點）」已{(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")}（v4 漸進遷移 Stage 51 第三步試點），5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -199,6 +204,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
             _saveMessage = $"「MS Agent Framework Design Meeting」已{(_useFrameworkDesign ? "啟用" : "停用")}（v4 漸進遷移 Stage 52 第四步），5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -214,6 +220,7 @@ public partial class SystemSettings
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkPipeline", _useFrameworkPipeline.ToString().ToLower());
             _saveMessage = $"「MS Agent Framework Pipeline」已{(_useFrameworkPipeline ? "啟用" : "停用")}（v4 漸進遷移 Stage 53A 第五步 macro-orchestration），5 分鐘內自動生效";
+            Snackbar.Add(_saveMessage, Severity.Success);
         }
         catch (Exception ex)
         {
@@ -333,7 +340,9 @@ public partial class SystemSettings
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            _errorMessage = $"儲存失敗：{ex.Message}";
+            _saveMessage  = null;
+            Snackbar.Add(_errorMessage, Severity.Error);
         }
         finally
         {
