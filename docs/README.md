@@ -37,7 +37,8 @@
 | 文件 | 說明 |
 |------|------|
 | `Stage_7_Roadmap.md` ~ `Stage_N_Roadmap.md` | 各 Stage 規劃書（早期 Stage 1-6 已歸檔到 [`_archive/early-stages/`](./_archive/early-stages/)） |
-| `Future_Feature.md` | 尚未排入 Stage 的功能候選清單 |
+| `Future_Feature.md` | active 功能候選清單 |
+| `Future_Feature_v5.5.md` ⭐ | v5.5 升級規劃 reference（進行中戰略主軸）|
 
 ---
 
@@ -52,6 +53,7 @@
 | `mudblazor.md` | MudBlazor 8.x 使用規範、常見陷阱 |
 | `ef-core.md` | EF Core 查詢優化、Repository 模式 |
 | `api-design.md` | RESTful API 設計規範 |
+| `refactor-sop.md` | 服務層大檔案拆解守則（FF 二十實踐累積）|
 
 ---
 

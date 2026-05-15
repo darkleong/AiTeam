@@ -1,33 +1,32 @@
 # AiTeam
 
-以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊負責執行軟體開發與部署任務——從接需求、設計、實作、Code Review、測試、文件、到通知 merge PR，全流程自動閉環。
+以 AI 驅動的軟體開發團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達自然語言指令，AI 團隊（v5.5 Talent-Skill separation 架構）負責執行軟體開發任務——從接需求、設計、實作、Code Review、測試、文件、到通知 merge PR，全流程自動閉環。
 
 > **目前版本與最新狀態見 [CHANGELOG.md](./CHANGELOG.md)。**
 > 系統演進歷史 + 各 Stage 細節見 [`docs/planning/`](./docs/planning/)。
 
 ---
 
-## 系統架構
+## 系統架構（v5.5 Talent-Skill separation）
 
 ```
 你（老闆）
     ↓ Discord 自然語言（在 #victoria-ceo 說話）
     或 Dashboard 操作中心（雙通道，先到先贏）
         │
-CEO Agent（Victoria）—— 從 DB 動態載入 Agent 清單
+CEO Talent（Victoria）—— 解讀意圖、雙層確認、動態 dispatch
     │
-    ├── PM Agent（Petra）        （品質審核閘門：Rosa/Demi/Dev_plan/Vera 產出皆需過審）
-    ├── Requirements Agent（Rosa）（需求拆解、建立 GitHub Issues）
-    ├── Designer Agent（Demi）   （需求 → MudBlazor UI 規格）
-    ├── Dev Agent（Cody）        （Claude Code CLI 自主開發、Bug 修復、開 PR）
-    ├── QA Agent（Quinn）        （Claude Code 產生測試 + dotnet build 驗證）
-    ├── Reviewer Agent（Vera）   （Claude Code session Code Review + 影響範圍分析）
-    ├── Doc Agent（Sage）        （收尾歸檔員：CHANGELOG + archive）
-    ├── Release Agent（Rena）    （版本管理、Git Release）
-    ├── Ops Agent（Maya）        （部署監控、健康檢查告警）
+PM Orchestrator（Petra）—— 動態決策 Skill 序列 + 看 Skill 找 Talent pool / round-robin
+    │
+    ├── Cody（兼任 3 Skill）— code_implementation / ui_design / release_publishing
+    ├── Vera                — code_review
+    ├── Quinn               — qa_testing
+    ├── Sage                — documentation
     │
     └── 結果回報 Discord + Dashboard + 詳細 log 寫入 PostgreSQL
 ```
+
+**v5.5 概念**：Talent = 人（Victoria/Petra/Cody/Vera/Quinn/Sage 六位）/ Skill = 職務（code_implementation / code_review / qa_testing / documentation / ui_design / release_publishing 六項）/ 一個 Talent 可兼多 Skill（如 Cody 兼三項）/ Petra dispatch 看 Skill 找 Talent pool，預備 horizontal scaling（多 instance round-robin）。
 
 即時狀態透過 **Blazor Web App Dashboard** 可視化（SignalR 推送）。
 
@@ -84,13 +83,14 @@ docs/
 ```
 📁 Software Team
   # victoria-ceo        ← 主要指令中心，自然語言跟 CEO 說話
-  # cody-dev / # petra-pm / # maya-ops / # quinn-qa / # sage-doc
-  # rosa-requirements / # vera-reviewer / # rena-release / # demi-designer
-  ↑ 各 Agent log + 可直接指派任務（CC 給 CEO）
+  # petra-pm / # cody-dev / # vera-reviewer / # quinn-qa / # sage-doc
+  ↑ 各 Talent log + 可直接指派任務（CC 給 CEO）
 
 📁 系統
   # 任務動態 / # 警報 / # 每日摘要
 ```
+
+> v5.5 Phase 1 拍板砍 Rosa / Demi / Rena / Maya（合進其他 Talent / Skill 概念吸收）。
 
 ---
 
@@ -110,14 +110,12 @@ CEO Agent 解讀意圖 → 提案／決策（Embed + ✅❌按鈕 / Dashboard �
 
 ---
 
-## 動態 Agent 框架
+## 動態 Talent / Skill 框架（v5.5）
 
-新增 Agent 只需四步，**不需修改 CEO 或 Bot 框架程式碼**：
-
-1. DB 新增 `AgentConfig` 記錄（`IsActive = false` 預設停用）
-2. 實作 `XxxAgentService : IAgentExecutor`
-3. `Program.cs` 加 `AddKeyedScoped<IAgentExecutor, XxxAgentService>(AgentNames.Xxx)`
-4. Dashboard 切換 `IsActive = true` → CEO 下次呼叫時自動感知
+- **Skill registry**：`ISkillRegistry` 6 Skill code-defined（[`src/AiTeam.Bot/Orchestration/Petra/Skills/`](./src/AiTeam.Bot/Orchestration/Petra/Skills/)）
+- **Talent registry**：DB `talents` + `talent_skills` 表（per-Project `ProjectId` nullable / null = 全域共用）+ Migration `Stage67TalentSkillSeparation` seed 6 預設 Talent
+- **Dispatch**：Petra `DecideTalentsAsync` LLM 動態決策 Skill 序列 → `FindTalentForSkill` 看 Skill 找 Talent pool → round-robin（baseline 1 instance / future horizontal scaling 多 instance 自然分流）
+- **Phase 3 規劃**：WebUI Talent CRUD（Christ 直接在 Dashboard 加 Talent / 改 Skill 兼任）— 詳見 [`docs/planning/Future_Feature_v5.5.md`](./docs/planning/Future_Feature_v5.5.md)
 
 ---
 
@@ -227,9 +225,10 @@ docker compose --env-file .env up -d
 | 想看的東西 | 去哪查 |
 |---|---|
 | 完整版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
-| 待實作功能候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
+| Active 功能候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
+| **v5.5 升級規劃 ⭐** | [Future_Feature_v5.5.md](./docs/planning/Future_Feature_v5.5.md) |
 | 開發流程全景圖 | [docs/architecture/03_Workflow_Overview.md](./docs/architecture/03_Workflow_Overview.md) |
 | 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
 | 老闆角色描述 | [docs/architecture/About_Boss.md](./docs/architecture/About_Boss.md) |
-| Agent 角色 lore | [docs/agents/](./docs/agents/) |
+| Agent / Talent 角色 lore | [docs/agents/](./docs/agents/) |
 | Self-implement 試驗紀錄 | [docs/experiments/](./docs/experiments/) |

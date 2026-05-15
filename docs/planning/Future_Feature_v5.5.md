@@ -2,8 +2,8 @@
 
 > 建立日期：2026-05-15
 > 狀態：規劃 reference（**v5 production 觀察期累積真實需求後評估啟動**）
-> 對應主檔：[Future_Feature.md](Future_Feature.md) FF 三十六 Phase B 全程動態 candidate / FF 六十一補強清單
-> 對應 Charter：[v5_charter/](../architecture/v5_charter/) Stage 62 既有規劃
+> 對應主檔：[Future_Feature.md](Future_Feature.md)（FF 一 v5.5 動態架構 / FF 二 v5 PoC 補強清單）
+> 對應歷史 Charter：Stage 62 Charter spike 4 deliverable（已歷史化，git history 可查）
 
 ## 一、為什麼有 v5.5 這個概念
 
