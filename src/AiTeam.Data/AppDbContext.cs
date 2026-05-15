@@ -22,6 +22,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PetraSession>        PetraSessions        => Set<PetraSession>();
     public DbSet<PetraSessionMessage> PetraSessionMessages => Set<PetraSessionMessage>();
 
+    // Stage 67：v5.5 Phase 1 Step 2 — Talent registry + Talent-Skill 多對多 assignment（baseline 6 Talent）
+    public DbSet<Talent>      Talents      => Set<Talent>();
+    public DbSet<TalentSkill> TalentSkills => Set<TalentSkill>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Team>(e =>
@@ -176,6 +180,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Content).HasColumnType("text");
             e.HasOne(x => x.Session).WithMany(s => s.Messages).HasForeignKey(x => x.SessionId);
             e.HasIndex(x => new { x.SessionId, x.CreatedAt });
+        });
+
+        // Stage 67：v5.5 Phase 1 Step 2 — Talent registry（DB-driven baseline 6 instance / per-Project nullable）
+        modelBuilder.Entity<Talent>(e =>
+        {
+            e.ToTable("talents");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            // 對齊 AgentConfig L51 防 seed 競態 — 同 ProjectId 內 Name 唯一（per-Project ProjectId nullable / null = 全域 group）
+            e.HasIndex(x => new { x.ProjectId, x.Name }).IsUnique();
+            e.HasOne(x => x.ProjectRef).WithMany().HasForeignKey(x => x.ProjectId).IsRequired(false);
+        });
+
+        // Stage 67：v5.5 Phase 1 Step 2 — Talent ↔ Skill 多對多 assignment
+        modelBuilder.Entity<TalentSkill>(e =>
+        {
+            e.ToTable("talent_skills");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            // 防 Talent 同 Skill 重複 assign
+            e.HasIndex(x => new { x.TalentId, x.SkillName }).IsUnique();
+            e.HasOne(x => x.Talent).WithMany(t => t.Skills).HasForeignKey(x => x.TalentId);
         });
     }
 }

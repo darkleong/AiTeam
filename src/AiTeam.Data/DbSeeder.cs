@@ -88,6 +88,86 @@ public static class DbSeeder
         await EnsureSettingAsync(db, "TokenPricing:InputPer1kUsd",    "0.003",  "每千個 Input Token 費用（USD），預設 Sonnet 費率");
         await EnsureSettingAsync(db, "TokenPricing:OutputPer1kUsd",   "0.015",  "每千個 Output Token 費用（USD），預設 Sonnet 費率");
         await db.SaveChangesAsync();
+
+        // Stage 67：v5.5 Phase 1 Step 2 — baseline 6 Talent + 6 Skill assignment seed（幂等）
+        await EnsureTalentsAsync(db);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Stage 67：v5.5 Phase 1 Step 2 — 確保 baseline 6 Talent + Talent-Skill assignment 存在（幂等）。
+    /// 對齊 Phase 1 Step 1 Baseline 拍板（Christ 2026-05-15）：Victoria / Petra 0 skill orchestrator + Cody 兼 3 skill + Vera/Quinn/Sage 主 1 skill。
+    /// ProjectId = null 全域共用（Christ 決議 2 per-Project 隔離 baseline 全 null）。
+    /// Provider / Model = null（runtime fallback Agents:Dev:Model 既有 BuildSessionContext pattern）。
+    /// </summary>
+    private static async Task EnsureTalentsAsync(AppDbContext db)
+    {
+        // baseline 6 Talent — 對齊 Phase 1 Step 1 Baseline 拍板
+        var talentSeeds = new (string Name, string DisplayName, string Description)[]
+        {
+            ("Victoria", "Victoria", "Orchestrator - 接 Christ 指令、forward 任務（無 Skill assignment）"),
+            ("Petra",    "Petra",    "Orchestrator - 拆解任務 / 派 Talent / 吸收 requirements_extraction 紀律（無 Skill assignment）"),
+            ("Cody",     "Cody",     "code_implementation 主 + ui_design + release_publishing 兼"),
+            ("Vera",     "Vera",     "code_review 主"),
+            ("Quinn",    "Quinn",    "qa_testing 主"),
+            ("Sage",     "Sage",     "documentation 主"),
+        };
+
+        // Talent <-> Skill 多對多 baseline assignment（Victoria / Petra orchestrator 0 skill）
+        var skillSeeds = new (string TalentName, string SkillName, bool IsPrimary, int Priority)[]
+        {
+            ("Cody",  "code_implementation", true,  0),
+            ("Cody",  "ui_design",           false, 0),
+            ("Cody",  "release_publishing",  false, 1),
+            ("Vera",  "code_review",         true,  0),
+            ("Quinn", "qa_testing",          true,  0),
+            ("Sage",  "documentation",       true,  0),
+        };
+
+        foreach (var (name, displayName, desc) in talentSeeds)
+        {
+            // 對齊 AppDbContext.HasIndex (ProjectId, Name).IsUnique() — ProjectId null + Name 唯一檢查
+            var existing = await db.Talents.FirstOrDefaultAsync(t => t.ProjectId == null && t.Name == name);
+            if (existing is null)
+            {
+                db.Talents.Add(new Talent
+                {
+                    Name        = name,
+                    DisplayName = displayName,
+                    Description = desc,
+                    ProjectId   = null,
+                    Provider    = null,
+                    Model       = null,
+                    IsActive    = true,
+                });
+            }
+        }
+
+        // 先 SaveChanges 取得 Talent.Id (DB-generated gen_random_uuid())
+        await db.SaveChangesAsync();
+
+        // Talent name -> Id lookup（baseline 全 ProjectId=null 全域 Talent）
+        var talentIdByName = await db.Talents
+            .Where(t => t.ProjectId == null)
+            .ToDictionaryAsync(t => t.Name, t => t.Id);
+
+        foreach (var (talentName, skillName, isPrimary, priority) in skillSeeds)
+        {
+            if (!talentIdByName.TryGetValue(talentName, out var talentId)) continue;
+
+            // 對齊 AppDbContext.HasIndex (TalentId, SkillName).IsUnique() — 同 Talent 同 Skill 不重複 assign
+            var existing = await db.TalentSkills.FirstOrDefaultAsync(s => s.TalentId == talentId && s.SkillName == skillName);
+            if (existing is null)
+            {
+                db.TalentSkills.Add(new TalentSkill
+                {
+                    TalentId  = talentId,
+                    SkillName = skillName,
+                    IsPrimary = isPrimary,
+                    Priority  = priority,
+                });
+            }
+        }
     }
 
     private static async Task EnsureSettingAsync(AppDbContext db, string key, string defaultValue, string description)

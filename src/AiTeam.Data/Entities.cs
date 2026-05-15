@@ -303,3 +303,51 @@ public class CeoMemory
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+/// <summary>
+/// Stage 67：v5.5 Phase 1 Step 2 — Talent registry（DB-driven baseline 6 instance）。
+/// Talent-Skill separation 概念：Talent = portable agent identity（角色 + provider + model + skill assignment）；
+/// Skill = code-defined capability（ISkillRegistry hardcode）。
+/// ProjectId nullable（Christ 決議 2 per-Project 隔離 / null = 全域共用 / 對齊未來客戶專案場景）。
+/// Phase 3 才開放 WebUI Talent CRUD — Phase 1 baseline 6 instance 由 DbSeeder seed。
+/// </summary>
+public class Talent
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = "";                  // 對齊既有 worker name："Cody" / "Vera" / "Quinn" / "Sage" / "Petra" / "Victoria"
+    public string DisplayName { get; set; } = "";
+    public string Description { get; set; } = "";
+    /// <summary>Stage 67：per-Project Talent 隔離 — null = 全域共用 / Guid = 該 Project 專屬 Talent。</summary>
+    public Guid? ProjectId { get; set; }
+    /// <summary>Stage 67：Talent 預設 LLM Provider（null = runtime fallback Agents:Dev:Model / 對齊既有 AgentConfig pattern）。</summary>
+    public string? Provider { get; set; }
+    /// <summary>Stage 67：Talent 預設 LLM Model（null = runtime fallback Agents:Dev:Model）。</summary>
+    public string? Model { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public Project? ProjectRef { get; set; }
+    public ICollection<TalentSkill> Skills { get; set; } = [];
+}
+
+/// <summary>
+/// Stage 67：v5.5 Phase 1 Step 2 — Talent ↔ Skill 多對多 assignment（一 Talent 可擔任 N Skill / 一 Skill 可由 N Talent 擔任 — horizontal scaling 預備）。
+/// SkillName FK by name 對 ISkillRegistry hardcode 列表（不建 skills 表 — Skill 是 code-defined / 不開放動態加）。
+/// IsPrimary = true 表主任職（dispatch 排序優先）/ false = 兼任。
+/// Priority 同 Talent 多 Skill 排序（同 IsPrimary 群內 ASC）。
+/// </summary>
+public class TalentSkill
+{
+    public Guid Id { get; set; }
+    public Guid TalentId { get; set; }
+    /// <summary>Stage 67：Skill 名稱 — FK by name 對齊 ISkillRegistry 6 Skill。</summary>
+    public string SkillName { get; set; } = "";
+    /// <summary>Stage 67：true = Talent 主任職（dispatch 排序優先）/ false = 兼任。</summary>
+    public bool IsPrimary { get; set; }
+    /// <summary>Stage 67：同 Talent 多 Skill dispatch 排序（同 IsPrimary 群內 ASC）。</summary>
+    public int Priority { get; set; }
+    public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+
+    public Talent? Talent { get; set; }
+}

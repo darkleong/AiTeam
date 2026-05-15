@@ -98,6 +98,11 @@ builder.Services.AddScoped<PetraSessionRepository>();
 builder.Services.AddScoped<PetraOrchestratorService>();
 builder.Services.AddHostedService<PetraSessionRecoveryService>();
 
+// Stage 67：v5.5 Phase 1 Step 2 — Skill registry (code-defined / Singleton) + Talent factory (runtime DB query / Singleton + IServiceScopeFactory)
+// Talent register 走 ITalentFactory.GetAllAsync(ct) 取代「DI scan IEnumerable<ITalent>」pattern — 解 app.Build 時 DB 還沒 ready 的時序問題 + Phase 3 dynamic CRUD 自然解
+builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Petra.Skills.ISkillRegistry, AiTeam.Bot.Orchestration.Petra.Skills.DefaultSkillRegistry>();
+builder.Services.AddSingleton<ITalentFactory, DefaultTalentFactory>();
+
 // Stage 35：PmAgentService 拆解為 5 個 service + 1 record 檔（Agents/Pm/）
 builder.Services.AddScoped<PmAgentCommons>();
 builder.Services.AddScoped<PmReviewService>();

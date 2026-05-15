@@ -1,4 +1,5 @@
 using AiTeam.Bot.Agents;
+using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -30,6 +31,8 @@ namespace AiTeam.Bot.Orchestration.Petra;
 /// </summary>
 public class PetraOrchestratorService(
     IEnumerable<IAgentTool> tools,
+    ITalentFactory talentFactory,
+    WorkflowSettingsResolver workflowResolver,
     PetraSessionRepository sessionRepo,
     AppDbContext db,
     LlmProviderFactory providerFactory,
@@ -39,6 +42,9 @@ public class PetraOrchestratorService(
     ILogger<PetraOrchestratorService> logger)
 {
     private const string PetraAgentName = "PM";   // 對齊既有 appsettings.json BotAgentSettings.Agents.PM 鍵
+
+    // Stage 67：v5.5 path round-robin counter（PetraOrchestratorService 是 Scoped — session 級無需 thread-safe）。
+    private int _roundRobinCounter;
 
     /// <summary>啟動新 session — Petra 動態決策 + BuildSequential dispatch。taskGroupId 可為 null（spike forward path 無 TaskGroup）。</summary>
     public async Task<PetraOrchestratorResult> StartAsync(
@@ -56,36 +62,77 @@ public class PetraOrchestratorService(
 
         try
         {
-            var toolsList = tools.ToList();
-            logger.LogInformation(
-                "PetraOrchestrator 啟動 — sessionId={SessionId} taskGroupId={TaskGroupId} toolsCount={Count} workingDir={Dir}",
-                session.Id, taskGroupId, toolsList.Count, sessionWithCtx.WorkingDir);
+            // Stage 67：v5.5 path 切換 — runtime flag 讀（DB app_settings 優先 / appsettings.json fallback）。
+            // flag=true 走 ITalent + GenericAgentTool path（Talent pool / round-robin）/ flag=false 走 v5 既有 IAgentTool path（守 fallback）。
+            var useTalentSkillSeparation = await workflowResolver.GetUseTalentSkillSeparationAsync(ct);
 
-            // 1. DecideAsync — Petra LLM 動態決策 capability 序列
-            var (decidedCapabilities, picks) = await DecideAsync(taskInput, toolsList, sessionWithCtx, ct);
-            if (picks.Count == 0)
+            List<string> decidedCapabilities;
+            List<string> dispatchNames;   // worker name (v5) or talent name (v5.5) — picks 抽 Name 統一傳 FinalizeGitAsync / summary
+            if (useTalentSkillSeparation)
             {
-                logger.LogWarning("Petra 動態決策回空序列 sessionId={SessionId}", session.Id);
-                await sessionRepo.CompleteAsync(session.Id, ct);
-                await db.SaveChangesAsync(ct);
-                return PetraOrchestratorResult.Empty(session.Id);
-            }
+                var talentsList = await talentFactory.GetAllAsync(ct);
+                logger.LogInformation(
+                    "PetraOrchestrator 啟動 (v5.5 Talent-Skill path) — sessionId={SessionId} taskGroupId={TaskGroupId} talentsCount={Count} workingDir={Dir}",
+                    session.Id, taskGroupId, talentsList.Count, sessionWithCtx.WorkingDir);
 
-            // 2. Stage 66：PetraOrchestratorService 自管 chain dispatch（取代 BuildSequential framework chain — 修 Vera 0 work 根因 GitHub #1308）。
-            //    framework BuildSequential edge 在 nuget 1.3.0 不會把 first agent output 餵下個 agent，自管 chain 完全 bypass。
-            //    BuildSequential 路徑既有 import / LogWorkflowEvent / _executorAccumulators 保留 reference（未來 framework 修 #1308 後評估回切）。
-            var workerAgents = picks.Select(t => t.CreateAgent(sessionWithCtx)).ToArray();
-            var dispatchSummaries = await DispatchWorkersAsync(session.Id, taskInput, decidedCapabilities, picks, workerAgents, ct);
-            await db.SaveChangesAsync(ct);
+                // 1. DecideTalentsAsync — Petra LLM 動態決策 Skill 序列 + lookup Talent pool（看 Skill 找 Talent / round-robin）
+                var (skills, talentPicks) = await DecideTalentsAsync(taskInput, talentsList, sessionWithCtx, ct);
+                if (talentPicks.Count == 0)
+                {
+                    logger.LogWarning("Petra v5.5 動態決策回空序列 sessionId={SessionId}", session.Id);
+                    await sessionRepo.CompleteAsync(session.Id, ct);
+                    await db.SaveChangesAsync(ct);
+                    return PetraOrchestratorResult.Empty(session.Id);
+                }
+                decidedCapabilities = skills;
+
+                // 2. v5.5 自管 chain dispatch — 對齊 v5 既有 DispatchWorkersAsync pattern 但用 ITalent
+                var talentAgents = new AIAgent[talentPicks.Count];
+                for (var i = 0; i < talentPicks.Count; i++)
+                {
+                    talentAgents[i] = talentPicks[i].CreateAgent(sessionWithCtx, skills[i]);
+                }
+                await DispatchTalentsAsync(session.Id, taskInput, skills, talentPicks, talentAgents, ct);
+                await db.SaveChangesAsync(ct);
+
+                dispatchNames = talentPicks.Select(t => t.Name).ToList();
+            }
+            else
+            {
+                var toolsList = tools.ToList();
+                logger.LogInformation(
+                    "PetraOrchestrator 啟動 (v5 既有 IAgentTool path) — sessionId={SessionId} taskGroupId={TaskGroupId} toolsCount={Count} workingDir={Dir}",
+                    session.Id, taskGroupId, toolsList.Count, sessionWithCtx.WorkingDir);
+
+                // 1. DecideAsync — Petra LLM 動態決策 capability 序列
+                var (caps, picks) = await DecideAsync(taskInput, toolsList, sessionWithCtx, ct);
+                if (picks.Count == 0)
+                {
+                    logger.LogWarning("Petra 動態決策回空序列 sessionId={SessionId}", session.Id);
+                    await sessionRepo.CompleteAsync(session.Id, ct);
+                    await db.SaveChangesAsync(ct);
+                    return PetraOrchestratorResult.Empty(session.Id);
+                }
+                decidedCapabilities = caps;
+
+                // 2. Stage 66：PetraOrchestratorService 自管 chain dispatch（取代 BuildSequential framework chain — 修 Vera 0 work 根因 GitHub #1308）。
+                //    framework BuildSequential edge 在 nuget 1.3.0 不會把 first agent output 餵下個 agent，自管 chain 完全 bypass。
+                //    BuildSequential 路徑既有 import / LogWorkflowEvent / _executorAccumulators 保留 reference（未來 framework 修 #1308 後評估回切）。
+                var workerAgents = picks.Select(t => t.CreateAgent(sessionWithCtx)).ToArray();
+                await DispatchWorkersAsync(session.Id, taskInput, caps, picks, workerAgents, ct);
+                await db.SaveChangesAsync(ct);
+
+                dispatchNames = picks.Select(p => p.Name).ToList();
+            }
 
             // Stage 64 子項 2：Workers 完成後 git commit/push/PR 接通（沿用 v4 GitHubService.CommitAll/Push/OpenPullRequestAsync API）。
             // 無 git diff → 不誤建 PR。Mock 階段 workingDir 不是 git repo → FinalizeGitAsync 內捕例外 + log warning 不擋流程（adapter 跑 Mock 時 workingDir 通常為空）。
-            var prUrl = await FinalizeGitAsync(sessionWithCtx, taskInput, decidedCapabilities, picks, ct);
+            var prUrl = await FinalizeGitAsync(sessionWithCtx, taskInput, decidedCapabilities, dispatchNames, ct);
 
             await sessionRepo.CompleteAsync(session.Id, ct);
             await db.SaveChangesAsync(ct);
 
-            var summary = $"Petra 完成 {picks.Count} worker dispatch（{string.Join(" → ", picks.Select(p => p.Name))}）"
+            var summary = $"Petra 完成 {dispatchNames.Count} dispatch（{string.Join(" → ", dispatchNames)}）"
                 + (prUrl is null ? "。" : $" + PR {prUrl}。");
             return PetraOrchestratorResult.Done(session.Id, decidedCapabilities, summary);
         }
@@ -308,15 +355,130 @@ public class PetraOrchestratorService(
     }
 
     /// <summary>
+    /// Stage 67：v5.5 Phase 1 Step 2 — Petra LLM 動態決策 Skill 序列 + lookup Talent pool（看 Skill 找 Talent / round-robin）。
+    /// 對齊既有 DecideAsync 邏輯但 lookup 改用 Talent pool — talentPool 由 talents.Where(t.Skills.Contains(skill)) + IsPrimary desc + Priority asc 排序。
+    /// baseline 1 instance 場景 pool.Count == 1 round-robin 無感 / future horizontal scaling 多 instance 自然分流。
+    /// </summary>
+    private async Task<(List<string> Skills, List<ITalent> TalentPicks)> DecideTalentsAsync(
+        string taskInput,
+        IReadOnlyList<ITalent> talents,
+        PetraSessionContext ctx,
+        CancellationToken ct)
+    {
+        // skill roster 從 talent.Skills 取（vs 既有 DecideAsync 取 tools.SelectMany(Capabilities)）— 對 LLM 等價
+        var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
+        var systemPrompt = BuildPetraSystemPrompt(skillRoster);
+
+        var provider = providerFactory.Create(PetraAgentName);
+        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
+
+        sessionRepo.AppendMessage(ctx.SessionId, "assistant", response.Content);
+
+        var raw = response.Content.Trim().Split('\n')[0].Trim();
+        var skills = raw.Split('|')
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrEmpty(s))
+            .ToList();
+
+        var talentPicks = new List<ITalent>();
+        var validSkills = new List<string>();
+        foreach (var skill in skills)
+        {
+            var pick = FindTalentForSkill(skill, talents);
+            if (pick is not null)
+            {
+                talentPicks.Add(pick);
+                validSkills.Add(skill);
+            }
+            else
+            {
+                logger.LogWarning("Petra v5.5 動態決策回未知 skill={Skill} 或 0 Talent 擔任（忽略）", skill);
+            }
+        }
+
+        logger.LogInformation(
+            "Petra v5.5 DecideTalentsAsync 完成 — raw=「{Raw}」picks={Picks}",
+            raw, string.Join(" → ", talentPicks.Select(p => $"{p.Name}({validSkills[talentPicks.IndexOf(p)]})")));
+
+        return (validSkills, talentPicks);
+    }
+
+    /// <summary>
+    /// Stage 67：v5.5 — 看 Skill 找 Talent pool（IsPrimary desc + Priority asc 排序） + round-robin pick。
+    /// baseline 簡單實作（避 fancy load balancing — Roadmap 子項 4 拍板）：pool[counter++ % pool.Count]。
+    /// 找不到任何 Talent 擔任該 Skill → return null。
+    /// </summary>
+    private ITalent? FindTalentForSkill(string skill, IReadOnlyList<ITalent> talents)
+    {
+        var pool = talents
+            .Where(t => t.Skills.Any(s => string.Equals(s, skill, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (pool.Count == 0) return null;
+        if (pool.Count == 1) return pool[0];
+
+        // multi-instance — round-robin baseline（future 加 IsPrimary / Priority 排序由 TalentSkill 對齊複雜化留 Phase 2/3）
+        var index = _roundRobinCounter % pool.Count;
+        _roundRobinCounter++;
+        return pool[index];
+    }
+
+    /// <summary>
+    /// Stage 67：v5.5 — 對齊 v5 DispatchWorkersAsync L238-277 自管 chain pattern 但用 ITalent + skill 動態傳。
+    /// 同位置同 transaction 寫 PetraSessionMessages tool role — 對齊 Stage 66 修法位置。
+    /// </summary>
+    private async Task<List<WorkerDispatchSummary>> DispatchTalentsAsync(
+        Guid sessionId,
+        string taskInput,
+        IReadOnlyList<string> skills,
+        IReadOnlyList<ITalent> talentPicks,
+        AIAgent[] talentAgents,
+        CancellationToken ct)
+    {
+        var summaries = new List<WorkerDispatchSummary>(talentAgents.Length);
+        for (var i = 0; i < talentAgents.Length; i++)
+        {
+            var talentAgent = talentAgents[i];
+            var talentName = talentPicks[i].Name;
+            var skill = i < skills.Count ? skills[i] : (talentPicks[i].Skills.FirstOrDefault() ?? "");
+
+            var inputMessages = i == 0
+                ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
+                : BuildNextWorkerInput(taskInput, summaries);
+
+            logger.LogInformation(
+                "PetraOrchestrator v5.5 自管 chain dispatch {Index}/{Total} talent={Talent} skill={Skill} inputMsgs={N} sessionId={SessionId}",
+                i + 1, talentAgents.Length, talentName, skill, inputMessages.Count, sessionId);
+
+            var response = await talentAgent.RunAsync(inputMessages, session: null, options: null, ct);
+            var outputText = response.Text ?? "";
+
+            var toolCallId = Guid.NewGuid().ToString("N");
+            var toolMessage = BuildToolMessage(talentName, skill, outputText);
+            sessionRepo.AppendMessage(sessionId, "tool", toolMessage, toolCallId);
+            await db.SaveChangesAsync(ct);
+
+            logger.LogInformation(
+                "PetraOrchestrator v5.5 自管 chain dispatch 完成 {Index}/{Total} talent={Talent} outputLen={Len} toolCallId={ToolCallId}",
+                i + 1, talentAgents.Length, talentName, outputText.Length, toolCallId);
+
+            summaries.Add(new WorkerDispatchSummary(talentName, skill, outputText, toolCallId));
+        }
+        return summaries;
+    }
+
+    /// <summary>
     /// Stage 64 子項 2：Workers 完成後 git commit/push/PR 接通。
     /// 範圍邊界：最小整合 — 不重做 v4 dev_plan / fix_loop / metadata 機制（留 Stage 65+）。
     /// 無 diff → 不誤建 PR；非 git repo → 捕例外 log warning 不擋流程。
+    /// </summary>
+    /// <summary>
+    /// Stage 67：picks 抽 dispatchNames 後簽名 — v5 既有 worker name 與 v5.5 talent name 共用一致 typed string list。
     /// </summary>
     private async Task<string?> FinalizeGitAsync(
         PetraSessionContext ctx,
         string taskInput,
         IReadOnlyList<string> caps,
-        IReadOnlyList<IAgentTool> picks,
+        IReadOnlyList<string> dispatchNames,
         CancellationToken ct)
     {
         if (string.IsNullOrEmpty(ctx.WorkingDir) || !Directory.Exists(Path.Combine(ctx.WorkingDir, ".git")))
@@ -372,7 +534,7 @@ public class PetraOrchestratorService(
                 .Select(m => m.Content)
                 .ToListAsync(ct);
 
-            var prBody = BuildPrBody(taskInput, caps, picks, workerSummaries);
+            var prBody = BuildPrBody(taskInput, caps, dispatchNames, workerSummaries);
             var prTitle = $"[Petra v5] {taskSummary}";
 
             var prUrl = await gitHubService.OpenPullRequestAsync(owner, repo, prTitle, prBody, branchName);
@@ -389,7 +551,7 @@ public class PetraOrchestratorService(
     private static string BuildPrBody(
         string? taskInput,
         IReadOnlyList<string> caps,
-        IReadOnlyList<IAgentTool> picks,
+        IReadOnlyList<string> dispatchNames,
         IReadOnlyList<string> workerSummaries)
     {
         var sb = new System.Text.StringBuilder();
@@ -397,8 +559,8 @@ public class PetraOrchestratorService(
         sb.AppendLine(taskInput ?? "");
         sb.AppendLine();
         sb.AppendLine("## Petra 動態決策");
-        sb.AppendLine($"- Capability 序列：`{string.Join(" | ", caps)}`");
-        sb.AppendLine($"- Workers dispatch 順序：{string.Join(" → ", picks.Select(p => p.Name))}");
+        sb.AppendLine($"- Capability / Skill 序列：`{string.Join(" | ", caps)}`");
+        sb.AppendLine($"- Workers / Talents dispatch 順序：{string.Join(" → ", dispatchNames)}");
         sb.AppendLine();
         sb.AppendLine("## Worker 完成 summary");
         if (workerSummaries.Count == 0)
@@ -513,6 +675,14 @@ public class PetraOrchestratorService(
   判準：新 Service 層 / 新 framework wire / 跨 domain 互動
   範例：「v5 動態架構 PoC」「新增 Memory module」
   → 回「code_implementation|code_review|code_implementation|code_review」
+
+【需求拆解紀律】（Stage 67：合 requirements_extraction 進來）
+
+接到任務時先用內部 reasoning 拆需求 — 不 dispatch worker 做 requirements_extraction。
+判準：以模糊度 / 範圍 / 邊界三維度自我評估
+  範例：「打磨 Dashboard 錯誤處理體驗」→ 內部拆「跨 5 範圍 + 中等改動 + UI 邊界」→ 命中 Design trigger
+  範例：「Dashboard 加圖示」→ 內部拆「視覺 + 小改動」→ 命中 1-on-1 trigger
+紀律：拆完直接決 capability 序列回（不要回「我先拆需求 → 再決定」這種兩步驟說法 / 不污染 capability 序列輸出格式）
 
 【輸出紀律】
 - 只回 capability 序列（用 `|` 分隔）

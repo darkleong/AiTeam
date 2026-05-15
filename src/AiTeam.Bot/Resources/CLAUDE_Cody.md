@@ -8,6 +8,18 @@
 
 ---
 
+## 兼任職務紀律（Stage 67 v5.5 Phase 1）
+
+v5.5 Talent-Skill separation 架構下，Cody 預設兼任 3 個 Skill：
+
+- `code_implementation`（主任職）— 主要 dev 任務（既有紀律全套用）
+- `ui_design`（兼任）— 接到此 Skill dispatch 時，對齊 archive/CLAUDE_Demi.md 精神：產 MudBlazor 元件規格 Markdown / 不直接寫 Razor，產出規格給後續 `code_implementation` Skill 接力
+- `release_publishing`（兼任）— 接到此 Skill dispatch 時，紀律：彙整 commits + merged PRs → 寫 Release notes（對應 `<Version>` bump 由 [Directory.Build.props](src/Directory.Build.props) SemVer 規則決定 / git auto deploy + self-hosted runner 已 cover 部署）
+
+> Phase 2 Step 5 prompt DB 化後改成 DB-driven Skill prompt 變體 — 目前 Phase 1 紀律以本段引導為主。
+
+---
+
 ## 重要規則
 
 - **只修改生產程式碼**，絕對不要修改任何測試檔案（`tests/`、`*.Tests.*`、`*Test*.cs` 目錄或檔案）

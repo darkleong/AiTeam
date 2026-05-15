@@ -249,8 +249,11 @@ public class PetraOrchestratorServiceTests
         var agentB = new ChatClientAgent(chatClient: chatB, instructions: null, name: "WorkerB");
 
         // PetraOrchestratorService 建構：DispatchWorkersAsync 只用 logger / sessionRepo / db，其他 dep 傳 null! / Null logger
+        // Stage 67：ctor 加 ITalentFactory + WorkflowSettingsResolver 兩參數 — Test 12 reflection invoke DispatchWorkersAsync 不走 StartAsync 不 call 此兩 dep / null! 安全
         var orch = new PetraOrchestratorService(
             tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
+            talentFactory: null!,
+            workflowResolver: null!,
             sessionRepo: repo,
             db: db,
             providerFactory: null!,
@@ -332,9 +335,137 @@ public class PetraOrchestratorServiceTests
         }
     }
 
+    // ─── Test 14（Stage 67）：Skill registry 6 Skill 完整載入 + 0 含 requirements_extraction（合進 Petra）─
+    [Fact]
+    public void Test14_DefaultSkillRegistry_LoadsSixSkills_WithoutRequirementsExtraction()
+    {
+        var registry = new AiTeam.Bot.Orchestration.Petra.Skills.DefaultSkillRegistry();
+
+        Assert.Equal(6, registry.All.Count);
+        Assert.NotNull(registry.GetByName("code_implementation"));
+        Assert.NotNull(registry.GetByName("code_review"));
+        Assert.NotNull(registry.GetByName("qa_testing"));
+        Assert.NotNull(registry.GetByName("documentation"));
+        Assert.NotNull(registry.GetByName("ui_design"));
+        Assert.NotNull(registry.GetByName("release_publishing"));
+
+        // Stage 67 baseline：requirements_extraction 砍掉合進 Petra orchestrator system prompt
+        Assert.Null(registry.GetByName("requirements_extraction"));
+
+        // 對齊 ISkillRegistry case-insensitive lookup
+        Assert.NotNull(registry.GetByName("CODE_IMPLEMENTATION"));
+    }
+
+    // ─── Test 15（Stage 67）：Talent pool 找 Talent dispatch — baseline 1 instance + Mock 多 instance round-robin ─
+    [Fact]
+    public void Test15_FindTalentForSkill_BaselineAndRoundRobin()
+    {
+        var orch = CreateMinimalOrchestratorForReflection();
+
+        var cody1 = new FakeTalent("Cody", new[] { "code_implementation", "ui_design" });
+        var cody2 = new FakeTalent("Cody-2", new[] { "code_implementation" });
+        var vera = new FakeTalent("Vera", new[] { "code_review" });
+
+        // baseline 1 instance — pool.Count == 1 直接 return 不走 round-robin
+        var pickedSingle = InvokeFindTalentForSkill(orch, "code_review", new ITalent[] { cody1, vera });
+        Assert.NotNull(pickedSingle);
+        Assert.Equal("Vera", pickedSingle!.Name);
+
+        // 多 instance round-robin — code_implementation pool = [Cody, Cody-2]
+        var pool = new ITalent[] { cody1, cody2 };
+        var first = InvokeFindTalentForSkill(orch, "code_implementation", pool);
+        var second = InvokeFindTalentForSkill(orch, "code_implementation", pool);
+        var third = InvokeFindTalentForSkill(orch, "code_implementation", pool);
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotNull(third);
+        // counter 從 0 開始：[0]=Cody / [1]=Cody-2 / [2]=Cody（pool.Count=2 round-robin 回）
+        Assert.Equal("Cody", first!.Name);
+        Assert.Equal("Cody-2", second!.Name);
+        Assert.Equal("Cody", third!.Name);
+
+        // 找不到任何 Talent 擔任的 skill → null
+        var missing = InvokeFindTalentForSkill(orch, "unknown_skill", pool);
+        Assert.Null(missing);
+    }
+
+    // ─── Test 16（Stage 67）：Petra DecideAsync 回 Skill 序列 lookup Talent 對齊 — picks 順序 + Cody 兼 ui_design 自然分流到主 Skill ─
+    [Fact]
+    public void Test16_FindTalentForSkill_LookupBySkill_RespectsTalentPool()
+    {
+        var orch = CreateMinimalOrchestratorForReflection();
+
+        // Cody 兼 code_implementation + ui_design + release_publishing / Vera code_review / Quinn qa_testing / Sage documentation
+        var cody  = new FakeTalent("Cody",  new[] { "code_implementation", "ui_design", "release_publishing" });
+        var vera  = new FakeTalent("Vera",  new[] { "code_review" });
+        var quinn = new FakeTalent("Quinn", new[] { "qa_testing" });
+        var sage  = new FakeTalent("Sage",  new[] { "documentation" });
+        var pool = new ITalent[] { cody, vera, quinn, sage };
+
+        // Petra 回「code_implementation|code_review」→ picks Cody → Vera
+        var pick1 = InvokeFindTalentForSkill(orch, "code_implementation", pool);
+        var pick2 = InvokeFindTalentForSkill(orch, "code_review", pool);
+        Assert.Equal("Cody", pick1!.Name);
+        Assert.Equal("Vera", pick2!.Name);
+
+        // Cody 兼 ui_design → pick3 仍 Cody（單一 instance pool）
+        var pick3 = InvokeFindTalentForSkill(orch, "ui_design", pool);
+        Assert.Equal("Cody", pick3!.Name);
+
+        // qa_testing → Quinn / documentation → Sage
+        var pick4 = InvokeFindTalentForSkill(orch, "qa_testing", pool);
+        var pick5 = InvokeFindTalentForSkill(orch, "documentation", pool);
+        Assert.Equal("Quinn", pick4!.Name);
+        Assert.Equal("Sage", pick5!.Name);
+    }
+
+    // ─── Test 17（Stage 67）：Feature flag UseTalentSkillSeparation default false 守 v5 既有 path 0 regression ─
+    [Fact]
+    public void Test17_WorkflowSettings_UseTalentSkillSeparation_DefaultIsFalse()
+    {
+        var settings = new AiTeam.Bot.Configuration.WorkflowSettings();
+        // Stage 67：v5.5 path 預設 false / Trial_v13 ✅ + Christ 拍板才切 default true
+        Assert.False(settings.UseTalentSkillSeparation);
+        // v5 既有 path flag 維持（v5.5 是 v5 path 上面演進）
+        Assert.False(settings.UsePetraOrchestratorV5);
+    }
+
     // ─── helper ───────────────────────────────────────────────────────────────────
     private static List<string> ParseCapabilities(string raw)
         => raw.Split('|').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+    /// <summary>Stage 67 Test 15/16：建一個全 null! dep 的 PetraOrchestratorService 實例 — reflection invoke FindTalentForSkill 只用 _roundRobinCounter 不碰其他 dep。</summary>
+    private static PetraOrchestratorService CreateMinimalOrchestratorForReflection()
+        => new PetraOrchestratorService(
+            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
+            talentFactory: null!,
+            workflowResolver: null!,
+            sessionRepo: null!,
+            db: null!,
+            providerFactory: null!,
+            gitHubService: null!,
+            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            logger: NullLogger<PetraOrchestratorService>.Instance);
+
+    /// <summary>Stage 67 Test 15/16：reflection invoke private FindTalentForSkill。</summary>
+    private static ITalent? InvokeFindTalentForSkill(PetraOrchestratorService orch, string skill, IReadOnlyList<ITalent> talents)
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "FindTalentForSkill",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        return (ITalent?)method!.Invoke(orch, new object[] { skill, talents });
+    }
+
+    private sealed class FakeTalent : ITalent
+    {
+        public string Name { get; }
+        public IReadOnlyList<string> Skills { get; }
+        public FakeTalent(string name, IReadOnlyList<string> skills) { Name = name; Skills = skills; }
+        public AIAgent CreateAgent(PetraSessionContext ctx, string skill)
+            => throw new NotImplementedException("Test 15/16 reflection 只驗 FindTalentForSkill lookup 不驗 CreateAgent");
+    }
 
     private sealed class StubClaudeCodeService : IClaudeCodeService
     {
