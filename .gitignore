@@ -419,3 +419,5 @@ FodyWeavers.xsd
 
 # Claude Code
 .claude/
+
+*.lscache
