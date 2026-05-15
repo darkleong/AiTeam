@@ -57,7 +57,7 @@ public class PetraOrchestratorService(
         await db.SaveChangesAsync(ct);
         var sessionWithCtx = ctx with { SessionId = session.Id };
 
-        sessionRepo.AppendMessage(session.Id, "user", taskInput);
+        await sessionRepo.AppendMessageAsync(session.Id, "user", taskInput, ct: ct);
         await db.SaveChangesAsync(ct);
 
         try
@@ -193,7 +193,7 @@ public class PetraOrchestratorService(
         var provider = providerFactory.Create(PetraAgentName);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
 
-        sessionRepo.AppendMessage(ctx.SessionId, "assistant", response.Content);
+        await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
 
         var raw = response.Content.Trim().Split('\n')[0].Trim();
         var caps = raw.Split('|')
@@ -262,7 +262,8 @@ public class PetraOrchestratorService(
 
             if (!string.IsNullOrWhiteSpace(toolText))
             {
-                sessionRepo.AppendMessage(sessionId, "tool", $"[{execId}] {toolText}");
+                // LogWorkflowEvent 是 framework callback（非 async signature）— fire-and-forget 同步 enqueue 即可（純 EF Add 無 I/O）
+                _ = sessionRepo.AppendMessageAsync(sessionId, "tool", $"[{execId}] {toolText}");
             }
             logger.LogInformation("Workflow event ExecutorCompleted executor={Exec} outputLen={Len}", execId, toolText.Length);
             return;
@@ -311,7 +312,7 @@ public class PetraOrchestratorService(
 
             var toolCallId = Guid.NewGuid().ToString("N");
             var toolMessage = BuildToolMessage(workerName, capability, outputText);
-            sessionRepo.AppendMessage(sessionId, "tool", toolMessage, toolCallId);
+            await sessionRepo.AppendMessageAsync(sessionId, "tool", toolMessage, toolCallId, ct);
             await db.SaveChangesAsync(ct);
 
             logger.LogInformation(
@@ -372,7 +373,7 @@ public class PetraOrchestratorService(
         var provider = providerFactory.Create(PetraAgentName);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
 
-        sessionRepo.AppendMessage(ctx.SessionId, "assistant", response.Content);
+        await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
 
         var raw = response.Content.Trim().Split('\n')[0].Trim();
         var skills = raw.Split('|')
@@ -454,7 +455,7 @@ public class PetraOrchestratorService(
 
             var toolCallId = Guid.NewGuid().ToString("N");
             var toolMessage = BuildToolMessage(talentName, skill, outputText);
-            sessionRepo.AppendMessage(sessionId, "tool", toolMessage, toolCallId);
+            await sessionRepo.AppendMessageAsync(sessionId, "tool", toolMessage, toolCallId, ct);
             await db.SaveChangesAsync(ct);
 
             logger.LogInformation(

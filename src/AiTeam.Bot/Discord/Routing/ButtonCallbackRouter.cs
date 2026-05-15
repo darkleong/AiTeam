@@ -392,6 +392,15 @@ public class ButtonCallbackRouter(
     {
         await interaction.DeferAsync();
 
+        // Stage 68：v5/v5.5 path 收尾（Trial_v12 揭 stale exec_confirm 卡議題）— Petra 已動態調度完成，
+        // 不需建立 TaskItem（無下個 worker）也不 fire exec_confirm 卡。守 Discord button 路徑與 Dashboard 路徑對等。
+        if (pending.CeoResponse.Action == CeoResponseActions.PetraV5Dispatched)
+        {
+            logger.LogInformation("confirm_yes：v5 path Petra 已完成（Action={Action}），跳過 TaskItem + exec_confirm fire", pending.CeoResponse.Action);
+            await interaction.FollowupAsync($"✅ Petra 已動態調度完成 — {pending.Description}");
+            return;
+        }
+
         try
         {
             await using var scope = serviceProvider.CreateAsyncScope();

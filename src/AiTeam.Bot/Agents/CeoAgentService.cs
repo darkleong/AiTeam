@@ -7,6 +7,7 @@ using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using AiTeam.Shared.Constants;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -104,7 +105,7 @@ public class CeoAgentService(
             return new CeoResponse
             {
                 Reply = $"[v5 PoC] Petra 已動態調度：{petraResult.Summary}（session={petraResult.SessionId} dispatched={petraResult.DispatchedWorkerCount}）",
-                Action = "petra_v5_dispatched"
+                Action = CeoResponseActions.PetraV5Dispatched
             };
         }
 

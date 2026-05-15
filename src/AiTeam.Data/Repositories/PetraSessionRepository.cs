@@ -22,8 +22,15 @@ public class PetraSessionRepository(AppDbContext db)
         return session;
     }
 
-    /// <summary>寫入一筆 session message（caller SaveChangesAsync）。</summary>
-    public void AppendMessage(Guid sessionId, string role, string content, string? toolCallId = null)
+    /// <summary>寫入一筆 session message（caller SaveChangesAsync）。
+    /// Stage 68：簽名改 async + CT 對齊 BossInteractionRepository pattern（FF 二補強清單）。
+    /// 當前實作純 EF Add 無 I/O — 回 Task.CompletedTask；CT 為將來 SaveChanges-inline 進化保留。</summary>
+    public Task AppendMessageAsync(
+        Guid sessionId,
+        string role,
+        string content,
+        string? toolCallId = null,
+        CancellationToken ct = default)
     {
         db.PetraSessionMessages.Add(new PetraSessionMessage
         {
@@ -33,6 +40,7 @@ public class PetraSessionRepository(AppDbContext db)
             ToolCallId = toolCallId,
             CreatedAt = DateTime.UtcNow,
         });
+        return Task.CompletedTask;
     }
 
     /// <summary>取所有 running session（PetraSessionRecoveryService Bot 啟動時掃描用）。</summary>

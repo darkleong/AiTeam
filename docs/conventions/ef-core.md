@@ -74,6 +74,90 @@ catch (Exception ex)
 }
 ```
 
+## PostgreSQL nullable unique + race-safe DbSeeder pattern
+
+> Stage 67 follow-up commit `6fd9472` 教訓 — Bot + Dashboard 並行 SeedAsync race + PostgreSQL `NULL ≠ NULL` 雙重雷三層修根因（[Stage 67 Roadmap](../planning/Stage_67_Roadmap.md)）。
+
+### 1. PostgreSQL `NULL ≠ NULL` unique 語義
+
+PostgreSQL 標準 unique constraint 對 nullable 欄位**不阻擋多筆 NULL**（NULL 不參與唯一性比較）— 兩個 race winner 都 commit 成功 → DB duplicate row。
+
+**修法：拆 partial unique index**（兩條 — NOT NULL 群組 + NULL 群組分開 enforce）：
+
+```csharp
+// ❌ 標準 unique 對 (ProjectId, Name) — ProjectId=null 多筆都過
+modelBuilder.Entity<Talent>()
+    .HasIndex(t => new { t.ProjectId, t.Name })
+    .IsUnique();
+
+// ✅ 拆 partial unique（含 NULL 群組明確 enforce）
+modelBuilder.Entity<Talent>()
+    .HasIndex(t => new { t.ProjectId, t.Name })
+    .IsUnique()
+    .HasFilter("\"ProjectId\" IS NOT NULL");
+
+modelBuilder.Entity<Talent>()
+    .HasIndex(t => t.Name)
+    .IsUnique()
+    .HasFilter("\"ProjectId\" IS NULL");
+```
+
+### 2. Bot + Dashboard 並行 SeedAsync race
+
+兩個 process 同時跑 seed → 都看 existing=null → 都 Add → 都 SaveChanges → 兩個 row 都進 DB（PostgreSQL `NULL ≠ NULL` 雷不阻）。
+
+**修法：per-row SaveChanges + catch DbUpdateException + Entity detach**
+
+```csharp
+foreach (var seed in seeds)
+{
+    var existing = await db.Talents.FirstOrDefaultAsync(t => t.Name == seed.Name);
+    if (existing is not null) continue;
+
+    db.Talents.Add(seed);
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch (DbUpdateException) // race loser — 對手已先 commit
+    {
+        db.Entry(seed).State = EntityState.Detached; // 還原 EF context state
+    }
+}
+
+// 防禦性 dedupe — 萬一 race 漏網 / partial index 套用前歷史 row 也不爆
+var byName = await db.Talents
+    .GroupBy(t => t.Name)
+    .Select(g => g.OrderBy(t => t.CreatedAt).First())
+    .ToDictionaryAsync(t => t.Name);
+```
+
+### 3. DI lifecycle — `app.Build()` 前 register / DB migrate 後 seed
+
+Singleton 直接持 `AppDbContext`（Scoped）會觸發 lifetime mismatch；`app.Build()` 前需註冊但 DB 還沒 migrate。**改用 `IServiceScopeFactory` factory pattern**：
+
+```csharp
+// Program.cs — register
+builder.Services.AddSingleton<DbSeeder>();
+
+// DbSeeder ctor 注入 IServiceScopeFactory（Singleton-safe）
+public class DbSeeder(IServiceScopeFactory scopeFactory, ILogger<DbSeeder> logger)
+{
+    public async Task SeedAsync()
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // ... seed logic
+    }
+}
+
+// Program.cs — app.Build() 後 DB migrate 完才呼叫
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<DbSeeder>().SeedAsync();
+}
+```
+
 ## SaveChangesAsync 原則
 
 ```csharp

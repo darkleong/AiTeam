@@ -46,6 +46,14 @@ public class ProposalConfirmationService(
             return;
         }
 
+        // Stage 68：v5/v5.5 path 收尾（Trial_v12 揭 stale exec_confirm 卡議題）— Petra 已動態調度完成，
+        // 不需建立 TaskItem（無下個 worker）也不 fire exec_confirm 卡。
+        if (ceoResponse.Action == CeoResponseActions.PetraV5Dispatched)
+        {
+            logger.LogInformation("ProcessCeoConfirmAsync：v5 path Petra 已完成（Action={Action}），跳過 exec_confirm fire", ceoResponse.Action);
+            return;
+        }
+
         await using var scope = serviceProvider.CreateAsyncScope();
         var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();

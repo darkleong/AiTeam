@@ -72,9 +72,9 @@ public class PetraOrchestratorServiceTests
         var session = repo.Start(taskGroupId);
         await db.SaveChangesAsync();
 
-        repo.AppendMessage(session.Id, "user", "修 README typo 1 行");
-        repo.AppendMessage(session.Id, "assistant", "code_implementation");
-        repo.AppendMessage(session.Id, "tool", "[Cody] 已實作（mock fixture）");
+        await repo.AppendMessageAsync(session.Id, "user", "修 README typo 1 行");
+        await repo.AppendMessageAsync(session.Id, "assistant", "code_implementation");
+        await repo.AppendMessageAsync(session.Id, "tool", "[Cody] 已實作（mock fixture）");
         await db.SaveChangesAsync();
 
         var reloaded = await repo.GetWithMessagesAsync(session.Id);
