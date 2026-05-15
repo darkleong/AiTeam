@@ -44,7 +44,6 @@ public partial class SystemSettings
     private bool    _isSavingMockDelay;
     private bool    _isSavingWorkflow;
     private string? _saveMessage;
-    private string? _saveError;
 
     #endregion
 
@@ -168,13 +167,10 @@ public partial class SystemSettings
 
     private async Task SaveCeoChannelIdAsync()
     {
-        _saveError   = null;
-        _saveMessage = null;
         var trimmed = _ceoChannelId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveError = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
-            Snackbar.Add(_saveError, Severity.Error);
+            _saveMessage = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
             return;
         }
 
@@ -186,13 +182,10 @@ public partial class SystemSettings
 
     private async Task SaveChristUserIdAsync()
     {
-        _saveError   = null;
-        _saveMessage = null;
         var trimmed = _christUserId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveError = "格式錯誤：Discord User ID 應為 17-20 位純數字";
-            Snackbar.Add(_saveError, Severity.Error);
+            _saveMessage = "格式錯誤：Discord User ID 應為 17-20 位純數字";
             return;
         }
 
@@ -211,12 +204,9 @@ public partial class SystemSettings
 
     private async Task SaveMockDelayAsync()
     {
-        _saveError   = null;
-        _saveMessage = null;
         if (!IsMockDelayValid())
         {
-            _saveError = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
-            Snackbar.Add(_saveError, Severity.Error);
+            _saveMessage = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
             return;
         }
 
@@ -241,12 +231,9 @@ public partial class SystemSettings
 
     private async Task SaveTokenLimitsAsync()
     {
-        _saveError   = null;
-        _saveMessage = null;
         if (_globalMonthlyLimitK <= 0 || _singleRequestLimitK <= 0)
         {
-            _saveError = "格式錯誤：Token 上限必須大於 0";
-            Snackbar.Add(_saveError, Severity.Error);
+            _saveMessage = "格式錯誤：Token 上限必須大於 0";
             return;
         }
         _isSavingTokenLimits = true;

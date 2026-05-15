@@ -14,10 +14,6 @@
     </MudButton>
 </div>
 
-@if (_saveError is not null)
-{
-    <MudAlert Severity="Severity.Error" Class="mb-3">@_saveError</MudAlert>
-}
 @if (_saveMessage is not null)
 {
     <MudAlert Severity="Severity.Success" Class="mb-3">@_saveMessage</MudAlert>

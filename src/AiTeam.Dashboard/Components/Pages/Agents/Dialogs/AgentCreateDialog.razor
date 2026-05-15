@@ -37,9 +37,6 @@
     [Inject]
     private DashboardAgentService AgentService { get; set; } = null!;
 
-    [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
-
     private string  _name        = "";
     private string  _description = "";
     private int     _trustLevel  = 1;
@@ -67,7 +64,6 @@
         catch (Exception ex)
         {
             _error = $"新增失敗：{ex.Message}";
-            Snackbar.Add(_error, Severity.Error);
         }
         finally
         {
