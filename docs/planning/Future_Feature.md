@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v7.98
+> 版本：v7.99
 > 建立日期：2026-04-01
-> 最後更新：2026-05-15
+> 最後更新：2026-05-16
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 > **2026-05-01 大整理**：以 v4 路線（FF 四十九 工具評估 + FF 三十六 架構評估）為主軸，重新評估 30 個待處理 FF，拆分 5 子檔讓主檔聚焦在 active 主清單。
 > **2026-05-02 v7.64**：Stage 47 結案 — FF 四十七 ✅ + FF 十一 ✅（路線 b DB AppSettings 動態化順帶大半解 FF 十一）。
@@ -57,12 +57,12 @@
 
 ---
 
-## 當前優先級 Top 5（2026-05-15 v7.98 — Stage 67 結案後 = v5.5 Phase 1 Step 2 完成 → Trial_v13 → Phase 1 完整收口 → Phase 2 啟動）
+## 當前優先級 Top 5（2026-05-16 v7.99 — Trial_v13 🟡 部分成功結案後 = v5.5 path 工程實證完整 + 揭關鍵紀律缺口已修 → 待 Stage 68 + Trial_v14 一起跑 → Phase 1 完整收口 → Phase 2 啟動）
 
 | # | FF | 標題 | 狀態 | 為何優先 |
 |---|---|---|---|---|
-| 1 | **Trial_v13** ⭐⭐⭐ | **Stage 67 結案後 v5.5 Phase 1 完整收口前最後一道閘門**（Aria 全程自跑 9-step 模板第 4 次實踐 — 驗 v5.5 path 真實 task：Petra dispatch 看 Skill 找 Talent / DispatchTalentsAsync chain pass-through / Talent pool round-robin schema 預備）| 🔴 啟動條件達成 — 待 Christ 拍板開跑 | Stage 67 Mock 全綠 + Aria gate1 Tier 0+1+2+Tier 3 #11 通過 + xUnit 17+ case PASS（場景 A/E/F/G cover）+ 場景 C v5.5 path 真實 task 留 Trial_v13 真實任務驗。沿用 Trial_v6-v12 同 prompt + main 直接驗 / 5-15 min / cost $1-5。驗收：v5.5 path Petra DecideTalentsAsync 命中 + DispatchTalentsAsync chain pass-through + tool role 寫入 + PR 真開 + 0 🔴 戰略級新類型 |
-| 2 | **v5.5 Phase 1 完整收口拍板** ⭐⭐⭐ | Trial_v13 ✅ 後 Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成 | 🟡 待 Trial_v13 結案 | Phase 1 完整收口後正式進入 v5.5 Talent-Skill separation 架構（baseline 6 Talent + 6 Skill 落地 / DB-driven Talent registry / Petra dispatch Talent pool / round-robin schema 預備 horizontal scaling）|
+| 1 | **Stage 68 + Trial_v14（合併跑）** ⭐⭐⭐ | Trial_v13 揭紀律修法 `0226c60` 真實生效驗 + Stage 68（FF 六十一補強清單 8+ 點之一 / Phase 2 Step 3 DB 持久記憶 schema 候選）— Christ 2026-05-16 拍板「先記錄繼續實作 Stage 再一起試驗」攤平 Trial cost / 時間 | 🟡 Stage 68 範圍待定 | Trial_v13 揭 3 議題（reload-cache scope 紀律 / workspace cleanup 紀律 / Cody push to main 紀律 — 第 3 條已修法 `0226c60`）+ v5.5 path 工程實證完整（DecideTalentsAsync + 自管 chain talent=/skill= format + Vera inputMsgs=2 真做事 + Cody 6/6 cover + 順修 bug）+ blind spot 0% 維持。Trial_v14 沿用同 prompt + 預期 Cody 不自己 commit / Petra FinalizeGitAsync 真實開 PR / cost $1-5 |
+| 2 | **v5.5 Phase 1 完整收口拍板** ⭐⭐⭐ | Trial_v14 ✅ 後 Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成 | 🟡 待 Trial_v14 結案 | Phase 1 完整收口後正式進入 v5.5 Talent-Skill separation 架構（baseline 6 Talent + 6 Skill 落地 / DB-driven Talent registry / Petra dispatch Talent pool / round-robin schema 預備 horizontal scaling）|
 | 3 | **v5.5 Phase 2 Step 3 DB 持久記憶 schema** | Per-task per-agent 持久記憶 hybrid（共用層 + 私有層）+ token budget 60-70% 主動 compact 紀律 | 🟡 待 Phase 1 完整收口 | v5.5 規劃 Phase 2 第一步 — 對齊業界 best practice 避 context drift 65% / 35 分鐘退化雷區 / 跟 Stage 67 Talent-Skill schema 整合 per-Talent 私有層 / 規模 M-L |
 | 4 | **v5.5 Phase 2 Step 4-5** | Petra 拆解指令精準度 spike + Prompt DB 化 + Talent identity 整合 | 🟡 待 Step 3 結案 | v5.5 規劃 Phase 2 後續 — 業界沒明確 best practice 要 spike / Talent prompt DB 化解 prompt 改不用 redeploy + 跨 Talent 變體（Cody-1 嚴謹 vs Cody-2 創意）|
 | 5 | **v5.5 Phase 3 Step 6-8** | WebUI Talent CRUD + 戰略決策層 3 agent debate + v4 既有 module 砍 vs 留 | 🟡 待 Phase 2 完整收口 | v5.5 規劃 Phase 3 — Phase 1+2 完整收口才開動態 CRUD（避業界 6% Copilot pilot 撐到 production 雷區）+ 戰略決策層多 agent debate 對齊兩層架構 + v4 既有 module 漸進評估砍 / 留 / 重寫 |
