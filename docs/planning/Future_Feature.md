@@ -8,17 +8,12 @@
 
 ---
 
-## 外部檔索引（2026-05-01 拆檔）
+## 外部檔索引
 
-| 子檔 | 內容 | 何時讀 |
-|---|---|---|
-| `Future_Feature_v4_eval.md` | 9 個 FF 待 v4 spike 後重評估 | spike Phase A 完成後 |
-| `Future_Feature_frozen.md` | 3 個冷凍 FF（觸發條件不滿足）| 評估解凍時 |
-| `Future_Feature_archived_v4.md` | 11 個已歸檔 FF（v4 吸收 / framework 內建 / Trial 完成）| 查歷史脈絡 |
-| `Future_Feature_completed.md` | 已完成項目摘要（FF + Stage 對照）| 查 Stage 完成歷史 |
-| **`Future_Feature_v5.5.md`** ⭐ | **v5.5 升級規劃 reference**（Christ + Aria 2026-05-14/15 討論累積：Petra 拆解指令 + per-task per-agent 持久記憶 hybrid + 兩層架構 / WebSearch 業界 balanced finding 含雷區揭露 / 對齊 FF 三十六 Phase B 進化版）| **v5 production 觀察期累積真實需求後啟動評估時讀** |
+- **`Future_Feature_v5.5.md`** ⭐ — v5.5 升級規劃 reference（進行中戰略主軸）
 
 ---
+
 
 ## 當前優先級 Top 5（2026-05-16 v7.99 — Trial_v13 🟡 部分成功結案後 = v5.5 path 工程實證完整 + 揭關鍵紀律缺口已修 → 待 Stage 68 + Trial_v14 一起跑 → Phase 1 完整收口 → Phase 2 啟動）
 
@@ -868,29 +863,3 @@ Trial_v5 / Trial_v6 觀察 Cody Dev_plan 在複雜任務踩 maxTurns 100% → es
 純 config 動態化，與 framework 無關。
 
 
-## v4 後重評估 FF 簡表
-
-> 詳細內容見 [`Future_Feature_v4_eval.md`](Future_Feature_v4_eval.md)
-
-| FF | 標題 | 狀態 | v4 重評估點 |
-|---|---|---|---|
-| 十 | Dashboard UI 細節打磨（第四批）| 🔵 低 | 動態架構下 UI 重新設計 |
-| 十四 | Agent I/O 完整記錄 | ⚪ 待討論 | MS Agent Framework 內建 telemetry 涵蓋 |
-| 十九 | Agent maxTurns 動態化 | ⚪ 待觀察 | v4 framework maxTurns 機制改變 |
-| 二十二 | Agent 命名一致性 | 🔵 低 | 動態架構下 Worker pool 命名規則改變 |
-| 二十五 | Self-implement 試驗 prompt 設計守則 | 🟢 經驗紀錄 | Trial_v5 證實 self-implement 適用範圍擴展 |
-| 三十八 | 跨專案能力研究 | ⚪ 待深度討論 | v4 影響跨 project 設計 |
-| 四十 | Stage 46 Dashboard razor UI 接線 | 🟠 中-高 | 動態架構下 UI 重新設計 |
-| 四十八 | Cody Dev_plan 階段 maxTurns 配置不足 | 🟠 中-高 | v4 framework maxTurns 機制改變 |
-
----
-
-## 冷凍 FF 簡表
-
-> 詳細內容見 [`Future_Feature_frozen.md`](Future_Feature_frozen.md)
-
-| FF | 標題 | 狀態 | 解凍觸發條件 |
-|---|---|---|---|
-| 二 | Agent 個性與造型 | 🔵 低 | Dashboard 視覺整體穩定（v4 後）|
-| 三 | AiTeam 安裝精靈 | 🔵 低 | 系統架構穩定 + 真實「在第二台機器部署」需求 |
-| 十三 | UAT 驗收階段 | ⚪ 待觀察 | Trial_v6+ 觀察期間頻繁出現「做出來不是我要的」case（≥ 3 次）|
