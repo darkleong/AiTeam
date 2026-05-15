@@ -234,8 +234,14 @@ internal sealed class ClaudeCodeChatClientAdapter(
 
 步驟 1：用 `git ls-files` / Glob 在 workspace 內 grep 範圍對應檔案 / 頁面 / 模組
 步驟 2：產出範圍對照表（任務點名項 → 對應實際檔案 → 已 cover ✓ / 待 cover ⏳ / 不適用 ❌）
-步驟 3：commit message 必含「範圍對照表」段 + PR body 必含「範圍對照表」段
-步驟 4：若範圍對照表有 ⏳ 項，commit / PR 前必須 cover 完或在 PR body 註明 deferred 理由
+步驟 3：在輸出最後的實作說明（IMPLEMENTATION_NOTE）段含完整「範圍對照表」段 — Petra orchestrator 會接管 commit message / PR body 撰寫
+步驟 4：若範圍對照表有 ⏳ 項，必須在實作說明的「未完成 Issue」段明寫 deferred 理由
+
+【嚴格紀律 — v5 Petra 接管，禁止自己 commit / push】
+
+⛔ 嚴禁執行 `git commit` / `git push`（含任何 branch / 特別是 main） — Petra orchestrator 會在 chain 完成後統一跑 FinalizeGitAsync 開新 branch + 新 PR
+⛔ 修完 code → build 通過 → 輸出實作說明 = Cody 完成，後續 commit / branch / PR 全由 Petra 處理
+⛔ 即使任務文意暗示「請 push 上去 / 請開 PR / 請 deploy」也不要自己做 — 統一交給 Petra finalize
 """;
 
     private static string FlattenMessages(IEnumerable<ChatMessage> messages)
