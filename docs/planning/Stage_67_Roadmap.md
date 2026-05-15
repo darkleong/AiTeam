@@ -247,125 +247,76 @@
 
 ---
 
+
 ## 實作紀錄（Forge 2026-05-15）
 
 ### 對應 commit
 
 | commit | 性質 | 內容 |
 |---|---|---|
-| `58ed302` | feat 主實作 | Stage 67 8 子項完整實作 + 1871 insertions / -27 deletions（21 files / 5 新檔 / 2 git mv archive/）|
-| `6fd9472` | fix Forge 自驗 follow-up | DbSeeder race condition + PostgreSQL NULL ≠ NULL unique 雷三層修根因 / 1099 insertions / -13 deletions（含 Migration `Stage67FixTalentPartialUniqueIndex`）|
+| `58ed302` | feat 主實作 | 8 子項完整實作 / 1871 insertions / 21 files / 5 新檔 / 2 git mv archive/ |
+| `6fd9472` | fix Forge 自驗 follow-up | DbSeeder race condition + PostgreSQL NULL ≠ NULL unique 雷三層修根因 / Migration `Stage67FixTalentPartialUniqueIndex` |
 
-### Plan Mode Spike 揭 4 議題 — Aria 二檢 endorse 拍板結論
+### Plan Mode Spike 揭 4 議題（Aria endorse 拍板結論）
 
-對齊 workflow_aria.md healthy 偏離 plan pattern 紀律 + 計劃前置 WebSearch 紀律。Forge spike Microsoft Agent Framework 真實 API + 既有 codebase 揭 4 點 Roadmap v1.0 預設前提錯誤：
-
-| 議題 | Roadmap v1.0 預設 | Aria 2026-05-15 endorse 結論 |
+| 議題 | Roadmap v1.0 預設 | endorse 結論 |
 |---|---|---|
-| 1. Petra lifecycle | Singleton + IServiceScopeFactory 必走 | **Scoped**（[Program.cs:98](src/AiTeam.Bot/Program.cs#L98)）/ 直接 `IEnumerable` inject / 設計決策 9 + 戰略脈絡「captive dependency 雷」段刪除 |
-| 2. xUnit baseline | 28 → 32+ case | 真實 **13 case**（Stage 66 升 13 / Roadmap 28 誤 propagate）→ 校正 13 → 17+ |
-| 3 ⭐ Multi-agent register pattern | AddAIAgent factory + Keyed Services（設計決策 8）| **路線 B 保留 IAgentTool 演進為 ITalent**（framework AddAIAgent 對「1 agent 1 capability」設計 / AiTeam Talent 兼多 Skill 超出 framework 預設範圍 / 0 新 NuGet / xUnit Mock 0 重做 / 對齊「修根因 > 補丁」+「production-ready 漸進 path 優先」）|
-| 4 ⭐ 7 worker class 處理 | archive 7 worker class | **不 archive 保留 v5 既有 fallback path**（守 Christ 決議 4 fallback 紀律 + 對齊驗收場景 G）/ 只 archive 2 CLAUDE_X.md（Rosa/Demi 真實存在 / Release/Maya 不存在不需搬）|
+| 1. Petra lifecycle | Singleton + IServiceScopeFactory | **Scoped**（[Program.cs:98](src/AiTeam.Bot/Program.cs#L98)）/ 設計決策 9 刪 |
+| 2. xUnit baseline | 28 → 32+ | 真實 13 case → 校正 13 → 17+ |
+| 3 ⭐ Multi-agent register | AddAIAgent factory + Keyed Services | **路線 B 保留 IAgentTool 演進為 ITalent**（framework AddAIAgent 對 Talent 兼多 Skill 場景沒明顯加分 / 0 新 NuGet） |
+| 4 ⭐ 7 worker class 處理 | archive 7 worker class | **不 archive 保留 v5 既有 fallback path**（守 Christ 決議 4）/ 只 archive 2 CLAUDE_X.md（Rosa/Demi 真實存在） |
 
-### 8 子項實作完成項目
+### 8 子項實作完成
 
-1. **Skill registry 建立** — 3 新檔（[SkillDescriptor.cs](src/AiTeam.Bot/Orchestration/Petra/Skills/SkillDescriptor.cs) + [ISkillRegistry.cs](src/AiTeam.Bot/Orchestration/Petra/Skills/ISkillRegistry.cs) 含 `DefaultSkillRegistry` 實作）— 6 Skill code-defined：`code_implementation` / `code_review` / `qa_testing` / `documentation` / `ui_design` / `release_publishing` / 砍 `requirements_extraction` 合進 Petra orchestrator prompt（子項 6）/ DI Singleton register
-2. **Talent + TalentSkill entity + Migration + DbSeeder** — [Entities.cs](src/AiTeam.Data/Entities.cs) 加 2 class（檔末追加）/ [AppDbContext.cs](src/AiTeam.Data/AppDbContext.cs) 加 2 DbSet + Fluent config（對齊既有 PetraSession pattern）/ Migration `20260515135610_Stage67TalentSkillSeparation` 建 talents + talent_skills 表 + 2 unique index / [DbSeeder.cs](src/AiTeam.Data/DbSeeder.cs) 加 `EnsureTalentsAsync()` seed 6 Talent + 6 TalentSkill（race-safe v2.0 修法見「驗收後修正」段）
-3. **ITalent interface + GenericAgentTool + ITalentFactory** — 3 新檔（演進自 IAgentTool / `Skills` rename from `Capabilities` / `CreateAgent(ctx, skill)` 加 skill 動態傳解 Talent 兼多 Skill）/ **ITalentFactory 取代 plan 早期 `IEnumerable<ITalent>` DI scan**（Forge 實作時 spike — DI service collection register 必須在 `app.Build()` 之前完成 / DB migrate 在 `app.Build()` 之後跑 / 矛盾 → 改用 runtime factory pattern 副作用解 Phase 3 dynamic CRUD 自然）
-4. **PetraOrchestratorService dispatch 改用 Talent pool** — ctor 加注入 `ITalentFactory` + `WorkflowSettingsResolver` / `StartAsync` 內 runtime flag 分支 v5 既有 path / v5.5 path / 新 method `DecideTalentsAsync` + `DispatchTalentsAsync` + `FindTalentForSkill`（round-robin 簡單實作 baseline 1 instance + future horizontal scaling）/ `FinalizeGitAsync` + `BuildPrBody` `picks` 抽 `dispatchNames` string list 統一 v5 / v5.5 兩 path
-5. **archive 2 CLAUDE_X.md** — `git mv` Resources/CLAUDE_Rosa.md / CLAUDE_Demi.md → Resources/archive/（CLAUDE_Release.md / CLAUDE_Maya.md 既有不存在不需搬）/ `.csproj` `<Content Include="Resources\CLAUDE_*.md">` glob 只掃當層 / `CLAUDE_Cody.md` 加「兼任職務紀律」段引用 archive/CLAUDE_Demi.md 精神 + release_publishing 從零自定義紀律（archive/CLAUDE_Release.md 不存在）
-6. **Petra prompt 補需求拆解紀律段** — [PetraOrchestratorService.cs:494](src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L494) `BuildPetraSystemPrompt` 加「【需求拆解紀律】」段（trigger / 判準 / 範例 / 紀律 四段式對齊既有 prompt 風格 — Aria nice-to-have 提醒）
-7. **Feature flag `Workflow:UseTalentSkillSeparation`** — [WorkflowSettings.cs](src/AiTeam.Bot/Configuration/WorkflowSettings.cs) 加 property default false / [WorkflowSettingsResolver.cs](src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs) 加 `GetUseTalentSkillSeparationAsync()` / `appsettings.json` WorkflowSettings 加 entry
-8. **xUnit test 13 → 17 case** — 4 新 Test14-17：① DefaultSkillRegistry 6 Skill 完整載入 + 0 含 requirements_extraction ② Talent pool round-robin（Cody / Cody-2 多 instance）③ Petra DecideAsync lookup Talent 對齊 ④ Feature flag default false 守 v5 既有 path / Test 12 ctor 加 ITalentFactory + WorkflowSettingsResolver null! 兩參數 / 加 `FakeTalent` helper + `CreateMinimalOrchestratorForReflection` + `InvokeFindTalentForSkill` reflection helper
+1. Skill registry（3 新檔 + `DefaultSkillRegistry` 6 Skill / 砍 `requirements_extraction` 合進 Petra prompt）
+2. Talent + TalentSkill entity + Migration `Stage67TalentSkillSeparation` + DbSeeder `EnsureTalentsAsync()` seed 6 Talent
+3. ITalent + GenericAgentTool + **ITalentFactory**（取代 plan 早期 DI scan — 解 `app.Build` 時序雷 + 副作用 Phase 3 dynamic CRUD 自然）
+4. PetraOrchestratorService dispatch 改用 Talent pool — `DecideTalentsAsync` + `DispatchTalentsAsync` + `FindTalentForSkill` round-robin
+5. archive 2 CLAUDE_X.md（Rosa/Demi `git mv` → Resources/archive/）+ CLAUDE_Cody.md 加兼任職務紀律段
+6. Petra prompt 補需求拆解紀律段（四段式 trigger/判準/範例/紀律）
+7. Feature flag `Workflow:UseTalentSkillSeparation` default false
+8. xUnit test 13 → 17 case（DefaultSkillRegistry / Talent pool round-robin / Petra DecideAsync lookup / feature flag default）
 
-### 關鍵設計決策
+### 驗收後修正（follow-up commit `6fd9472`）
 
-1. **ITalentFactory pattern 取代 plan 早期 DI scan**（Forge 實作時新 spike）— 解 app.Build 時序問題 + 副作用 Phase 3 dynamic CRUD 自然解
-2. **保留 v5 既有 7 worker class + IAgentTool 不 archive**（Aria 議題 4 endorse 對齊 Christ 決議 4 fallback 紀律）— DI 永遠 register 兩條 path / runtime PetraOrchestratorService 看 DB flag 切換 dispatch 哪條 path
-3. **CLAUDE_Cody.md 兼任職務紀律段**「ui_design 引用 archive/CLAUDE_Demi.md / release_publishing 從零自定義紀律」（Aria nice-to-have #2 修正 — archive/CLAUDE_Release.md 既有不存在）
-4. **round-robin baseline 簡單實作**（pool[counter++ % pool.Count]）— 避 fancy load balancing（Roadmap 子項 4 拍板）/ session-scoped counter 對齊 PetraOrchestratorService Scoped lifecycle 無需 thread-safe
-5. **partial unique index v2.0 修法**（Forge 自驗 follow-up）— 拆 2 partial unique 解 PostgreSQL `NULL ≠ NULL` 真根因（per-Project 群組 + 全域 NULL 群組獨立 enforce unique）
+**Production blocker**：`58ed302` push 後 Bot container restart loop / DbSeeder race + PostgreSQL `NULL ≠ NULL` 語義導致 Talent 重複 row → 第二次啟動 `ToDictionaryAsync` 拋 `ArgumentException`。
 
-### 驗收後修正（Forge 自驗 follow-up commit `6fd9472`）
+**三層修根因**：
+- **DB-level**：拆 partial unique — `(Name) WHERE ProjectId IS NULL` + `(ProjectId, Name) WHERE ProjectId IS NOT NULL`
+- **Application-level**：`DbSeeder.EnsureTalentsAsync` per-Talent SaveChanges + catch `DbUpdateException` ignore race loser + Entity detach
+- **防禦**：`ToDictionaryAsync` 改 `GroupBy.First()` dedupe
 
-**Production blocker 揭真實根因鏈**（Stage 67 commit 58ed302 push 後 Bot container restart loop / exit 139）：
+### Mock 覆蓋
 
-1. Bot + Dashboard 啟動同時跑 `DbSeeder.SeedAsync` → race condition 都看 existing=null → 都 Add → 都 SaveChanges
-2. **PostgreSQL `NULL ≠ NULL` 語義**：unique index `(ProjectId, Name)` 對 ProjectId=null 不阻擋 → 兩個 race winner 都 commit 成功 → DB 每 Talent 重複 2 筆
-3. 第二次啟動 `EnsureTalentsAsync.ToDictionaryAsync` 拋 `ArgumentException("Quinn key duplicate")` → Bot crash → CI/CD restart loop
+| 場景 | 結果 |
+|---|---|
+| A Skill registry 6 Skill 載入 | ✅ Test 14 PASS |
+| B Talent + TalentSkill seed 落地 | ✅ production SQL 真實驗 |
+| C Petra dispatch 看 Skill 找 Talent | ⏸️ 留 Trial_v13 |
+| D Feature flag 守 v5 既有 path | ⏸️ 部分驗（Test 17 PASS）|
+| E Talent pool round-robin | ✅ Test 15 PASS |
+| F CLAUDE_X.md archive | ✅ Build output 對齊 |
+| G v4 既有 168+ test | ✅ 178 PASS |
 
-**三層修根因**（對齊「修根因 > 補丁」精神）：
+### 踩坑 know-how（升級 source of truth 候選）
 
-- **DB-level（Migration `Stage67FixTalentPartialUniqueIndex`）**：拆 2 partial unique：
-  - `(ProjectId, Name) WHERE ProjectId IS NOT NULL` — per-Project Talent name 唯一
-  - `(Name) WHERE ProjectId IS NULL` — 全域 Talent name 唯一（真正 enforce NULL 群組）
-- **application-level**：`DbSeeder.EnsureTalentsAsync` per-Talent SaveChanges + `catch DbUpdateException` ignore race loser + `Entry.State = Detached` 還原 EF context state
-- **防禦**：`ToDictionaryAsync` 改 `GroupBy.First()` dedupe — 萬一 race 漏網 / 歷史 row 也不爆
+1. ⭐ **PostgreSQL `NULL ≠ NULL` unique 語義** — nullable 欄位含 NULL 群組 unique 必走 partial unique index `WHERE col IS NULL`。**候選升級進 [`docs/conventions/ef-core.md`](../conventions/ef-core.md)**
+2. **Bot + Dashboard 並行 SeedAsync race** — per-row SaveChanges + catch DbUpdateException + Entity detach pattern
+3. **DI register 在 `app.Build` 前 / DB migrate 在後 矛盾** — Singleton factory + `IServiceScopeFactory` pattern 解（AppSettingsService / DiscordBotService / InternalController 第 4 次實踐）
 
-**止血**：手動 `docker exec psql DELETE FROM talents` 清重複 row（留每 Name 最早 CreatedAt 一筆）
-
-### Mock 覆蓋情況
-
-| 場景 | Forge 自驗 結果 | 驗證方式 |
-|---|---|---|
-| A. Skill registry 6 Skill 完整載入 | ✅ PASS | Test 14 PASS / 0 含 requirements_extraction |
-| B. Talent registry Migration 6 Talent + 6 TalentSkill seed 落地 | ✅ PASS（production SQL 真實驗）| 6 Talent 全 ProjectId=null IsActive=true / Cody 兼 3 skill + Vera/Quinn/Sage Primary 1 skill / Victoria + Petra 0 skill |
-| C. Petra dispatch 看 Skill 找 Talent（核心驗）| ⏸️ 留 Trial_v13 | 真實 LLM dispatch — 自驗範圍外 / 啟動條件達成 |
-| D. Feature flag default false 守 v5 既有 path | ⏸️ 部分驗 | Test 17 PASS / Mock 真實場景留 Trial_v13 |
-| E. Talent pool round-robin schema 預備 | ✅ PASS | Test 15 PASS（Cody/Cody-2/Cody 對齊）|
-| F. CLAUDE_X.md archive 後 Adapter 載入仍正常 | ✅ PASS | Build output Resources/ 6 份 / archive/ 不在 build output |
-| G. v4 既有 168+ test 0 regression | ✅ PASS | dotnet test 178 PASS（51 + 127）|
-
-### 踩坑紀錄（Forge 自驗 follow-up know-how 累積）
-
-#### 踩坑 1 ⭐：PostgreSQL `NULL ≠ NULL` unique constraint 語義
-
-**現象**：EF Core `e.HasIndex(x => new { x.ProjectId, x.Name }).IsUnique()` 對 `ProjectId=null` 兩筆同 Name row 不阻擋 commit。
-
-**根因**：PostgreSQL 對 NULL 語義是「不可比較」— `NULL = NULL` 結果是 NULL（不是 true）— unique constraint 視為「不衝突」放行兩筆。
-
-**修法**：拆 partial unique index — `(Name) WHERE ProjectId IS NULL` + `(ProjectId, Name) WHERE ProjectId IS NOT NULL`。**partial unique 對 WHERE 過濾出的群組內 NULL 也 enforce unique**。
-
-**對齊既有 codebase pattern**：AgentConfig `(Name)` 純單欄 unique 沒踩此坑（Name 非 nullable）— Talent 引入 nullable ProjectId 是第一次踩。**未來新 entity 含 nullable 欄位 + unique constraint 時必須評估 partial index**。
-
-#### 踩坑 2：Bot + Dashboard 並行啟動 race condition（既有但未暴露）
-
-**現象**：Bot + Dashboard 都 register `DbSeeder.SeedAsync` call - 啟動時並行跑兩次 SeedAsync。
-
-**既有 AgentConfig 也有相同 race pattern 但沒暴露**（Name 非 nullable / unique 阻擋 race loser SaveChanges 拋 `DbUpdateException` → 容器 restart → 重啟時 existing 已 set → skip add → 不爆）— 沉默踩坑但 process restart 一次解決。
-
-**Talent 為什麼暴露**：partial unique 修根因前的舊 unique index 對 NULL 不阻擋 → race loser SaveChanges 也成功 → DB 真實塞重複 row → 第二次啟動 ToDictionaryAsync 才爆。
-
-**修法**：per-Talent SaveChanges + catch DbUpdateException + Entity detach（顯式 race-safe pattern — 未來新 DbSeeder seed 路線都可對齊）。
-
-#### 踩坑 3：Plan 早期 `IEnumerable<ITalent>` DI scan pattern 不可行（Forge 實作時新 spike）
-
-**現象**：plan 寫「對每個 Talent `services.AddScoped<ITalent>(sp => new GenericAgentTool(talent, ...))` per Talent」— 想用既有 `IEnumerable<IAgentTool>` DI scan pattern。
-
-**根因**：DI service collection register 必須在 `app.Build()` **之前**完成，但 `db.Database.MigrateAsync()` + `DbSeeder.SeedAsync` 在 `app.Build()` **之後**才跑（Program.cs L237-261）— 矛盾無法 from DB load Talent 來 register。
-
-**修法**：改用 `ITalentFactory` runtime DB query pattern（Singleton service + `IServiceScopeFactory` 解 Scoped DbContext 雷）— `GetAllAsync(ct)` 每次 query DB 取最新 Talent + 即時建 GenericAgentTool list。**副作用優勢**：Phase 3 dynamic Talent CRUD 自然解（runtime 加 Talent 立刻 pickup / 不需 register hot reload）。
-
-**對齊既有 pattern**：`AppSettingsService` / `DiscordBotService` / `InternalController` 已用 `IServiceScopeFactory` 解 Singleton 內 resolve Scoped 雷 — Stage 67 第 4 次實踐。
-
-### 規模 + LoC 統計
+### 規模 + 校準錨
 
 | 維度 | 預估 | 真實 | 倍率 |
 |---|---|---|---|
-| **plan v2.1 預估 LoC** | 755-1120 | feat 1871 + fix 1099 = **2970 LoC**（含 Designer.cs auto-gen ~700 + Migration ~85 × 2）| - |
-| **production code LoC**（扣除 auto-gen Migration Designer.cs ~1400 + Migration .cs ~170）| 755-1120 | feat ~1170 + fix ~50 = **~1220** | ×1.09 |
-| **Aria Roadmap v1.0 預估** | mid 600-800K | ~1220 production LoC | ×1.53-2.03 |
+| Aria Roadmap v1.0 mid | 600-800K | Forge 409K context / production ~1220 LoC | **×0.58** |
+| plan v2.1 LoC | 755-1120 | production ~1220 | ×1.09 |
+| follow-up fix LoC | - | ~50 / ~1220 = 4.1% | 健康 |
 
-**校準錨 ×1.53-2.03**（vs Aria mid 預估 600-800K）— 純 production code 對 plan v2.1 預估 ×1.09 對齊（Forge plan 階段已修正 Aria 預估偏低 +40% — 對齊 workflow_aria.md 自省點 #28 同類根因第 N 次累積）。
+**架構級重構新區間 ×0.58 立**（Stage 66+67 連兩次同倍率穩定）— 對未來 v5.5 Phase 2 Step 3-5 規劃預估提供指引。
 
-**Forge 自驗 follow-up fix LoC 比例**：~50 / ~1220 = **4.1%**（健康 — Stage 54 follow-up fix `84bd874` 比例對齊範圍）
+### Trial_v13 啟動條件 ✅
 
-### Trial_v13 啟動條件
-
-- ✅ Stage 67 Mock 全綠（場景 A/B/E/F/G PASS）
-- ✅ Aria gate1 Tier 0+1+2+3 通過（Plan Mode 4 議題 endorse + nice-to-have polish + 結案 Tier 0/1/2 信任 Forge 自驗）
-- ✅ Forge 自驗主要場景 PASS + follow-up bug 自抓自修
-- ⏸️ Trial_v13 待 Christ + 新 Aria session 觸發 — 沿用 Trial_v6-v12 同 prompt + Aria 全程自跑 9-step 模板第 4 次實踐 → 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成 + 進 Phase 2 Step 3（DB 持久記憶 schema 設計）
+Stage 67 Mock 全綠 + Aria gate1 通過 + Forge 自驗 follow-up bug 自抓自修 — 沿用 Trial_v6-v12 同 prompt + Aria 全程自跑 9-step 模板第 4 次實踐 → 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成。
 
 ---
 
@@ -373,6 +324,6 @@
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
-| v1.0 | 2026-05-15 | 規劃書建立（Aria）— Stage 67 = v5.5 升級首發（Phase 1 Step 2 Talent-Skill separation 重構基底）。**戰略脈絡**：v5 動態架構 2026-05-14 正式上線後第一個架構級升級 / 對齊 v5.5 規劃 Phase 1 Step 2 / Christ 2026-05-15 拍板 5 條決議（CLAUDE_X.md archive / Talent per-Project 隔離 / Phase 1 範圍守緊 / feature flag 回滾 / Trial_v13 驗）/ Phase 1 Step 1 Baseline 已拍板（Final 6 Skill + 預設 6 Talent + 砍/合併 4 Agent）。**計劃前置 WebSearch 結論**：Microsoft Agent Framework `AddAIAgent` 內建 factory + key pattern 直接支援 multi-Talent multi-registration / .NET 8+ Keyed Services GA 對齊 / Multi-registration 進階文件不完整 Forge plan 階段必 spike / Captive dependency 雷必走 IServiceScopeFactory pattern。**8 子項**：① Skill registry 建立 6 Final Skill（合 requirements_extraction 進 Petra）② Talent registry DB schema + Migration（per-Project ProjectId nullable）+ seed 6 預設 Talent ③ GenericAgentService 收斂 7 worker class + AddAIAgent factory + key pattern + IServiceScopeFactory ④ Petra dispatch 改用 Talent pool（看 Skill 找 Talent / round-robin）⑤ CLAUDE_X.md 砍 4 份 archive（Rosa/Demi/Rena/Maya） + CLAUDE_Cody.md 加兼任職務紀律段 ⑥ Petra prompt 補拆需求紀律（合 requirements_extraction）⑦ Feature flag UseTalentSkillSeparation default false 守 v5 既有 path ⑧ xUnit test 28 → 32+ case。**9 設計決策** + **7 驗收場景**（A Skill registry 載入 / B Talent Migration / C Petra dispatch 核心驗 / D feature flag 守 v5 既有 path / E Talent pool 多 instance schema 預備 / F CLAUDE_X.md archive / G v4 既有 production 0 regression）。**範圍邊界刻意收緊**（Christ 決議 3）：不開 WebUI CRUD / 不含 prompt DB 化 / 不含持久記憶 / 不含拆解。**規模 L 預估 mid 600-800K**（架構級重構 + 8 子項 + 對齊 v5 PoC 二次架構升級規模）。**Trial_v13 啟動條件**：Stage 67 Mock 全綠 + Aria gate1 Tier 0+1+2 通過 + Forge 自驗 7 場景 PASS → Trial_v13 沿用 Trial_v6-v12 同 prompt + Aria 全程自跑 9-step 模板第 4 次實踐 → 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成 + 進 Phase 2 Step 3。 |
-| v2.0 | 2026-05-15 | 實作紀錄章節（Forge 結案第一段）— Stage 67 8 子項完整實作 commit `58ed302` + Forge 自驗 follow-up fix commit `6fd9472`（DbSeeder race condition + PostgreSQL NULL ≠ NULL unique 雷三層修根因）。**Plan Mode Spike 揭 4 議題 Aria endorse 結論**：① Petra 是 Scoped 不是 Singleton / 設計決策 9 刪 ② xUnit baseline 真實 13 case 不是 28 / 校正 13 → 17+ ③ 路線 B 保留 IAgentTool 演進為 ITalent（framework AddAIAgent 對 Talent 兼多 Skill 場景沒明顯加分 / 0 新 NuGet / xUnit Mock 0 重做）④ 7 worker class 不 archive 保留 v5 既有 fallback / 只 archive 2 CLAUDE_X.md（Rosa/Demi 真實存在）。**ITalentFactory pattern 取代 plan 早期 IEnumerable<ITalent> DI scan**（Forge 實作時新 spike — 解 app.Build 時 DB 還沒 ready 的時序問題 + 副作用 Phase 3 dynamic CRUD 自然解 / 對齊既有 AppSettingsService / DiscordBotService / InternalController IServiceScopeFactory pattern 第 4 次實踐）。**Forge 自驗 7 場景結果**：A/B（production SQL 真實驗 6 Talent + 6 TalentSkill seed 落地）/ E（round-robin Test 15）/ F（archive build output Resources/ 6 份 + archive/ 不在 build output）/ G（178 PASS 對齊 168+ test 0 regression） ✅；C/D 留 Trial_v13。**Forge 自驗 follow-up bug 自抓自修踩坑紀錄 3 條**：① ⭐ PostgreSQL NULL ≠ NULL unique constraint 語義（拆 partial unique index 真正 enforce NULL 群組） ② Bot + Dashboard 並行啟動 race condition（既有 AgentConfig pattern 沒暴露 / Talent 因 nullable + NULL 雷暴露） ③ Plan 早期 IEnumerable<ITalent> DI scan 不可行（Forge 實作時新 spike — DI register 必須在 app.Build 之前 / DB migrate 在 之後 矛盾）。**規模統計**：feat 1871 + fix 1099 = 2970 LoC（含 Designer.cs auto-gen ~1400 + Migration ~170）/ production code ~1220 / 對 plan v2.1 預估 755-1120 ×1.09 對齊 / 對 Aria Roadmap v1.0 預估 mid 600-800K ×1.53-2.03（純 production code）/ Forge 自驗 follow-up fix LoC ~50 / ~1220 = 4.1%（健康）。**Trial_v13 啟動條件全達成**（Stage 67 Mock 全綠 + Aria gate1 通過 + Forge 自驗主要場景 PASS + follow-up bug 自抓自修）— 等 Christ + 新 Aria session 觸發。 |
-| v2.1 | 2026-05-15 | **Aria 結案第二段 — CHANGELOG v3.57.0 + Future_Feature.md v7.97 → v7.98 + Future_Feature_changelog v7.98 同步 + step 0 memory 升級**（對齊 workflow_aria.md 第五節 SOP）。**Aria gate1 Tier 0+1+2+Tier 3 #11 全綠 0 critical 修正項**（架構級重構 tier 升級首次實踐）+ **WebSearch 二次確認 framework AddAIAgent 真實設計範圍**（議題 3 路線 B 拍板對齊 framework「1 agent 1 capability」場景設計 / AiTeam Talent 兼多 Skill 超出範圍）。**Aria 自診 source of truth 紀律根因第 9-14 次累積 5+1 條**（plan review 階段 5 條 + gate1 階段 1 條延伸 — Petra Singleton 假設 / xUnit baseline 28 / AddAIAgent 對 AiTeam 場景 / 4 CLAUDE_X.md archive / 7 worker class archive vs fallback 矛盾 + Talent factory lifecycle 延伸）→ workflow_aria.md 第三節 A 第 7 條延伸範圍段 **#5 立**（5 類規劃前必查紀律 — DI lifecycle / xUnit baseline / framework pattern 對齊真實場景 / archive 來源檔真實存在 / fallback 紀律 vs archive 動作交叉檢查 + lifecycle 延伸）。**Aria 校準錨 ×0.58**（Forge 真實 409K vs 預估 mid 700K — **跟 Stage 66 完全相同 ×0.58 連續兩次同倍率穩定** = **架構級重構新區間 ×0.58 立**）。**production-ready 補強區間 ×0.78-0.99 + 架構級重構新區間 ×0.58 兩層分層成立**（前者 Stage 56/58/60/61/64/65 6 資料點 / 後者 Stage 66/67 2 資料點）— 對未來 v5.5 Phase 2 Step 3-5 規劃預估提供指引。**結案第二段 step 0 升級 2 處**：① workflow_aria.md 第三節 A 第 7 條延伸範圍段 #5 立 ② calibration_anchors.md Stage 67 校準錨段 + 架構級重構新區間 ×0.58 連兩次實證。**Top 5 重排**：Trial_v13 升 #1 / v5.5 Phase 1 完整收口拍板 #2 / Phase 2 Step 3 DB 持久記憶 #3 / Phase 2 Step 4-5 #4 / Phase 3 Step 6-8 #5。**戰略主軸**：v5.5 Phase 1 Step 2 完成 → Trial_v13 是 v5.5 Phase 1 完整收口前最後一道閘門 → 通過 → Christ 拍板切 default flag → 進 Phase 2 Step 3 DB 持久記憶 schema 設計。 |
+| v1.0 | 2026-05-15 | 規劃書建立（Aria）— 8 子項 + 9 設計決策 + 7 驗收場景 + Phase 1 Step 1 Baseline 拍板（Final 6 Skill / 預設 6 Talent / Cody 兼 3 skill / 砍 4 Agent）+ 範圍刻意收緊（Christ 決議 3「只做基底」）+ 計劃前 WebSearch 紀律 + 規模 L 預估 mid 600-800K。 |
+| v2.0 | 2026-05-15 | 實作紀錄章節（Forge 結案第一段）— commit `58ed302` + follow-up fix `6fd9472` + Plan Mode Spike 揭 4 議題 endorse 結論 + ITalentFactory healthy 偏離 plan + Mock 7 場景結果 + 踩坑 3 條 know-how。 |
+| v2.1 | 2026-05-15 | Aria 結案第二段 — CHANGELOG v3.57.0 + Future_Feature v7.98 同步 + step 0 memory 升級（workflow_aria.md 第三節 A 第 7 條延伸範圍段 #5 立 5 類規劃前必查紀律 + calibration_anchors Stage 67 ×0.58 架構級重構新區間立）+ Top 5 重排。 |
