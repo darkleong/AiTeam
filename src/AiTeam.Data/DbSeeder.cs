@@ -95,10 +95,15 @@ public static class DbSeeder
     }
 
     /// <summary>
-    /// Stage 67：v5.5 Phase 1 Step 2 — 確保 baseline 6 Talent + Talent-Skill assignment 存在（幂等）。
+    /// Stage 67：v5.5 Phase 1 Step 2 — 確保 baseline 6 Talent + Talent-Skill assignment 存在（幂等 + race-safe）。
     /// 對齊 Phase 1 Step 1 Baseline 拍板（Christ 2026-05-15）：Victoria / Petra 0 skill orchestrator + Cody 兼 3 skill + Vera/Quinn/Sage 主 1 skill。
     /// ProjectId = null 全域共用（Christ 決議 2 per-Project 隔離 baseline 全 null）。
     /// Provider / Model = null（runtime fallback Agents:Dev:Model 既有 BuildSessionContext pattern）。
+    ///
+    /// Stage 67 Forge 自驗 follow-up fix（2026-05-15）：
+    /// - Bot + Dashboard 啟動同時跑 DbSeeder.SeedAsync → race condition 塞重複 row
+    /// - PostgreSQL `NULL ≠ NULL` unique constraint 對 ProjectId=null 不阻擋（partial unique index 才解 — 對齊 Stage67FixTalentPartialUniqueIndex Migration）
+    /// - 三層 race-safe：① per-Talent SaveChanges + catch DbUpdateException 忽略 race loser ② ToDictionaryAsync dedupe 防禦（GroupBy.First）③ 失敗後 detach entity 還原 EF context state
     /// </summary>
     private static async Task EnsureTalentsAsync(AppDbContext db)
     {
@@ -130,7 +135,7 @@ public static class DbSeeder
             var existing = await db.Talents.FirstOrDefaultAsync(t => t.ProjectId == null && t.Name == name);
             if (existing is null)
             {
-                db.Talents.Add(new Talent
+                var talent = new Talent
                 {
                     Name        = name,
                     DisplayName = displayName,
@@ -139,17 +144,31 @@ public static class DbSeeder
                     Provider    = null,
                     Model       = null,
                     IsActive    = true,
-                });
+                };
+                db.Talents.Add(talent);
+
+                // per-Talent SaveChanges + catch DbUpdateException race loser（Bot + Dashboard 並行 seed 場景）
+                try
+                {
+                    await db.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // race loser — 另一個 process 已 seed 同名 Talent → detach 還原 EF context state 繼續下個 Talent
+                    db.Entry(talent).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                }
             }
         }
 
-        // 先 SaveChanges 取得 Talent.Id (DB-generated gen_random_uuid())
-        await db.SaveChangesAsync();
-
         // Talent name -> Id lookup（baseline 全 ProjectId=null 全域 Talent）
-        var talentIdByName = await db.Talents
+        // 防禦 dedupe：partial unique index 修根因前的歷史 DB 可能有重複 row — GroupBy.First 取最早一筆避免 ToDictionaryAsync 爆
+        var talentList = await db.Talents
             .Where(t => t.ProjectId == null)
-            .ToDictionaryAsync(t => t.Name, t => t.Id);
+            .OrderBy(t => t.CreatedAt)
+            .ToListAsync();
+        var talentIdByName = talentList
+            .GroupBy(t => t.Name)
+            .ToDictionary(g => g.Key, g => g.First().Id);
 
         foreach (var (talentName, skillName, isPrimary, priority) in skillSeeds)
         {
@@ -159,13 +178,24 @@ public static class DbSeeder
             var existing = await db.TalentSkills.FirstOrDefaultAsync(s => s.TalentId == talentId && s.SkillName == skillName);
             if (existing is null)
             {
-                db.TalentSkills.Add(new TalentSkill
+                var ts = new TalentSkill
                 {
                     TalentId  = talentId,
                     SkillName = skillName,
                     IsPrimary = isPrimary,
                     Priority  = priority,
-                });
+                };
+                db.TalentSkills.Add(ts);
+
+                try
+                {
+                    await db.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // race loser — 另一個 process 已 seed 同 Talent 同 Skill
+                    db.Entry(ts).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                }
             }
         }
     }

@@ -183,13 +183,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
 
         // Stage 67：v5.5 Phase 1 Step 2 — Talent registry（DB-driven baseline 6 instance / per-Project nullable）
+        // Stage 67 Forge 自驗 follow-up fix（2026-05-15）：PostgreSQL `NULL ≠ NULL` unique constraint 對 ProjectId=null 不阻擋
+        // → 拆成兩個 partial unique index 真正 enforce：
+        //   1. (ProjectId, Name) WHERE ProjectId IS NOT NULL — per-Project Talent name 唯一
+        //   2. (Name) WHERE ProjectId IS NULL — 全域 Talent name 唯一
         modelBuilder.Entity<Talent>(e =>
         {
             e.ToTable("talents");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
-            // 對齊 AgentConfig L51 防 seed 競態 — 同 ProjectId 內 Name 唯一（per-Project ProjectId nullable / null = 全域 group）
-            e.HasIndex(x => new { x.ProjectId, x.Name }).IsUnique();
+            // per-Project unique index（ProjectId NOT NULL 群組）
+            e.HasIndex(x => new { x.ProjectId, x.Name })
+                .IsUnique()
+                .HasFilter("\"ProjectId\" IS NOT NULL")
+                .HasDatabaseName("ix_talents_project_name_per_project");
+            // 全域 unique index（ProjectId NULL 群組 — 解 PostgreSQL NULL ≠ NULL 雷）
+            e.HasIndex(x => x.Name)
+                .IsUnique()
+                .HasFilter("\"ProjectId\" IS NULL")
+                .HasDatabaseName("ix_talents_name_global");
             e.HasOne(x => x.ProjectRef).WithMany().HasForeignKey(x => x.ProjectId).IsRequired(false);
         });
 
