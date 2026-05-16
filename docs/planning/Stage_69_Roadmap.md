@@ -2,7 +2,7 @@
 
 > 目標版本：**v3.59.0**（minor — v5.5 Phase 2 第一步 / 架構級新建 / 跨 session 長期持久記憶基底）
 > 狀態：✅ 已完成（2026-05-16）
-> 文件版本：v2.0
+> 文件版本：v2.1
 > 範圍：TaskMemory + TalentMemory entity + Migration + MemoryRepository + token budget compact 紀律 + 整合 v5.5 PetraOrchestratorService dispatch（feature flag 守 fallback）
 > 規模：M-L
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 2 Step 3

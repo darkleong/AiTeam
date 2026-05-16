@@ -11,9 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v14 開跑（合併驗 Stage 68 補強 + Stage 67 紀律修法 `0226c60` 生效）→ 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完整收口 → Phase 2 Step 3 DB 持久記憶 schema。
+- **下個動作候選**：Trial_v15 開跑（驗 Stage 69 memory inject/寫回 production 真實生效 + 第二次跑同 task 對照組驗 memory 行為差異）→ 通過 → Christ 拍板切 `Workflow:UseV5Memory` default true = v5.5 Phase 2 Step 3 完整收口 → Stage 70 Phase 2 Step 4 Petra 拆解指令精準度 spike。
 
 ---
+
+## [3.59.0] — 2026-05-16 — [Stage 69](docs/planning/Stage_69_Roadmap.md) v5.5 Phase 2 Step 3 跨 session 長期持久記憶基底（TaskMemory + TalentMemory schema / 整合 v5.5 dispatch / v2.1 scope pivot TaskGroup → PetraSession 修 Aria 漏掃 v5.5 path 根因）
 
 ## [3.58.0] — 2026-05-16 — [Stage 68](docs/planning/Stage_68_Roadmap.md) v5.5 Phase 1 完整收口前 production-ready 補強（AppendMessage async + v5 PoC post-confirm 收尾 + ef-core.md nullable unique pattern）
 
