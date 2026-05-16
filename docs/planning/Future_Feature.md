@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v8.7
+> 版本：v8.8
 > 建立日期：2026-04-01
-> 最後更新：2026-05-17（Stage 72 結案 — v5.5 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合 / SkillPrompts + TalentPrompts 兩層 schema + Versioning + rollback / 連續 6 Stage 0 follow-up bug fix / 等 Trial_v18 驗 + 切 default true）
+> 最後更新：2026-05-17（Trial_v18 🟢 結案 — v5.5 Phase 2 Step 5 正式完整收口 / 5 flag production active / 連續 8 Trial 業務級成功 + 連續 6 Stage 0 follow-up / Phase 3 啟動條件達成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---

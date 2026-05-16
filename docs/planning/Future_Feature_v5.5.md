@@ -201,7 +201,7 @@
 - **Trial_v17 結果**：4 flag SQL=true production active / 業務級成功 / cost -16% / 3x deliverable / 連續 7 Trial 業務級成功 / aria-trial-run skill 首次實踐成功
 - **戰略級觀察**（Christ 2026-05-16 點破）：「品質 > 做法」評估框架修正 — Aria 評估 Trial 結果用品質 metric / 預期數字是參考不是死標準 / 對 Step 5 Prompt DB 化「讓 Talent 自主判斷做法 / 我們只定品質標準」精神指引
 
-**Step 5（Stage 72）— Prompt DB 化 + Talent identity 整合** ✅ **已完成**（v3.62.0 / 2026-05-17 / M 規模 / commit `151e156` + Forge 結案 + Aria gate1 Tier 0+1+2+Tier 3 #11 通過 / 等 Trial_v18 驗）
+**Step 5（Stage 72）— Prompt DB 化 + Talent identity 整合** ✅ **已完成 + Trial_v18 🟢 全綠驗收通過** ⭐⭐（v3.62.0 / 2026-05-17 / M 規模 / commit `151e156` + Forge 結案 + Aria gate1 Tier 0+1+2+Tier 3 #11 通過 / Trial_v18 業務 4.7/5 評分 + 19 檔 +1158 + 10 範圍 cover）
 - ① ✅ **SkillPrompts + TalentPrompts 兩層 schema**（職位層 per-Skill 共享 + 個性層 per-Talent nullable / partial unique index 守一條 active / 對齊 Stage 69 既有 nullable unique pattern + 對冗餘不容忍精神）
 - ② ✅ **EF Migration `Stage72PromptSchema`** + 2 table + 4 index + FK cascade（CI/CD self-hosted runner 自動 apply）
 - ③ ✅ **PromptRepository** CRUD + Upsert（新版本 row + 舊 active 切 false）+ Rollback（切版本 + 不刪舊 row 保 audit trail）+ ListVersions
