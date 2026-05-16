@@ -11,10 +11,11 @@
 
 ## [Unreleased]
 
-- **Trial_v13 🟡 部分成功結案（2026-05-16）** — v5.5 path 工程實證完整 + 揭 3 議題並修根因 commit `0226c60`（BuildBroadScopeEnforceSection 步驟 3-4 + ⛔ 嚴禁段）+ revert `8b24192`。blind spot 0%（$3.18 真實 vs SQL $3.1869）。詳見 [Trial_v13_Plan.md](docs/experiments/Trial_v13_Plan.md)。
-- **下個動作候選**：Stage 68 + Trial_v14 合併跑（Christ 拍板攤平 cost）→ 通過 → 切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完成 → Phase 2 Step 3 DB 持久記憶 schema。
+- **下個動作候選**：Trial_v14 開跑（合併驗 Stage 68 補強 + Stage 67 紀律修法 `0226c60` 生效）→ 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = v5.5 Phase 1 完整收口 → Phase 2 Step 3 DB 持久記憶 schema。
 
 ---
+
+## [3.58.0] — 2026-05-16 — [Stage 68](docs/planning/Stage_68_Roadmap.md) v5.5 Phase 1 完整收口前 production-ready 補強（AppendMessage async + v5 PoC post-confirm 收尾 + ef-core.md nullable unique pattern）
 
 ## [3.57.0] — 2026-05-15 — [Stage 67](docs/planning/Stage_67_Roadmap.md) v5.5 升級首發 Phase 1 Step 2 Talent-Skill separation 重構基底（架構級重構 / Trial_v13 啟動條件達成）
 
