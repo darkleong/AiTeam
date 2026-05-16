@@ -1,8 +1,8 @@
 # Stage 72 Roadmap — v5.5 Phase 2 Step 5：Prompt DB 化 + Talent identity 整合（兩層 schema）
 
 > 目標版本：**v3.62.0**（minor — v5.5 Phase 2 第三步 / 架構級重構：Prompt 從 hardcoded → DB / 對齊業界 2026 prompt orchestration 主流）
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 結案第一段（Forge 實作完成 + 自驗 5 場景全綠 / 等 Aria gate2 + Trial_v18 真實業務驗）
+> 文件版本：v2.0
 > 範圍：SkillPrompts + TalentPrompts 兩層 schema + Migration + PromptRepository + DbSeeder + v5.5 path 整合 + Versioning + rollback + feature flag 守 fallback + xUnit
 > 規模：M
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 2 Step 5
@@ -198,8 +198,84 @@ DI 註冊：Scoped（對齊 MemoryRepository 既有 lifecycle）。
 
 ---
 
+## 實作紀錄（Forge 結案第一段）
+
+### commit 範圍
+
+- **主 commit**：[`151e156`](https://github.com/darkleong/AiTeam/commit/151e156) — `feat(stage72): Prompt DB 化 v3.62.0 — SkillPrompts + TalentPrompts 兩層 schema + versioning + rollback + feature flag UseV5PromptDb`（22 檔 / +2177 / -54）
+
+### 交付清單（對齊計劃書子項）
+
+| 子項 | 檔案 | 結果 |
+|---|---|---|
+| 1. Entity records | `src/AiTeam.Data/Entities.cs` 加 `SkillPrompt` + `TalentPrompt` 兩 class | ✅ |
+| 2. AppDbContext fluent config | `src/AiTeam.Data/AppDbContext.cs` 加 2 DbSet + partial unique index `(SkillName) WHERE IsActive=true` + `(TalentId) WHERE IsActive=true` + (SkillName, VersionNumber) 版本歷史索引 + FK cascade | ✅ |
+| 3. EF Migration | `Migrations/20260516165615_Stage72PromptSchema.cs` — 2 table + 4 index + FK | ✅ |
+| 4. PromptRepository | `src/AiTeam.Data/Repositories/PromptRepository.cs` — 7 method（Get/List/Upsert × Skill+Talent + Rollback） | ✅ |
+| 5. PromptResolver | `src/AiTeam.Bot/Services/PromptResolver.cs` — Singleton + 5-min TTL cache + IServiceScopeFactory（對齊 AppSettingsService pattern） | ✅ |
+| 6. PetraPromptTemplate 常數抽取 | `src/AiTeam.Data/SeedContent/PetraPromptTemplate.cs` — DbSeeder + BuildPetraSystemPrompt 共用 source-of-truth | ✅ |
+| 7. DbSeeder | `src/AiTeam.Data/DbSeeder.cs` 加 `EnsureSkillPromptsAsync`（race-safe per-row + DbUpdateException catch） | ✅ |
+| 8. WorkflowSettings + Resolver + appsettings.json | `UseV5PromptDb` flag default false | ✅ |
+| 9. PetraOrchestratorService 整合 | ctor 加 PromptResolver + BuildPetraSystemPrompt 第 3 optional `baseTemplateOverride` param + 新 instance async `BuildPetraSystemPromptForRuntimeAsync` + 3 處 call site（lines 222 / 402 / 469）改 await | ✅ |
+| 10. ClaudeCodeChatClientAdapter 整合 | ctor 加第 9 optional PromptResolver param + GetResponseAsync PromptResolver-first / file fallback 雙路 | ✅ |
+| 11. DI propagation | PetraWorkerHelper / GenericAgentTool / DefaultTalentFactory 全鏈接過 PromptResolver | ✅ |
+| 12. Program.cs DI | `AddScoped<PromptRepository>` + `AddSingleton<PromptResolver>` | ✅ |
+| 13. InternalController 整合 | reload-cache `all` scope 加 `promptResolver.InvalidateCache()`（議題 2 路線 A — 不加新 `prompts` scope） | ✅ |
+| 14. xUnit | T46/T47 BuildPetraSystemPrompt override / hardcoded 雙路 + PromptRepositoryTests T1-T4 CRUD/versioning/rollback + Test 9/27/28 reflection 加 null 第 3 arg | ✅（70 pass / 0 fail） |
+| 15. Directory.Build.props | v3.61.0 → v3.62.0 | ✅ |
+
+### Forge 自驗結果（5 場景全綠）
+
+| 場景 | 工具 | 驗證內容 | 結果 |
+|---|---|---|---|
+| **A** SkillPrompts schema + DbSeeder baseline | `docker exec psql` query production DB | 6 row seed（VersionNumber=1 / IsActive=true / body_len 對齊 source 檔大小）+ TalentPrompts 0 row baseline + schema 完整含 partial unique index | ✅ |
+| **B** Versioning + Rollback | `dotnet test` PromptRepositoryTests T1/T2/T3 | Upsert 累積新版本 + 舊 active 切 false / Rollback 切換 active + 累積 row 不刪 audit trail / ListVersions 返回 asc | ✅ |
+| **C** feature flag=true DB 讀對齊 | `dotnet test` Test46 reflection | baseTemplateOverride 三 placeholder（`{{capabilityRoster}}` / `{{decompositionSection}}` / `{{outputSection}}`）全 Replace + Stage 70+71 decomposition + JSON output 段保留 | ✅ |
+| **D** feature flag=false hardcoded 0 regression | `dotnet test` Test47 + Test 9/27/28 加 null arg | override=null → PetraPromptTemplate.Template baseline + Stage 64+67+70+71 累積關鍵字（1-on-1/Design/Kickoff trigger / 需求拆解紀律 / Hierarchical Decomposition / Few-shot 範例）全綠 | ✅ |
+| **G** partial unique index production enforced（額外補驗） | `docker exec psql` INSERT 第二條同 SkillName / IsActive=true | `ERROR: duplicate key value violates unique constraint "ix_skill_prompts_active_per_skill"` + IsActive=false archive row 允許累積（versioning 紀律） | ✅ |
+| 整合補驗 | `curl /internal/reload-cache?scope=all` + log | Bot Cache 已清除 log + PromptResolver.InvalidateCache 串接 | ✅ |
+
+> 場景 **E**（rollback production 真實生效）+ **F**（v4 既有 path 0 regression）— 留 Trial_v18 真實業務驗收 / 不在 Forge 自驗範圍（對齊 forge-self-verify skill 邊界）。
+
+### 部署驗證
+
+- CI/CD self-hosted runner 自動部署 + `Database.MigrateAsync` 自動 apply Migration `20260516165615_Stage72PromptSchema`
+- 6 SkillPrompts 透過 DbSeeder race-safe path 全部 seed 成功（body_len 對齊 source 檔大小 — `petra_orchestration` 722 bytes = PetraPromptTemplate.Template / 其他 5 個對齊 CLAUDE_*.md 全檔大小）
+- Bot 啟動 0 fail / 0 FATAL / `Application started` 正常
+- partial unique index 真實 enforced（production PostgreSQL `NULL ≠ NULL` 雷修法第 N 次驗證對齊 ef-core.md Stage 68 紀律）
+
+### Backwards-compatible 4 層守護驗證
+
+- v4 既有 path 0 動：DevAgentService / QaAgentService / ReviewerAgentService / DocAgentService / CeoAgentService / ReleaseAgentService 等 v4 service 用 `Resources/CLAUDE_*.md` 讀檔路徑保留 ✅
+- v5 既有 path 0 動：IAgentTool + 7 worker class fallback 維持 ✅
+- v5.5 既有 hardcoded path（feature flag=false fallback）0 regression：xUnit Test 9/27/28 全綠 + PromptResolver.ResolveCapabilityPromptAsync flag=false → null → adapter 退既有 file fallback ✅
+- Stage 70+71 累積 prompt 紀律保留：動態 skill roster 注入機制 + hierarchical decomposition + 線性整包邊界 — Test46 + Test27/28 全綠驗 ✅
+
+### Forge healthy 偏離 plan（對齊 Stage 58 結論「Forge spike 揭露架構盲點紀律」）
+
+1. **PetraPromptTemplate 常數抽取進 AiTeam.Data**（計劃書原本只在 AiTeam.Bot 處理 — Forge spike 揭跨專案 reference 工程議題：DbSeeder 在 AiTeam.Data 專案內要讀同份 Petra template，需抽常數避兩處重複維護導致 drift）
+2. **BuildPetraSystemPrompt 內部改 string.Replace 取代 raw $$ interpolation**（計劃書原 raw interpolation — Forge 實作時揭：placeholder 抽常數後 source code 跟 DB seed 必須用同一段內容，最簡解 = 把 raw interpolation 改成 Replace 統一兩層機制）
+3. **PromptResolver `Workflow:UseV5PromptDb=false` 短路紀律**（計劃書要求 cache 5-min TTL，但 flag=false 場景應 0 DB query hit — Forge 加 flag check early return null 避免不必要 cache reload）
+
+### 自驗踩坑記錄（修根因 / 0 補丁）
+
+- **首次 Edit 替換 BuildPetraSystemPrompt 全段 fail**（half-width vs full-width parens char mismatch）— 改用 2 個 smaller targeted Edit（signature 改 + return block 改）解。修根因 = 不貪大塊一次 replace / 用最小範圍編輯（對齊 workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸到 Forge）。
+- **dotnet test 首次 fail 3 處 PetraOrchestratorService ctor 缺 `promptResolver`**（Test 12 / CreateMinimalOrchestratorForReflection / CreateMemoryTestServices）— 全加 `promptResolver: null!` 補齊 named arg / 1 commit 內解 / 0 follow-up commit。
+
+### 校準錨（待 Aria gate2 結案第二段計算寫入 calibration_anchors）
+
+- 預期：架構級重構新區間 ×0.43-0.60（Stage 67/68/69/70 4 資料點 baseline / Stage 72 = 第 5 資料點累積）
+- 實際 LoC：22 檔 / +2177 / -54
+
+### 自診修 follow-up
+
+0 follow-up commit（dotnet build/test 首次過 + 自驗 5 場景全綠）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-17 | 規劃書建立 — v3.62.0 / M 規模 / v5.5 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合。**範圍**：SkillPrompts + TalentPrompts 兩層 schema + Migration + PromptRepository + DbSeeder（6 個 prompt seed）+ v5.5 path 整合（BuildPetraSystemPrompt + ClaudeCodeChatClientAdapter）+ Versioning + rollback + feature flag `Workflow:UseV5PromptDb` default false + xUnit。**戰略脈絡**：對齊業界 2026 prompt orchestration 主流（WebSearch 結論 — DB-backed + versioning 是 industry standard / 不分層保護 orchestrator）+ Christ 4 議題拍板（全部包 / 兩層 schema / 純後端 / 內容不動）+ Trial_v17 戰略級觀察「讓 Talent 自主判斷做法 / 我們只定品質標準」精神實作。**校準錨預期**：架構級重構新區間 ×0.43-0.60（對齊 Stage 67/68/69/70 4 資料點 baseline / Stage 72 = 第 5 資料點累積）。**驗收**：6 場景 — A schema + DbSeeder baseline / B Versioning + rollback / C feature flag=true DB 讀 prompt 對齊（含 Trial_v18 真實驗）/ D feature flag=false hardcoded 0 regression / E rollback production 真實生效 / F v4 既有 path 0 regression。**下一步**：Forge 實作 + Aria gate1 Tier 0+1+2（架構級重構對應 tier）+ Trial_v18 真實任務驗 → 通過後切 `UseV5PromptDb` default true = Phase 2 Step 5 完整收口 → Stage 73+ Phase 3 開（WebUI Talent CRUD + Talent persona seed + prompt content 升級評估）。 |
+| v2.0 | 2026-05-17 | 實作紀錄章節（Forge 結案第一段）— commit `151e156` + 22 檔 / +2177 / -54 + Forge 自驗 5 場景全綠（A schema baseline production DB query 驗 / B versioning+rollback xUnit / C DB-driven 三 placeholder Replace xUnit / D hardcoded 0 regression xUnit / **G partial unique index production enforced 額外補驗** — `ERROR: duplicate key value violates unique constraint` + IsActive=false archive 允許累積）+ 整合 reload-cache 串接驗 + backwards-compatible 4 層守護驗 + Forge healthy 偏離 plan 3 條（PetraPromptTemplate 常數抽取 AiTeam.Data / string.Replace 取代 raw interpolation / PromptResolver flag=false 短路）+ 自驗踩坑修根因 2 條（Edit 全段 char mismatch 改 small targeted edit / Test ctor 3 處補 promptResolver null! arg）+ 0 follow-up commit。**等 Aria gate2 + Trial_v18 真實業務驗 → 通過切 `UseV5PromptDb` default true = Phase 2 Step 5 完整收口**。 |
