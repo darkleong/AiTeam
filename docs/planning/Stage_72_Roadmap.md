@@ -1,7 +1,7 @@
 # Stage 72 Roadmap — v5.5 Phase 2 Step 5：Prompt DB 化 + Talent identity 整合（兩層 schema）
 
 > 目標版本：**v3.62.0**（minor — v5.5 Phase 2 第三步 / 架構級重構：Prompt 從 hardcoded → DB / 對齊業界 2026 prompt orchestration 主流）
-> 狀態：✅ 結案第一段（Forge 實作完成 + 自驗 5 場景全綠 / 等 Aria gate2 + Trial_v18 真實業務驗）
+> 狀態：✅ 已完成（2026-05-17）— Forge 結案第一段 / 等 Aria gate2 結案第二段（CHANGELOG + Future_Feature_v5.5.md 同步）+ Trial_v18 真實業務驗 → 切 default true 完整收口
 > 文件版本：v2.0
 > 範圍：SkillPrompts + TalentPrompts 兩層 schema + Migration + PromptRepository + DbSeeder + v5.5 path 整合 + Versioning + rollback + feature flag 守 fallback + xUnit
 > 規模：M
