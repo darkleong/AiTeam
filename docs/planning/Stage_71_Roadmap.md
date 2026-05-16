@@ -177,6 +177,49 @@ Trial_v15.2 Quinn 因 Claude Code CLI 偶發 exit 1 outputLen=0，但 Petra 寫�
 
 ---
 
+## 實作紀錄
+
+> Forge 結案第一段（2026-05-16）— 版本：v3.61.0 / commit `b24a335`
+
+### 實作結果
+
+**3 檔案，+178 / -19 行**：
+
+| 檔案 | 改動 |
+|---|---|
+| `PetraOrchestratorService.cs` | `BuildPetraSystemPrompt` 補 few-shot 反例（打磨多 form 線性整包）+ 判斷邊界段；`DispatchTalentsAsync` memory 寫回加 `outputText.Length == 0` guard with `LogWarning` |
+| `PetraOrchestratorServiceTests.cs` | Test 28/29/30 新增 + `CreateMemoryTestServices` helper + `using Microsoft.Extensions.DependencyInjection` |
+| `Directory.Build.props` | v3.60.0 → v3.61.0 |
+
+### 本機驗證
+
+- `dotnet build AiTeam.slnx` — **0 error**，102 warning（全為既有 Playwright MSTEST0037 / CS0618 / MUD0002，Stage 71 無新增）
+- `dotnet test src/AiTeam.Bot.Tests/` — **64/64 passed**（Test 28/29/30 全綠，Test 1-27 0 regression）
+
+### Forge 自驗（4 場景全 xUnit 覆蓋 — 純 code-logic 改動，無 Docker/API 交互需求）
+
+| 場景 | 驗證 | 結果 |
+|---|---|---|
+| B：prompt 升級關鍵字（線性整包 / 真不同 scope / 判斷邊界 / 打磨多 form） | Test 28 reflection assert | ✅ |
+| C：outputLen=0 skip memory write | Test 29 InMemory DB count = 0 | ✅ |
+| D：outputLen>0 upsert 既有邏輯 0 regression | Test 30 InMemory DB count = 1 | ✅ |
+| E：UseV5Memory / UseV5SubtaskPlanning default false 守 fallback | Test 18/26 flag assert | ✅ |
+
+場景 A（Trial_v17 真實任務 subtasks ≤ 2）+ 場景 F（v4 既有 path 0 regression）留 Trial_v17 真實驗收。
+
+### Backwards-compatible 守護驗收
+
+- `useSubtaskPlanning=false` 段（需求拆解紀律）完全不動 — Test 27 既有 assert 仍綠
+- `outputLen > 0` 既有 truncate+upsert 邏輯完全不動 — Test 30 regression 覆蓋
+- v5 既有 path / Stage 67 v5.5 既有 path / Stage 70 SubtaskPlan / topological sort — 全 64 test 維持綠
+
+### 設計決策落地驗證
+
+- **Test 29 `CreateMemoryTestServices` helper**：`ServiceCollection` + InMemory DB + 空 app_settings 表 → resolver 自動 fallback IOptions defaults（compactKeep=50 / threshold=60）— 對齊 Stage 69 既有 InMemory DB test 風格
+- **議題 #3 不修 production code** — 對齊 Roadmap 紀律，0 entrypoint / chown / sudo 改動
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
