@@ -215,22 +215,60 @@
 - ⑪ ✅ **G 場景 partial unique index production enforced 額外補驗**（Forge 主動補對齊 Aria gate1 minor 議題 — production PostgreSQL ERROR: duplicate key value violates unique constraint）
 - **Backwards-compatible 4 層守護**：v4 既有 path / v5 既有 path / v5.5 既有 hardcoded path（flag=false fallback）/ Stage 70+71 累積 prompt 紀律（動態 skill roster 注入 + hierarchical decomposition + 線性整包邊界）— 全保留
 
-### 🥉 Phase 3：進階機制 + 動態化開放
+### 🥉 Phase 3：進階機制 + 動態化開放（2026-05-17 Phase 2 完整收口後拍板新順序）
 
-**Step 6 — WebUI Talent CRUD**（規模 S-M / Phase 1+2 完整收口後才開）
+**Phase 1+2 完整收口 ✅**（Stage 67-72 + Trial_v14/v17/v18 全 🟢） — 對齊「Phase 1+2 完整收口才開 Phase 3」紀律 — Phase 3 啟動條件達成。
+
+**Phase 3 順序拍板**（Christ 2026-05-17 拍板 — WebUI 排最後 / 核心功能先做）：
+
+```
+Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
+→ Stage 76 Petra 接收層 queue → Stage 75 WebUI 員工管理（最後做）
+→ v5.5 完整收口
+```
+
+**Step 7（Stage 73）— prompt content 升級 + Petra TalentPrompt persona seed**（規模 M+ / 預估 cost $3-4.5 per cycle）
+
+- 6 個 SkillPrompt content 重寫對齊「品質 > 做法」精神（自省點 #35 / Trial_v17 戰略觀察延伸）— 從「步驟紀律」升級成「品質目標 + 業界 best practice」
+- **Petra TalentPrompt persona seed**（2026-05-17 WebSearch 揭業界 Orchestrator 也有 persona / Christ 直覺對齊 + Aria 自省點 #36 真實再評估）— DbSeeder 加 1 條 TalentPrompt row / 內容 = PM 個性風格（謹慎拍板 / 對冗餘不容忍 / 持續迭代 / 對等和互相）
+- 對齊 Trial_v18 觀察：Cody 已主動補測試 / 主動識別「不適用」場景 — Stage 73 把這個精神**明文化進 prompt**
+- 含 Trial_v18 議題 1（SystemSettings inconsistent pattern）順手對齊
+- xUnit test 補強 + Trial_v19 真實驗
+
+**Step 8（Stage 74）— 真並行 dispatch + 戰略決策層 3 agent debate**（規模 M / 預估 cost $3-5 per cycle）
+
+- 真並行 dispatch — 同 dependency level subtask 平行跑（既有 SubtaskPlan Independent dependency 純設計 surface → 真實 dispatch 並行）
+- 戰略決策層 3 agent debate — 從 Talent pool 選 3 個（2 opposing + 1 synthesizer）/ 觸發場景：大型新 feature 設計 / 客戶專案啟動
+- 設計依賴 Stage 73 升級後 prompt content（debate 機制用「升級後品質目標 prompt」設計才精準）
+- xUnit + Trial_v20 真實驗
+
+**Step 9（Stage 76）— Petra 接收層 queue + status 顯示**（規模 S-M / 預估 cost $2-4 per cycle）⭐ **2026-05-17 WebSearch 揭新立**
+
+- **業界 WebSearch 結論**（[7 AI Agent Orchestration Patterns - DEV Community](https://dev.to/dohkoai/7-ai-agent-orchestration-patterns-for-scaling-concurrent-systems-with-production-code-1onc) + [Multi-Agent Orchestration Guide](https://gurusup.com/blog/multi-agent-orchestration-guide)）：業界 70% production Orchestrator-Worker pattern 主流做法 = **「Orchestrator 接收層 queue accept 多 task + 執行層 single workspace 排隊跑 + UX status 顯示」**（不是「Agent 像人類同時間只 1 task」極端 / 也不是「無限制平行」極端）
+- 對齊「Agent 像人類處理事件」精神延伸 — 真實 PM 接收並行 / 執行管理（手上多 task 但同時間深度做 1 個）
+- AiTeam 真實場景 — Christ 想到什麼立刻送 task → Petra 應該 accept + queue / 跟你說「task A 跑中 / B 排隊」不擋 user
+- 範圍：Petra accept 多 task + DB queue + UX status（Discord + Dashboard）+ workspace 級別排隊機制 + 可選 backpressure mechanism（Petra 太忙時通知 user）
+- v4 既有 `AgentQueueProcessor`（Stage 27 立 DB-as-Queue）對齊評估 — v5.5 path 是否走既有 queue 機制需 grep / Stage 76 計劃前 grep 驗
+
+**Step 6（Stage 75）— WebUI Talent CRUD**（規模 S-M / 預估 cost $2-4 per cycle）— **最後做**
+
 - Dashboard 加 Talent 管理頁（新增 / 編輯 / 刪除 Talent）
-- Skill 多選 assignment
-- prompt 編輯器
-- ⚠️ **必須等 Phase 1+2 完整收口才開**（避開業界 6% Copilot pilot 撐到 production 雷區）
+- Skill 多選 assignment + prompt 編輯器（含版本歷史 + rollback UI）
+- ⚠️ **Phase 3 最後做**（Christ 2026-05-17 拍板 — 核心功能完成且可運作前 WebUI 排最後 / 避免 UI 提早做被核心功能改變動）
 
-**Step 7 — Spike #4 戰略決策層 3 agent debate**（規模 M）
-- 對齊兩層架構（day-to-day orchestrator-worker / 戰略決策 multi-agent debate）
-- 從 Talent pool 選 3 個（2 opposing + 1 synthesizer）
-- 觸發場景：大型新 feature 設計 / 客戶專案啟動
+### Phase 3 撤除規劃（既有 Step 8 v4 砍 / 改 Phase 4 候選）
 
-**Step 8 — Spike #5 v4 既有 module 砍 vs 留**（規模 M）
-- 對齊 Talent-Skill 收斂後 — v4 對應 Stage Executor / MeetingService 等可評估
-- 對齊 Phase 3 Step 6 動態化開放 — 既有 v4 hardcoded path 可漸進廢除
+- **v4 既有 module 砍 vs 留** — Phase 3 不做（v4 path 已被 v5.5 path 取代上線 / Trial_v18 後 5 flag production active / v4 path 留 fallback 不擾 production / 待真實業務需求觸發再評估 — 留 Phase 4 候選）
+
+### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
+
+| Stage | 規模 | Forge session | Trial AiTeam | per cycle |
+|---|---|---|---|---|
+| 73 prompt 升級 + Petra persona | M+ | $1-1.5 | $2-3 | **$3-4.5** |
+| 74 並行 dispatch + 3 agent debate | M | $1.5-2 | $1.5-3 | **$3-5** |
+| 76 Petra 接收層 queue | S-M | $0.5-1 | $1.5-3 | **$2-4** |
+| 75 WebUI Talent CRUD（最後）| S-M | $0.5-1 | $1.5-3 | **$2-4** |
+| **Phase 3 完整收口 total** | | | | **$10-17.5** |
 
 ### 跨 Phase 紀律
 
