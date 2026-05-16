@@ -57,6 +57,7 @@ public partial class AgentSettings
         catch (Exception ex)
         {
             _loadError = ex.Message;
+            Snackbar.Add($"Agent 設定載入失敗：{ex.Message}", Severity.Error);
         }
     }
 
