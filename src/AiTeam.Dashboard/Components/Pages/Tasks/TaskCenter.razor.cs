@@ -84,16 +84,24 @@ public partial class TaskCenter : IAsyncDisposable
         TableState state,
         CancellationToken cancellationToken)
     {
-        var result = await TaskService.GetTasksPagedAsync(
-            page: state.Page + 1,
-            pageSize: state.PageSize,
-            statusFilters: _statusFilters.ToHashSet());
-
-        return new TableData<TaskItemDto>
+        try
         {
-            Items      = result.Items,
-            TotalItems = result.TotalCount
-        };
+            var result = await TaskService.GetTasksPagedAsync(
+                page: state.Page + 1,
+                pageSize: state.PageSize,
+                statusFilters: _statusFilters.ToHashSet());
+
+            return new TableData<TaskItemDto>
+            {
+                Items      = result.Items,
+                TotalItems = result.TotalCount
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"任務清單載入失敗：{ex.Message}", Severity.Error);
+            return new TableData<TaskItemDto> { Items = [], TotalItems = 0 };
+        }
     }
 
     private async Task OnTaskRowClickAsync(TableRowClickEventArgs<TaskItemDto> args)
@@ -101,8 +109,15 @@ public partial class TaskCenter : IAsyncDisposable
         _selectedTask = args.Item;
         if (_selectedTask is null) return;
 
-        _selectedLogs     = await TaskService.GetTaskLogsAsync(_selectedTask.Id);
-        _isTaskDrawerOpen = true;
+        try
+        {
+            _selectedLogs     = await TaskService.GetTaskLogsAsync(_selectedTask.Id);
+            _isTaskDrawerOpen = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"載入任務記錄失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnStatusFilterChangedAsync()

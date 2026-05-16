@@ -120,50 +120,106 @@ public partial class SystemSettings
     private async Task OnSkipCeoConfirmChanged(bool newValue)
     {
         _skipCeoConfirm = newValue;
-        await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
-        _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
+            _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _skipCeoConfirm = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnMockModeChanged(bool newValue)
     {
         _mockMode = newValue;
-        await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
-        _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
+            _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _mockMode = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnUseFrameworkAppealLoopChanged(bool newValue)
     {
         _useFrameworkAppealLoop = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Appeal Loop」已{(_useFrameworkAppealLoop ? "啟用" : "停用")}（v4 漸進遷移 Stage 49 首發），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
+            _saveMessage = $"「MS Agent Framework Appeal Loop」已{(_useFrameworkAppealLoop ? "啟用" : "停用")}（v4 漸進遷移 Stage 49 首發），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _useFrameworkAppealLoop = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnUseFrameworkKickoffChanged(bool newValue)
     {
         _useFrameworkKickoff = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Kickoff Meeting」已{(_useFrameworkKickoff ? "啟用" : "停用")}（v4 漸進遷移 Stage 50 第二步），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
+            _saveMessage = $"「MS Agent Framework Kickoff Meeting」已{(_useFrameworkKickoff ? "啟用" : "停用")}（v4 漸進遷移 Stage 50 第二步），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _useFrameworkKickoff = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnUseFrameworkKickoffMidInterruptChanged(bool newValue)
     {
         _useFrameworkKickoffMidInterrupt = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework HITL（Kickoff 中途介入試點）」已{(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")}（v4 漸進遷移 Stage 51 第三步試點），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
+            _saveMessage = $"「MS Agent Framework HITL（Kickoff 中途介入試點）」已{(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")}（v4 漸進遷移 Stage 51 第三步試點），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _useFrameworkKickoffMidInterrupt = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnUseFrameworkDesignChanged(bool newValue)
     {
         _useFrameworkDesign = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Design Meeting」已{(_useFrameworkDesign ? "啟用" : "停用")}（v4 漸進遷移 Stage 52 第四步），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
+            _saveMessage = $"「MS Agent Framework Design Meeting」已{(_useFrameworkDesign ? "啟用" : "停用")}（v4 漸進遷移 Stage 52 第四步），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _useFrameworkDesign = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnUseFrameworkPipelineChanged(bool newValue)
     {
         _useFrameworkPipeline = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkPipeline", _useFrameworkPipeline.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Pipeline」已{(_useFrameworkPipeline ? "啟用" : "停用")}（v4 漸進遷移 Stage 53A 第五步 macro-orchestration），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:UseFrameworkPipeline", _useFrameworkPipeline.ToString().ToLower());
+            _saveMessage = $"「MS Agent Framework Pipeline」已{(_useFrameworkPipeline ? "啟用" : "停用")}（v4 漸進遷移 Stage 53A 第五步 macro-orchestration），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _useFrameworkPipeline = !newValue;
+            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task SaveCeoChannelIdAsync()
@@ -178,10 +234,22 @@ public partial class SystemSettings
         }
 
         _isSavingChannel = true;
-        await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
-        _isSavingChannel = false;
-        _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
-        _saveError   = null;
+        try
+        {
+            await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
+            _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+            _saveError   = null;
+        }
+        catch (Exception ex)
+        {
+            _saveError   = $"儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
+        }
+        finally
+        {
+            _isSavingChannel = false;
+        }
     }
 
     private async Task SaveChristUserIdAsync()
@@ -196,10 +264,22 @@ public partial class SystemSettings
         }
 
         _isSavingUserId = true;
-        await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
-        _isSavingUserId = false;
-        _saveMessage = $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
-        _saveError   = null;
+        try
+        {
+            await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
+            _saveMessage = $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+            _saveError   = null;
+        }
+        catch (Exception ex)
+        {
+            _saveError   = $"儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
+        }
+        finally
+        {
+            _isSavingUserId = false;
+        }
     }
 
     /// <summary>Discord Snowflake ID 格式驗證：空字串（代表清除）或 17-20 位純數字。</summary>
@@ -220,23 +300,47 @@ public partial class SystemSettings
         }
 
         _isSavingMockDelay = true;
-        await AppSettingsService.UpsertAsync("Mock:DelayMinMs", _mockDelayMin.ToString());
-        await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
-        _isSavingMockDelay = false;
-        _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
-        _saveError   = null;
+        try
+        {
+            await AppSettingsService.UpsertAsync("Mock:DelayMinMs", _mockDelayMin.ToString());
+            await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
+            _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
+            _saveError   = null;
+        }
+        catch (Exception ex)
+        {
+            _saveError   = $"儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
+        }
+        finally
+        {
+            _isSavingMockDelay = false;
+        }
     }
 
     private async Task SaveWorkflowRoundsAsync()
     {
         _isSavingWorkflow = true;
-        await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
-        _isSavingWorkflow = false;
-        _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
+        try
+        {
+            await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
+            await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
+            _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
+        }
+        catch (Exception ex)
+        {
+            _saveError   = $"儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
+        }
+        finally
+        {
+            _isSavingWorkflow = false;
+        }
     }
 
     private async Task SaveTokenLimitsAsync()
@@ -249,13 +353,25 @@ public partial class SystemSettings
             return;
         }
         _isSavingTokenLimits = true;
-        await AppSettingsService.UpsertAsync("Token:GlobalMonthlyLimitK", _globalMonthlyLimitK.ToString());
-        await AppSettingsService.UpsertAsync("Token:SingleRequestLimitK", _singleRequestLimitK.ToString());
-        // 立即刷新 Bot Cache，不需等 5 分鐘 TTL
-        await BotService.ReloadCacheAsync("all");
-        _isSavingTokenLimits = false;
-        _saveMessage = $"Token 守門設定已儲存（全域月限={_globalMonthlyLimitK}K / 單次上限={_singleRequestLimitK}K），Bot Cache 已立即刷新。";
-        _saveError   = null;
+        try
+        {
+            await AppSettingsService.UpsertAsync("Token:GlobalMonthlyLimitK", _globalMonthlyLimitK.ToString());
+            await AppSettingsService.UpsertAsync("Token:SingleRequestLimitK", _singleRequestLimitK.ToString());
+            // 立即刷新 Bot Cache，不需等 5 分鐘 TTL
+            await BotService.ReloadCacheAsync("all");
+            _saveMessage = $"Token 守門設定已儲存（全域月限={_globalMonthlyLimitK}K / 單次上限={_singleRequestLimitK}K），Bot Cache 已立即刷新。";
+            _saveError   = null;
+        }
+        catch (Exception ex)
+        {
+            _saveError   = $"儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
+        }
+        finally
+        {
+            _isSavingTokenLimits = false;
+        }
     }
 
     private async Task ReloadCacheAsync()

@@ -65,7 +65,16 @@ public partial class RuleManagement
     #region Override Methods
 
     protected override async Task OnInitializedAsync()
-        => _rules = await RuleService.GetAllRulesAsync();
+    {
+        try
+        {
+            _rules = await RuleService.GetAllRulesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"規則載入失敗：{ex.Message}", Severity.Error);
+        }
+    }
 
     #endregion
 
@@ -120,14 +129,28 @@ public partial class RuleManagement
 
     private async Task ToggleActiveAsync(Rule rule, bool isActive)
     {
-        await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
-        rule.IsActive = isActive;
+        try
+        {
+            await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
+            rule.IsActive = isActive;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"狀態切換失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     private async Task DeleteRuleAsync(Guid id)
     {
-        await RuleService.DeleteRuleAsync(id);
-        _rules.RemoveAll(r => r.Id == id);
+        try
+        {
+            await RuleService.DeleteRuleAsync(id);
+            _rules.RemoveAll(r => r.Id == id);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"刪除失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     #endregion

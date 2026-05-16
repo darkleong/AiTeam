@@ -299,4 +299,34 @@ public class TaskCenterTests
             result.Should().NotBeEmpty(because: $"duration={duration} 不應回傳空字串");
         }
     }
+
+    // -----------------------------------------------------------------------
+    // TriggeredByColor
+    // -----------------------------------------------------------------------
+
+    private static Color InvokeTriggeredByColor(string? triggeredBy)
+    {
+        var method = typeof(TaskCenter).GetMethod(
+            "TriggeredByColor",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        return (Color)method.Invoke(null, new object?[] { triggeredBy })!;
+    }
+
+    [Fact]
+    public void TriggeredByColor_Discord_應回傳Secondary色()
+    {
+        InvokeTriggeredByColor("Discord").Should().Be(Color.Secondary);
+    }
+
+    [Fact]
+    public void TriggeredByColor_Null_應回傳Default色()
+    {
+        InvokeTriggeredByColor(null).Should().Be(Color.Default);
+    }
+
+    [Fact]
+    public void TriggeredByColor_未知字串_應回傳Default色()
+    {
+        InvokeTriggeredByColor("UnknownSource").Should().Be(Color.Default);
+    }
 }

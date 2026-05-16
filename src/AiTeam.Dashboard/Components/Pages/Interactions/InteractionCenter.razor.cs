@@ -32,6 +32,7 @@ public partial class InteractionCenter : IAsyncDisposable
     private List<BossInteractionDto> _historyItems = [];
     private bool                     _isLoading    = true;
     private bool                     _historyLoading = false;
+    private string?                  _loadError;
 
     // 歷史紀錄篩選條件
     private string?    _typeFilter   = null;
@@ -61,9 +62,15 @@ public partial class InteractionCenter : IAsyncDisposable
     private async Task LoadAsync()
     {
         _isLoading = true;
+        _loadError = null;
         try
         {
             _pending = await TaskService.GetPendingInteractionsAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"載入待處理項目失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
         }
         finally
         {
@@ -87,6 +94,10 @@ public partial class InteractionCenter : IAsyncDisposable
                 sourceFilter: string.IsNullOrEmpty(_sourceFilter) ? null : _sourceFilter,
                 from: from, to: to);
             _historyItems = items;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"載入歷史紀錄失敗：{ex.Message}", Severity.Error);
         }
         finally
         {
