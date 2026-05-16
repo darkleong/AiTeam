@@ -11,9 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v15 開跑（驗 Stage 69 memory inject/寫回 production 真實生效 + 第二次跑同 task 對照組驗 memory 行為差異）→ 通過 → Christ 拍板切 `Workflow:UseV5Memory` default true = v5.5 Phase 2 Step 3 完整收口 → Stage 70 Phase 2 Step 4 Petra 拆解指令精準度 spike。
+- **下個動作候選**：Trial_v15 / Trial_v16 開跑（合併驗 Stage 69 memory inject/寫回 + Stage 70 hierarchical decomposition production 真實生效 + 複雜 task 真實 dispatch order）→ 通過 → Christ 拍板切 `UseV5Memory` + `UseV5SubtaskPlanning` default true = v5.5 Phase 2 Step 3+4 完整收口 → Stage 71 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合。
 
 ---
+
+## [3.60.0] — 2026-05-16 — [Stage 70](docs/planning/Stage_70_Roadmap.md) v5.5 Phase 2 Step 4 Petra 拆解指令精準度（hierarchical decomposition + dependency graph / SubtaskPlan + Parser + TopoSort / Backwards-compatible 4 層守護）
 
 ## [3.59.0] — 2026-05-16 — [Stage 69](docs/planning/Stage_69_Roadmap.md) v5.5 Phase 2 Step 3 跨 session 長期持久記憶基底（TaskMemory + TalentMemory schema / 整合 v5.5 dispatch / v2.1 scope pivot TaskGroup → PetraSession 修 Aria 漏掃 v5.5 path 根因）
 
