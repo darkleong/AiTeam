@@ -29,7 +29,16 @@ public static class Extensions
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
             // Turn on resilience by default
-            http.AddStandardResilienceHandler();
+            // Stage 70 揭：default AttemptTimeout=10s / TotalRequestTimeout=30s 對 Petra
+            // DecideTalentsWithPlanAsync (Gemini Flash 結構化 JSON SubtaskPlan 輸出) 太緊 — 拉長
+            // 對齊 AiTeam single-tenant 非 user-blocking 背景處理性質。
+            // CircuitBreaker.SamplingDuration constraint：必須 ≥ 2 × AttemptTimeout。
+            http.AddStandardResilienceHandler(options =>
+            {
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(180);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
+            });
 
             // Turn on service discovery by default
             http.AddServiceDiscovery();
