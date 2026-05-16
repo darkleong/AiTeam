@@ -193,11 +193,12 @@
 - v5.5 核心新功能：拆解任務 + 派 Talent
 - 對齊 Talent-Skill：Petra 拆出 subtask 對應 Skill → 找可用 Talent
 
-**Step 4.5（Stage 71 候選）— v5.5 Phase 2 Step 3+4 production-ready 補強**（規模 M / Trial_v15+v16 揭 4 議題 → 修完 Trial_v17 重驗 → 切兩個 default flag）
-- ① **Petra prompt 升級紀律** — DecideTalentsWithPlanAsync few-shot 範例補強「拆 = 真不同 scope」清楚紀律 + 「打磨多 form」場景線性 vs 分階段判斷邊界（Trial_v15.2 揭 Cody 過度拆 3 段重複工作 / cost +21% PR 反小）
-- ② **Stage 69 memory 寫入 outputLen=0 guard** — WriteMemoryAsync path 加空 content guard（Trial_v15.2 揭 Quinn outputLen=0 寫空 content 污染下次 inject）
-- ③ **FinalizeGitAsync permission denied 修法** — LibGit2Sharp 操作前確保 workspace ownership = appuser（Bot CloneOrPull 路徑加 ownership 復原 step / 或 git operations 改透過 subprocess + gosu appuser）（Trial_v16 揭業務 deliver 中斷）
-- ④ **Aria 自省點 #34 立**（workflow_aria_session_lessons.md） — Trial workspace cleanup 紀律：不能用 `docker exec sh -c "git ..."` root 動 workspace（對齊 Stage 65 entrypoint chown 紀律延伸到 Aria 操作層）
+**Step 4.5（Stage 71）— v5.5 Phase 2 Step 3+4 production-ready 補強** ✅ **已完成**（v3.61.0 / 2026-05-16 / S 規模 / commit `b24a335` + Forge 結案 + Aria gate1 Tier 0+1+2 通過）
+- ① ✅ **Petra prompt 升級「拆=真不同 scope」紀律** — BuildPetraSystemPrompt useSubtaskPlanning=true 段補 few-shot 反例（打磨多 form toast = 線性整包）+ 判斷邊界 3 條（同類同 Skill 同 scope = 線性整包 / 真不同 scope 跨 Skill = 拆解 / 直覺判準）
+- ② ✅ **Stage 69 memory 寫入 outputLen=0 guard** — DispatchTalentsAsync memory 寫回加 `if (outputText.Length == 0)` guard + LogWarning skip / outputLen>0 既有 truncate+upsert 邏輯 0 動
+- ③ 🔄 **FinalizeGitAsync permission denied 走 Aria 紀律修正不修 production code** — Bot 無 root 不能 chown 防呆 / docker-compose entrypoint 已自動防呆 / 修法 = `/aria-memory` 加自省點 #34
+- ④ 🔄 **Aria 自省點 #34 立** — `/aria-memory` 觸發時加入 workflow_aria_session_lessons.md
+- **驗收**：Trial_v17 真實任務重驗（場景 A 線性整包 subtasks ≤ 2 + 場景 F v4 既有 path 0 regression） → 通過後切 `UseV5Memory` + `UseV5SubtaskPlanning` default true = Phase 2 Step 3+4 正式完整收口
 
 **Step 5 — Prompt DB 化 + Talent identity 整合**（規模 M）
 - 對齊「Talent identity 含 prompt」原則

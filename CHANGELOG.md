@@ -11,9 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v15 / Trial_v16 開跑（合併驗 Stage 69 memory inject/寫回 + Stage 70 hierarchical decomposition production 真實生效 + 複雜 task 真實 dispatch order）→ 通過 → Christ 拍板切 `UseV5Memory` + `UseV5SubtaskPlanning` default true = v5.5 Phase 2 Step 3+4 完整收口 → Stage 71 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合。
+- **下個動作候選**：Trial_v17 真實任務重驗（沿用 Trial_v6-v14 同 prompt / Aria 9-step 模板第 7 次實踐 / 驗 Stage 71 兩議題收口效果 — 場景 A 線性整包 subtasks ≤ 2 + 場景 F v4 既有 path 0 regression）→ 通過 → Christ 拍板切 `UseV5Memory` + `UseV5SubtaskPlanning` default true = v5.5 Phase 2 Step 3+4 正式完整收口 → Stage 72 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合。
 
 ---
+
+## [3.61.0] — 2026-05-16 — [Stage 71](docs/planning/Stage_71_Roadmap.md) v5.5 Phase 2 Step 3+4 production-ready 補強（Trial_v15+v16 揭 2 議題收口 — Petra prompt 線性整包紀律 + memory 空 content guard / 連續 5 Stage 0 follow-up bug fix）
 
 ## [3.60.0] — 2026-05-16 — [Stage 70](docs/planning/Stage_70_Roadmap.md) v5.5 Phase 2 Step 4 Petra 拆解指令精準度（hierarchical decomposition + dependency graph / SubtaskPlan + Parser + TopoSort / Backwards-compatible 4 層守護）
 
