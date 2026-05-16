@@ -351,3 +351,49 @@ public class TalentSkill
 
     public Talent? Talent { get; set; }
 }
+
+/// <summary>
+/// Stage 69：v5.5 Phase 2 Step 3 — per-Task 共用記憶（Petra dispatch 多 Talent 共看）。
+/// 跨 session 長期持久層（vs PetraSessionMessage 是 short-term session 對話 history）。
+/// 對齊業界 2026 Hybrid memory 三層 standard 中段 — searchable recall database / per-task scoping。
+/// </summary>
+public class TaskMemory
+{
+    public Guid Id { get; set; }
+    /// <summary>所屬 TaskGroup（required FK — 對齊 task_groups）。</summary>
+    public Guid TaskGroupId { get; set; }
+    /// <summary>所屬 Project（nullable — TaskGroup 自身 ProjectId 可能為 null）。</summary>
+    public Guid? ProjectId { get; set; }
+    /// <summary>記憶 key（KV 風格 — 如 `decision/cody-output-summary` / `context/business-rule`）。</summary>
+    public string Key { get; set; } = "";
+    /// <summary>記憶 content（任意 text — Talent output 摘要 / Petra 拍板 decision / Christ 中途指引等）。</summary>
+    public string Content { get; set; } = "";
+    /// <summary>寫入此記憶的 Talent name（如 "Cody" / "Vera" / "Petra"）。</summary>
+    public string CreatedByTalent { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Stage 69：v5.5 Phase 2 Step 3 — per-Talent 私有記憶（個人記憶 / 跨 task 累積）。
+/// 對齊 Stage 67 Talent schema ProjectId nullable + partial unique index 紀律
+/// （docs/conventions/ef-core.md Stage 68 新段 PostgreSQL `NULL ≠ NULL` 雷修法）。
+/// </summary>
+public class TalentMemory
+{
+    public Guid Id { get; set; }
+    /// <summary>所屬 Talent（required FK — 對齊 talents）。</summary>
+    public Guid TalentId { get; set; }
+    /// <summary>所屬 Project（nullable — 對齊 Talent.ProjectId 隔離 pattern / null = 全域 Talent 全域記憶）。</summary>
+    public Guid? ProjectId { get; set; }
+    /// <summary>記憶 key（KV 風格 — 如 `last-task-summary` / `preference/coding-style`）。</summary>
+    public string Key { get; set; } = "";
+    /// <summary>記憶 content。</summary>
+    public string Content { get; set; } = "";
+    /// <summary>Stage 69 起步：簡單 keyword tag（Phase 3 可升 vector index）。</summary>
+    public List<string> Tags { get; set; } = [];
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public Talent? Talent { get; set; }
+}

@@ -26,6 +26,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Talent>      Talents      => Set<Talent>();
     public DbSet<TalentSkill> TalentSkills => Set<TalentSkill>();
 
+    // Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶（per-Task 共用 + per-Talent 私有 hybrid 雙層）
+    public DbSet<TaskMemory>   TaskMemories   => Set<TaskMemory>();
+    public DbSet<TalentMemory> TalentMemories => Set<TalentMemory>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Team>(e =>
@@ -214,6 +218,52 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // 防 Talent 同 Skill 重複 assign
             e.HasIndex(x => new { x.TalentId, x.SkillName }).IsUnique();
             e.HasOne(x => x.Talent).WithMany(t => t.Skills).HasForeignKey(x => x.TalentId);
+        });
+
+        // Stage 69：v5.5 Phase 2 Step 3 — per-Task 共用記憶（Petra dispatch 多 Talent 共看）
+        modelBuilder.Entity<TaskMemory>(e =>
+        {
+            e.ToTable("task_memories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            // TaskGroupId required FK — 對齊 task_groups（cascade delete 自然清理）
+            e.HasOne<TaskGroup>()
+                .WithMany()
+                .HasForeignKey(x => x.TaskGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // (TaskGroupId, Key) 唯一 — 同 group 同 key 視為 upsert（caller append vs update 各自判斷）
+            e.HasIndex(x => new { x.TaskGroupId, x.Key })
+                .IsUnique()
+                .HasDatabaseName("ix_task_memories_group_key");
+            // compact 排序常用 — (TaskGroupId, CreatedAt) 查 oldest
+            e.HasIndex(x => new { x.TaskGroupId, x.CreatedAt });
+        });
+
+        // Stage 69：v5.5 Phase 2 Step 3 — per-Talent 私有記憶（個人記憶 / 跨 task 累積）
+        // 對齊 Stage 67 Talent schema partial unique index 紀律（docs/conventions/ef-core.md Stage 68 新段）：
+        //   1. (TalentId, Key, ProjectId) WHERE ProjectId IS NOT NULL — per-Project 隔離 talent memory key 唯一
+        //   2. (TalentId, Key) WHERE ProjectId IS NULL — 全域 Talent memory key 唯一（解 PostgreSQL NULL ≠ NULL 雷）
+        modelBuilder.Entity<TalentMemory>(e =>
+        {
+            e.ToTable("talent_memories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            // Tags 用 PostgreSQL text[] 對齊 Roadmap 設計（簡單 keyword search 起步）
+            e.Property(x => x.Tags).HasColumnType("text[]");
+            // Talent FK
+            e.HasOne(x => x.Talent).WithMany().HasForeignKey(x => x.TalentId);
+            // per-Project unique index（ProjectId NOT NULL 群組）
+            e.HasIndex(x => new { x.TalentId, x.Key, x.ProjectId })
+                .IsUnique()
+                .HasFilter("\"ProjectId\" IS NOT NULL")
+                .HasDatabaseName("ix_talent_memories_talent_key_project");
+            // 全域 unique index（ProjectId NULL 群組 — 解 PostgreSQL NULL ≠ NULL 雷）
+            e.HasIndex(x => new { x.TalentId, x.Key })
+                .IsUnique()
+                .HasFilter("\"ProjectId\" IS NULL")
+                .HasDatabaseName("ix_talent_memories_talent_key_global");
+            // compact 排序常用 — (TalentId, CreatedAt)
+            e.HasIndex(x => new { x.TalentId, x.CreatedAt });
         });
     }
 }

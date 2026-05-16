@@ -255,6 +255,7 @@ public class PetraOrchestratorServiceTests
             talentFactory: null!,
             workflowResolver: null!,
             sessionRepo: repo,
+            memoryRepo: null!,
             db: db,
             providerFactory: null!,
             gitHubService: null!,
@@ -430,6 +431,158 @@ public class PetraOrchestratorServiceTests
         Assert.False(settings.UsePetraOrchestratorV5);
     }
 
+    // ─── Test 18（Stage 69）：UseV5Memory default = false 守 v5.5 既有 dispatch path 0 regression ──
+    [Fact]
+    public void Test18_WorkflowSettings_UseV5Memory_DefaultIsFalse()
+    {
+        var settings = new AiTeam.Bot.Configuration.WorkflowSettings();
+        Assert.False(settings.UseV5Memory);
+        // 對齊 compact config default
+        Assert.Equal(60, settings.V5MemoryCompactThresholdPercent);
+        Assert.Equal(50, settings.V5MemoryCompactKeepCount);
+    }
+
+    // ─── Test 19（Stage 69）：MemoryRepository.UpsertTaskMemoryAsync — 同 key 二次 = 1 row + UpdatedAt 推進 ──
+    [Fact]
+    public async Task Test19_MemoryRepository_UpsertTaskMemory_SameKey_UpdatesExisting()
+    {
+        await using var db = CreateInMemoryDb(nameof(Test19_MemoryRepository_UpsertTaskMemory_SameKey_UpdatesExisting));
+        await db.Database.EnsureCreatedAsync();
+        var repo = new MemoryRepository(db);
+        var taskGroupId = Guid.NewGuid();
+
+        // 1st upsert
+        await repo.UpsertTaskMemoryAsync(taskGroupId, projectId: null, key: "decision/cody-output-summary", content: "first content", createdByTalent: "Cody");
+        await db.SaveChangesAsync();
+
+        var firstCount = await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId);
+        var first = await db.TaskMemories.SingleAsync(m => m.TaskGroupId == taskGroupId);
+        var firstUpdatedAt = first.UpdatedAt;
+        Assert.Equal(1, firstCount);
+        Assert.Equal("first content", first.Content);
+
+        // 確保 UpdatedAt 有時間差（DateTime.UtcNow 同 tick 可能相同）
+        await Task.Delay(10);
+
+        // 2nd upsert 同 key
+        await repo.UpsertTaskMemoryAsync(taskGroupId, projectId: null, key: "decision/cody-output-summary", content: "second content", createdByTalent: "Vera");
+        await db.SaveChangesAsync();
+
+        var secondCount = await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId);
+        var second = await db.TaskMemories.SingleAsync(m => m.TaskGroupId == taskGroupId);
+        Assert.Equal(1, secondCount);     // upsert — 仍 1 row
+        Assert.Equal("second content", second.Content);
+        Assert.True(second.UpdatedAt > firstUpdatedAt, $"UpdatedAt 應推進 — first={firstUpdatedAt:O} second={second.UpdatedAt:O}");
+        // CreatedByTalent 保留原值（先寫者留名 — Forge spike 拍板 #1）
+        Assert.Equal("Cody", second.CreatedByTalent);
+    }
+
+    // ─── Test 20（Stage 69）：CompactTaskMemoryAsync — 100 條削回 50（newest 50 保留）──
+    [Fact]
+    public async Task Test20_MemoryRepository_CompactTaskMemory_KeepsNewestN()
+    {
+        await using var db = CreateInMemoryDb(nameof(Test20_MemoryRepository_CompactTaskMemory_KeepsNewestN));
+        await db.Database.EnsureCreatedAsync();
+        var repo = new MemoryRepository(db);
+        var taskGroupId = Guid.NewGuid();
+
+        // 寫 100 條 — 每條 key 不同（unique constraint 不撞）+ CreatedAt 升序遞增
+        var baseTime = DateTime.UtcNow.AddHours(-1);
+        for (var i = 0; i < 100; i++)
+        {
+            db.TaskMemories.Add(new TaskMemory
+            {
+                TaskGroupId = taskGroupId,
+                Key = $"entry/{i:D3}",
+                Content = $"content-{i}",
+                CreatedByTalent = "Cody",
+                CreatedAt = baseTime.AddSeconds(i),
+                UpdatedAt = baseTime.AddSeconds(i),
+            });
+        }
+        await db.SaveChangesAsync();
+        Assert.Equal(100, await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId));
+
+        // compact 保留 newest 50
+        var deleted = await repo.CompactTaskMemoryAsync(taskGroupId, keepCount: 50);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(50, deleted);
+        var remaining = await db.TaskMemories
+            .Where(m => m.TaskGroupId == taskGroupId)
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync();
+        Assert.Equal(50, remaining.Count);
+        // 保留的應是 newest（entry/050 ~ entry/099）
+        Assert.Equal("entry/050", remaining.First().Key);
+        Assert.Equal("entry/099", remaining.Last().Key);
+    }
+
+    // ─── Test 21（Stage 69）：TalentMemory ProjectId null vs non-null 隔離 ──
+    // partial unique index InMemory provider 不 enforce filter；本 test 驗 Repository upsert 不誤刪不同 Project 同 key
+    [Fact]
+    public async Task Test21_MemoryRepository_TalentMemory_ProjectIsolation()
+    {
+        await using var db = CreateInMemoryDb(nameof(Test21_MemoryRepository_TalentMemory_ProjectIsolation));
+        await db.Database.EnsureCreatedAsync();
+        var repo = new MemoryRepository(db);
+        var talentId = Guid.NewGuid();
+        var projectA = Guid.NewGuid();
+        var projectB = Guid.NewGuid();
+
+        // 三筆同 talent + 同 key + 不同 ProjectId（null / A / B）— 應視為三筆獨立記憶
+        await repo.UpsertTalentMemoryAsync(talentId, projectId: null, key: "last-task-summary", content: "global summary", tags: null);
+        await repo.UpsertTalentMemoryAsync(talentId, projectId: projectA, key: "last-task-summary", content: "project A summary", tags: null);
+        await repo.UpsertTalentMemoryAsync(talentId, projectId: projectB, key: "last-task-summary", content: "project B summary", tags: null);
+        await db.SaveChangesAsync();
+
+        var total = await db.TalentMemories.CountAsync(m => m.TalentId == talentId);
+        Assert.Equal(3, total);
+
+        // GetTalentMemoriesAsync(projectId: null) 只回全域
+        var global = await repo.GetTalentMemoriesAsync(talentId, projectId: null, tagFilter: null);
+        Assert.Single(global);
+        Assert.Equal("global summary", global[0].Content);
+
+        // GetTalentMemoriesAsync(projectId: projectA) 只回 Project A
+        var pa = await repo.GetTalentMemoriesAsync(talentId, projectId: projectA, tagFilter: null);
+        Assert.Single(pa);
+        Assert.Equal("project A summary", pa[0].Content);
+
+        // 同 projectId 再 upsert → 1 row update
+        await repo.UpsertTalentMemoryAsync(talentId, projectId: projectA, key: "last-task-summary", content: "project A updated", tags: new[] { "v2" });
+        await db.SaveChangesAsync();
+        var paUpdated = await repo.GetTalentMemoriesAsync(talentId, projectId: projectA, tagFilter: null);
+        Assert.Single(paUpdated);
+        Assert.Equal("project A updated", paUpdated[0].Content);
+        Assert.Contains("v2", paUpdated[0].Tags);
+        // 仍是 3 row total（不誤刪不同 Project 同 key）
+        Assert.Equal(3, await db.TalentMemories.CountAsync(m => m.TalentId == talentId));
+    }
+
+    // ─── Test 22（Stage 69）：GetTaskMemoriesAsync OrderBy CreatedAt ─
+    [Fact]
+    public async Task Test22_MemoryRepository_GetTaskMemories_OrderedByCreatedAt()
+    {
+        await using var db = CreateInMemoryDb(nameof(Test22_MemoryRepository_GetTaskMemories_OrderedByCreatedAt));
+        await db.Database.EnsureCreatedAsync();
+        var repo = new MemoryRepository(db);
+        var taskGroupId = Guid.NewGuid();
+
+        // 故意亂序寫入（CreatedAt 不依 insert 順序）
+        var baseTime = DateTime.UtcNow.AddMinutes(-30);
+        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k3", Content = "third", CreatedByTalent = "Cody", CreatedAt = baseTime.AddMinutes(20), UpdatedAt = baseTime.AddMinutes(20) });
+        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k1", Content = "first", CreatedByTalent = "Cody", CreatedAt = baseTime, UpdatedAt = baseTime });
+        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k2", Content = "second", CreatedByTalent = "Vera", CreatedAt = baseTime.AddMinutes(10), UpdatedAt = baseTime.AddMinutes(10) });
+        await db.SaveChangesAsync();
+
+        var got = await repo.GetTaskMemoriesAsync(taskGroupId);
+        Assert.Equal(3, got.Count);
+        Assert.Equal("k1", got[0].Key);
+        Assert.Equal("k2", got[1].Key);
+        Assert.Equal("k3", got[2].Key);
+    }
+
     // ─── helper ───────────────────────────────────────────────────────────────────
     private static List<string> ParseCapabilities(string raw)
         => raw.Split('|').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
@@ -441,6 +594,7 @@ public class PetraOrchestratorServiceTests
             talentFactory: null!,
             workflowResolver: null!,
             sessionRepo: null!,
+            memoryRepo: null!,
             db: null!,
             providerFactory: null!,
             gitHubService: null!,

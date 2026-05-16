@@ -75,6 +75,19 @@ public class WorkflowSettingsResolver(
     public Task<bool> GetUseTalentSkillSeparationAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseTalentSkillSeparation", Defaults.UseTalentSkillSeparation, ct);
 
+    /// <summary>Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 feature flag。預設 false。
+    /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（caller 自行檢查三 flag）。</summary>
+    public Task<bool> GetUseV5MemoryAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseV5Memory", Defaults.UseV5Memory, ct);
+
+    /// <summary>Stage 69：compact 觸發閾值百分比（buffer-above-keep）。預設 60。</summary>
+    public Task<int> GetV5MemoryCompactThresholdPercentAsync(CancellationToken ct = default)
+        => GetIntAsync("Workflow:V5MemoryCompactThresholdPercent", Defaults.V5MemoryCompactThresholdPercent, ct);
+
+    /// <summary>Stage 69：compact 後保留 newest N 條。預設 50。</summary>
+    public Task<int> GetV5MemoryCompactKeepCountAsync(CancellationToken ct = default)
+        => GetIntAsync("Workflow:V5MemoryCompactKeepCount", Defaults.V5MemoryCompactKeepCount, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);

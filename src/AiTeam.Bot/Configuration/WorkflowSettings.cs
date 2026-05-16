@@ -76,4 +76,20 @@ public class WorkflowSettings
     /// 與 Stage 49-63B 六 framework / v5 flag 並存 — 必須 UsePetraOrchestratorV5=true 才有意義（v5.5 是 v5 path 上面的演進）。
     /// Trial_v13 驗 + Christ 拍板才切 default true。</summary>
     public bool UseTalentSkillSeparation { get; set; } = false;
+
+    /// <summary>Stage 69：v5.5 Phase 2 Step 3 — 是否啟用跨 session 長期持久記憶（TaskMemory + TalentMemory 注入 + 寫回）。
+    /// 預設 false（守 v5.5 既有 dispatch path 0 regression — Trial_v15 驗 + Christ 拍板才切 default true）。
+    /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 是 Phase 1 之上演進）。
+    /// AppSettings 表 key = "Workflow:UseV5Memory"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseV5Memory { get; set; } = false;
+
+    /// <summary>Stage 69：v5.5 Phase 2 Step 3 — Token budget compact 觸發閾值百分比（buffer-above-keep 模型）。
+    /// 語意：trigger 條件 = count &gt;= KeepCount * (100 + ThresholdPercent) / 100。
+    /// default 60：50 keep + 60% buffer → trigger 在 80 entries → 削回 50。
+    /// AppSettings 表 key = "Workflow:V5MemoryCompactThresholdPercent"，DB 優先 / fallback 60。</summary>
+    public int V5MemoryCompactThresholdPercent { get; set; } = 60;
+
+    /// <summary>Stage 69：v5.5 Phase 2 Step 3 — compact 後保留 newest N 條（per-TaskGroup / per-Talent 各自獨立計算）。
+    /// AppSettings 表 key = "Workflow:V5MemoryCompactKeepCount"，DB 優先 / fallback 50。</summary>
+    public int V5MemoryCompactKeepCount { get; set; } = 50;
 }
