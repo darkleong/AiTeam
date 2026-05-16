@@ -1,7 +1,8 @@
 # Stage 68 Roadmap — v5.5 Phase 1 完整收口前 production-ready 補強
 
 > 目標版本：**v3.58.0**（minor — Phase 1 完整收口拍板閘門前最後一塊 production-ready 補強）
-> 狀態：規劃中
+> 狀態：✅ 已完成（2026-05-16）
+> 文件版本：v2.0
 > 範圍：FF 二 v5 PoC simplification 補強 2 點 + Stage 67 follow-up know-how 升級 conventions/
 > 規模：M
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 1 完整收口前最後一塊
@@ -113,8 +114,78 @@
 
 ---
 
+---
+
+## 實作紀錄（v2.0 — 2026-05-16）
+
+### 實作完成項目
+
+**子項 1 — PetraSessionRepository.AppendMessage 改 async** ✅
+- [`PetraSessionRepository.cs:26`](../../src/AiTeam.Data/Repositories/PetraSessionRepository.cs#L26) AppendMessage → AppendMessageAsync + CancellationToken + Task return
+- 同步轉 9 處 caller：PetraOrchestratorService 6 處（user / assistant / tool role 寫入 — line 60/196/265/314/375/457）+ PetraOrchestratorServiceTests 3 處（line 75-77）
+- LogWorkflowEvent framework callback 用 fire-and-forget enqueue 維持非 async signature（純 EF Add 無 I/O — 安全）
+
+**子項 2 — v5 PoC post-confirm flow 收尾** ✅
+- 新建 [`CeoResponseActions.cs`](../../src/AiTeam.Shared/Constants/CeoResponseActions.cs)（採納 Christ #1 nice-to-have — magic string 抽常數對齊 AgentNames pattern）
+- [`CeoAgentService.cs:108`](../../src/AiTeam.Bot/Agents/CeoAgentService.cs#L108) 寫入點改用 `CeoResponseActions.PetraV5Dispatched`
+- [`ProposalConfirmationService.cs:50`](../../src/AiTeam.Bot/Orchestration/Proposal/ProposalConfirmationService.cs#L50) Dashboard 路徑加 v5/v5.5 path 偵測 + skip TaskItem + skip exec_confirm fire
+- [`ButtonCallbackRouter.cs:394`](../../src/AiTeam.Bot/Discord/Routing/ButtonCallbackRouter.cs#L394) Discord button 路徑同邏輯 + Followup「✅ Petra 已動態調度完成」訊息
+
+**子項 3 — docs/conventions/ef-core.md 補強** ✅
+- 加新段「PostgreSQL nullable unique + race-safe DbSeeder pattern」插在「PostgreSQL 例外處理」段後（語義延伸）
+- 涵蓋 3 條 know-how：① NULL ≠ NULL unique 語義 + partial unique index 修法 ② 並行 SeedAsync race + per-row SaveChanges + DbUpdateException + Entity detach ③ DI lifecycle Singleton factory + IServiceScopeFactory
+- Stage 67 Roadmap reference link
+
+**子項 4 — Directory.Build.props v3.57.0 → v3.58.0** ✅
+
+### 關鍵設計決策
+
+1. **子項 2 修法落點 Forge spike 推翻 Aria 兩候選方案**：
+   - ❌ Aria 候選「PetraOrchestratorService 結尾關閉 BossInteraction」**不可行** — Petra 跑完時 ceo_confirm BossInteraction 還沒被 fire（fire 在上層 CeoResponse 回來後才建）
+   - ❌ Aria 候選「CeoAgentService 條件分支」可行但太上層 — marker 已在 `Action = PetraV5Dispatched`，沒必要再翻譯
+   - ✅ Forge 拍：修在 confirm 接力 service（ProcessCeoConfirmAsync + HandleConfirmYesAsync 兩處對等）— 真實 stale fire 點 = 修源頭最直接
+2. **`LogWorkflowEvent` 內 AppendMessageAsync 用 fire-and-forget**：framework callback signature 非 async（`void LogWorkflowEvent(...)`）— 純 EF Add 無 I/O 等待 → `_ = sessionRepo.AppendMessageAsync(...)` 安全
+3. **`AppendMessageAsync` 當前回 `Task.CompletedTask`**：純 EF Add 無 I/O — 但 CT 參數 + Task return 對齊 BossInteractionRepository pattern + 為將來 SaveChanges-inline 進化保留介面
+4. **magic string 抽 constant**（採納 Christ #1）：對齊 [`AgentNames`](../../src/AiTeam.Shared/Constants/AgentNames.cs) pattern — 跨 3 檔 hardcode 收一處新 [`CeoResponseActions`](../../src/AiTeam.Shared/Constants/CeoResponseActions.cs)
+
+### Mock 覆蓋情況
+
+| 子項 | Mock 覆蓋 | 備註 |
+|---|---|---|
+| 1 AppendMessage async | ✅ 完整（dotnet test Test 4 直接打）| 178 PASS regression baseline |
+| 2 v5 PoC post-confirm 跳過 | ⚠ **Mock 物理限制** — 所有 `framework_*` scenarios 都是 pipeline-stage mock，**無一驅動 CEO confirm 流程**（ProcessCeoConfirmAsync / HandleConfirmYesAsync）| Code path 100% wired（CeoResponseActions 1 producer + 2 reader / 0 magic string 殘留 / Bot 啟動 0 error 證實 IL 載入 OK）→ 留 Trial_v14 真實任務驗（對齊 commit message pre-acknowledge / 對齊 Stage 64/65 既有紀律精神）|
+| 3 ef-core.md | ✅ grep 驗證內容齊全 | 純文件 |
+
+### 踩坑紀錄
+
+無。Forge spike Phase 1 已揭真實 wire 點 + 推翻兩候選方案落點 — 實作期 0 follow-up bug / 0 self-diag fix / 1 commit 完成。
+
+### Production state 確認（自驗時取）
+
+```
+Workflow:UsePetraOrchestratorV5    = true   ← v5 path active production
+Workflow:UseTalentSkillSeparation  = false  ← v5.5 待 Trial_v14 拍板切
+MockMode                            = false  ← production
+```
+
+→ Stage 68 sub-item 2 修法 **immediately effective** on next real CEO task（v5 path 已上線）— Trial_v14 開跑時即驗。
+
+### 本機驗證
+
+- `dotnet build AiTeam.slnx`：0 error / 102 warning（全既有 / 0 新引入）
+- `dotnet test`：178 PASS（51 AiTeam.Bot.Tests + 127 AiTeam.Tests.Generated / 0 fail / 0 skip）= 對齊 Roadmap 場景 A 期望
+- CI/CD run [25935590154](https://github.com/darkleong/AiTeam/actions/runs/25935590154) **success**
+- 容器 fresh deploy + 0 startup error / 0 exception
+
+### 對應 commit
+
+- `0b7e3c7` feat(stage68): v3.58.0 — v5.5 Phase 1 完整收口前 production-ready 補強（3 子項）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-16 | **實作完成（Forge）** — 3 子項 + 1 nice-to-have 採納（magic string 抽常數）/ 1 commit `0b7e3c7` / 0 follow-up / 178 PASS regression baseline / Mock 物理限制 acknowledge（sub-item 2 留 Trial_v14 真實驗）/ Forge spike 推翻 Aria 兩候選方案落點（PetraOrchestratorService 結尾不可行 + CeoAgentService 太上層 → 修在 confirm 接力 service 兩處對等）。 |
 | v1.0 | 2026-05-16 | 規劃書建立（Aria）— Stage 68 = Trial_v13 結案後 v5.5 Phase 1 完整收口前最後一個 production-ready 補強 Stage。**3 子項**：① PetraSessionRepository.AppendMessage 改 async ② v5 PoC post-confirm flow 收尾 ③ docs/conventions/ef-core.md 補強 PostgreSQL NULL unique + DbSeeder race pattern。**4 驗收場景**：A AppendMessage async 0 regression / B v5 PoC post-confirm 乾淨收尾 / C conventions/ 紀律落地 / D v4 既有 production path 0 regression。**範圍邊界刻意收緊**：不擴 FF 二其他補強 / 不開 Phase 2 Step 3 DB 持久記憶 schema（規模 M-L 留 Stage 69）。**Trial_v14 啟動條件**：Stage 68 Mock 全綠 + Aria gate1 通過 → 沿用 Trial_v6-v13 同 prompt 真實任務驗 = 同時驗 Stage 68 補強 + Stage 67 紀律修法 `0226c60` 生效 → 通過 → Christ 拍板切 `Workflow:UseTalentSkillSeparation` default true = **v5.5 Phase 1 完整收口** + 進 Phase 2 Step 3 DB 持久記憶 schema 設計。 |
