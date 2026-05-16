@@ -1,5 +1,6 @@
 using AiTeam.Dashboard.Configuration;
 using AiTeam.Dashboard.Identity;
+using MudBlazor;
 using MudBlazor.Services;
 using AiTeam.Dashboard.Services;
 using AiTeam.Data;
@@ -23,7 +24,14 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 // MudBlazor
-builder.Services.AddMudServices();
+builder.Services.AddMudServices(config =>
+{
+    config.SnackbarConfiguration.PositionClass          = Defaults.Classes.Position.BottomRight;
+    config.SnackbarConfiguration.VisibleStateDuration   = 4000;
+    config.SnackbarConfiguration.ShowTransitionDuration = 300;
+    config.SnackbarConfiguration.HideTransitionDuration = 300;
+    config.SnackbarConfiguration.PreventDuplicates      = false;
+});
 
 // SignalR（Hub 定義在 AiTeam.Data）
 builder.Services.AddSignalR();

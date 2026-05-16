@@ -18,6 +18,10 @@
 {
     <MudAlert Severity="Severity.Success" Class="mb-3">@_saveMessage</MudAlert>
 }
+@if (_saveError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_saveError</MudAlert>
+}
 
 <h3 style="margin-bottom:16px">一般設定</h3>
 

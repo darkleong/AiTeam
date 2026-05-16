@@ -41,6 +41,9 @@
     [Inject]
     private DashboardRuleService RuleService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     [Parameter]
     public Rule? EditingRule { get; set; }
 
@@ -77,6 +80,7 @@
         if (string.IsNullOrWhiteSpace(_content))
         {
             _error = "規則內容為必填。";
+            Snackbar.Add(_error, Severity.Warning);
             return;
         }
 
@@ -102,6 +106,7 @@
         catch (Exception ex)
         {
             _error = $"操作失敗：{ex.Message}";
+            Snackbar.Add(_error, Severity.Error);
         }
         finally
         {

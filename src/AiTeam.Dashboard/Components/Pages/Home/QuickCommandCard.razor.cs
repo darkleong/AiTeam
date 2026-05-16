@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components.Forms;
+using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
 
@@ -11,6 +12,9 @@ public partial class QuickCommandCard
 
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
+
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
 
     #endregion
 
@@ -69,7 +73,10 @@ public partial class QuickCommandCard
         }
 
         if (messages.Count > 0)
+        {
             _error = string.Join("；", messages);
+            Snackbar.Add(_error, Severity.Warning);
+        }
 
         if (valid.Count != _selectedFiles.Count)
             _selectedFiles = valid.Count == 0 ? null : valid;
@@ -108,6 +115,7 @@ public partial class QuickCommandCard
                 catch
                 {
                     _error = $"讀取圖片「{file.Name}」失敗，請重試。";
+                    Snackbar.Add(_error, Severity.Error);
                     _isSubmitting = false;
                     return;
                 }
@@ -122,7 +130,8 @@ public partial class QuickCommandCard
 
         if (!result.Success)
         {
-            _error = result.ErrorMessage;
+            _error = result.ErrorMessage ?? "指令送出失敗，請稍後再試。";
+            Snackbar.Add(_error, Severity.Error);
             return;
         }
 

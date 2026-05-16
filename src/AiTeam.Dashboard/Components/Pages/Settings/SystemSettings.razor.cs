@@ -44,6 +44,7 @@ public partial class SystemSettings
     private bool    _isSavingMockDelay;
     private bool    _isSavingWorkflow;
     private string? _saveMessage;
+    private string? _saveError;
 
     #endregion
 
@@ -170,7 +171,9 @@ public partial class SystemSettings
         var trimmed = _ceoChannelId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveMessage = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
+            _saveError   = "格式錯誤：Discord 頻道 ID 應為 17-20 位純數字";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Warning);
             return;
         }
 
@@ -178,6 +181,7 @@ public partial class SystemSettings
         await AppSettingsService.UpsertAsync("CeoDefaultChannelId", trimmed);
         _isSavingChannel = false;
         _saveMessage = $"CEO 指令預設頻道已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+        _saveError   = null;
     }
 
     private async Task SaveChristUserIdAsync()
@@ -185,7 +189,9 @@ public partial class SystemSettings
         var trimmed = _christUserId.Trim();
         if (!IsValidSnowflakeId(trimmed))
         {
-            _saveMessage = "格式錯誤：Discord User ID 應為 17-20 位純數字";
+            _saveError   = "格式錯誤：Discord User ID 應為 17-20 位純數字";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Warning);
             return;
         }
 
@@ -193,6 +199,7 @@ public partial class SystemSettings
         await AppSettingsService.UpsertAsync("ChristDiscordUserId", trimmed);
         _isSavingUserId = false;
         _saveMessage = $"Christ Discord User ID 已更新{(string.IsNullOrWhiteSpace(trimmed) ? "（已清除）" : $"：{trimmed}")}";
+        _saveError   = null;
     }
 
     /// <summary>Discord Snowflake ID 格式驗證：空字串（代表清除）或 17-20 位純數字。</summary>
@@ -206,7 +213,9 @@ public partial class SystemSettings
     {
         if (!IsMockDelayValid())
         {
-            _saveMessage = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
+            _saveError   = "格式錯誤：需滿足 0 ≤ 最小 < 最大 ≤ 600000";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Warning);
             return;
         }
 
@@ -215,6 +224,7 @@ public partial class SystemSettings
         await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
         _isSavingMockDelay = false;
         _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
+        _saveError   = null;
     }
 
     private async Task SaveWorkflowRoundsAsync()
@@ -233,7 +243,9 @@ public partial class SystemSettings
     {
         if (_globalMonthlyLimitK <= 0 || _singleRequestLimitK <= 0)
         {
-            _saveMessage = "格式錯誤：Token 上限必須大於 0";
+            _saveError   = "格式錯誤：Token 上限必須大於 0";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Warning);
             return;
         }
         _isSavingTokenLimits = true;
@@ -243,6 +255,7 @@ public partial class SystemSettings
         await BotService.ReloadCacheAsync("all");
         _isSavingTokenLimits = false;
         _saveMessage = $"Token 守門設定已儲存（全域月限={_globalMonthlyLimitK}K / 單次上限={_singleRequestLimitK}K），Bot Cache 已立即刷新。";
+        _saveError   = null;
     }
 
     private async Task ReloadCacheAsync()

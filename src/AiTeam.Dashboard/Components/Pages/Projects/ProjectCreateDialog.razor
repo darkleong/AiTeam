@@ -38,6 +38,9 @@
     [Inject]
     private DashboardProjectService ProjectService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     private string  _name      = "";
     private string  _repoUrl   = "";
     private string  _techStack = "";
@@ -51,6 +54,7 @@
         if (string.IsNullOrWhiteSpace(_name))
         {
             _error = "專案名稱為必填。";
+            Snackbar.Add(_error, Severity.Warning);
             return;
         }
 
@@ -65,6 +69,7 @@
         catch (Exception ex)
         {
             _error = $"新增失敗：{ex.Message}";
+            Snackbar.Add(_error, Severity.Error);
         }
         finally
         {
