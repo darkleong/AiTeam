@@ -41,6 +41,9 @@
     [Inject]
     private DashboardRuleService RuleService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     [Parameter]
     public Rule? EditingRule { get; set; }
 
@@ -102,6 +105,7 @@
         catch (Exception ex)
         {
             _error = $"操作失敗：{ex.Message}";
+            Snackbar.Add($"規則儲存失敗：{ex.Message}", Severity.Error);
         }
         finally
         {

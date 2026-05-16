@@ -35,7 +35,6 @@ public partial class AgentSettings
     private bool                  _isSaving;
     private bool                  _isTogglingActive;
     private bool                  _isSavingLlm;
-    private string?               _saveMessage;
     private string?               _loadError;
 
     // 重啟 Bot
@@ -68,11 +67,19 @@ public partial class AgentSettings
     {
         if (_isTogglingActive) return;
         _isTogglingActive = true;
-
-        agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
-        _saveMessage = $"{agent.Name} 已{(agent.IsActive ? "啟用" : "停用")}";
-
-        _isTogglingActive = false;
+        try
+        {
+            agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
+            Snackbar.Add($"{agent.Name} 已{(agent.IsActive ? "啟用" : "停用")}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{agent.Name} 狀態切換失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTogglingActive = false;
+        }
     }
 
     private async Task OpenCreateAgentDialogAsync()
@@ -83,29 +90,48 @@ public partial class AgentSettings
         {
             _agents.Add(created);
             _trustLevels[created.Id] = created.TrustLevel;
-            _saveMessage = $"Agent「{created.Name}」已新增，重啟 Bot 後生效。";
+            Snackbar.Add($"Agent「{created.Name}」已新增，重啟 Bot 後生效。", Severity.Success);
         }
     }
 
     private async Task SaveTrustLevelAsync(AgentConfigDto agent)
     {
-        _isSaving    = true;
-        _saveMessage = null;
-
-        await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
-        agent.TrustLevel = _trustLevels[agent.Id];
-
-        _saveMessage = $"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}";
-        _isSaving    = false;
+        _isSaving = true;
+        try
+        {
+            await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
+            agent.TrustLevel = _trustLevels[agent.Id];
+            Snackbar.Add($"{agent.Name} 信任等級已儲存為 Lv{_trustLevels[agent.Id]}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{agent.Name} 信任等級儲存失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
     }
 
     private async Task RestartBotAsync()
     {
         _isRestarting = true;
-        var success = await BotService.RestartBotAsync();
-        _showRestartConfirm = false;
-        _saveMessage = success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定";
-        _isRestarting = false;
+        try
+        {
+            var success = await BotService.RestartBotAsync();
+            _showRestartConfirm = false;
+            Snackbar.Add(
+                success ? "Bot 重啟指令已送出，請稍候約 30 秒後確認上線狀態" : "重啟失敗，請確認 Bot 服務設定",
+                success ? Severity.Success : Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"重啟指令送出失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRestarting = false;
+        }
     }
 
     /// <summary>
