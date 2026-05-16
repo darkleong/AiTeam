@@ -176,7 +176,8 @@ public class PetraOrchestratorServiceTests
         Assert.NotNull(method);
 
         // Stage 70：BuildPetraSystemPrompt 簽名升級加 bool useSubtaskPlanning（default false）— reflection 不自動套 C# default value，顯式傳 false 維持既有 Stage 64/67/69 baseline 行為
-        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", false })!;
+        // Stage 72：簽名再加第 3 optional string? baseTemplateOverride（default null）— null 走 PetraPromptTemplate.Template hardcoded baseline / 0 regression
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", false, null })!;
 
         // 三 trigger 具體判準（Stage 64 子項 3 升級）
         Assert.Contains("1-on-1 trigger", prompt);
@@ -252,6 +253,7 @@ public class PetraOrchestratorServiceTests
 
         // PetraOrchestratorService 建構：DispatchWorkersAsync 只用 logger / sessionRepo / db，其他 dep 傳 null! / Null logger
         // Stage 67：ctor 加 ITalentFactory + WorkflowSettingsResolver 兩參數 — Test 12 reflection invoke DispatchWorkersAsync 不走 StartAsync 不 call 此兩 dep / null! 安全
+        // Stage 72：ctor 加 PromptResolver — Test 12 不走 BuildPetraSystemPromptForRuntimeAsync 不 call promptResolver / null! 安全
         var orch = new PetraOrchestratorService(
             tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
             talentFactory: null!,
@@ -262,6 +264,7 @@ public class PetraOrchestratorServiceTests
             providerFactory: null!,
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            promptResolver: null!,
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -703,7 +706,8 @@ public class PetraOrchestratorServiceTests
         Assert.NotNull(method);
 
         // useSubtaskPlanning = true → 含 hierarchical decomposition + JSON 輸出格式 + few-shot 範例
-        var promptWith = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true })!;
+        // Stage 72：簽名加第 3 optional baseTemplateOverride（null = hardcoded baseline）
+        var promptWith = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true, null })!;
         Assert.Contains("Hierarchical Decomposition", promptWith);
         Assert.Contains("dependency", promptWith, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("JSON SubtaskPlan", promptWith);
@@ -719,7 +723,7 @@ public class PetraOrchestratorServiceTests
         Assert.Contains("Kickoff trigger", promptWith);
 
         // useSubtaskPlanning = false（default）→ 守 Stage 67/69 既有 prompt 0 regression — Test9 既有 baseline 仍綠
-        var promptWithout = (string)method.Invoke(null, new object?[] { "code_implementation, code_review", false })!;
+        var promptWithout = (string)method.Invoke(null, new object?[] { "code_implementation, code_review", false, null })!;
         Assert.Contains("需求拆解紀律", promptWithout);
         Assert.DoesNotContain("Hierarchical Decomposition", promptWithout);
         Assert.DoesNotContain("JSON SubtaskPlan", promptWithout);
@@ -736,7 +740,8 @@ public class PetraOrchestratorServiceTests
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
-        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true })!;
+        // Stage 72：簽名加第 3 optional baseTemplateOverride（null = hardcoded baseline）
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true, null })!;
 
         // Stage 71 新增：線性整包反例 + 判斷邊界
         Assert.Contains("線性整包", prompt);
@@ -847,6 +852,7 @@ public class PetraOrchestratorServiceTests
             providerFactory: null!,
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            promptResolver: null!,
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -881,6 +887,7 @@ public class PetraOrchestratorServiceTests
             providerFactory: null!,
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            promptResolver: null!,
             loggerFactory: NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
         return (db, resolver, sessionRepo, memoryRepo, orch);
@@ -983,5 +990,73 @@ public class PetraOrchestratorServiceTests
         }
         public AIAgent CreateAgent(AiTeam.Bot.Orchestration.Petra.PetraSessionContext ctx)
             => throw new NotImplementedException("DispatchWorkersAsync 收 workerAgents 不會呼叫 CreateAgent");
+    }
+
+    // ─── Test 46（Stage 72）：BuildPetraSystemPrompt baseTemplateOverride 非 null 走 DB base path ─
+    // 驗 override 機制 — 三 placeholder（capabilityRoster / decompositionSection / outputSection）正確 Replace
+    [Fact]
+    public void Test46_BuildPetraSystemPrompt_BaseTemplateOverride_ReplacesAllPlaceholders()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // 自訂 override base template — 含三 placeholder + 自訂內容（驗 DB-loaded path 從 PromptResolver 來的 body 也走相同 Replace 邏輯）
+        const string customBase = """
+[CUSTOM_HEADER]
+roster={{capabilityRoster}}
+---
+{{decompositionSection}}
+---
+{{outputSection}}
+[CUSTOM_FOOTER]
+""";
+
+        // useSubtaskPlanning=true → decomposition + output 走 Stage 70+71 段（含 Hierarchical Decomposition / JSON SubtaskPlan）
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true, customBase })!;
+
+        // override base 標記正確出現
+        Assert.Contains("[CUSTOM_HEADER]", prompt);
+        Assert.Contains("[CUSTOM_FOOTER]", prompt);
+        // 三 placeholder 真實 Replace 成功（不應剩 raw `{{...}}` 字串）
+        Assert.DoesNotContain("{{capabilityRoster}}", prompt);
+        Assert.DoesNotContain("{{decompositionSection}}", prompt);
+        Assert.DoesNotContain("{{outputSection}}", prompt);
+        // dynamic 注入內容存在
+        Assert.Contains("roster=code_implementation, code_review", prompt);
+        // Stage 70 decomposition + Stage 70 output 段（useSubtaskPlanning=true）注入後仍存在
+        Assert.Contains("Hierarchical Decomposition", prompt);
+        Assert.Contains("JSON SubtaskPlan", prompt);
+    }
+
+    // ─── Test 47（Stage 72）：BuildPetraSystemPrompt baseTemplateOverride=null 走 hardcoded PetraPromptTemplate.Template baseline ─
+    // 驗 Stage 64+67+70+71 累積 baseline 0 regression
+    [Fact]
+    public void Test47_BuildPetraSystemPrompt_NullOverride_UsesHardcodedTemplate()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // override=null → 走 PetraPromptTemplate.Template hardcoded constant（Test9 等價驗）
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", false, null })!;
+
+        // 對齊 PetraPromptTemplate.Template 內容（Stage 64 三 trigger）
+        Assert.Contains("v5 動態架構 Multi-Agent Orchestrator", prompt);
+        Assert.Contains("1-on-1 trigger", prompt);
+        Assert.Contains("Design trigger", prompt);
+        Assert.Contains("Kickoff trigger", prompt);
+        // capability roster 注入
+        Assert.Contains("code_implementation, code_review", prompt);
+        // Stage 67 既有需求拆解紀律段（useSubtaskPlanning=false）
+        Assert.Contains("需求拆解紀律", prompt);
+        // useSubtaskPlanning=false 不該含 Stage 70 hierarchical decomposition 段
+        Assert.DoesNotContain("Hierarchical Decomposition", prompt);
+        // 三 placeholder 全部 Replace 完成（不應剩 raw 字串）
+        Assert.DoesNotContain("{{capabilityRoster}}", prompt);
+        Assert.DoesNotContain("{{decompositionSection}}", prompt);
+        Assert.DoesNotContain("{{outputSection}}", prompt);
     }
 }

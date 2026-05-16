@@ -30,6 +30,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskMemory>   TaskMemories   => Set<TaskMemory>();
     public DbSet<TalentMemory> TalentMemories => Set<TalentMemory>();
 
+    // Stage 72：v5.5 Phase 2 Step 5 — Prompt DB 化（職位層 SkillPrompt + 個性層 TalentPrompt 兩層 schema）
+    public DbSet<SkillPrompt>  SkillPrompts  => Set<SkillPrompt>();
+    public DbSet<TalentPrompt> TalentPrompts => Set<TalentPrompt>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Team>(e =>
@@ -265,6 +269,39 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasDatabaseName("ix_talent_memories_talent_key_global");
             // compact 排序常用 — (TalentId, CreatedAt)
             e.HasIndex(x => new { x.TalentId, x.CreatedAt });
+        });
+
+        // Stage 72：v5.5 Phase 2 Step 5 — SkillPrompt（職位層）
+        // partial unique index：同 SkillName 只一條 IsActive=true（version archive row IsActive=false 不衝突）
+        modelBuilder.Entity<SkillPrompt>(e =>
+        {
+            e.ToTable("skill_prompts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.PromptBody).HasColumnType("text");
+            // partial unique — 對齊 Stage 67/69 既有紀律（ef-core.md Stage 68 段 PostgreSQL NULL ≠ NULL 雷 partial filter 修法延伸）
+            e.HasIndex(x => x.SkillName)
+                .IsUnique()
+                .HasFilter("\"IsActive\" = true")
+                .HasDatabaseName("ix_skill_prompts_active_per_skill");
+            // 版本歷史查詢用
+            e.HasIndex(x => new { x.SkillName, x.VersionNumber });
+        });
+
+        // Stage 72：v5.5 Phase 2 Step 5 — TalentPrompt（個性層 / per-Talent）
+        modelBuilder.Entity<TalentPrompt>(e =>
+        {
+            e.ToTable("talent_prompts");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.PersonaBody).HasColumnType("text");
+            e.HasOne(x => x.Talent).WithMany().HasForeignKey(x => x.TalentId);
+            // partial unique — 同 TalentId 只一條 IsActive=true
+            e.HasIndex(x => x.TalentId)
+                .IsUnique()
+                .HasFilter("\"IsActive\" = true")
+                .HasDatabaseName("ix_talent_prompts_active_per_talent");
+            e.HasIndex(x => new { x.TalentId, x.VersionNumber });
         });
     }
 }

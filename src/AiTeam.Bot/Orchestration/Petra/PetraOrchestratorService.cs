@@ -1,8 +1,10 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using AiTeam.Data.SeedContent;
 using LibGit2Sharp;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -39,6 +41,7 @@ public class PetraOrchestratorService(
     LlmProviderFactory providerFactory,
     GitHubService gitHubService,
     IConfiguration configuration,
+    PromptResolver promptResolver,
     ILoggerFactory loggerFactory,
     ILogger<PetraOrchestratorService> logger)
 {
@@ -219,7 +222,7 @@ public class PetraOrchestratorService(
         CancellationToken ct)
     {
         var capabilityRoster = string.Join(", ", tools.SelectMany(t => t.Capabilities).Distinct());
-        var systemPrompt = BuildPetraSystemPrompt(capabilityRoster);
+        var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(capabilityRoster, useSubtaskPlanning: false, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
@@ -399,7 +402,7 @@ public class PetraOrchestratorService(
     {
         // skill roster 從 talent.Skills 取（vs 既有 DecideAsync 取 tools.SelectMany(Capabilities)）— 對 LLM 等價
         var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
-        var systemPrompt = BuildPetraSystemPrompt(skillRoster);
+        var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(skillRoster, useSubtaskPlanning: false, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
@@ -466,7 +469,7 @@ public class PetraOrchestratorService(
         CancellationToken ct)
     {
         var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
-        var systemPrompt = BuildPetraSystemPrompt(skillRoster, useSubtaskPlanning: true);
+        var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(skillRoster, useSubtaskPlanning: true, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
@@ -882,8 +885,16 @@ public class PetraOrchestratorService(
     ///
     /// Stage 70：useSubtaskPlanning=true 時升級「需求拆解紀律」為 hierarchical decomposition + dependency graph 紀律段
     /// + few-shot 範例 + 輸出格式改為 JSON SubtaskPlan（取代 `|` 分隔字串）。default false 保 Stage 67/69 既有 path 0 regression。
+    ///
+    /// Stage 72：v5.5 Phase 2 Step 5 — 加第 3 optional param `baseTemplateOverride` 支援 DB-driven prompt。
+    /// override != null（feature flag=true 從 DB load）→ 用 override 當 base template + string.Replace placeholder 注入動態值。
+    /// override == null（feature flag=false / Test 9/27/28 baseline）→ 走 PetraPromptTemplate.Template 既有 hardcoded constant。
+    /// 動態 skill roster + Stage 70/71 decomposition/output 段 100% 不動（議題 4 內容不動 / 只搬家）。
     /// </summary>
-    private static string BuildPetraSystemPrompt(string capabilityRoster, bool useSubtaskPlanning = false)
+    private static string BuildPetraSystemPrompt(
+        string capabilityRoster,
+        bool useSubtaskPlanning = false,
+        string? baseTemplateOverride = null)
     {
         var decompositionSection = useSubtaskPlanning
             ? """
@@ -949,30 +960,28 @@ public class PetraOrchestratorService(
 - 正例：`code_implementation|code_review`
 """;
 
-        return $$"""
-你是 Petra — v5 動態架構 Multi-Agent Orchestrator。
-依任務規模 + 三 trigger 條件動態決定 Worker capability 序列。
+        // Stage 72：base template 來源
+        // - override != null → DB-loaded（含 {{capabilityRoster}}/{{decompositionSection}}/{{outputSection}} placeholder）
+        // - override == null → PetraPromptTemplate.Template 既有 hardcoded constant（Test 9/27/28 baseline / Stage 64+67+70+71 累積內容 byte-for-byte 對齊）
+        var baseTemplate = baseTemplateOverride ?? PetraPromptTemplate.Template;
+        return baseTemplate
+            .Replace("{{capabilityRoster}}",     capabilityRoster)
+            .Replace("{{decompositionSection}}", decompositionSection)
+            .Replace("{{outputSection}}",        outputSection);
+    }
 
-【可選 capability】{{capabilityRoster}}
-
-【三 trigger 條件具體判斷準則】
-
-★ 1-on-1 trigger（純技術改動 / 配置 / 文件 / typo）
-  判準：< 50 行改動 / 單檔範圍 / 無架構決策
-  範例：「修 README typo」「調 Gemini BaseUrl 預設值」「rename 一個變數」
-  → 回「code_implementation」
-
-★ Design trigger（跨 3-5 元件 / 中型功能 / 需 review）
-  判準：Issue ≥ 5 OR 跨多檔 OR 涉及 API/DTO 邊界
-  範例：「Dashboard 加 Petra session 列表頁」「新增一個 Agent 設定欄位」
-  → 回「code_implementation|code_review」
-
-★ Kickoff trigger（架構決策 / 跨多領域 / 大型功能）
-  判準：新 Service 層 / 新 framework wire / 跨 domain 互動
-  範例：「v5 動態架構 PoC」「新增 Memory module」
-  → 回「code_implementation|code_review|code_implementation|code_review」
-{{decompositionSection}}
-{{outputSection}}
-""";
+    /// <summary>
+    /// Stage 72：v5.5 Phase 2 Step 5 — runtime async wrapper for BuildPetraSystemPrompt（含 feature flag check + DB load）。
+    ///
+    /// flag=`Workflow:UseV5PromptDb`=true → 透過 PromptResolver 取 DB SkillPrompt `petra_orchestration` PromptBody 當 base template override。
+    /// flag=false → override=null，走 hardcoded PetraPromptTemplate.Template 既有 baseline 0 regression。
+    /// </summary>
+    private async Task<string> BuildPetraSystemPromptForRuntimeAsync(
+        string capabilityRoster,
+        bool useSubtaskPlanning,
+        CancellationToken ct)
+    {
+        var dbBase = await promptResolver.ResolvePetraBaseTemplateAsync(ct);
+        return BuildPetraSystemPrompt(capabilityRoster, useSubtaskPlanning, dbBase);
     }
 }

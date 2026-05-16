@@ -23,6 +23,7 @@ public sealed class GenericAgentTool : ITalent
     private readonly IClaudeCodeService _claudeCode;
     private readonly TokenLogService _tokenLogService;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly PromptResolver? _promptResolver;
 
     public string Name { get; }
     public IReadOnlyList<string> Skills { get; }
@@ -31,19 +32,22 @@ public sealed class GenericAgentTool : ITalent
         Talent talent,
         IClaudeCodeService claudeCode,
         TokenLogService tokenLogService,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        PromptResolver? promptResolver = null)
     {
         Name = talent.Name;
         Skills = talent.Skills.Select(s => s.SkillName).ToList();
         _claudeCode = claudeCode;
         _tokenLogService = tokenLogService;
         _loggerFactory = loggerFactory;
+        _promptResolver = promptResolver;
     }
 
     /// <summary>
     /// Stage 67：動態建 AIAgent — 對齊既有 PetraWorkerHelper.BuildAgent 7 參數 pattern（v5 既有 worker class CreateAgent 走同 helper）。
     /// capability=skill 動態傳（解 Talent 兼多 Skill 問題）。
     /// instructions=null 對齊 v5 既有 path — ClaudeCodeChatClientAdapter dispatch 內 systemPrompt 由 capability → CLAUDE_*.md 動態載入。
+    /// Stage 72：propagate PromptResolver（feature flag UseV5PromptDb=true 時 adapter 走 DB SkillPrompt path / flag=false 退既有 file fallback）。
     /// </summary>
     public AIAgent CreateAgent(PetraSessionContext ctx, string skill)
     {
@@ -54,6 +58,7 @@ public sealed class GenericAgentTool : ITalent
             instructions: $"Talent={Name} Skill={skill}（Stage 67 v5.5 dispatch）",
             ctx: ctx,
             tokenLogService: _tokenLogService,
-            loggerFactory: _loggerFactory);
+            loggerFactory: _loggerFactory,
+            promptResolver: _promptResolver);
     }
 }

@@ -1,3 +1,4 @@
+using AiTeam.Data.SeedContent;
 using AiTeam.Shared.Constants;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,6 +93,83 @@ public static class DbSeeder
         // Stage 67：v5.5 Phase 1 Step 2 — baseline 6 Talent + 6 Skill assignment seed（幂等）
         await EnsureTalentsAsync(db);
         await db.SaveChangesAsync();
+
+        // Stage 72：v5.5 Phase 2 Step 5 — baseline 6 SkillPrompts seed（幂等 + race-safe / TalentPrompts 0 row baseline）
+        await EnsureSkillPromptsAsync(db);
+    }
+
+    /// <summary>
+    /// Stage 72：v5.5 Phase 2 Step 5 — 把 v5.5 path 既有 hardcoded prompt seed 進 skill_prompts table（議題 4 內容不動 / 只搬家）。
+    ///
+    /// 6 個 SkillPrompts（baseline VersionNumber=1 / IsActive=true）：
+    /// - code_implementation  ← Resources/CLAUDE_Cody.md content
+    /// - code_review          ← Resources/CLAUDE_Vera.md content
+    /// - qa_testing           ← Resources/CLAUDE_Quinn.md content
+    /// - documentation        ← Resources/CLAUDE_Sage.md content
+    /// - ceo_orchestration    ← Resources/CLAUDE_Victoria.md content（seed only — Stage 72 無 CEO read path 整合）
+    /// - petra_orchestration  ← PetraPromptTemplate.Template（議題 1 路線 A — 不含 CLAUDE_Petra.md content / 對齊 BuildPetraSystemPrompt 既有 template literal）
+    ///
+    /// race-safe（對齊 Stage 67 EnsureTalentsAsync pattern）：per-row SaveChanges + catch DbUpdateException + Detach 還原 EF context state。
+    /// 檔案不存在 → log warning + skip（不阻擋其他 seed）— production 補檔後重啟 Bot 重新 seed。
+    /// </summary>
+    private static async Task EnsureSkillPromptsAsync(AppDbContext db)
+    {
+        var baseDir = AppContext.BaseDirectory;
+
+        // (SkillName, FilePath or "<<INLINE>>" for PetraPromptTemplate)
+        var seeds = new (string SkillName, string Source)[]
+        {
+            ("code_implementation", Path.Combine(baseDir, "Resources", "CLAUDE_Cody.md")),
+            ("code_review",         Path.Combine(baseDir, "Resources", "CLAUDE_Vera.md")),
+            ("qa_testing",          Path.Combine(baseDir, "Resources", "CLAUDE_Quinn.md")),
+            ("documentation",       Path.Combine(baseDir, "Resources", "CLAUDE_Sage.md")),
+            ("ceo_orchestration",   Path.Combine(baseDir, "Resources", "CLAUDE_Victoria.md")),
+            ("petra_orchestration", "<<INLINE>>"),
+        };
+
+        foreach (var (skillName, source) in seeds)
+        {
+            // 幂等：同 SkillName 已有 active row → skip（重啟 / Bot+Dashboard 並行 seed 場景都安全）
+            var existing = await db.SkillPrompts
+                .FirstOrDefaultAsync(s => s.SkillName == skillName && s.IsActive);
+            if (existing is not null) continue;
+
+            string body;
+            if (source == "<<INLINE>>")
+            {
+                body = PetraPromptTemplate.Template;
+            }
+            else
+            {
+                if (!File.Exists(source))
+                {
+                    // log via Console（DbSeeder 為 static class 無 ILogger 注入 — 對齊既有 pattern 不引入 logger 包袱）
+                    Console.WriteLine($"[DbSeeder][Stage72] SkillPrompt 來源檔不存在 skip seed：{skillName} ← {source}");
+                    continue;
+                }
+                body = await File.ReadAllTextAsync(source);
+            }
+
+            var seed = new SkillPrompt
+            {
+                SkillName     = skillName,
+                PromptBody    = body,
+                VersionNumber = 1,
+                IsActive      = true,
+                CreatedByUser = null,   // baseline seed = system / Phase 3 audit 才寫 user
+            };
+            db.SkillPrompts.Add(seed);
+
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // race loser — 另一個 process 已 seed 同 SkillName → detach 還原 EF context state 繼續下個 seed
+                db.Entry(seed).State = EntityState.Detached;
+            }
+        }
     }
 
     /// <summary>

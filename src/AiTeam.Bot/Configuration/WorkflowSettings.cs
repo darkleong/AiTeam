@@ -98,4 +98,12 @@ public class WorkflowSettings
     /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 第二步 = Phase 2 第一步之上演進）。
     /// AppSettings 表 key = "Workflow:UseV5SubtaskPlanning"，DB 優先，appsettings.json fallback。</summary>
     public bool UseV5SubtaskPlanning { get; set; } = false;
+
+    /// <summary>Stage 72：v5.5 Phase 2 Step 5 — Prompt DB 化 feature flag。
+    /// 預設 false（守 v5.5 既有 hardcoded path fallback — Trial_v18 驗 + Christ 拍板才切 default true）。
+    /// flag=true 時 BuildPetraSystemPrompt 從 DB load `petra_orchestration` SkillPrompt base template +
+    /// ClaudeCodeChatClientAdapter Worker dispatch 從 DB load `{capability}` SkillPrompt（含 TalentPrompt persona nullable overlay）。
+    /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 第三步 = Phase 2 第二步之上演進）。
+    /// AppSettings 表 key = "Workflow:UseV5PromptDb"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseV5PromptDb { get; set; } = false;
 }

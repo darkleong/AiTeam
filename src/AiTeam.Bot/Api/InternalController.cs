@@ -25,6 +25,7 @@ public class InternalController(
     RulesService rulesService,
     AgentQueueService queueService,
     AgentConfigCache agentConfigCache,
+    PromptResolver promptResolver,
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
@@ -34,6 +35,7 @@ public class InternalController(
     /// scope: rules | agents | agent-config | all（預設 all）
     /// - agents       = AppSettings 資料表快取（AppSettingsService；legacy 命名，對應 app_settings 資料表）
     /// - agent-config = Stage 38 新增：AgentConfig 資料表的 Provider/Model 快取（AgentConfigCache）
+    /// - all          = Stage 72 新增：含 PromptResolver（skill_prompts / talent_prompts 快取 — production rollback SQL UPDATE + reload-cache `all` 5 分鐘內生效）
     /// </summary>
     [HttpPost("reload-cache")]
     public IActionResult ReloadCache([FromQuery] string scope = "all")
@@ -50,6 +52,10 @@ public class InternalController(
         // Stage 38：清 AgentConfig 資料表的 Provider/Model 快取（Dashboard 改完 Agent 設定頁呼叫）
         if (scope is "agent-config" or "all")
             agentConfigCache.InvalidateCache();
+
+        // Stage 72：清 SkillPrompt / TalentPrompt cache（議題 2 路線 A — 不加新 `prompts` scope / Phase 3 WebUI 直接 CRUD 後此整合多餘）
+        if (scope is "all")
+            promptResolver.InvalidateCache();
 
         logger.LogInformation("Bot Cache 已清除（scope={Scope}）", scope);
         return Ok(new { message = "已套用變更", scope });

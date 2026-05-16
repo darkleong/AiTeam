@@ -2,6 +2,7 @@ using AiTeam.Bot.Agents;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using Microsoft.EntityFrameworkCore;
+// AiTeam.Bot.Services.PromptResolver — already covered by `using AiTeam.Bot.Services`
 
 namespace AiTeam.Bot.Orchestration.Petra;
 
@@ -24,11 +25,13 @@ public interface ITalentFactory
 /// <summary>
 /// Stage 67：預設 Talent factory 實作（DI Singleton — 用 IServiceScopeFactory 解 Singleton/Scoped 雷）。
 /// 每次 GetAllAsync 開新 scope query DB — 簡單實作（無 cache / Phase 3 加 TTL cache 評估）。
+/// Stage 72：注入 PromptResolver 傳給 GenericAgentTool — adapter dispatch 時走 DB SkillPrompt path（feature flag=true 場景）。
 /// </summary>
 internal sealed class DefaultTalentFactory(
     IServiceScopeFactory scopeFactory,
     IClaudeCodeService claudeCode,
     TokenLogService tokenLogService,
+    PromptResolver promptResolver,
     ILoggerFactory loggerFactory) : ITalentFactory
 {
     public async Task<IReadOnlyList<ITalent>> GetAllAsync(CancellationToken ct = default)
@@ -46,7 +49,7 @@ internal sealed class DefaultTalentFactory(
         var workerTalents = talents.Where(t => t.Skills.Count > 0).ToList();
 
         return workerTalents
-            .Select(ITalent (t) => new GenericAgentTool(t, claudeCode, tokenLogService, loggerFactory))
+            .Select(ITalent (t) => new GenericAgentTool(t, claudeCode, tokenLogService, loggerFactory, promptResolver))
             .ToList();
     }
 }

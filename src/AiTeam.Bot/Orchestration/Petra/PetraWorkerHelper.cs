@@ -1,4 +1,5 @@
 using AiTeam.Bot.Agents;
+using AiTeam.Bot.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -20,6 +21,8 @@ internal static class PetraWorkerHelper
     /// <summary>
     /// 建 ChatClientAgent 包裝 ClaudeCodeChatClientAdapter（路線 A — Stage 63A 限制 (b) workaround 必走）。
     /// 對齊 ChatClientAgent ctor 重載 1：(IChatClient, instructions, name, description, tools, ILoggerFactory, IServiceProvider)。
+    ///
+    /// Stage 72：加 optional `promptResolver` param — 非 null 時 adapter 走 DB SkillPrompt path（v5.5 path）/ null 時退既有 file fallback。
     /// </summary>
     public static AIAgent BuildAgent(
         IClaudeCodeService claudeCode,
@@ -28,7 +31,8 @@ internal static class PetraWorkerHelper
         string instructions,
         PetraSessionContext ctx,
         AiTeam.Bot.Services.TokenLogService tokenLogService,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        PromptResolver? promptResolver = null)
     {
         var adapter = new ClaudeCodeChatClientAdapter(
             claudeCode,
@@ -38,7 +42,8 @@ internal static class PetraWorkerHelper
             ctx.ApiKey,
             ctx.WorkingDir,
             tokenLogService,
-            loggerFactory.CreateLogger<ClaudeCodeChatClientAdapter>());
+            loggerFactory.CreateLogger<ClaudeCodeChatClientAdapter>(),
+            promptResolver);
 
         return new ChatClientAgent(
             chatClient: adapter,

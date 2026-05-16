@@ -400,3 +400,49 @@ public class TalentMemory
 
     public Talent? Talent { get; set; }
 }
+
+/// <summary>
+/// Stage 72：v5.5 Phase 2 Step 5 — Prompt DB 化 / 職位層 SkillPrompt（per-Skill 共享 / 工作範圍）。
+/// 對齊業界 2026 prompt orchestration 主流：DB-backed + versioning + rollback 保護 production。
+///
+/// Versioning method A：單表 + version_number + is_active flag（同 SkillName 多 row 累積，partial unique index 守一條 active）。
+/// rollback = SQL UPDATE 切 is_active（不刪舊版本，留 audit trail）。
+/// </summary>
+public class SkillPrompt
+{
+    public Guid Id { get; set; }
+    /// <summary>Skill 名稱（如 code_implementation / code_review / petra_orchestration）。</summary>
+    public string SkillName { get; set; } = "";
+    /// <summary>Prompt 本體（含 {{capabilityRoster}}/{{decompositionSection}}/{{outputSection}} placeholder 對齊 BuildPetraSystemPrompt — 其他 skill 為純文字內容）。</summary>
+    public string PromptBody { get; set; } = "";
+    /// <summary>版本號（baseline = 1，每次 Upsert 累加）。</summary>
+    public int VersionNumber { get; set; } = 1;
+    /// <summary>是否為當前 active 版本（partial unique index 守同 SkillName 只一條 true）。</summary>
+    public bool IsActive { get; set; } = true;
+    /// <summary>Stage 72：Phase 3 audit 預留（nullable — baseline seed 為 null）。</summary>
+    public string? CreatedByUser { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Stage 72：v5.5 Phase 2 Step 5 — Prompt DB 化 / 個性層 TalentPrompt（per-Talent / 風格差異 / nullable）。
+/// 對齊 Christ 議題 2 拍板：「同 Skill 多 Talent 不重複存職責 — SkillPrompt 共享」+「Talent 個性風格分開 — TalentPrompt 各自獨立」。
+/// baseline 0 row（Phase 3 WebUI Talent CRUD 才補 persona content / Stage 72 schema 預留 nullable）。
+/// </summary>
+public class TalentPrompt
+{
+    public Guid Id { get; set; }
+    /// <summary>所屬 Talent（required FK → talents）。</summary>
+    public Guid TalentId { get; set; }
+    /// <summary>Persona 本體（風格 / 個性 / 語氣等 — Stage 72 baseline 0 row，Phase 3 補）。</summary>
+    public string PersonaBody { get; set; } = "";
+    /// <summary>版本號（baseline = 1）。</summary>
+    public int VersionNumber { get; set; } = 1;
+    /// <summary>是否為當前 active 版本（partial unique index 守同 TalentId 只一條 true）。</summary>
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public Talent? Talent { get; set; }
+}

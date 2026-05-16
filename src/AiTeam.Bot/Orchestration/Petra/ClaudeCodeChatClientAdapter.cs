@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using AiTeam.Bot.Agents;
+using AiTeam.Bot.Services;
 using Microsoft.Extensions.AI;
 
 namespace AiTeam.Bot.Orchestration.Petra;
@@ -43,7 +44,8 @@ internal sealed class ClaudeCodeChatClientAdapter(
     string apiKey,
     string workingDir,
     AiTeam.Bot.Services.TokenLogService? tokenLogService,   // nullable: production DI 必注入 / xUnit test 可傳 null（adapter dispatch 驗 不驗 token_logs 寫入）
-    ILogger<ClaudeCodeChatClientAdapter> logger) : IChatClient
+    ILogger<ClaudeCodeChatClientAdapter> logger,
+    PromptResolver? promptResolver = null) : IChatClient    // Stage 72：nullable / null = test path 退既有 Resources/CLAUDE_<X>.md file fallback（Test 7/13 0 改）
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
 
@@ -92,25 +94,41 @@ internal sealed class ClaudeCodeChatClientAdapter(
 
         // Stage 65 子項 1：CLAUDE.md inject ritual 修根因 — 改用 CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
         // 取代 Stage 64 backup/write/finally restore 整段：讀 template content → systemPrompt 透傳 → ClaudeCodeService.BuildArgs 加 conditional --append-system-prompt flag。
-        var templateName = CapabilityToTemplate.TryGetValue(capability, out var t) ? t : null;
+        //
+        // Stage 72：PromptResolver-first / file fallback 雙路：
+        // - promptResolver != null 且 flag UseV5PromptDb=true → 從 DB SkillPrompt {capability} 取 PromptBody
+        // - promptResolver == null / flag=false / DB cache miss → 退既有 Resources/CLAUDE_<X>.md file path（Test 7/13 + Stage 65/66 baseline 0 regression）
         string? systemPrompt = null;
-        if (templateName is not null)
+        if (promptResolver is not null)
         {
-            var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", templateName);
-            if (File.Exists(templatePath))
+            systemPrompt = await promptResolver.ResolveCapabilityPromptAsync(capability, cancellationToken);
+            if (systemPrompt is not null)
             {
-                systemPrompt = await File.ReadAllTextAsync(templatePath, cancellationToken);
-                logger.LogInformation("CLAUDE template 載入 worker={Worker} template={Template} len={Len}",
-                    workerName, templateName, systemPrompt.Length);
+                logger.LogInformation("Stage 72 SkillPrompt (DB) 載入 worker={Worker} capability={Capability} len={Len}",
+                    workerName, capability, systemPrompt.Length);
+            }
+        }
+        if (systemPrompt is null)
+        {
+            var templateName = CapabilityToTemplate.TryGetValue(capability, out var t) ? t : null;
+            if (templateName is not null)
+            {
+                var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", templateName);
+                if (File.Exists(templatePath))
+                {
+                    systemPrompt = await File.ReadAllTextAsync(templatePath, cancellationToken);
+                    logger.LogInformation("CLAUDE template 載入 worker={Worker} template={Template} len={Len}",
+                        workerName, templateName, systemPrompt.Length);
+                }
+                else
+                {
+                    logger.LogWarning("CLAUDE template 不存在於 {Path}，dispatch 不附 systemPrompt worker={Worker}", templatePath, workerName);
+                }
             }
             else
             {
-                logger.LogWarning("CLAUDE template 不存在於 {Path}，dispatch 不附 systemPrompt worker={Worker}", templatePath, workerName);
+                logger.LogWarning("Capability {Cap} 無對應 CLAUDE template（路線 A — fallback 不附 systemPrompt）worker={Worker}", capability, workerName);
             }
-        }
-        else
-        {
-            logger.LogWarning("Capability {Cap} 無對應 CLAUDE template（路線 A — fallback 不附 systemPrompt）worker={Worker}", capability, workerName);
         }
 
         // Stage 65 子項 2：token_logs 寫入移 finally — 即使 DispatchWithRetryAsync 拋（LlmApiFailureException / cancel）
