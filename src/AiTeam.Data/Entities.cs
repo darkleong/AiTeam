@@ -354,15 +354,18 @@ public class TalentSkill
 
 /// <summary>
 /// Stage 69：v5.5 Phase 2 Step 3 — per-Task 共用記憶（Petra dispatch 多 Talent 共看）。
-/// 跨 session 長期持久層（vs PetraSessionMessage 是 short-term session 對話 history）。
+/// 跨 session 長期持久層（vs PetraSessionMessage 是 short-term session 對話 history — 本表是「事件累積結論」級記憶）。
 /// 對齊業界 2026 Hybrid memory 三層 standard 中段 — searchable recall database / per-task scoping。
+///
+/// Stage 69 v2.1：scope = **PetraSession**（不是 v4 TaskGroup）。
+/// 對齊 v5.5「每次 CEO 觸發 = 一個 PetraSession = 一個 Task event」設計精神 — v5.5 path 刻意不建 v4 workflow 容器（dynamic orchestrator 取代 hierarchical static）。
 /// </summary>
 public class TaskMemory
 {
     public Guid Id { get; set; }
-    /// <summary>所屬 TaskGroup（required FK — 對齊 task_groups）。</summary>
-    public Guid TaskGroupId { get; set; }
-    /// <summary>所屬 Project（nullable — TaskGroup 自身 ProjectId 可能為 null）。</summary>
+    /// <summary>所屬 PetraSession（required FK — 對齊 petra_sessions / cascade delete）。</summary>
+    public Guid PetraSessionId { get; set; }
+    /// <summary>所屬 Project（nullable — PetraSession 自身可能無 ProjectId）。</summary>
     public Guid? ProjectId { get; set; }
     /// <summary>記憶 key（KV 風格 — 如 `decision/cody-output-summary` / `context/business-rule`）。</summary>
     public string Key { get; set; } = "";

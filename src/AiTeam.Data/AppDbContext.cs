@@ -220,23 +220,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Talent).WithMany(t => t.Skills).HasForeignKey(x => x.TalentId);
         });
 
-        // Stage 69：v5.5 Phase 2 Step 3 — per-Task 共用記憶（Petra dispatch 多 Talent 共看）
+        // Stage 69 v2.1：v5.5 Phase 2 Step 3 — per-Task 共用記憶 scope = PetraSession（不是 v4 TaskGroup）
+        // 對齊 v5.5「每次 CEO 觸發 = 一個 PetraSession = 一個 Task event」設計精神
         modelBuilder.Entity<TaskMemory>(e =>
         {
             e.ToTable("task_memories");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
-            // TaskGroupId required FK — 對齊 task_groups（cascade delete 自然清理）
-            e.HasOne<TaskGroup>()
+            // PetraSessionId required FK — 對齊 petra_sessions（cascade delete 自然清理）
+            e.HasOne<PetraSession>()
                 .WithMany()
-                .HasForeignKey(x => x.TaskGroupId)
+                .HasForeignKey(x => x.PetraSessionId)
                 .OnDelete(DeleteBehavior.Cascade);
-            // (TaskGroupId, Key) 唯一 — 同 group 同 key 視為 upsert（caller append vs update 各自判斷）
-            e.HasIndex(x => new { x.TaskGroupId, x.Key })
+            // (PetraSessionId, Key) 唯一 — 同 session 同 key 視為 upsert
+            e.HasIndex(x => new { x.PetraSessionId, x.Key })
                 .IsUnique()
-                .HasDatabaseName("ix_task_memories_group_key");
-            // compact 排序常用 — (TaskGroupId, CreatedAt) 查 oldest
-            e.HasIndex(x => new { x.TaskGroupId, x.CreatedAt });
+                .HasDatabaseName("ix_task_memories_session_key");
+            // compact 排序常用 — (PetraSessionId, CreatedAt) 查 oldest
+            e.HasIndex(x => new { x.PetraSessionId, x.CreatedAt });
         });
 
         // Stage 69：v5.5 Phase 2 Step 3 — per-Talent 私有記憶（個人記憶 / 跨 task 累積）

@@ -3,33 +3,37 @@ using Microsoft.EntityFrameworkCore;
 namespace AiTeam.Data.Repositories;
 
 /// <summary>
-/// Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶資料存取（per-Task 共用 + per-Talent 私有 hybrid 雙層）。
+/// Stage 69（v2.1）：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶資料存取（per-PetraSession 共用 + per-Talent 私有 hybrid 雙層）。
+///
+/// Stage 69 v2.1 修根因（Aria 規劃漏掃 v5.5 path source of truth）：
+/// - TaskMemory scope = **PetraSession**（不是 v4 TaskGroup）— 對齊 v5.5「每次 CEO 觸發 = 一個 PetraSession = 一個 Task event」設計精神
+/// - v5.5 path 刻意不建 v4 workflow 容器（dynamic orchestrator 取代 hierarchical static — PetraOrchestratorService.cs:50 comment「spike forward path 無 TaskGroup」）
 ///
 /// 設計紀律：
-/// - Append 語意實作為 Upsert by Key（同 (group, key) 或 (talent, key, projectId) 已存在 → 更新 Content/UpdatedAt；不存在 → insert）。
-///   schema 層由 unique partial index 保護（TaskMemory 直接 unique / TalentMemory 拆 NULL / NOT NULL 兩條 partial 對齊 Stage 67 紀律）。
+/// - Append 語意實作為 Upsert by Key（同 (session, key) 或 (talent, key, projectId) 已存在 → 更新 Content/UpdatedAt；不存在 → insert）。
+///   schema 層由 unique partial index 保護（TaskMemory 直接 unique (PetraSessionId, Key) / TalentMemory 拆 NULL / NOT NULL 兩條 partial 對齊 Stage 67 紀律）。
 ///   想保留 history → caller 在 key 自加 round/timestamp 後綴。
 /// - Compact：保留 newest N 條，delete 較舊的（CreatedAt 排序）。
 /// - Caller 負責 SaveChangesAsync — 對齊 PetraSessionRepository / BossInteractionRepository pattern。
 /// </summary>
 public class MemoryRepository(AppDbContext db)
 {
-    // ─── Task layer（per-TaskGroup 共用 — Petra dispatch 多 Talent 共看）─────────────
+    // ─── Task layer（per-PetraSession 共用 — Petra dispatch 多 Talent 共看）─────────────
 
-    /// <summary>取 TaskGroup 全部記憶（時序排序 — 注入 prompt 用）。</summary>
-    public Task<List<TaskMemory>> GetTaskMemoriesAsync(Guid taskGroupId, CancellationToken ct = default)
+    /// <summary>取 PetraSession 全部記憶（時序排序 — 注入 prompt 用）。</summary>
+    public Task<List<TaskMemory>> GetTaskMemoriesAsync(Guid petraSessionId, CancellationToken ct = default)
         => db.TaskMemories
-            .Where(m => m.TaskGroupId == taskGroupId)
+            .Where(m => m.PetraSessionId == petraSessionId)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync(ct);
 
-    /// <summary>取 TaskGroup 當前記憶數（compact threshold 比對用）。</summary>
-    public Task<int> CountTaskMemoriesAsync(Guid taskGroupId, CancellationToken ct = default)
-        => db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId, ct);
+    /// <summary>取 PetraSession 當前記憶數（compact threshold 比對用）。</summary>
+    public Task<int> CountTaskMemoriesAsync(Guid petraSessionId, CancellationToken ct = default)
+        => db.TaskMemories.CountAsync(m => m.PetraSessionId == petraSessionId, ct);
 
-    /// <summary>Upsert by Key — 同 (taskGroupId, key) 已存在 → 更新 Content/UpdatedAt；不存在 → insert（caller SaveChangesAsync）。</summary>
+    /// <summary>Upsert by Key — 同 (petraSessionId, key) 已存在 → 更新 Content/UpdatedAt；不存在 → insert（caller SaveChangesAsync）。</summary>
     public async Task<TaskMemory> UpsertTaskMemoryAsync(
-        Guid taskGroupId,
+        Guid petraSessionId,
         Guid? projectId,
         string key,
         string content,
@@ -37,7 +41,7 @@ public class MemoryRepository(AppDbContext db)
         CancellationToken ct = default)
     {
         var existing = await db.TaskMemories
-            .FirstOrDefaultAsync(m => m.TaskGroupId == taskGroupId && m.Key == key, ct);
+            .FirstOrDefaultAsync(m => m.PetraSessionId == petraSessionId && m.Key == key, ct);
         if (existing is not null)
         {
             existing.Content = content;
@@ -49,7 +53,7 @@ public class MemoryRepository(AppDbContext db)
 
         var entity = new TaskMemory
         {
-            TaskGroupId     = taskGroupId,
+            PetraSessionId  = petraSessionId,
             ProjectId       = projectId,
             Key             = key,
             Content         = content,
@@ -65,11 +69,11 @@ public class MemoryRepository(AppDbContext db)
     /// Compact：保留 newest <paramref name="keepCount"/> 條，delete 較舊的（CreatedAt asc 排序前 N-keepCount 條）。
     /// 回傳 delete count（caller SaveChangesAsync 後生效）。
     /// </summary>
-    public async Task<int> CompactTaskMemoryAsync(Guid taskGroupId, int keepCount, CancellationToken ct = default)
+    public async Task<int> CompactTaskMemoryAsync(Guid petraSessionId, int keepCount, CancellationToken ct = default)
     {
         if (keepCount < 0) throw new ArgumentOutOfRangeException(nameof(keepCount), "keepCount 不得為負");
         var all = await db.TaskMemories
-            .Where(m => m.TaskGroupId == taskGroupId)
+            .Where(m => m.PetraSessionId == petraSessionId)
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync(ct);
         if (all.Count <= keepCount) return 0;

@@ -449,14 +449,15 @@ public class PetraOrchestratorServiceTests
         await using var db = CreateInMemoryDb(nameof(Test19_MemoryRepository_UpsertTaskMemory_SameKey_UpdatesExisting));
         await db.Database.EnsureCreatedAsync();
         var repo = new MemoryRepository(db);
-        var taskGroupId = Guid.NewGuid();
+        // Stage 69 v2.1：scope = PetraSession（不是 v4 TaskGroup）— 對齊 v5.5 設計精神
+        var petraSessionId = Guid.NewGuid();
 
         // 1st upsert
-        await repo.UpsertTaskMemoryAsync(taskGroupId, projectId: null, key: "decision/cody-output-summary", content: "first content", createdByTalent: "Cody");
+        await repo.UpsertTaskMemoryAsync(petraSessionId, projectId: null, key: "decision/cody-output-summary", content: "first content", createdByTalent: "Cody");
         await db.SaveChangesAsync();
 
-        var firstCount = await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId);
-        var first = await db.TaskMemories.SingleAsync(m => m.TaskGroupId == taskGroupId);
+        var firstCount = await db.TaskMemories.CountAsync(m => m.PetraSessionId == petraSessionId);
+        var first = await db.TaskMemories.SingleAsync(m => m.PetraSessionId == petraSessionId);
         var firstUpdatedAt = first.UpdatedAt;
         Assert.Equal(1, firstCount);
         Assert.Equal("first content", first.Content);
@@ -465,11 +466,11 @@ public class PetraOrchestratorServiceTests
         await Task.Delay(10);
 
         // 2nd upsert 同 key
-        await repo.UpsertTaskMemoryAsync(taskGroupId, projectId: null, key: "decision/cody-output-summary", content: "second content", createdByTalent: "Vera");
+        await repo.UpsertTaskMemoryAsync(petraSessionId, projectId: null, key: "decision/cody-output-summary", content: "second content", createdByTalent: "Vera");
         await db.SaveChangesAsync();
 
-        var secondCount = await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId);
-        var second = await db.TaskMemories.SingleAsync(m => m.TaskGroupId == taskGroupId);
+        var secondCount = await db.TaskMemories.CountAsync(m => m.PetraSessionId == petraSessionId);
+        var second = await db.TaskMemories.SingleAsync(m => m.PetraSessionId == petraSessionId);
         Assert.Equal(1, secondCount);     // upsert — 仍 1 row
         Assert.Equal("second content", second.Content);
         Assert.True(second.UpdatedAt > firstUpdatedAt, $"UpdatedAt 應推進 — first={firstUpdatedAt:O} second={second.UpdatedAt:O}");
@@ -484,7 +485,7 @@ public class PetraOrchestratorServiceTests
         await using var db = CreateInMemoryDb(nameof(Test20_MemoryRepository_CompactTaskMemory_KeepsNewestN));
         await db.Database.EnsureCreatedAsync();
         var repo = new MemoryRepository(db);
-        var taskGroupId = Guid.NewGuid();
+        var petraSessionId = Guid.NewGuid();
 
         // 寫 100 條 — 每條 key 不同（unique constraint 不撞）+ CreatedAt 升序遞增
         var baseTime = DateTime.UtcNow.AddHours(-1);
@@ -492,7 +493,7 @@ public class PetraOrchestratorServiceTests
         {
             db.TaskMemories.Add(new TaskMemory
             {
-                TaskGroupId = taskGroupId,
+                PetraSessionId = petraSessionId,
                 Key = $"entry/{i:D3}",
                 Content = $"content-{i}",
                 CreatedByTalent = "Cody",
@@ -501,15 +502,15 @@ public class PetraOrchestratorServiceTests
             });
         }
         await db.SaveChangesAsync();
-        Assert.Equal(100, await db.TaskMemories.CountAsync(m => m.TaskGroupId == taskGroupId));
+        Assert.Equal(100, await db.TaskMemories.CountAsync(m => m.PetraSessionId == petraSessionId));
 
         // compact 保留 newest 50
-        var deleted = await repo.CompactTaskMemoryAsync(taskGroupId, keepCount: 50);
+        var deleted = await repo.CompactTaskMemoryAsync(petraSessionId, keepCount: 50);
         await db.SaveChangesAsync();
 
         Assert.Equal(50, deleted);
         var remaining = await db.TaskMemories
-            .Where(m => m.TaskGroupId == taskGroupId)
+            .Where(m => m.PetraSessionId == petraSessionId)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
         Assert.Equal(50, remaining.Count);
@@ -567,16 +568,16 @@ public class PetraOrchestratorServiceTests
         await using var db = CreateInMemoryDb(nameof(Test22_MemoryRepository_GetTaskMemories_OrderedByCreatedAt));
         await db.Database.EnsureCreatedAsync();
         var repo = new MemoryRepository(db);
-        var taskGroupId = Guid.NewGuid();
+        var petraSessionId = Guid.NewGuid();
 
         // 故意亂序寫入（CreatedAt 不依 insert 順序）
         var baseTime = DateTime.UtcNow.AddMinutes(-30);
-        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k3", Content = "third", CreatedByTalent = "Cody", CreatedAt = baseTime.AddMinutes(20), UpdatedAt = baseTime.AddMinutes(20) });
-        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k1", Content = "first", CreatedByTalent = "Cody", CreatedAt = baseTime, UpdatedAt = baseTime });
-        db.TaskMemories.Add(new TaskMemory { TaskGroupId = taskGroupId, Key = "k2", Content = "second", CreatedByTalent = "Vera", CreatedAt = baseTime.AddMinutes(10), UpdatedAt = baseTime.AddMinutes(10) });
+        db.TaskMemories.Add(new TaskMemory { PetraSessionId = petraSessionId, Key = "k3", Content = "third", CreatedByTalent = "Cody", CreatedAt = baseTime.AddMinutes(20), UpdatedAt = baseTime.AddMinutes(20) });
+        db.TaskMemories.Add(new TaskMemory { PetraSessionId = petraSessionId, Key = "k1", Content = "first", CreatedByTalent = "Cody", CreatedAt = baseTime, UpdatedAt = baseTime });
+        db.TaskMemories.Add(new TaskMemory { PetraSessionId = petraSessionId, Key = "k2", Content = "second", CreatedByTalent = "Vera", CreatedAt = baseTime.AddMinutes(10), UpdatedAt = baseTime.AddMinutes(10) });
         await db.SaveChangesAsync();
 
-        var got = await repo.GetTaskMemoriesAsync(taskGroupId);
+        var got = await repo.GetTaskMemoriesAsync(petraSessionId);
         Assert.Equal(3, got.Count);
         Assert.Equal("k1", got[0].Key);
         Assert.Equal("k2", got[1].Key);

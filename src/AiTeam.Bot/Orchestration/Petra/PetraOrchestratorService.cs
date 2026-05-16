@@ -94,11 +94,12 @@ public class PetraOrchestratorService(
                     talentAgents[i] = talentPicks[i].CreateAgent(sessionWithCtx, skills[i]);
                 }
 
-                // Stage 69：v5.5 Phase 2 Step 3 — v5Memory flag 三 flag 連動（必須 v5 + v5.5 + memory 同時 true 才生效）
+                // Stage 69 v2.1：v5.5 Phase 2 Step 3 — v5Memory flag 三 flag 連動（必須 v5 + v5.5 + memory 同時 true 才生效）
+                // scope = PetraSession（不是 v4 TaskGroup）— session.Id 100% 有值，移除 taskGroupId gate
                 var useV5Memory = await workflowResolver.GetUseV5MemoryAsync(ct);
                 // talentName → Talent.Id lookup map（v5.5 baseline 全 ProjectId=null 全域 Talent / Phase 3 per-Project Talent 加入時需擴展此 query）
                 Dictionary<string, Guid>? talentNameToIdMap = null;
-                if (useV5Memory && taskGroupId is not null)
+                if (useV5Memory)
                 {
                     var names = talentPicks.Select(t => t.Name).Distinct().ToList();
                     talentNameToIdMap = await db.Talents
@@ -108,7 +109,7 @@ public class PetraOrchestratorService(
 
                 await DispatchTalentsAsync(
                     session.Id, taskInput, skills, talentPicks, talentAgents,
-                    useV5Memory, taskGroupId, talentNameToIdMap, ct);
+                    useV5Memory, talentNameToIdMap, ct);
                 await db.SaveChangesAsync(ct);
 
                 dispatchNames = talentPicks.Select(t => t.Name).ToList();
@@ -443,9 +444,11 @@ public class PetraOrchestratorService(
     /// Stage 67：v5.5 — 對齊 v5 DispatchWorkersAsync L238-277 自管 chain pattern 但用 ITalent + skill 動態傳。
     /// 同位置同 transaction 寫 PetraSessionMessages tool role — 對齊 Stage 66 修法位置。
     ///
-    /// Stage 69（v5.5 Phase 2 Step 3）：useV5Memory=true 時 dispatch 前注入 TaskMemory + TalentMemory + dispatch 後 upsert 寫回。
+    /// Stage 69 v2.1（v5.5 Phase 2 Step 3）：useV5Memory=true 時 dispatch 前注入 TaskMemory + TalentMemory + dispatch 後 upsert 寫回。
+    /// scope = sessionId（PetraSession.Id 100% 有值 — 對齊 v5.5「每次 CEO 觸發 = 一個 Task event」設計精神，
+    /// 不對齊 v4 TaskGroup 容器 — Aria v2.1 規劃漏掃修根因）。
     /// Talent 個人記憶寫回起步 = candidate A（key=`last-task-summary` / content = output 前 500 字元）。
-    /// useV5Memory=false 或 taskGroupId=null（spike forward path）→ skip memory 段保 v5.5 既有行為 0 regression。
+    /// useV5Memory=false → skip memory 段保 v5.5 既有行為 0 regression。
     /// </summary>
     private async Task<List<WorkerDispatchSummary>> DispatchTalentsAsync(
         Guid sessionId,
@@ -454,12 +457,11 @@ public class PetraOrchestratorService(
         IReadOnlyList<ITalent> talentPicks,
         AIAgent[] talentAgents,
         bool useV5Memory,
-        Guid? taskGroupId,
         IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
         CancellationToken ct)
     {
-        // 三 flag 連動 + taskGroupId 必須有值 + lookup map 必須備好 — 缺一退為 false（保險）
-        var memoryEnabled = useV5Memory && taskGroupId is not null && talentNameToIdMap is not null;
+        // 三 flag 連動 + lookup map 必須備好（caller useV5Memory=true 時應已 build / 缺則退為 false 保險）
+        var memoryEnabled = useV5Memory && talentNameToIdMap is not null;
         var compactKeep = memoryEnabled ? await workflowResolver.GetV5MemoryCompactKeepCountAsync(ct) : 0;
         var compactThresholdPct = memoryEnabled ? await workflowResolver.GetV5MemoryCompactThresholdPercentAsync(ct) : 0;
 
@@ -478,7 +480,7 @@ public class PetraOrchestratorService(
             List<ChatMessage> inputMessages;
             if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentId))
             {
-                var taskMems = await memoryRepo.GetTaskMemoriesAsync(taskGroupId!.Value, ct);
+                var taskMems = await memoryRepo.GetTaskMemoriesAsync(sessionId, ct);
                 var talentMems = await memoryRepo.GetTalentMemoriesAsync(talentId, projectId: null, tagFilter: null, ct);
                 var memoryContext = BuildMemoryContext(taskMems, talentMems);
                 if (!string.IsNullOrEmpty(memoryContext))
@@ -518,7 +520,7 @@ public class PetraOrchestratorService(
             {
                 var truncated = outputText.Length > 500 ? outputText[..500] : outputText;
                 await memoryRepo.UpsertTaskMemoryAsync(
-                    taskGroupId!.Value, projectId: null,
+                    sessionId, projectId: null,
                     key: $"decision/{talentName}-output-summary",
                     content: truncated,
                     createdByTalent: talentName,
@@ -539,15 +541,15 @@ public class PetraOrchestratorService(
             // 3. compact threshold 檢查（buffer-above-keep 模型：count >= keep * (100 + thresholdPct) / 100）
             if (memoryEnabled)
             {
-                var taskMemCount = await memoryRepo.CountTaskMemoriesAsync(taskGroupId!.Value, ct);
+                var taskMemCount = await memoryRepo.CountTaskMemoriesAsync(sessionId, ct);
                 var triggerAt = compactKeep + (compactKeep * compactThresholdPct / 100);
                 if (taskMemCount >= triggerAt && triggerAt > 0)
                 {
-                    var deleted = await memoryRepo.CompactTaskMemoryAsync(taskGroupId.Value, compactKeep, ct);
+                    var deleted = await memoryRepo.CompactTaskMemoryAsync(sessionId, compactKeep, ct);
                     await db.SaveChangesAsync(ct);
                     logger.LogInformation(
-                        "Memory compact 觸發 TaskGroupId={TaskGroupId} beforeCount={Before} afterCount={After} deleted={Deleted}",
-                        taskGroupId.Value, taskMemCount, taskMemCount - deleted, deleted);
+                        "Memory compact 觸發 PetraSessionId={SessionId} beforeCount={Before} afterCount={After} deleted={Deleted}",
+                        sessionId, taskMemCount, taskMemCount - deleted, deleted);
                 }
             }
 
