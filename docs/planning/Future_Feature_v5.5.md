@@ -193,6 +193,12 @@
 - v5.5 核心新功能：拆解任務 + 派 Talent
 - 對齊 Talent-Skill：Petra 拆出 subtask 對應 Skill → 找可用 Talent
 
+**Step 4.5（Stage 71 候選）— v5.5 Phase 2 Step 3+4 production-ready 補強**（規模 M / Trial_v15+v16 揭 4 議題 → 修完 Trial_v17 重驗 → 切兩個 default flag）
+- ① **Petra prompt 升級紀律** — DecideTalentsWithPlanAsync few-shot 範例補強「拆 = 真不同 scope」清楚紀律 + 「打磨多 form」場景線性 vs 分階段判斷邊界（Trial_v15.2 揭 Cody 過度拆 3 段重複工作 / cost +21% PR 反小）
+- ② **Stage 69 memory 寫入 outputLen=0 guard** — WriteMemoryAsync path 加空 content guard（Trial_v15.2 揭 Quinn outputLen=0 寫空 content 污染下次 inject）
+- ③ **FinalizeGitAsync permission denied 修法** — LibGit2Sharp 操作前確保 workspace ownership = appuser（Bot CloneOrPull 路徑加 ownership 復原 step / 或 git operations 改透過 subprocess + gosu appuser）（Trial_v16 揭業務 deliver 中斷）
+- ④ **Aria 自省點 #34 立**（workflow_aria_session_lessons.md） — Trial workspace cleanup 紀律：不能用 `docker exec sh -c "git ..."` root 動 workspace（對齊 Stage 65 entrypoint chown 紀律延伸到 Aria 操作層）
+
 **Step 5 — Prompt DB 化 + Talent identity 整合**（規模 M）
 - 對齊「Talent identity 含 prompt」原則
 - 同 Skill 不同 Talent 可有不同 prompt 風格（例：Cody-1 嚴謹 / Cody-2 創意）
