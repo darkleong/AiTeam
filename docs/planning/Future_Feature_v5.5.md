@@ -242,13 +242,40 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - 設計依賴 Stage 73 升級後 prompt content（debate 機制用「升級後品質目標 prompt」設計才精準）
 - xUnit + Trial_v20 真實驗
 
-**Step 9（Stage 76）— Petra 接收層 queue + status 顯示**（規模 S-M / 預估 cost $2-4 per cycle）⭐ **2026-05-17 WebSearch 揭新立**
+**Step 9（Stage 76）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Agent 1 task at a time**（規模 S-M / 預估 cost $2-4 per cycle）⭐ **2026-05-17 WebSearch 揭 + Christ 拍板新立**
 
-- **業界 WebSearch 結論**（[7 AI Agent Orchestration Patterns - DEV Community](https://dev.to/dohkoai/7-ai-agent-orchestration-patterns-for-scaling-concurrent-systems-with-production-code-1onc) + [Multi-Agent Orchestration Guide](https://gurusup.com/blog/multi-agent-orchestration-guide)）：業界 70% production Orchestrator-Worker pattern 主流做法 = **「Orchestrator 接收層 queue accept 多 task + 執行層 single workspace 排隊跑 + UX status 顯示」**（不是「Agent 像人類同時間只 1 task」極端 / 也不是「無限制平行」極端）
+- **業界 WebSearch 結論**（[7 AI Agent Orchestration Patterns - DEV Community](https://dev.to/dohkoai/7-ai-agent-orchestration-patterns-for-scaling-concurrent-systems-with-production-code-1onc) + [Multi-Agent Orchestration Guide](https://gurusup.com/blog/multi-agent-orchestration-guide)）：業界 70% production Orchestrator-Worker pattern 主流做法 = **「Orchestrator 接收層 queue accept 多 task + 執行層 per-Agent 1 task at a time + UX status 顯示」**（不是「Agent 像人類同時間只 1 task」極端 / 也不是「無限制平行」極端）
 - 對齊「Agent 像人類處理事件」精神延伸 — 真實 PM 接收並行 / 執行管理（手上多 task 但同時間深度做 1 個）
-- AiTeam 真實場景 — Christ 想到什麼立刻送 task → Petra 應該 accept + queue / 跟你說「task A 跑中 / B 排隊」不擋 user
-- 範圍：Petra accept 多 task + DB queue + UX status（Discord + Dashboard）+ workspace 級別排隊機制 + 可選 backpressure mechanism（Petra 太忙時通知 user）
-- v4 既有 `AgentQueueProcessor`（Stage 27 立 DB-as-Queue）對齊評估 — v5.5 path 是否走既有 queue 機制需 grep / Stage 76 計劃前 grep 驗
+
+**兩層 queue 配套設計**（Christ 2026-05-17 拍板）：
+
+```
+Layer 1：Petra 接收層 queue（user → Petra）
+- Christ 送 task A → Petra accept + 拆 subtask + 派工
+- Christ 送 task B（A 還在跑）→ Petra accept + queue → 拆 subtask + 派工到 Worker 待辦
+- Discord / Dashboard 顯示「task A 跑中 / B 排隊 / C 排隊」status
+- 不擋 user — Christ 想到立刻送
+
+Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）⭐ 核心紀律
+- 每個 Talent（Cody / Vera / Quinn / Sage）同時間只執行 1 任務
+- Cody 跑 task A 期間 → Petra 派 task B 給 Cody → Cody 待辦 queue 排隊等
+- Cody 跑完 task A → 自動接 task B from queue
+- Vera / Quinn / Sage 同理
+- 對齊「真實 Cody / Vera / Quinn 是個人 dev / 同時間深度做 1 件事 / 不多工分心」精神
+```
+
+**per-Talent 鎖紀律（非 per-Skill 鎖）— 對齊 v5.5 Talent-Skill separation 設計**：
+
+- 未來 horizontal scaling 場景：**Cody-1 嚴謹 + Cody-2 創意是兩個人 / 各自跑各自的 task / 平行 OK**
+- 同 Cody-1 同時間 1 task / 同 Cody-2 同時間 1 task / 但 Cody-1 跟 Cody-2 之間可平行
+- 對齊「真實 dev 各自工作 / 不互相鎖」精神 — 鎖在 Talent 不在 Skill
+
+**範圍**：
+- Petra 接收層 queue + DB-as-Queue 對齊（v4 既有 `AgentQueueProcessor` Stage 27 立 — Stage 76 計劃前 grep 驗 v5.5 path 是否走既有 queue 或需新立）
+- Worker 待辦 queue（per-Talent / DB 表新立或 reuse 既有）
+- UX status 顯示（Discord 訊息 + Dashboard 操作中心狀態列）
+- 可選 backpressure mechanism（Petra 太忙時通知 user — 例：queue 累積 5+ task 提醒 Christ）
+- xUnit + Trial 真實驗（多 task 並送場景）
 
 **Step 6（Stage 75）— WebUI Talent CRUD**（規模 S-M / 預估 cost $2-4 per cycle）— **最後做**
 
