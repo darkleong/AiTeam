@@ -92,4 +92,10 @@ public class WorkflowSettings
     /// <summary>Stage 69：v5.5 Phase 2 Step 3 — compact 後保留 newest N 條（per-TaskGroup / per-Talent 各自獨立計算）。
     /// AppSettings 表 key = "Workflow:V5MemoryCompactKeepCount"，DB 優先 / fallback 50。</summary>
     public int V5MemoryCompactKeepCount { get; set; } = 50;
+
+    /// <summary>Stage 70：v5.5 Phase 2 Step 4 — Petra hierarchical decomposition + dependency graph 拆解 feature flag。
+    /// 預設 false（守 v5.5 既有「Skill 序列線性 chain」path 0 regression — Trial_v16 驗 + Christ 拍板才切 default true）。
+    /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 第二步 = Phase 2 第一步之上演進）。
+    /// AppSettings 表 key = "Workflow:UseV5SubtaskPlanning"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseV5SubtaskPlanning { get; set; } = false;
 }

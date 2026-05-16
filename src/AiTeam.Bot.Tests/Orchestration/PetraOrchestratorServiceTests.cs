@@ -174,7 +174,8 @@ public class PetraOrchestratorServiceTests
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
 
-        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review" })!;
+        // Stage 70：BuildPetraSystemPrompt 簽名升級加 bool useSubtaskPlanning（default false）— reflection 不自動套 C# default value，顯式傳 false 維持既有 Stage 64/67/69 baseline 行為
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", false })!;
 
         // 三 trigger 具體判準（Stage 64 子項 3 升級）
         Assert.Contains("1-on-1 trigger", prompt);
@@ -582,6 +583,148 @@ public class PetraOrchestratorServiceTests
         Assert.Equal("k1", got[0].Key);
         Assert.Equal("k2", got[1].Key);
         Assert.Equal("k3", got[2].Key);
+    }
+
+    // ─── Test 23（Stage 70）：SubtaskPlan record + Linear factory baseline ──────────
+    [Fact]
+    public void Test23_SubtaskPlan_LinearFactory_ProducesIdAscendingSubtasksWithZeroDependencies()
+    {
+        var skills = new[] { "code_implementation", "code_review", "qa_testing" };
+        var plan = SubtaskPlan.Linear(skills);
+
+        Assert.Equal(3, plan.Subtasks.Count);
+        Assert.Equal(1, plan.Subtasks[0].Id);
+        Assert.Equal("code_implementation", plan.Subtasks[0].SkillName);
+        Assert.Equal(2, plan.Subtasks[1].Id);
+        Assert.Equal("code_review", plan.Subtasks[1].SkillName);
+        Assert.Equal(3, plan.Subtasks[2].Id);
+        Assert.Equal("qa_testing", plan.Subtasks[2].SkillName);
+        Assert.Empty(plan.Dependencies);
+
+        // 空 skills → Empty plan
+        var empty = SubtaskPlan.Linear(Array.Empty<string>());
+        Assert.Empty(empty.Subtasks);
+        Assert.Empty(empty.Dependencies);
+        Assert.Same(SubtaskPlan.Empty, empty);
+    }
+
+    // ─── Test 24（Stage 70）：SubtaskPlanParser JSON 解析 + code fence strip + 失敗 fallback ─
+    [Fact]
+    public void Test24_SubtaskPlanParser_HandlesValidJsonAndCodeFenceAndMalformed()
+    {
+        // case 1：純 JSON ✓
+        var raw1 = """{"subtasks":[{"id":1,"skill":"code_implementation","description":"impl"},{"id":2,"skill":"code_review","description":"review"}],"dependencies":[{"from":1,"to":2,"type":"sequential"}]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw1, out var plan1, out var err1));
+        Assert.Null(err1);
+        Assert.Equal(2, plan1.Subtasks.Count);
+        Assert.Equal("code_implementation", plan1.Subtasks[0].SkillName);
+        Assert.Single(plan1.Dependencies);
+        Assert.Equal(DependencyType.Sequential, plan1.Dependencies[0].Type);
+
+        // case 2：markdown code fence 包裹 ✓ 自動 strip
+        var raw2 = """
+```json
+{"subtasks":[{"id":1,"skill":"code_implementation","description":"x"}],"dependencies":[]}
+```
+""";
+        Assert.True(SubtaskPlanParser.TryParse(raw2, out var plan2, out var err2));
+        Assert.Null(err2);
+        Assert.Single(plan2.Subtasks);
+
+        // case 3：純亂碼 ✗ → return false + error 非空（plan = Empty）
+        Assert.False(SubtaskPlanParser.TryParse("這是隨便亂寫的話不是 JSON", out var plan3, out var err3));
+        Assert.NotNull(err3);
+        Assert.Empty(plan3.Subtasks);
+
+        // case 4：JSON 但 0 subtask ✗
+        Assert.False(SubtaskPlanParser.TryParse("""{"subtasks":[],"dependencies":[]}""", out _, out var err4));
+        Assert.NotNull(err4);
+
+        // case 5：dependency 指向不存在 subtask Id → 該 edge skip（不擋整 plan）
+        var raw5 = """{"subtasks":[{"id":1,"skill":"code_implementation"}],"dependencies":[{"from":1,"to":99,"type":"sequential"},{"from":1,"to":1,"type":"sequential"}]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw5, out var plan5, out _));
+        Assert.Single(plan5.Subtasks);
+        Assert.Empty(plan5.Dependencies);   // 99 不存在 + 自指向 1→1 都 skip
+    }
+
+    // ─── Test 25（Stage 70）：SubtaskPlanTopologicalSort — Linear / 鏈 / 並行 / cycle ──
+    [Fact]
+    public void Test25_SubtaskPlanTopologicalSort_HandlesLinearAndChainAndParallelAndCycle()
+    {
+        // case 1：Linear plan (0 deps) → 回 Id 升序（對齊既有 Stage 69 dispatch 順序）
+        var linear = SubtaskPlan.Linear(new[] { "a", "b", "c" });
+        var order1 = SubtaskPlanTopologicalSort.Sort(linear);
+        Assert.Equal(new[] { 1, 2, 3 }, order1);
+
+        // case 2：sequential chain 1→2→3
+        var chain = new SubtaskPlan(
+            new[] { new Subtask(1, "a", ""), new Subtask(2, "b", ""), new Subtask(3, "c", "") },
+            new[] { new DependencyEdge(1, 2, DependencyType.Sequential), new DependencyEdge(2, 3, DependencyType.Sequential) });
+        var order2 = SubtaskPlanTopologicalSort.Sort(chain);
+        Assert.Equal(new[] { 1, 2, 3 }, order2);
+
+        // case 3：並行 deps — 1 與 2 都指向 3（1,2 為起點 deterministic 升序，3 一定在最後）
+        var parallel = new SubtaskPlan(
+            new[] { new Subtask(1, "a", ""), new Subtask(2, "b", ""), new Subtask(3, "c", "") },
+            new[] { new DependencyEdge(1, 3, DependencyType.Sequential), new DependencyEdge(2, 3, DependencyType.Sequential) });
+        var order3 = SubtaskPlanTopologicalSort.Sort(parallel);
+        Assert.Equal(3, order3.Count);
+        Assert.Equal(3, order3[^1]);   // 3 在最後
+        Assert.Contains(1, order3);
+        Assert.Contains(2, order3);
+
+        // case 4：cycle 1→2 + 2→1 → throw
+        var cyclic = new SubtaskPlan(
+            new[] { new Subtask(1, "a", ""), new Subtask(2, "b", "") },
+            new[] { new DependencyEdge(1, 2, DependencyType.Sequential), new DependencyEdge(2, 1, DependencyType.Sequential) });
+        var ex = Assert.Throws<InvalidOperationException>(() => SubtaskPlanTopologicalSort.Sort(cyclic));
+        Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ─── Test 26（Stage 70）：UseV5SubtaskPlanning default false + 三 flag 連動 baseline ─
+    [Fact]
+    public void Test26_WorkflowSettings_UseV5SubtaskPlanning_DefaultIsFalse_AndThreeFlagBaseline()
+    {
+        var settings = new AiTeam.Bot.Configuration.WorkflowSettings();
+        Assert.False(settings.UseV5SubtaskPlanning);
+        // 三 flag 連動 baseline（v5 / v5.5 TalentSkillSeparation / v5.5 Step 4 SubtaskPlanning 都 false → 守 v4 既有 path 0 regression）
+        Assert.False(settings.UsePetraOrchestratorV5);
+        Assert.False(settings.UseTalentSkillSeparation);
+    }
+
+    // ─── Test 27（Stage 70）：BuildPetraSystemPrompt(useSubtaskPlanning) 兩 path 段落切換驗 ─
+    [Fact]
+    public void Test27_BuildPetraSystemPrompt_SubtaskPlanningPath_SwitchesDecompositionAndOutputSections()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // useSubtaskPlanning = true → 含 hierarchical decomposition + JSON 輸出格式 + few-shot 範例
+        var promptWith = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true })!;
+        Assert.Contains("Hierarchical Decomposition", promptWith);
+        Assert.Contains("dependency", promptWith, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("JSON SubtaskPlan", promptWith);
+        Assert.Contains("subtasks", promptWith);
+        Assert.Contains("Few-shot 範例 1", promptWith);
+        Assert.Contains("Few-shot 範例 2", promptWith);
+        Assert.Contains("拆解是擴展不是取代", promptWith);
+        // 反例段守紀律
+        Assert.Contains("反例", promptWith);
+        // 三 trigger 既有判準仍保留（共用段）
+        Assert.Contains("1-on-1 trigger", promptWith);
+        Assert.Contains("Design trigger", promptWith);
+        Assert.Contains("Kickoff trigger", promptWith);
+
+        // useSubtaskPlanning = false（default）→ 守 Stage 67/69 既有 prompt 0 regression — Test9 既有 baseline 仍綠
+        var promptWithout = (string)method.Invoke(null, new object?[] { "code_implementation, code_review", false })!;
+        Assert.Contains("需求拆解紀律", promptWithout);
+        Assert.DoesNotContain("Hierarchical Decomposition", promptWithout);
+        Assert.DoesNotContain("JSON SubtaskPlan", promptWithout);
+        Assert.DoesNotContain("Few-shot 範例 1", promptWithout);
+        // 既有「`|` 分隔」輸出格式段仍在
+        Assert.Contains("`|` 分隔", promptWithout);
     }
 
     // ─── helper ───────────────────────────────────────────────────────────────────

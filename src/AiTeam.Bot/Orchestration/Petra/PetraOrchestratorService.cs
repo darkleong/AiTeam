@@ -72,12 +72,25 @@ public class PetraOrchestratorService(
             if (useTalentSkillSeparation)
             {
                 var talentsList = await talentFactory.GetAllAsync(ct);
+                // Stage 70：v5.5 Phase 2 Step 4 — UseV5SubtaskPlanning 三 flag 連動（v5 + v5.5 + SubtaskPlanning 同 true 才走 JSON SubtaskPlan path）
+                var useV5SubtaskPlanning = await workflowResolver.GetUseV5SubtaskPlanningAsync(ct);
                 logger.LogInformation(
-                    "PetraOrchestrator 啟動 (v5.5 Talent-Skill path) — sessionId={SessionId} taskGroupId={TaskGroupId} talentsCount={Count} workingDir={Dir}",
-                    session.Id, taskGroupId, talentsList.Count, sessionWithCtx.WorkingDir);
+                    "PetraOrchestrator 啟動 (v5.5 Talent-Skill path) — sessionId={SessionId} taskGroupId={TaskGroupId} talentsCount={Count} useV5SubtaskPlanning={SubtaskPlanning} workingDir={Dir}",
+                    session.Id, taskGroupId, talentsList.Count, useV5SubtaskPlanning, sessionWithCtx.WorkingDir);
 
-                // 1. DecideTalentsAsync — Petra LLM 動態決策 Skill 序列 + lookup Talent pool（看 Skill 找 Talent / round-robin）
-                var (skills, talentPicks) = await DecideTalentsAsync(taskInput, talentsList, sessionWithCtx, ct);
+                // 1. Decide — flag=true 走 JSON SubtaskPlan / flag=false 走 Stage 69 既有 Skill 序列線性 chain（Linear 包成 SubtaskPlan 統一介面）
+                SubtaskPlan plan;
+                List<ITalent> talentPicks;
+                if (useV5SubtaskPlanning)
+                {
+                    (plan, talentPicks) = await DecideTalentsWithPlanAsync(taskInput, talentsList, sessionWithCtx, ct);
+                }
+                else
+                {
+                    var (skills, picks) = await DecideTalentsAsync(taskInput, talentsList, sessionWithCtx, ct);
+                    plan = SubtaskPlan.Linear(skills);
+                    talentPicks = picks;
+                }
                 if (talentPicks.Count == 0)
                 {
                     logger.LogWarning("Petra v5.5 動態決策回空序列 sessionId={SessionId}", session.Id);
@@ -85,13 +98,14 @@ public class PetraOrchestratorService(
                     await db.SaveChangesAsync(ct);
                     return PetraOrchestratorResult.Empty(session.Id);
                 }
-                decidedCapabilities = skills;
+                decidedCapabilities = plan.Subtasks.Select(s => s.SkillName).ToList();
 
                 // 2. v5.5 自管 chain dispatch — 對齊 v5 既有 DispatchWorkersAsync pattern 但用 ITalent
+                // Stage 70：plan.Subtasks index 與 talentPicks index 對齊（CreateAgent 用 plan.Subtasks[i].SkillName 動態傳）
                 var talentAgents = new AIAgent[talentPicks.Count];
                 for (var i = 0; i < talentPicks.Count; i++)
                 {
-                    talentAgents[i] = talentPicks[i].CreateAgent(sessionWithCtx, skills[i]);
+                    talentAgents[i] = talentPicks[i].CreateAgent(sessionWithCtx, plan.Subtasks[i].SkillName);
                 }
 
                 // Stage 69 v2.1：v5.5 Phase 2 Step 3 — v5Memory flag 三 flag 連動（必須 v5 + v5.5 + memory 同時 true 才生效）
@@ -108,7 +122,7 @@ public class PetraOrchestratorService(
                 }
 
                 await DispatchTalentsAsync(
-                    session.Id, taskInput, skills, talentPicks, talentAgents,
+                    session.Id, taskInput, plan, talentPicks, talentAgents,
                     useV5Memory, talentNameToIdMap, ct);
                 await db.SaveChangesAsync(ct);
 
@@ -441,6 +455,68 @@ public class PetraOrchestratorService(
     }
 
     /// <summary>
+    /// Stage 70：v5.5 Phase 2 Step 4 — Petra LLM 動態拆任務 + dependency graph + lookup Talent pool。
+    /// Prompt 含 hierarchical decomposition + few-shot 範例 — LLM 回 JSON SubtaskPlan。
+    /// 容錯紀律：JSON 解析失敗 fallback 為 Linear[code_implementation] 單一 subtask（0-crash 保 dispatch 不中斷）。
+    /// </summary>
+    private async Task<(SubtaskPlan Plan, List<ITalent> TalentPicks)> DecideTalentsWithPlanAsync(
+        string taskInput,
+        IReadOnlyList<ITalent> talents,
+        PetraSessionContext ctx,
+        CancellationToken ct)
+    {
+        var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
+        var systemPrompt = BuildPetraSystemPrompt(skillRoster, useSubtaskPlanning: true);
+
+        var provider = providerFactory.Create(PetraAgentName);
+        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
+
+        await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
+
+        SubtaskPlan plan;
+        if (!SubtaskPlanParser.TryParse(response.Content, out plan, out var parseError))
+        {
+            var rawPreview = response.Content.Length > 200 ? response.Content[..200] : response.Content;
+            logger.LogWarning(
+                "Petra v5.5 Step 4 SubtaskPlan JSON 解析失敗 fallback Linear[code_implementation] error={Error} raw=「{Raw}」",
+                parseError, rawPreview);
+            plan = SubtaskPlan.Linear(new[] { "code_implementation" });
+        }
+
+        // 每 subtask 用 FindTalentForSkill 找 Talent — 找不到的整 subtask 連同對應 dependency edges filter 掉
+        var validSubtasks = new List<Subtask>();
+        var validTalents = new List<ITalent>();
+        foreach (var sub in plan.Subtasks)
+        {
+            var pick = FindTalentForSkill(sub.SkillName, talents);
+            if (pick is not null)
+            {
+                validSubtasks.Add(sub);
+                validTalents.Add(pick);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Petra v5.5 Step 4 SubtaskPlan 回未知 skill={Skill} 或 0 Talent 擔任 subtaskId={Id}（忽略 subtask + 對應 edges）",
+                    sub.SkillName, sub.Id);
+            }
+        }
+
+        var validIds = validSubtasks.Select(s => s.Id).ToHashSet();
+        var validEdges = plan.Dependencies
+            .Where(d => validIds.Contains(d.FromId) && validIds.Contains(d.ToId))
+            .ToList();
+        var finalPlan = new SubtaskPlan(validSubtasks, validEdges);
+
+        logger.LogInformation(
+            "Petra v5.5 Step 4 DecideTalentsWithPlanAsync 完成 — subtasks={N} dependencies={E} picks={Picks}",
+            finalPlan.Subtasks.Count, finalPlan.Dependencies.Count,
+            string.Join(" → ", validTalents.Select((t, i) => $"{t.Name}({finalPlan.Subtasks[i].SkillName})")));
+
+        return (finalPlan, validTalents);
+    }
+
+    /// <summary>
     /// Stage 67：v5.5 — 對齊 v5 DispatchWorkersAsync L238-277 自管 chain pattern 但用 ITalent + skill 動態傳。
     /// 同位置同 transaction 寫 PetraSessionMessages tool role — 對齊 Stage 66 修法位置。
     ///
@@ -453,7 +529,7 @@ public class PetraOrchestratorService(
     private async Task<List<WorkerDispatchSummary>> DispatchTalentsAsync(
         Guid sessionId,
         string taskInput,
-        IReadOnlyList<string> skills,
+        SubtaskPlan plan,
         IReadOnlyList<ITalent> talentPicks,
         AIAgent[] talentAgents,
         bool useV5Memory,
@@ -465,15 +541,29 @@ public class PetraOrchestratorService(
         var compactKeep = memoryEnabled ? await workflowResolver.GetV5MemoryCompactKeepCountAsync(ct) : 0;
         var compactThresholdPct = memoryEnabled ? await workflowResolver.GetV5MemoryCompactThresholdPercentAsync(ct) : 0;
 
-        var summaries = new List<WorkerDispatchSummary>(talentAgents.Length);
-        for (var i = 0; i < talentAgents.Length; i++)
+        // Stage 70：topological sort — Linear plan (0 deps) 自然回 Id 升序 = 既有 dispatch 順序 = 0 regression
+        var orderedIds = SubtaskPlanTopologicalSort.Sort(plan);
+        // subtask Id → plan.Subtasks index（caller talentPicks / talentAgents 與 plan.Subtasks 同 index 對齊）
+        var idToIndex = new Dictionary<int, int>(plan.Subtasks.Count);
+        for (var i = 0; i < plan.Subtasks.Count; i++) idToIndex[plan.Subtasks[i].Id] = i;
+        // dependsOn 觀察用 lookup（per subtask 直接 depends 的 from Id 集合）
+        var dependsOnLookup = plan.Subtasks.ToDictionary(s => s.Id, _ => new List<int>());
+        foreach (var edge in plan.Dependencies)
         {
+            if (dependsOnLookup.ContainsKey(edge.ToId)) dependsOnLookup[edge.ToId].Add(edge.FromId);
+        }
+
+        var summaries = new List<WorkerDispatchSummary>(talentAgents.Length);
+        for (var dispatchIndex = 0; dispatchIndex < orderedIds.Count; dispatchIndex++)
+        {
+            var subtaskId = orderedIds[dispatchIndex];
+            var i = idToIndex[subtaskId];
             var talentAgent = talentAgents[i];
             var talentName = talentPicks[i].Name;
-            var skill = i < skills.Count ? skills[i] : (talentPicks[i].Skills.FirstOrDefault() ?? "");
+            var skill = plan.Subtasks[i].SkillName;
 
-            // 1. 組 input messages（base chain + 可選 memory inject）
-            var baseInput = i == 0
+            // 1. 組 input messages（base chain + 可選 memory inject）— 對齊既有「prior summaries 全餵下個」紀律
+            var baseInput = dispatchIndex == 0
                 ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
                 : BuildNextWorkerInput(taskInput, summaries);
 
@@ -504,9 +594,12 @@ public class PetraOrchestratorService(
                 inputMessages = baseInput;
             }
 
+            // Stage 70：dispatch log 含 subtaskId + dependsOn — Linear plan dependsOn=[] 對齊既有 dispatch 觀察點
+            var dependsOnIds = dependsOnLookup[subtaskId];
             logger.LogInformation(
-                "PetraOrchestrator v5.5 自管 chain dispatch {Index}/{Total} talent={Talent} skill={Skill} inputMsgs={N} sessionId={SessionId}",
-                i + 1, talentAgents.Length, talentName, skill, inputMessages.Count, sessionId);
+                "PetraOrchestrator v5.5 自管 chain dispatch {DispatchIndex}/{Total} subtaskId={SubtaskId} talent={Talent} skill={Skill} dependsOn=[{DependsOn}] inputMsgs={N} sessionId={SessionId}",
+                dispatchIndex + 1, orderedIds.Count, subtaskId, talentName, skill,
+                string.Join(",", dependsOnIds), inputMessages.Count, sessionId);
 
             var response = await talentAgent.RunAsync(inputMessages, session: null, options: null, ct);
             var outputText = response.Text ?? "";
@@ -554,8 +647,8 @@ public class PetraOrchestratorService(
             }
 
             logger.LogInformation(
-                "PetraOrchestrator v5.5 自管 chain dispatch 完成 {Index}/{Total} talent={Talent} outputLen={Len} toolCallId={ToolCallId}",
-                i + 1, talentAgents.Length, talentName, outputText.Length, toolCallId);
+                "PetraOrchestrator v5.5 自管 chain dispatch 完成 {DispatchIndex}/{Total} subtaskId={SubtaskId} talent={Talent} outputLen={Len} toolCallId={ToolCallId}",
+                dispatchIndex + 1, orderedIds.Count, subtaskId, talentName, outputText.Length, toolCallId);
 
             summaries.Add(new WorkerDispatchSummary(talentName, skill, outputText, toolCallId));
         }
@@ -777,8 +870,67 @@ public class PetraOrchestratorService(
     /// Stage 64 子項 3：Petra DecideAsync prompt 升級（三 trigger 具體判準 + 範例 + 反例 + 輸出紀律）。
     /// 不對齊 CLAUDE_Petra.md「四審核閘門」段（不同職能 — CLAUDE_Petra.md 仍服務 v4 pm_review path 保留不刪）。
     /// 對 Gemini Flash 友善：聚焦 ~35 行 dispatch 決策核心，避免 221 行整檔 prompt 干擾輕量模型解析。
+    ///
+    /// Stage 70：useSubtaskPlanning=true 時升級「需求拆解紀律」為 hierarchical decomposition + dependency graph 紀律段
+    /// + few-shot 範例 + 輸出格式改為 JSON SubtaskPlan（取代 `|` 分隔字串）。default false 保 Stage 67/69 既有 path 0 regression。
     /// </summary>
-    private static string BuildPetraSystemPrompt(string capabilityRoster) => $$"""
+    private static string BuildPetraSystemPrompt(string capabilityRoster, bool useSubtaskPlanning = false)
+    {
+        var decompositionSection = useSubtaskPlanning
+            ? """
+
+【Hierarchical Decomposition + Dependency Graph 紀律】（Stage 70：v5.5 Phase 2 Step 4）
+
+接到任務時先用內部 reasoning 拆需求 + 識別 subtask 間依賴 — 不 dispatch worker 做 requirements_extraction。
+判準：以模糊度 / 範圍 / 邊界三維度自我評估，命中 Design / Kickoff trigger 時主動拆 subtask。
+
+紀律：
+- simple task 仍回 1 subtask 0 dependency（**拆解是擴展不是取代** — Linear 形式對齊 Trial_v6-v14 既有 baseline）
+- 複雜 task 拆 N 個 subtask（N ≤ 5 為佳），用 dependency edges 標示「先做 A 才能做 B」的 sequential / nested 關係
+- subtask id 從 1 起算連號 / skill 必須在【可選 capability】內 / description 一句話描述 subtask 範圍
+- dependency edge type：sequential（A 完成才能做 B）/ nested（B 是 A 的子工作）
+
+★ Few-shot 範例 1：simple task（1 subtask）
+  輸入：「修 README typo」
+  輸出（單行 JSON）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"修 README typo"}],"dependencies":[]}
+
+★ Few-shot 範例 2：複雜 task（多 subtask + sequential chain）
+  輸入：「Dashboard 加 Petra session 列表頁 + review + 補 Playwright test」
+  輸出（單行 JSON）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"實作 Dashboard Petra session 列表頁 + Razor + Service"},{"id":2,"skill":"code_review","description":"review 列表頁 production safety + coding style"},{"id":3,"skill":"qa_testing","description":"補 Playwright test 截圖驗收"}],"dependencies":[{"from":1,"to":2,"type":"sequential"},{"from":2,"to":3,"type":"sequential"}]}
+
+"""
+            : """
+
+【需求拆解紀律】（Stage 67：合 requirements_extraction 進來）
+
+接到任務時先用內部 reasoning 拆需求 — 不 dispatch worker 做 requirements_extraction。
+判準：以模糊度 / 範圍 / 邊界三維度自我評估
+  範例：「打磨 Dashboard 錯誤處理體驗」→ 內部拆「跨 5 範圍 + 中等改動 + UI 邊界」→ 命中 Design trigger
+  範例：「Dashboard 加圖示」→ 內部拆「視覺 + 小改動」→ 命中 1-on-1 trigger
+紀律：拆完直接決 capability 序列回（不要回「我先拆需求 → 再決定」這種兩步驟說法 / 不污染 capability 序列輸出格式）
+""";
+
+        var outputSection = useSubtaskPlanning
+            ? """
+【輸出紀律】（Stage 70：JSON SubtaskPlan）
+- 只回單行 JSON 物件（含 subtasks + dependencies 兩 key）
+- 不要 markdown 包裹 / 不要 backtick / 不要解釋 / 不要 prefix 「output:」
+- 反例：```json{...}```（錯：markdown code fence 包裹）
+- 反例：「我建議拆成 3 個 subtask」（錯：解釋）
+- 反例：code_implementation|code_review（錯：舊 `|` 分隔字串格式 — Stage 70 已升級 JSON）
+- 正例：{"subtasks":[{"id":1,"skill":"code_implementation","description":"..."}],"dependencies":[]}
+"""
+            : """
+【輸出紀律】
+- 只回 capability 序列（用 `|` 分隔）
+- 不要 markdown 包裹 / 不要 backtick / 不要解釋 / 不要 prefix 「output:」
+- 不要回 Worker 名稱（例如「Cody」），只回 capability tag
+- 反例：```code_implementation|code_review```（錯：backtick 包裹）
+- 反例：「我建議 code_implementation」（錯：解釋）
+- 正例：`code_implementation|code_review`
+""";
+
+        return $$"""
 你是 Petra — v5 動態架構 Multi-Agent Orchestrator。
 依任務規模 + 三 trigger 條件動態決定 Worker capability 序列。
 
@@ -800,21 +952,8 @@ public class PetraOrchestratorService(
   判準：新 Service 層 / 新 framework wire / 跨 domain 互動
   範例：「v5 動態架構 PoC」「新增 Memory module」
   → 回「code_implementation|code_review|code_implementation|code_review」
-
-【需求拆解紀律】（Stage 67：合 requirements_extraction 進來）
-
-接到任務時先用內部 reasoning 拆需求 — 不 dispatch worker 做 requirements_extraction。
-判準：以模糊度 / 範圍 / 邊界三維度自我評估
-  範例：「打磨 Dashboard 錯誤處理體驗」→ 內部拆「跨 5 範圍 + 中等改動 + UI 邊界」→ 命中 Design trigger
-  範例：「Dashboard 加圖示」→ 內部拆「視覺 + 小改動」→ 命中 1-on-1 trigger
-紀律：拆完直接決 capability 序列回（不要回「我先拆需求 → 再決定」這種兩步驟說法 / 不污染 capability 序列輸出格式）
-
-【輸出紀律】
-- 只回 capability 序列（用 `|` 分隔）
-- 不要 markdown 包裹 / 不要 backtick / 不要解釋 / 不要 prefix 「output:」
-- 不要回 Worker 名稱（例如「Cody」），只回 capability tag
-- 反例：```code_implementation|code_review```（錯：backtick 包裹）
-- 反例：「我建議 code_implementation」（錯：解釋）
-- 正例：`code_implementation|code_review`
+{{decompositionSection}}
+{{outputSection}}
 """;
+    }
 }

@@ -88,6 +88,11 @@ public class WorkflowSettingsResolver(
     public Task<int> GetV5MemoryCompactKeepCountAsync(CancellationToken ct = default)
         => GetIntAsync("Workflow:V5MemoryCompactKeepCount", Defaults.V5MemoryCompactKeepCount, ct);
 
+    /// <summary>Stage 70：v5.5 Phase 2 Step 4 — hierarchical decomposition + dependency graph 拆解 feature flag。預設 false。
+    /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（caller 自行檢查三 flag）。</summary>
+    public Task<bool> GetUseV5SubtaskPlanningAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseV5SubtaskPlanning", Defaults.UseV5SubtaskPlanning, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);
