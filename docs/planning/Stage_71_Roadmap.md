@@ -1,8 +1,8 @@
 # Stage 71 Roadmap — v5.5 Phase 2 Step 3+4 production-ready 補強（Trial_v15+v16 揭 2 議題收口）
 
 > 目標版本：**v3.61.0**（minor — production-ready 補強對齊 Stage 71 + CLAUDE.md 版本紀律「每 Stage 完成 minor bump」）
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-16）
+> 文件版本：v2.0
 > 範圍：Petra prompt 升級「拆=真不同 scope」紀律 + Stage 69 memory 寫入空 content guard
 > 規模：S
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 2 Step 4.5（production-ready 補強）
@@ -224,4 +224,5 @@ Trial_v15.2 Quinn 因 Claude Code CLI 偶發 exit 1 outputLen=0，但 Petra 寫�
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-16 | Forge 結案 — 實作完成 v3.61.0 / commit `bf048f3` / 64/64 test passed / 0 error build / 4 場景自驗全綠（B/C/D/E xUnit 覆蓋）/ 場景 A+F 留 Trial_v17 驗收。實作紀錄章節補入。 |
 | v1.0 | 2026-05-16 | 規劃書建立 — v3.61.0 / S 規模 / v5.5 Phase 2 Step 3+4 production-ready 補強。**範圍**：Petra prompt 升級「拆=真不同 scope」紀律（few-shot 補強對齊 AiTeam 真實場景）+ Stage 69 memory 寫入 outputLen=0 guard（避空 content 污染下次 prompt）+ xUnit test 補強。**戰略脈絡**：Trial_v15+v16 揭 2 production code 議題（議題 #1 過度拆 cost +21% / 議題 #2 空 content memory 污染）+ 議題 #3 走 Aria 紀律修正不修 production code（修根因 > 補丁紀律 / Bot 沒 root 不能 chown / docker-compose entrypoint 已自動防呆）+ Step 5 Prompt DB 化留 Stage 72 不擴範圍（連續 7 Stage 0 follow-up 紀律延續）。**校準錨預期**：production-ready 補強區間 ×0.78-0.99（對齊 Stage 56/58/60/61/64/65 6 資料點 / Stage 71 = 第 7 資料點累積）。**驗收**：6 場景 — A Trial_v17 真實場景驗收（線性整包反例 subtasks ≤ 2）/ B xUnit prompt 升級 assert / C Worker outputLen=0 跳過寫入 / D Worker outputLen > 0 既有邏輯 0 regression / E feature flag default false 守 fallback / F v4 既有 path 0 regression。**下一步**：Forge 實作 + Aria gate1 Tier 0+1（production-ready 補強對應 tier）+ Trial_v17 真實任務重驗 → 通過後切兩個 default flag = Phase 2 Step 3+4 正式完整收口 → Stage 72 Step 5 Prompt DB 化。 |
