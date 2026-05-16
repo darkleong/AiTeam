@@ -5,6 +5,7 @@ using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -727,6 +728,109 @@ public class PetraOrchestratorServiceTests
         Assert.Contains("`|` 分隔", promptWithout);
     }
 
+    // ─── Test 28（Stage 71）：BuildPetraSystemPrompt 升級後含線性整包反例 + 判斷邊界 ─
+    [Fact]
+    public void Test28_BuildPetraSystemPrompt_SubtaskPlanningPath_ContainsLinearBundleCounterexampleAndBoundary()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", true })!;
+
+        // Stage 71 新增：線性整包反例 + 判斷邊界
+        Assert.Contains("線性整包", prompt);
+        Assert.Contains("真不同 scope", prompt);
+        Assert.Contains("判斷邊界", prompt);
+        Assert.Contains("打磨多 form", prompt);   // 反例場景關鍵字
+        // Stage 70 既有內容 0 regression
+        Assert.Contains("Hierarchical Decomposition", prompt);
+        Assert.Contains("Few-shot 範例 1", prompt);
+        Assert.Contains("Few-shot 範例 2", prompt);
+        Assert.Contains("拆解是擴展不是取代", prompt);
+    }
+
+    // ─── Test 29（Stage 71）：DispatchTalentsAsync Worker outputLen=0 → skip memory write ──
+    [Fact]
+    public async Task Test29_DispatchTalentsAsync_WorkerOutputEmpty_SkipsMemoryWrite()
+    {
+        const string dbName = nameof(Test29_DispatchTalentsAsync_WorkerOutputEmpty_SkipsMemoryWrite);
+        var (db, _, sessionRepo, _, orch) = CreateMemoryTestServices(dbName);
+        await db.Database.EnsureCreatedAsync();
+
+        var session = sessionRepo.Start(taskGroupId: null);
+        await db.SaveChangesAsync();
+
+        var talentId = Guid.NewGuid();
+        const string talentName = "Cody";
+        var emptyClient = new RecordingChatClient(returnText: "");   // outputLen=0
+        var agent = new ChatClientAgent(chatClient: emptyClient, instructions: null, name: talentName);
+        var plan = SubtaskPlan.Linear(new[] { "code_implementation" });
+        var talent = new FakeTalent(talentName, new[] { "code_implementation" });
+        IReadOnlyDictionary<string, Guid> talentNameToIdMap = new Dictionary<string, Guid> { [talentName] = talentId };
+
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "DispatchTalentsAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var task = (Task)method!.Invoke(orch, new object?[]
+        {
+            session.Id, "打磨 toast 通知", plan,
+            (IReadOnlyList<ITalent>)new ITalent[] { talent },
+            new AIAgent[] { agent },
+            true,
+            talentNameToIdMap,
+            CancellationToken.None
+        })!;
+        await task;
+
+        // outputLen=0 → 0 寫入
+        Assert.Equal(0, await db.TaskMemories.CountAsync());
+        Assert.Equal(0, await db.TalentMemories.CountAsync());
+    }
+
+    // ─── Test 30（Stage 71）：DispatchTalentsAsync Worker outputLen>0 → upsert 生效（regression 守護）──
+    [Fact]
+    public async Task Test30_DispatchTalentsAsync_WorkerOutputNonEmpty_WritesMemory()
+    {
+        const string dbName = nameof(Test30_DispatchTalentsAsync_WorkerOutputNonEmpty_WritesMemory);
+        var (db, _, sessionRepo, _, orch) = CreateMemoryTestServices(dbName);
+        await db.Database.EnsureCreatedAsync();
+
+        var session = sessionRepo.Start(taskGroupId: null);
+        await db.SaveChangesAsync();
+
+        var talentId = Guid.NewGuid();
+        const string talentName = "Cody";
+        var nonEmptyClient = new RecordingChatClient(returnText: "Build 通過，0 error。");
+        var agent = new ChatClientAgent(chatClient: nonEmptyClient, instructions: null, name: talentName);
+        var plan = SubtaskPlan.Linear(new[] { "code_implementation" });
+        var talent = new FakeTalent(talentName, new[] { "code_implementation" });
+        IReadOnlyDictionary<string, Guid> talentNameToIdMap = new Dictionary<string, Guid> { [talentName] = talentId };
+
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "DispatchTalentsAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var task = (Task)method!.Invoke(orch, new object?[]
+        {
+            session.Id, "修 README typo", plan,
+            (IReadOnlyList<ITalent>)new ITalent[] { talent },
+            new AIAgent[] { agent },
+            true,
+            talentNameToIdMap,
+            CancellationToken.None
+        })!;
+        await task;
+
+        // outputLen>0 → upsert 各 1 row
+        Assert.Equal(1, await db.TaskMemories.CountAsync());
+        Assert.Equal(1, await db.TalentMemories.CountAsync());
+        var taskMem = await db.TaskMemories.SingleAsync();
+        Assert.Equal($"decision/{talentName}-output-summary", taskMem.Key);
+        Assert.Equal("Build 通過，0 error。", taskMem.Content);
+    }
+
     // ─── helper ───────────────────────────────────────────────────────────────────
     private static List<string> ParseCapabilities(string raw)
         => raw.Split('|').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
@@ -745,6 +849,42 @@ public class PetraOrchestratorServiceTests
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
+
+    /// <summary>Stage 71 Test 29/30：建立含真實 WorkflowSettingsResolver 的 test 服務群。
+    /// 空 app_settings InMemory DB → resolver fallback IOptions defaults（compactKeep=50 / threshold=60）。</summary>
+    private static (AppDbContext db, WorkflowSettingsResolver resolver,
+        PetraSessionRepository sessionRepo, MemoryRepository memoryRepo,
+        PetraOrchestratorService orch) CreateMemoryTestServices(string dbName)
+    {
+        var services = new ServiceCollection();
+        services.AddDbContext<AppDbContext>(o => o
+            .UseInMemoryDatabase(dbName)
+            .ConfigureWarnings(w => w.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning)));
+        services.AddLogging();
+        services.Configure<AiTeam.Bot.Configuration.WorkflowSettings>(_ => { });
+        services.AddSingleton<AiTeam.Bot.Services.AppSettingsService>();
+        services.AddSingleton<AiTeam.Bot.Configuration.WorkflowSettingsResolver>();
+        var sp = services.BuildServiceProvider();
+
+        var db = sp.GetRequiredService<AppDbContext>();
+        var resolver = sp.GetRequiredService<AiTeam.Bot.Configuration.WorkflowSettingsResolver>();
+        var sessionRepo = new PetraSessionRepository(db);
+        var memoryRepo = new MemoryRepository(db);
+        var orch = new PetraOrchestratorService(
+            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
+            talentFactory: null!,
+            workflowResolver: resolver,
+            sessionRepo: sessionRepo,
+            memoryRepo: memoryRepo,
+            db: db,
+            providerFactory: null!,
+            gitHubService: null!,
+            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            loggerFactory: NullLoggerFactory.Instance,
+            logger: NullLogger<PetraOrchestratorService>.Instance);
+        return (db, resolver, sessionRepo, memoryRepo, orch);
+    }
 
     /// <summary>Stage 67 Test 15/16：reflection invoke private FindTalentForSkill。</summary>
     private static ITalent? InvokeFindTalentForSkill(PetraOrchestratorService orch, string skill, IReadOnlyList<ITalent> talents)

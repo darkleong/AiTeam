@@ -611,22 +611,31 @@ public class PetraOrchestratorService(
             // 2. memory 寫回（useV5Memory=true 時 dispatch 後 upsert TaskMemory + TalentMemory）
             if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentIdForWrite))
             {
-                var truncated = outputText.Length > 500 ? outputText[..500] : outputText;
-                await memoryRepo.UpsertTaskMemoryAsync(
-                    sessionId, projectId: null,
-                    key: $"decision/{talentName}-output-summary",
-                    content: truncated,
-                    createdByTalent: talentName,
-                    ct);
-                await memoryRepo.UpsertTalentMemoryAsync(
-                    talentIdForWrite, projectId: null,
-                    key: "last-task-summary",
-                    content: truncated,
-                    tags: null,
-                    ct);
-                logger.LogInformation(
-                    "Petra v5.5 dispatch 完成寫回 TaskMemory key=decision/{Talent}-output-summary + TalentMemory key=last-task-summary",
-                    talentName);
+                if (outputText.Length == 0)
+                {
+                    logger.LogWarning(
+                        "Petra v5.5 dispatch worker output empty skip memory write talent={Talent} skill={Skill} sessionId={SessionId}",
+                        talentName, skill, sessionId);
+                }
+                else
+                {
+                    var truncated = outputText.Length > 500 ? outputText[..500] : outputText;
+                    await memoryRepo.UpsertTaskMemoryAsync(
+                        sessionId, projectId: null,
+                        key: $"decision/{talentName}-output-summary",
+                        content: truncated,
+                        createdByTalent: talentName,
+                        ct);
+                    await memoryRepo.UpsertTalentMemoryAsync(
+                        talentIdForWrite, projectId: null,
+                        key: "last-task-summary",
+                        content: truncated,
+                        tags: null,
+                        ct);
+                    logger.LogInformation(
+                        "Petra v5.5 dispatch 完成寫回 TaskMemory key=decision/{Talent}-output-summary + TalentMemory key=last-task-summary",
+                        talentName);
+                }
             }
 
             await db.SaveChangesAsync(ct);
@@ -897,6 +906,16 @@ public class PetraOrchestratorService(
 ★ Few-shot 範例 2：複雜 task（多 subtask + sequential chain）
   輸入：「Dashboard 加 Petra session 列表頁 + review + 補 Playwright test」
   輸出（單行 JSON）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"實作 Dashboard Petra session 列表頁 + Razor + Service"},{"id":2,"skill":"code_review","description":"review 列表頁 production safety + coding style"},{"id":3,"skill":"qa_testing","description":"補 Playwright test 截圖驗收"}],"dependencies":[{"from":1,"to":2,"type":"sequential"},{"from":2,"to":3,"type":"sequential"}]}
+
+★ Few-shot 反例（不拆 — 線性整包）：
+  輸入：「打磨多 form 錯誤處理 toast 通知（跨 5 form 同類改動）」
+  ❌ 過拆（錯誤）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"修 Form A toast"},{"id":2,"skill":"code_implementation","description":"修 Form B toast"},{"id":3,"skill":"code_implementation","description":"修 Form C toast"}],"dependencies":[{"from":1,"to":2,"type":"sequential"},{"from":2,"to":3,"type":"sequential"}]}
+  ✅ 線性整包（正確）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"打磨多 form 錯誤處理 toast 通知"}],"dependencies":[]}
+
+【判斷邊界】
+- 線性整包（1 subtask）：同類改動 + 同 Skill + 同 scope — 不管幾個 form / 幾個檔 / 幾處改動
+- 真不同 scope（拆 N subtask）：任務含真正不同性質（實作 + review + 測試 或 跨 module 獨立功能）+ 跨 Skill 串接
+- 直覺判準：「一句話描述的 code 任務」= 線性整包 / 「A 完成後才能做 B 且性質真的不同」= 拆解
 
 """
             : """
