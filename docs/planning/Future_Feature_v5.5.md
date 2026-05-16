@@ -193,12 +193,13 @@
 - v5.5 核心新功能：拆解任務 + 派 Talent
 - 對齊 Talent-Skill：Petra 拆出 subtask 對應 Skill → 找可用 Talent
 
-**Step 4.5（Stage 71）— v5.5 Phase 2 Step 3+4 production-ready 補強** ✅ **已完成**（v3.61.0 / 2026-05-16 / S 規模 / commit `b24a335` + Forge 結案 + Aria gate1 Tier 0+1+2 通過）
-- ① ✅ **Petra prompt 升級「拆=真不同 scope」紀律** — BuildPetraSystemPrompt useSubtaskPlanning=true 段補 few-shot 反例（打磨多 form toast = 線性整包）+ 判斷邊界 3 條（同類同 Skill 同 scope = 線性整包 / 真不同 scope 跨 Skill = 拆解 / 直覺判準）
-- ② ✅ **Stage 69 memory 寫入 outputLen=0 guard** — DispatchTalentsAsync memory 寫回加 `if (outputText.Length == 0)` guard + LogWarning skip / outputLen>0 既有 truncate+upsert 邏輯 0 動
-- ③ 🔄 **FinalizeGitAsync permission denied 走 Aria 紀律修正不修 production code** — Bot 無 root 不能 chown 防呆 / docker-compose entrypoint 已自動防呆 / 修法 = `/aria-memory` 加自省點 #34
-- ④ 🔄 **Aria 自省點 #34 立** — `/aria-memory` 觸發時加入 workflow_aria_session_lessons.md
-- **驗收**：Trial_v17 真實任務重驗（場景 A 線性整包 subtasks ≤ 2 + 場景 F v4 既有 path 0 regression） → 通過後切 `UseV5Memory` + `UseV5SubtaskPlanning` default true = Phase 2 Step 3+4 正式完整收口
+**Step 4.5（Stage 71）— v5.5 Phase 2 Step 3+4 production-ready 補強** ✅ **已完成**（v3.61.0 / 2026-05-16）+ **Trial_v17 🟢 全綠驗收通過 ⭐**
+- ① ✅ **Petra prompt 升級「拆=真不同 scope」紀律** — Stage 71 修法 / Trial_v17 完整治到根（策略階段論取代機械重複拆 / Cody 從 3 段降到 2 段）
+- ② ✅ **Stage 69 memory 寫入 outputLen=0 guard** — Stage 71 修法 / Trial_v17 production 生效（TaskMemory/TalentMemory 全 500 char 非空）
+- ③ ✅ **議題 #3 走 Aria 紀律修正** — 自省點 #34 立 + aria-trial-run skill 工具化 / Trial_v17 FinalizeGitAsync 完美無 permission denied
+- ④ ✅ **Aria 自省點 #34 立** — `workflow_aria_session_lessons.md` 含 workspace cleanup 紀律
+- **Trial_v17 結果**：4 flag SQL=true production active / 業務級成功 / cost -16% / 3x deliverable / 連續 7 Trial 業務級成功 / aria-trial-run skill 首次實踐成功
+- **戰略級觀察**（Christ 2026-05-16 點破）：「品質 > 做法」評估框架修正 — Aria 評估 Trial 結果用品質 metric / 預期數字是參考不是死標準 / 對 Step 5 Prompt DB 化「讓 Talent 自主判斷做法 / 我們只定品質標準」精神指引
 
 **Step 5 — Prompt DB 化 + Talent identity 整合**（規模 M）
 - 對齊「Talent identity 含 prompt」原則

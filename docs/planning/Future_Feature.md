@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v8.5
+> 版本：v8.6
 > 建立日期：2026-04-01
-> 最後更新：2026-05-16（Stage 71 結案 — Trial_v15+v16 揭 2 議題收口 / Petra prompt 線性整包紀律 + memory 空 content guard / 連續 5 Stage 0 follow-up）
+> 最後更新：2026-05-16（Trial_v17 🟢 結案 — v5.5 Phase 2 Step 3+4 正式完整收口 / 4 flag production active / 連續 7 Trial 業務級成功 / aria-trial-run skill 首次實踐成功）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---
