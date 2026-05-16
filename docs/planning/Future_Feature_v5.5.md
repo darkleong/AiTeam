@@ -201,10 +201,19 @@
 - **Trial_v17 結果**：4 flag SQL=true production active / 業務級成功 / cost -16% / 3x deliverable / 連續 7 Trial 業務級成功 / aria-trial-run skill 首次實踐成功
 - **戰略級觀察**（Christ 2026-05-16 點破）：「品質 > 做法」評估框架修正 — Aria 評估 Trial 結果用品質 metric / 預期數字是參考不是死標準 / 對 Step 5 Prompt DB 化「讓 Talent 自主判斷做法 / 我們只定品質標準」精神指引
 
-**Step 5 — Prompt DB 化 + Talent identity 整合**（規模 M）
-- 對齊「Talent identity 含 prompt」原則
-- 同 Skill 不同 Talent 可有不同 prompt 風格（例：Cody-1 嚴謹 / Cody-2 創意）
-- Versioning + rollback 機制（業界踩坑必要）
+**Step 5（Stage 72）— Prompt DB 化 + Talent identity 整合** ✅ **已完成**（v3.62.0 / 2026-05-17 / M 規模 / commit `151e156` + Forge 結案 + Aria gate1 Tier 0+1+2+Tier 3 #11 通過 / 等 Trial_v18 驗）
+- ① ✅ **SkillPrompts + TalentPrompts 兩層 schema**（職位層 per-Skill 共享 + 個性層 per-Talent nullable / partial unique index 守一條 active / 對齊 Stage 69 既有 nullable unique pattern + 對冗餘不容忍精神）
+- ② ✅ **EF Migration `Stage72PromptSchema`** + 2 table + 4 index + FK cascade（CI/CD self-hosted runner 自動 apply）
+- ③ ✅ **PromptRepository** CRUD + Upsert（新版本 row + 舊 active 切 false）+ Rollback（切版本 + 不刪舊 row 保 audit trail）+ ListVersions
+- ④ ✅ **PromptResolver service**（Singleton + 5-min TTL cache + IServiceScopeFactory 對齊 AppSettingsService pattern + flag=false 0 DB query 短路 + catch Exception fallback resilience）
+- ⑤ ✅ **DbSeeder 6 個 SkillPrompts seed**（code_implementation / code_review / qa_testing / documentation / ceo_orchestration / petra_orchestration — race-safe per-row + DbUpdateException catch 對齊 Stage 67 EnsureTalentsAsync pattern）
+- ⑥ ✅ **v5.5 path 整合**（BuildPetraSystemPrompt 加第 3 optional `baseTemplateOverride` + 新 instance async `BuildPetraSystemPromptForRuntimeAsync` + ClaudeCodeChatClientAdapter 加第 9 optional PromptResolver + DI propagation chain 5 檔完整）
+- ⑦ ✅ **Feature flag `Workflow:UseV5PromptDb` default false 守 fallback**（Trial_v18 驗 + Christ 拍板才切 default true）
+- ⑧ ✅ **InternalController reload-cache `all` scope** 加 `PromptResolver.InvalidateCache`（議題 2 路線 A 不加新 prompts scope / 對齊範圍刻意收緊）
+- ⑨ ✅ **PetraPromptTemplate.cs 常數抽進 AiTeam.Data**（Forge healthy 偏離 plan — 跨專案 reference 工程議題解決 / DbSeeder + BuildPetraSystemPrompt 共用同份 source-of-truth）
+- ⑩ ✅ **xUnit 6 新 case**（T46/T47 BuildPetraSystemPrompt override / hardcoded 雙路 + PromptRepositoryTests T1-T4 CRUD/versioning/rollback / 70 pass / 0 fail）
+- ⑪ ✅ **G 場景 partial unique index production enforced 額外補驗**（Forge 主動補對齊 Aria gate1 minor 議題 — production PostgreSQL ERROR: duplicate key value violates unique constraint）
+- **Backwards-compatible 4 層守護**：v4 既有 path / v5 既有 path / v5.5 既有 hardcoded path（flag=false fallback）/ Stage 70+71 累積 prompt 紀律（動態 skill roster 注入 + hierarchical decomposition + 線性整包邊界）— 全保留
 
 ### 🥉 Phase 3：進階機制 + 動態化開放
 
