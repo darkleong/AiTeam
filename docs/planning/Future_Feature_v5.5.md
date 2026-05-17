@@ -241,7 +241,7 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Aria 二檢 1 Critical + 5 Warning 全修正對齊**（C1 Quinn schema 維持既有不改 / W1 Cody 三段補回 / W2 detach single-entity / W3 fresh DB trade-off Implementation Note 明寫 / W4 Petra persona 第 3 條對齊 Stage 76 / W5 baseline test 對照表 + Test47 update + grep 紀律）
 - **production 真實生效**：12 row skill_prompts（6 × 2 version / partial unique index enforced）+ 1 row talent_prompts Petra（907 chars / 4 拍板特質關鍵字全 hit）+ reload-cache wire 真實生效
 
-**Step 8（Stage 74）— per-Skill Model + 真並行 dispatch DAG fan-out + Skill registry metadata 擴展** ✅ **已完成**（v3.64.0 / 2026-05-17 / M+ 規模 / commit `3a66f88` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 8 Stage 0 follow-up bug fix / 待 Trial_v20 真實業務驗）
+**Step 8（Stage 74）— per-Skill Model + 真並行 dispatch DAG fan-out + Skill registry metadata 擴展** ✅ **已完成 + Trial_v20 🟡 部分過驗收通過**（v3.64.0 / 2026-05-17 / M+ 規模 / commit `3a66f88` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 8 Stage 0 follow-up bug fix / Trial_v20 業務評分 4.5/5 + Stage 74 核心驗收 4 訊號全綠 + PR #380 30 檔 +1765/-99 + 17 範圍 cover + Cost $2.2131 / 連續 10 Trial 業務級成功 v10-v20 / Trial_v20 揭 1 🟡 Quinn fail cause 不明 + 2 🟢 觀察）
 
 > **戰略 question 點破史**（規劃前置 / Christ 2026-05-17 連續兩 question）：① 仲裁是 Agent 還是權責？→ 撤回 Cora Talent 建議（Petra 內建職責）② 權責能不能設 Model？→ Aria grep 實證揭真實架構缺口（per-Skill Model 沒做）→ 修根因紀律「先補完 per-Skill Model 三層架構 / debate 機制延後 Phase 4」
 
