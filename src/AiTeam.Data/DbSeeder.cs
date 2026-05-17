@@ -1,3 +1,4 @@
+using AiTeam.Data.Repositories;
 using AiTeam.Data.SeedContent;
 using AiTeam.Shared.Constants;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +97,12 @@ public static class DbSeeder
 
         // Stage 72：v5.5 Phase 2 Step 5 — baseline 6 SkillPrompts seed（幂等 + race-safe / TalentPrompts 0 row baseline）
         await EnsureSkillPromptsAsync(db);
+
+        // Stage 73：v5.5 Phase 3 Step 7 — 升級 6 SkillPrompts 到 v2「品質 > 做法」content（幂等：v2 active 已存在則 skip）
+        await UpgradeSkillPromptsToV2Async(db);
+
+        // Stage 73：v5.5 Phase 3 Step 7 — Petra TalentPrompt persona seed（幂等 + race-safe）
+        await EnsurePetraTalentPromptAsync(db);
     }
 
     /// <summary>
@@ -275,6 +282,108 @@ public static class DbSeeder
                     db.Entry(ts).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Stage 73：v5.5 Phase 3 Step 7 — 把 6 SkillPrompt 從 v1 baseline 升級到 v2「品質 > 做法」content。
+    ///
+    /// 走 PromptRepository.UpsertSkillPromptAsync versioning path：
+    /// - 同 SkillName 已存在 VersionNumber >= 2 active row → skip（幂等：重啟 / 並行 seed 安全）
+    /// - 否則 Upsert → 舊 v1 切 IsActive=false（audit trail 保留）+ 新 v2 IsActive=true / VersionNumber=max+1
+    ///
+    /// race-safe（對齊 Stage 72 EnsureSkillPromptsAsync pattern）：per-skill SaveChanges + catch DbUpdateException + 單 entity Detach。
+    /// 檔案不存在 → log warning + skip（不阻擋其他 seed）。
+    ///
+    /// 已知 trade-off：fresh DB 首次部署會 seed v1 → 立刻升 v2 → v1 archive row 看起來像「歷史」但其實是 0 秒前 seed。
+    /// 接受現狀理由：fresh DB rare event / production 升級才是主場景 / 改進方案會破壞 Stage 72 既有 EnsureSkillPromptsAsync 幂等紀律。
+    /// </summary>
+    private static async Task UpgradeSkillPromptsToV2Async(AppDbContext db)
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var seeds = new (string SkillName, string Source)[]
+        {
+            ("code_implementation", Path.Combine(baseDir, "Resources", "CLAUDE_Cody.md")),
+            ("code_review",         Path.Combine(baseDir, "Resources", "CLAUDE_Vera.md")),
+            ("qa_testing",          Path.Combine(baseDir, "Resources", "CLAUDE_Quinn.md")),
+            ("documentation",       Path.Combine(baseDir, "Resources", "CLAUDE_Sage.md")),
+            ("ceo_orchestration",   Path.Combine(baseDir, "Resources", "CLAUDE_Victoria.md")),
+            ("petra_orchestration", "<<INLINE>>"),
+        };
+
+        var repo = new PromptRepository(db);
+
+        foreach (var (skillName, source) in seeds)
+        {
+            // 幂等：同 SkillName VersionNumber >= 2 active row 已存在 → skip
+            var active = await db.SkillPrompts
+                .FirstOrDefaultAsync(s => s.SkillName == skillName && s.IsActive);
+            if (active is not null && active.VersionNumber >= 2) continue;
+
+            string body;
+            if (source == "<<INLINE>>")
+            {
+                body = PetraPromptTemplate.Template;
+            }
+            else
+            {
+                if (!File.Exists(source))
+                {
+                    Console.WriteLine($"[DbSeeder][Stage73] SkillPrompt 來源檔不存在 skip upgrade：{skillName} ← {source}");
+                    continue;
+                }
+                body = await File.ReadAllTextAsync(source);
+            }
+
+            var newEntity = await repo.UpsertSkillPromptAsync(skillName, body, createdByUser: "stage73-upgrade");
+
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // race loser — 另一個 process 已 upgrade 同 SkillName → 只 detach 失敗那一個（對齊 Stage 72 EnsureSkillPromptsAsync pattern）
+                db.Entry(newEntity).State = EntityState.Detached;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stage 73：v5.5 Phase 3 Step 7 — Petra TalentPrompt persona seed（VersionNumber=1 / IsActive=true）。
+    ///
+    /// 走 PromptRepository.UpsertTalentPromptAsync：
+    /// - Petra Talent 已存在 active TalentPrompt → skip（幂等）
+    /// - 否則 Upsert 新 row
+    ///
+    /// race-safe per-Talent SaveChanges + catch DbUpdateException + 單 entity Detach（對齊 Stage 67 EnsureTalentsAsync pattern）。
+    /// Petra Talent 不存在（EnsureTalentsAsync 失敗）→ log warning + skip。
+    /// </summary>
+    private static async Task EnsurePetraTalentPromptAsync(AppDbContext db)
+    {
+        var petra = await db.Talents
+            .FirstOrDefaultAsync(t => t.ProjectId == null && t.Name == "Petra");
+        if (petra is null)
+        {
+            Console.WriteLine("[DbSeeder][Stage73] Petra Talent 不存在 skip TalentPrompt seed（檢查 EnsureTalentsAsync log）");
+            return;
+        }
+
+        var existing = await db.TalentPrompts
+            .FirstOrDefaultAsync(t => t.TalentId == petra.Id && t.IsActive);
+        if (existing is not null) return;   // 幂等：active row 已存在
+
+        var repo = new PromptRepository(db);
+        var newEntity = await repo.UpsertTalentPromptAsync(petra.Id, PetraPersonaSeed.PersonaBody);
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // race loser — 對齊 Stage 67 EnsureTalentsAsync 單 entity detach pattern
+            db.Entry(newEntity).State = EntityState.Detached;
         }
     }
 

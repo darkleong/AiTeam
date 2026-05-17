@@ -1043,8 +1043,8 @@ roster={{capabilityRoster}}
         // override=null → 走 PetraPromptTemplate.Template hardcoded constant（Test9 等價驗）
         var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation, code_review", false, null })!;
 
-        // 對齊 PetraPromptTemplate.Template 內容（Stage 64 三 trigger）
-        Assert.Contains("v5 動態架構 Multi-Agent Orchestrator", prompt);
+        // 對齊 PetraPromptTemplate.Template 內容（Stage 64 三 trigger / Stage 73：v5 → v5.5 升級）
+        Assert.Contains("v5.5 動態架構 Multi-Agent Orchestrator", prompt);
         Assert.Contains("1-on-1 trigger", prompt);
         Assert.Contains("Design trigger", prompt);
         Assert.Contains("Kickoff trigger", prompt);

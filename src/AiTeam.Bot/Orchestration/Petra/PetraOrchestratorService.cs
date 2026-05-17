@@ -971,10 +971,11 @@ public class PetraOrchestratorService(
     }
 
     /// <summary>
-    /// Stage 72：v5.5 Phase 2 Step 5 — runtime async wrapper for BuildPetraSystemPrompt（含 feature flag check + DB load）。
+    /// Stage 72 + Stage 73：v5.5 Phase 2/3 — runtime async wrapper for BuildPetraSystemPrompt（含 feature flag check + DB load）。
     ///
-    /// flag=`Workflow:UseV5PromptDb`=true → 透過 PromptResolver 取 DB SkillPrompt `petra_orchestration` PromptBody 當 base template override。
-    /// flag=false → override=null，走 hardcoded PetraPromptTemplate.Template 既有 baseline 0 regression。
+    /// Stage 72：flag=`Workflow:UseV5PromptDb`=true → 透過 PromptResolver 取 DB SkillPrompt `petra_orchestration` PromptBody 當 base template override。
+    /// Stage 73：flag=true + Petra TalentPrompt 存在 → prepend persona body 上 base template；
+    ///          不存在或 flag=false → 純 base template（backwards-compatible 守護 0 regression）。
     /// </summary>
     private async Task<string> BuildPetraSystemPromptForRuntimeAsync(
         string capabilityRoster,
@@ -982,6 +983,32 @@ public class PetraOrchestratorService(
         CancellationToken ct)
     {
         var dbBase = await promptResolver.ResolvePetraBaseTemplateAsync(ct);
-        return BuildPetraSystemPrompt(capabilityRoster, useSubtaskPlanning, dbBase);
+        var baseTemplate = BuildPetraSystemPrompt(capabilityRoster, useSubtaskPlanning, dbBase);
+
+        // Stage 73：Petra persona prepend（flag-gated + TalentPrompt 存在才注入 / 不存在 fallback 純 base template）
+        var persona = await ResolvePetraPersonaAsync(ct);
+        if (string.IsNullOrWhiteSpace(persona)) return baseTemplate;
+
+        return $"""
+{persona}
+
+────────────────────────────
+
+{baseTemplate}
+""";
+    }
+
+    /// <summary>
+    /// Stage 73：取 Petra TalentPrompt persona（透過 db 查 Petra Talent.Id + PromptResolver cache）。
+    /// flag=false / Petra Talent 不存在 / Petra TalentPrompt 不存在 → null（caller fallback 純 base template）。
+    /// </summary>
+    private async Task<string?> ResolvePetraPersonaAsync(CancellationToken ct)
+    {
+        var petra = await db.Talents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.ProjectId == null && t.Name == "Petra", ct);
+        if (petra is null) return null;
+
+        return await promptResolver.ResolveTalentPersonaAsync(petra.Id, ct);
     }
 }
