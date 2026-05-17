@@ -29,6 +29,9 @@ public partial class Home : IAsyncDisposable
     [Inject]
     private ILogger<Home> Logger { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -45,9 +48,16 @@ public partial class Home : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
-        _recentGroups  = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
-        _agentQueues   = await TaskService.GetAgentQueuesAsync();
+        try
+        {
+            _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
+            _recentGroups  = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
+            _agentQueues   = await TaskService.GetAgentQueuesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"首頁資料載入失敗：{ex.Message}", Severity.Error);
+        }
         await ConnectSignalRAsync();
     }
 
@@ -137,10 +147,12 @@ public partial class Home : IAsyncDisposable
             client.BaseAddress = new Uri(Navigation.BaseUri);
             var response = await client.PostAsync("/internal/agent-status/test", null);
             Logger.LogInformation("測試推送回應：{StatusCode}", response.StatusCode);
+            Snackbar.Add($"測試推送已送出（HTTP {(int)response.StatusCode}）", Severity.Success);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "測試推送失敗");
+            Snackbar.Add($"測試推送失敗：{ex.Message}", Severity.Error);
         }
     }
 

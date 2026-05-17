@@ -9,6 +9,9 @@ public partial class DeploymentHistory
     [Inject]
     private DashboardTaskService TaskService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -24,12 +27,19 @@ public partial class DeploymentHistory
 
     protected override async Task OnInitializedAsync()
     {
-        // 部署紀錄：篩選 Ops Agent 執行的任務
-        var result = await TaskService.GetTasksPagedAsync(pageSize: 200);
-        _deployments = result.Items
-            .Where(t => t.AssignedAgent == AiTeam.Shared.Constants.AgentNames.Ops
-                     || t.TriggeredBy == "GitHub")
-            .ToList();
+        try
+        {
+            // 部署紀錄：篩選 Ops Agent 執行的任務
+            var result = await TaskService.GetTasksPagedAsync(pageSize: 200);
+            _deployments = result.Items
+                .Where(t => t.AssignedAgent == AiTeam.Shared.Constants.AgentNames.Ops
+                         || t.TriggeredBy == "GitHub")
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"部署紀錄載入失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     #endregion
@@ -41,8 +51,15 @@ public partial class DeploymentHistory
         _selectedTask = args.Item;
         if (_selectedTask is null) return;
 
-        _selectedLogs = await TaskService.GetTaskLogsAsync(_selectedTask.Id);
-        _isDrawerOpen = true;
+        try
+        {
+            _selectedLogs = await TaskService.GetTaskLogsAsync(_selectedTask.Id);
+            _isDrawerOpen = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"載入部署記錄失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     #endregion
