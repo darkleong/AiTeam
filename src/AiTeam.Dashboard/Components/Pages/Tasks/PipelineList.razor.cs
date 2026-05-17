@@ -21,6 +21,9 @@ public partial class PipelineList : IAsyncDisposable
     [Inject]
     private IConfiguration Configuration { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -101,16 +104,24 @@ public partial class PipelineList : IAsyncDisposable
         TableState state,
         CancellationToken cancellationToken)
     {
-        var result = await TaskService.GetTaskGroupsPagedAsync(
-            page: state.Page + 1,
-            pageSize: state.PageSize,
-            statusFilters: _statusFilters.ToHashSet());
-
-        return new TableData<TaskGroupDto>
+        try
         {
-            Items      = result.Items,
-            TotalItems = result.TotalCount
-        };
+            var result = await TaskService.GetTaskGroupsPagedAsync(
+                page: state.Page + 1,
+                pageSize: state.PageSize,
+                statusFilters: _statusFilters.ToHashSet());
+
+            return new TableData<TaskGroupDto>
+            {
+                Items      = result.Items,
+                TotalItems = result.TotalCount
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"任務群組載入失敗：{ex.Message}", Severity.Error);
+            return new TableData<TaskGroupDto> { Items = [], TotalItems = 0 };
+        }
     }
 
     private void OnGroupRowClickAsync(TableRowClickEventArgs<TaskGroupDto> args)

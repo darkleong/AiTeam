@@ -13,6 +13,11 @@
     </MudButton>
 </div>
 
+@if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_loadError</MudAlert>
+}
+
 <MudTable Items="@_projects"
           Dense="true"
           Hover="true"

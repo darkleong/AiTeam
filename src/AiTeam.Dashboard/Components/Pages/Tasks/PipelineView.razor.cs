@@ -159,6 +159,10 @@ public partial class PipelineView : IAsyncDisposable
             var runningIdx = _steps.FindIndex(s => s.Task.Status == "running");
             _activeStepIndex = runningIdx >= 0 ? runningIdx : Math.Max(0, _steps.Count - 1);
         }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Pipeline 步驟載入失敗：{ex.Message}", Severity.Error);
+        }
         finally
         {
             _loading = false;
@@ -169,8 +173,15 @@ public partial class PipelineView : IAsyncDisposable
     private async Task RefreshGroupContentAsync()
     {
         if (Group is null) return;
-        var freshGroup = await TaskService.GetTaskGroupByIdAsync(Group.Id);
-        ApplyGroupContent(freshGroup);
+        try
+        {
+            var freshGroup = await TaskService.GetTaskGroupByIdAsync(Group.Id);
+            ApplyGroupContent(freshGroup);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"群組內容更新失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     /// <summary>將 freshGroup 的 content 欄位同步回 Group Parameter（集中管理，避免漏欄位）。</summary>
@@ -304,8 +315,15 @@ public partial class PipelineView : IAsyncDisposable
 
     private async Task LoadLogsAsync(PipelineStepViewModel step)
     {
-        step.Logs       = await TaskService.GetTaskLogsAsync(step.Task.Id);
-        step.LogsLoaded = true;
+        try
+        {
+            step.Logs       = await TaskService.GetTaskLogsAsync(step.Task.Id);
+            step.LogsLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"任務記錄載入失敗：{ex.Message}", Severity.Error);
+        }
         StateHasChanged();
     }
 

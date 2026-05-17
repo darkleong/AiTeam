@@ -12,6 +12,9 @@ public partial class ProjectManagement
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     #endregion
 
     #region Private Variables
@@ -19,13 +22,24 @@ public partial class ProjectManagement
     private List<ProjectDto> _projects = [];
     private ProjectDto?      _selectedProject;
     private bool             _isDrawerOpen;
+    private string?          _loadError;
 
     #endregion
 
     #region Override Methods
 
     protected override async Task OnInitializedAsync()
-        => _projects = await ProjectService.GetAllProjectsAsync();
+    {
+        try
+        {
+            _projects = await ProjectService.GetAllProjectsAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"專案清單載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
+        }
+    }
 
     #endregion
 
@@ -51,8 +65,15 @@ public partial class ProjectManagement
 
     private async Task ToggleIsActiveAsync(ProjectDto project, bool isActive)
     {
-        await ProjectService.ToggleProjectActiveAsync(project.Id, isActive);
-        project.IsActive = isActive;
+        try
+        {
+            await ProjectService.ToggleProjectActiveAsync(project.Id, isActive);
+            project.IsActive = isActive;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"狀態切換失敗：{ex.Message}", Severity.Error);
+        }
     }
 
     #endregion

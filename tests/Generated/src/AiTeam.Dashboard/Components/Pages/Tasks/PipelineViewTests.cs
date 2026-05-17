@@ -2,9 +2,11 @@ using System;
 using System.Reflection;
 using AiTeam.Dashboard.Components.Pages.Tasks;
 using AiTeam.Dashboard.Helpers;
+using AiTeam.Dashboard.Services;
 using AiTeam.Shared.Dtos;
 using FluentAssertions;
 using MudBlazor;
+using NSubstitute;
 using Xunit;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks.Tests;
@@ -359,5 +361,92 @@ public class PipelineViewTests
     public void GetLogColor_未知狀態_應回傳Default顏色()
     {
         InvokeGetLogColor("unknown").Should().Be(Color.Default);
+    }
+
+    // -----------------------------------------------------------------------
+    // IsRevision — needs_intervention（Stage 43 補充）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void IsRevision_needs_intervention狀態_應回傳True()
+    {
+        InvokeIsRevision("needs_intervention").Should().BeTrue(
+            because: "needs_intervention 屬於需要介入的修正類狀態");
+    }
+
+    // -----------------------------------------------------------------------
+    // GetLogColor — needs_intervention（Stage 43 補充）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void GetLogColor_needs_intervention狀態_應回傳Warning顏色()
+    {
+        InvokeGetLogColor("needs_intervention").Should().Be(Color.Warning);
+    }
+
+    // -----------------------------------------------------------------------
+    // PipelineStepViewModel — 預設值
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void PipelineStepViewModel_預設值_LogsLoaded應為False()
+    {
+        var vm = new PipelineStepViewModel();
+
+        vm.LogsLoaded.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PipelineStepViewModel_預設值_Logs應為空列表且不為Null()
+    {
+        var vm = new PipelineStepViewModel();
+
+        vm.Logs.Should().NotBeNull();
+        vm.Logs.Should().BeEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // LoadStepsAsync — 服務失敗（catch 路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task LoadStepsAsync_服務拋出例外_loading應重設為False()
+    {
+        var instance = new PipelineView();
+        instance.Group = new TaskGroupDto { Id = Guid.NewGuid() };
+        typeof(PipelineView)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineView)
+            .GetProperty("TaskService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, new DashboardTaskService(null!));
+
+        var method = typeof(PipelineView).GetMethod(
+            "LoadStepsAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await (Task)method.Invoke(instance, null)!;
+
+        var loading = (bool)typeof(PipelineView)
+            .GetField("_loading", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(instance)!;
+        loading.Should().BeFalse("finally 區塊應確保 _loading 重設為 false");
+    }
+
+    [Fact]
+    public async Task LoadStepsAsync_服務拋出例外_不應拋出未處理例外()
+    {
+        var instance = new PipelineView();
+        instance.Group = new TaskGroupDto { Id = Guid.NewGuid() };
+        typeof(PipelineView)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineView)
+            .GetProperty("TaskService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, new DashboardTaskService(null!));
+
+        var method = typeof(PipelineView).GetMethod(
+            "LoadStepsAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        Func<Task> act = async () => await (Task)method.Invoke(instance, null)!;
+
+        await act.Should().NotThrowAsync();
     }
 }

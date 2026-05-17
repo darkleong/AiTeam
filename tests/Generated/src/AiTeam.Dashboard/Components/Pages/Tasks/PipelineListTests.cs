@@ -1,8 +1,11 @@
 using System.Reflection;
 using AiTeam.Dashboard.Components.Pages.Tasks;
 using AiTeam.Dashboard.Helpers;
+using AiTeam.Dashboard.Services;
+using AiTeam.Shared.Dtos;
 using FluentAssertions;
 using MudBlazor;
+using NSubstitute;
 using Xunit;
 
 namespace AiTeam.Dashboard.Components.Pages.Tasks.Tests;
@@ -199,5 +202,51 @@ public class PipelineListTests
         var result = InvokeExtractPrNumber("https://github.com/org/repo/pull/");
 
         result.Should().Be("PR");
+    }
+
+    // -----------------------------------------------------------------------
+    // LoadGroupServerDataAsync — 服務失敗（catch 路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task LoadGroupServerDataAsync_服務拋出例外_應回傳空集合()
+    {
+        var instance = new PipelineList();
+        typeof(PipelineList)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineList)
+            .GetProperty("TaskService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, new DashboardTaskService(null!));
+
+        var method = typeof(PipelineList).GetMethod(
+            "LoadGroupServerDataAsync",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+        var result = await (Task<TableData<TaskGroupDto>>)method.Invoke(
+            instance, new object[] { new TableState(), CancellationToken.None })!;
+
+        result.Items.Should().BeEmpty();
+        result.TotalItems.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task LoadGroupServerDataAsync_服務拋出例外_不應拋出未處理例外()
+    {
+        var instance = new PipelineList();
+        typeof(PipelineList)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineList)
+            .GetProperty("TaskService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, new DashboardTaskService(null!));
+
+        var method = typeof(PipelineList).GetMethod(
+            "LoadGroupServerDataAsync",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        Func<Task> act = async () => await (Task<TableData<TaskGroupDto>>)method.Invoke(
+            instance, new object[] { new TableState(), CancellationToken.None })!;
+
+        await act.Should().NotThrowAsync();
     }
 }
