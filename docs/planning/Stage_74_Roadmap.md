@@ -1,8 +1,8 @@
 # Stage 74 Roadmap — v5.5 Phase 3 Step 8：per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展
 
 > 目標版本：**v3.64.0**（minor — v5.5 Phase 3 第二步 / 一般架構級重構：Talent-Skill-Model 三層架構打磨完整 + DAG fan-out 並行 dispatch + 對齊業界 2026 Agent Skills open standard format）
-> 狀態：📝 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-17）
+> 文件版本：v2.0
 > 範圍：TalentSkill schema 擴展 + Model resolution 三層 fallback chain + ClaudeCodeChatClientAdapter Model 動態選擇 + DAG fan-out 並行 dispatch + ISkillRegistry metadata 擴展 + xUnit + Directory.Build.props bump
 > 規模：M+
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 3 Step 8
@@ -285,8 +285,106 @@ DI 註冊（[`Program.cs`](src/AiTeam.Bot/Program.cs)）：`AddSingleton<TalentS
 
 ---
 
+## 實作紀錄
+
+> **Forge 結案第一段 — 2026-05-17 完成**
+> commit [`3a66f88`](https://github.com/darkleong/AiTeam/commit/3a66f88) — feat(stage74): per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展 v3.64.0 — v5.5 Phase 3 Step 8
+> 規模：18 files changed / 1956 insertions / 123 deletions（純機制升級層 / 0 文案層）
+
+### 實作完成項目（依 9 子項對照）
+
+| Roadmap 子項 | 對應檔案 | 完成情況 |
+|---|---|---|
+| 1. TalentSkill schema 擴展 + Migration | [`src/AiTeam.Data/Entities.cs:340`](../../src/AiTeam.Data/Entities.cs) + [`Migrations/20260517072347_Stage74TalentSkillModel.cs`](../../src/AiTeam.Data/Migrations/20260517072347_Stage74TalentSkillModel.cs) | ✅ 純 ADD COLUMN nullable / 0 既有 row 影響 / production Migration apply 成功（log `Applying migration '20260517072347_Stage74TalentSkillModel'`）|
+| 2. TalentSkillModelResolver 三層 fallback chain | [`src/AiTeam.Bot/Services/TalentSkillModelResolver.cs`](../../src/AiTeam.Bot/Services/TalentSkillModelResolver.cs)（新立 / 117 行）| ✅ Singleton + 5-min TTL + SemaphoreSlim + double-check lock + IServiceScopeFactory 對齊 Stage 72 PromptResolver pattern / T1-T4 xUnit 全綠 |
+| 3. ClaudeCodeChatClientAdapter Model 動態整合 | [`src/AiTeam.Bot/Orchestration/Petra/ClaudeCodeChatClientAdapter.cs`](../../src/AiTeam.Bot/Orchestration/Petra/ClaudeCodeChatClientAdapter.cs) | ✅ ctor 加 `Guid? talentId` + `TalentSkillModelResolver?` 兩 optional / GetResponseAsync 內 resolvedModel 動態 / DispatchAsync 簽名 propagate / log 加 `model={Model}` field |
+| 3′. DI propagation chain（C′）| [`PetraWorkerHelper.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraWorkerHelper.cs) + [`GenericAgentTool.cs`](../../src/AiTeam.Bot/Orchestration/Petra/GenericAgentTool.cs) + [`ITalentFactory.cs`](../../src/AiTeam.Bot/Orchestration/Petra/ITalentFactory.cs) + [`Program.cs:108`](../../src/AiTeam.Bot/Program.cs) | ✅ BuildAgent + GenericAgentTool ctor + DefaultTalentFactory ctor 全鏈打通 / C# default value 自動套 0 既有 caller 改 / DI Singleton 註冊 |
+| 4. 真並行 dispatch DAG fan-out | [`SubtaskPlan.cs:181-237`](../../src/AiTeam.Bot/Orchestration/Petra/SubtaskPlan.cs) `SubtaskPlanLevelGrouping`（新立 helper）+ [`PetraOrchestratorService.cs:532+`](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs) `DispatchTalentsAsync` level-based 改寫 + 抽 `BuildInputMessagesForSubtaskAsync` + `ProcessSubtaskResultAsync` 2 helper | ✅ Kahn-style BFS 分層 / 路線 A 紀律生效（LLM dispatch 並行 / DB write 並行段結束後 sequential）/ T5 + T6 xUnit 全綠 |
+| 5. ISkillRegistry SkillDescriptor metadata 擴展 | [`SkillDescriptor.cs`](../../src/AiTeam.Bot/Orchestration/Petra/Skills/SkillDescriptor.cs) record 加 2 field + [`ISkillRegistry.cs`](../../src/AiTeam.Bot/Orchestration/Petra/Skills/ISkillRegistry.cs) 6 row 對齊 Christ 拍板 tier | ✅ standard×3 + strategic×2 + cost-efficient×1 對齊 議題 2 拍板 / T7 xUnit 全綠 |
+| 6. DbSeeder 維持 Provider=Model=null | （0 改動）| ✅ production SQL 驗：既有 6 row（Cody×3 / Vera×1 / Quinn×1 / Sage×1）Provider 與 Model 皆 NULL |
+| 7. reload-cache 串接 | [`InternalController.cs:60-64`](../../src/AiTeam.Bot/Api/InternalController.cs) | ✅ scope=all path 加 `talentSkillModelResolver.InvalidateCache()` / production `curl /internal/reload-cache?scope=all` 驗返 200 |
+| 8. xUnit 7 case | [`Stage74TalentSkillModelTests.cs`](../../src/AiTeam.Bot.Tests/Orchestration/Stage74TalentSkillModelTests.cs)（新立 / 240 行）| ✅ T1-T7 全綠（含 T4 InvalidateCache 刷新補強）+ Test23 baseline update 對齊 Linear factory 修根因 |
+| 9. Directory.Build.props bump | [`src/Directory.Build.props`](../../src/Directory.Build.props) | ✅ v3.63.0 → v3.64.0 |
+
+### 關鍵設計決策
+
+**1. 真並行 dispatch 內 AppDbContext thread-safety 採路線 A（Christ 議題 1 拍板）**：LLM dispatch 並行 / DB write 並行段結束後 sequential — 對齊「session message order sequential」既有紀律 + speedup 主來源（LLM 慢）保留 + 0 race risk。並行段內 `talentAgent.RunAsync` 各自獨立（IClaudeCodeService subprocess 各自獨立 / TokenLogService 自開 scope / Resolver 自管 lock）— 與 ctor 注入的 db 0 衝突。
+
+**2. Resolver 保 `(Provider, Model)` tuple return（Christ 議題 3 拍板）**：Stage 74 範圍 Adapter 只 propagate `Model` 進 `IClaudeCodeService.RunXxxAsync`（既有簽名只吃 model + apiKey）/ Provider tuple 保留為 Phase 3 真實切 GPT-4o / Gemini 鋪路（evaluate IClaudeCodeService DI proxy 升級 IModelDispatcher）。
+
+**3. SkillDescriptor metadata 簡化版（Christ 議題 2 拍板）**：6 row tier 分類（standard×3 / strategic×2 / cost-efficient×1）+ 一句話 ReturnTypeDescription / 不擴 JSON Schema parameters 全套 — 對齊「自己用爽」精神避過早 over-engineer / 業界 Agent Skills open standard 第一步落地。
+
+**4. ctor 加 optional param vs new 介面**：對齊 Stage 72 既有 `PromptResolver` optional injection pattern — Adapter / BuildAgent / GenericAgentTool / DefaultTalentFactory 全加 optional param + C# default value 自動套 / 0 既有 caller 改（含 xUnit `NewAdapter` helper 8 param named arg 0 改動）。
+
+**5. TalentSkillModelResolver Singleton + IServiceScopeFactory + 5-min TTL**：完全對齊 Stage 72 PromptResolver pattern — 解 Singleton-Scoped 雷 + InvalidateCache wire 對齊 reload-cache `scope=all`。
+
+**6. DbSeeder 既有 6 TalentSkill seed Provider=Model=null 維持**：對齊 Roadmap 紀律 — runtime fallback / Christ 後續手動 SQL UPDATE 或 WebUI 設定切（如 Trial_v20 場景 G 預想 Sage Haiku 短期實驗）/ 不強塞推薦值避踩雷。
+
+**7. Level grouping 用獨立 helper `SubtaskPlanLevelGrouping`**：不破壞 Stage 70 既有 `SubtaskPlanTopologicalSort` 設計 + Test25 baseline 0 衝突 / 同檔內接續 pattern。
+
+### 驗收後修正（Forge spike 揭架構盲點修根因 — 對齊 Stage 58 結論第 N 次累積）
+
+**SubtaskPlan.Linear factory Stage 70 設定 0 deps 在 DAG fan-out 引入後會被誤為「全並行 level 0」破壞 Trial baseline sequential 紀律**：
+
+- **問題揭露時序**：Forge 實作 §D 完成跑 `dotnet test` → T5 失敗（`Assert.Single(levels[0])` 不滿足 — Linear 3 subtask 0 deps → LevelGrouping 把全 3 subtask 放在 level 0 → 視為「全並行」）
+- **真實根因**：Linear chain 業務語意 = 後 Talent 吃前 Talent output（`BuildNextWorkerInput(taskInput, summaries)` 把 prior summaries 全餵下個）— **必須 sequential**。Stage 70 設定 0 deps 是 DAG fan-out 未引入前的設計簡化 / Stage 74 引入 LevelGrouping 後此設計 misalign
+- **修法**：`SubtaskPlan.Linear` factory 加 sequential edges（1→2, 2→3, ..., n-1→n）對齊真實語意
+- **影響面**：Test23 baseline assertion update 1 處（`Assert.Empty(plan.Dependencies)` → `Assert.Equal(2, plan.Dependencies.Count)` + 驗 2 條 sequential edges + 補單 skill 0 edges case + 命名 `ZeroDependencies` → `SequentialEdges`）
+- **TopologicalSort 兼容**：Test25 case 1 仍正確（chain with deps 仍回 [1,2,3] 升序）/ 既有 Stage 70 路徑 0 regression
+
+對齊 Stage 58 結論「Forge spike 揭露架構盲點紀律生效」第 N 次累積 — 規劃層難預見的 architecture gap 由 Forge 實作層揭露 + 自診修根因 + 既有 baseline test 同步更新。
+
+### Mock 覆蓋情況
+
+Stage 74 純機制升級層（schema + Resolver + DAG fan-out + metadata）— **無對應 Mock scenario 設計**。場景驗收分配：
+
+- 場景 A（schema + Migration）→ production SQL `\d talent_skills` + 既有 row Provider=Model=NULL 驗 ✅
+- 場景 B（Resolver 三層 fallback）→ xUnit T1-T4 ✅
+- 場景 D（DAG fan-out 並行）→ xUnit T6 ✅
+- 場景 E（線性 chain 0 regression）→ xUnit T5 + Test30 既有 dispatch baseline 0 regression ✅
+- 場景 F（SkillDescriptor metadata）→ xUnit T7 ✅
+- **場景 B 補強**（reload-cache wire）→ production `curl /internal/reload-cache?scope=all` 驗 200 ✅
+- 場景 C（Adapter dispatch model field 真實 propagate）→ **Aria gate2 範圍**（需手動 SQL UPDATE + 跑真實 dispatch + grep Bot log `model=...` field）
+- 場景 G（Trial_v20 真實業務驗 — Sage Haiku cost optimization 短期實驗）→ **Aria gate2 + Aria 9-step 模板第 10 次實踐範圍**
+- 場景 H（v4 path 0 regression — flag UsePetraOrchestratorV5=false）→ **Aria gate2 範圍**
+
+### 踩坑紀錄
+
+**1. PowerShell Bash psql column reference 歧義（Trial_v7 紀律延伸第 N 次踩）**：
+production 自驗時跑 `SELECT "SkillName", "Provider", "Model", t."Name" ... FROM talent_skills ts JOIN talents t ...` → `ERROR: column reference "Provider" is ambiguous`（talents 表 + talent_skills 表都有 Provider 欄位）。修法：所有 column 加 table alias qualified ref（`ts."Provider"` / `t."Name"`）。對齊 SQL JOIN best practice。
+
+**2. Linear factory 0 deps Stage 70 設計與 Stage 74 DAG fan-out 語意衝突**：
+已在「驗收後修正」段詳述。揭露時序：Forge 實作 §D 完成跑 xUnit → T5 fail → 自診修根因。
+
+**3. Aria 二檢 6 條 Warning gate1 自驗紀律真實生效**：
+W1（appsettings.json Agents:Dev:Model default）→ 對齊 BuildSessionContext 既有 fallback chain 同源 / W4（AIAgent.RunAsync thread-safety）→ WorkerDispatchSummary immutable record + TokenLogService 自開 scope 雙保障 / W6（SkillDescriptor caller grep）→ 唯一 caller DefaultSkillRegistry compile-time 強制更新。grep verify 紀律真實避了「憑印象寫」風險 — 對齊「自省點 #37 source of truth 紀律」第 N 次累積。
+
+### Gate1 自驗紀律已套（對齊 Aria 二檢 6 條 Warning）
+
+- ✅ W1: `GetRuntimeModel` fallback chain 對齊 BuildSessionContext 同源（`Agents:Dev:Model ?? Anthropic:DefaultModel ?? "claude-opus-4-6"`）
+- ✅ W2: `DispatchAsync` switch 7 case 全 cover（含既有 requirements_extraction v5 fallback path）
+- ✅ W3: GenericAgentTool 既有 explicit ctor pattern 對齊（不無謂 refactor）
+- ✅ W4: AIAgent.RunAsync thread-safety（agents independent）+ WorkerDispatchSummary immutable record + TokenLogService 自開 scope 三重保障
+- ✅ W5: T6 xUnit case 用 `DependencyType.Sequential` 對齊 Stage 70 既有 enum value
+- ✅ W6: SkillDescriptor record 加 2 field — dotnet build 0 error / dotnet test 0 既有 caller 漏改
+
+### 本機驗證結果
+
+| 項目 | 結果 |
+|---|---|
+| `dotnet ef migrations add Stage74TalentSkillModel` | ✅ 純 ADD COLUMN nullable / 0 既有 row 影響 |
+| `dotnet build AiTeam.slnx` | ✅ 0 Error / 102 Warning（全 PR Playwright 既有 + obsolete fallback / 無新增） |
+| `dotnet test` | ✅ **82/82 全綠**（7 新 Stage 74 + 既有 Test1-50 + Stage 73 + ClaudeCodeChatClientAdapterTests 全保留 + Test23 baseline 升級） |
+| CI/CD 部署 | ✅ `Deploy main (3a66f88)（done）` |
+| Migration production apply | ✅ `Applying migration '20260517072347_Stage74TalentSkillModel'` |
+| 場景 A schema + 既有 6 row NULL 維持 | ✅ production SQL 驗 |
+| 場景 B 補強 reload-cache wire | ✅ `curl /internal/reload-cache?scope=all` 返 200 |
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-17 | **Forge 結案第一段** — 8 子項 + 9 修根因實作完整收口（commit `3a66f88` / 18 files changed / 1956 insertions / 123 deletions / dotnet test 82/82 全綠 / production Migration apply + 既有 6 row NULL 維持 + reload-cache wire 全驗）。**3 議題 Christ 拍板採納**：① 路線 A LLM 並行 / DB write sequential ② 6 row tier 草稿全採納（standard×3 / strategic×2 / cost-efficient×1）③ Resolver 保 `(Provider, Model)` tuple return 為未來 Phase 3 真實切 GPT-4o / Gemini 鋪路。**Forge spike 揭架構盲點修根因（對齊 Stage 58 結論第 N 次累積）**：SubtaskPlan.Linear factory Stage 70 設定 0 deps 在 DAG fan-out 引入後被誤為「全並行 level 0」破壞 Trial baseline sequential 紀律 → Linear factory 加 sequential edges (1→2, 2→3, ..., n-1→n) 對齊真實語意 + Test23 baseline update 1 處。**Aria 二檢 6 條 Warning gate1 自驗全綠**（W1-W6 grep verify + dotnet build/test 雙重保障 — appsettings model fallback / 7 case cover / GenericAgentTool ctor / AIAgent thread-safety / DependencyType enum / SkillDescriptor caller）。**自驗範圍 A-F 透過 xUnit + production SQL + reload-cache 全綠**（場景 C/G/H 範圍外 — Aria gate2 + Trial_v20 範疇）。 |
 | v1.0 | 2026-05-17 | 規劃書建立 — v3.64.0 / M+ 規模 / v5.5 Phase 3 Step 8 per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展。**範圍**：TalentSkill schema 加 Provider/Model nullable + Migration / TalentSkillModelResolver 三層 fallback chain（per-Skill > per-Talent > Agents:Dev:Model）/ ClaudeCodeChatClientAdapter Model 動態選擇整合 / 真並行 dispatch DAG fan-out（同 dependency level Task.WhenAll / 線性 chain 仍 sequential 0 regression）/ ISkillRegistry SkillDescriptor metadata 擴展（RecommendedModelTier + ReturnTypeDescription 簡化版對齊 Agent Skills open standard format 第一步）/ DbSeeder 既有 6 TalentSkill seed Provider=Model=null 維持 / PromptResolver cache invalidate 串接 / xUnit 7 new case + Directory.Build.props bump。**戰略脈絡**：Christ 2026-05-17 連續兩個戰略 question 點破真實架構缺口（仲裁是 Agent 還是權責？/ 權責能不能設 Model？）→ 修根因紀律先補完 per-Skill Model 三層架構 / debate 機制延後 Phase 4 / 撤回 Cora Talent 建議。**業界 WebSearch 結論延用**（Model mesh approach / Capability-aware routing / Model routing 比 uniform 便宜 60% / Agent Skills open standard / 真並行 1.4-2.4× speedup / State management primary 挑戰 AiTeam 已對齊 ✓）。**核心紀律**：DbSeeder 既有 6 TalentSkill Provider=Model=null 維持（runtime fallback / Christ 後續手動 SQL UPDATE 或 WebUI 設定）+ Skill registry metadata 簡化版避過早 over-engineer JSON Schema 全套。**校準錨預期**：一般架構級重構區間 ×0.43-0.60（Stage 67/68/69/70/72/73 6 資料點 baseline / Stage 74 = 第 7 資料點累積）。**Aria prep-session 預估**：raw read existing files ~20-25K + 機制層 code 改動 ~30-40K + DI propagation chain ~10-15K + xUnit 補強 ~10-15K = raw ~70-95K × 1.6 = **112-152K 總 context**（Sonnet 200K + high 充裕 / 對齊自省點 #37 三步法）。**驗收**：8 場景 — A schema 擴展 + Migration / B Resolver 三層 fallback / C Adapter Model 動態整合 / D DAG fan-out 真並行 / E 線性 chain 0 regression / F SkillDescriptor metadata 擴展 / G **Trial_v20 真實業務驗（Aria 9-step 第 10 次實踐 + Sage Haiku 短期實驗 cost optimization 真實生效）** / H v4 path 0 regression。**下一步**：Forge 實作 + Aria gate1 Tier 0+1+Tier 2 #3 build + Trial_v20 真實任務驗 → 通過後 Stage 76 開（兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent 1 task at a time）。**Phase 3 完整收口路徑**：73 ✅ → 74（per-Skill Model + 真並行）→ 76（兩層 queue 配套）→ 75（WebUI Talent CRUD 最後做）→ v5.5 完整收口。 |
