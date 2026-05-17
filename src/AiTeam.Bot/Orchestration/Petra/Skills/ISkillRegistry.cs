@@ -22,14 +22,40 @@ public interface ISkillRegistry
 /// </summary>
 internal sealed class DefaultSkillRegistry : ISkillRegistry
 {
+    // Stage 74：v5.5 Phase 3 Step 8 — 6 SkillDescriptor 全含 RecommendedModelTier + ReturnTypeDescription metadata
+    //                                 對齊業界 Agent Skills open standard format 第一步（簡化版避過早 over-engineer JSON Schema parameters 全套）。
     private static readonly IReadOnlyList<SkillDescriptor> _skills = new[]
     {
-        new SkillDescriptor("code_implementation", "Code Implementation", "寫 code — 主開發任務（dispatch IClaudeCodeService.RunAsync）"),
-        new SkillDescriptor("code_review",         "Code Review",          "review code — 找 bug / coding style / production safety check（dispatch RunReviewAsync）"),
-        new SkillDescriptor("qa_testing",          "QA Testing",           "測試 + 寫 test case + Playwright 真實點擊（dispatch RunQaAsync）"),
-        new SkillDescriptor("documentation",       "Documentation",        "寫文件 + README + commit message + PR body（dispatch RunReadOnlyAsync）"),
-        new SkillDescriptor("ui_design",           "UI Design",            "UI/UX 設計（特定 UI 任務 Petra dispatch — dispatch RunReadOnlyAsync）"),
-        new SkillDescriptor("release_publishing",  "Release Publishing",   "Release notes + version bump + 部署協調（dispatch RunAsync）"),
+        new SkillDescriptor(
+            "code_implementation", "Code Implementation",
+            "寫 code — 主開發任務（dispatch IClaudeCodeService.RunAsync）",
+            "standard",
+            "code patch + Implementation Note 段（含實作摘要 / 自驗結果 / 已知 follow-up）"),
+        new SkillDescriptor(
+            "code_review",         "Code Review",
+            "review code — 找 bug / coding style / production safety check（dispatch RunReviewAsync）",
+            "strategic",
+            "JSON review report — critical/warning/info 三層 array + summary + impact 分析"),
+        new SkillDescriptor(
+            "qa_testing",          "QA Testing",
+            "測試 + 寫 test case + Playwright 真實點擊（dispatch RunQaAsync）",
+            "standard",
+            "test files 直寫 + JSON QA report（status / passed_tests / failed_tests / unverifiable_targets / summary）"),
+        new SkillDescriptor(
+            "documentation",       "Documentation",
+            "寫文件 + README + commit message + PR body（dispatch RunReadOnlyAsync）",
+            "cost-efficient",
+            "CHANGELOG entry + 歸檔 markdown（含實作摘要 / 審查摘要 / PR 連結 / 版本號）"),
+        new SkillDescriptor(
+            "ui_design",           "UI Design",
+            "UI/UX 設計（特定 UI 任務 Petra dispatch — dispatch RunReadOnlyAsync）",
+            "strategic",
+            "UI spec markdown — 含 component 結構 / interaction flow / 設計理由"),
+        new SkillDescriptor(
+            "release_publishing",  "Release Publishing",
+            "Release notes + version bump + 部署協調（dispatch RunAsync）",
+            "standard",
+            "version bump diff + release notes markdown + 部署確認 log"),
     };
 
     public IReadOnlyList<SkillDescriptor> All => _skills;

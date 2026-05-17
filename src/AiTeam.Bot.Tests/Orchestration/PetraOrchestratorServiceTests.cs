@@ -589,9 +589,10 @@ public class PetraOrchestratorServiceTests
         Assert.Equal("k3", got[2].Key);
     }
 
-    // ─── Test 23（Stage 70）：SubtaskPlan record + Linear factory baseline ──────────
+    // ─── Test 23（Stage 70 + Stage 74）：SubtaskPlan record + Linear factory baseline ──────────
+    // Stage 74：Linear factory 加 sequential edges（修根因 — DAG fan-out 引入後 Linear 必須真實 sequential 避誤為「全並行 level 0」）。
     [Fact]
-    public void Test23_SubtaskPlan_LinearFactory_ProducesIdAscendingSubtasksWithZeroDependencies()
+    public void Test23_SubtaskPlan_LinearFactory_ProducesIdAscendingSubtasksWithSequentialEdges()
     {
         var skills = new[] { "code_implementation", "code_review", "qa_testing" };
         var plan = SubtaskPlan.Linear(skills);
@@ -603,13 +604,22 @@ public class PetraOrchestratorServiceTests
         Assert.Equal("code_review", plan.Subtasks[1].SkillName);
         Assert.Equal(3, plan.Subtasks[2].Id);
         Assert.Equal("qa_testing", plan.Subtasks[2].SkillName);
-        Assert.Empty(plan.Dependencies);
+
+        // Stage 74：Linear chain 真實 sequential edges 1→2, 2→3（後 Talent 依賴前 Talent output / DAG fan-out level grouping 才會把每 subtask 各自一個 level 走 sequential）
+        Assert.Equal(2, plan.Dependencies.Count);
+        Assert.Contains(plan.Dependencies, e => e.FromId == 1 && e.ToId == 2 && e.Type == DependencyType.Sequential);
+        Assert.Contains(plan.Dependencies, e => e.FromId == 2 && e.ToId == 3 && e.Type == DependencyType.Sequential);
 
         // 空 skills → Empty plan
         var empty = SubtaskPlan.Linear(Array.Empty<string>());
         Assert.Empty(empty.Subtasks);
         Assert.Empty(empty.Dependencies);
         Assert.Same(SubtaskPlan.Empty, empty);
+
+        // 單 skill → 1 subtask + 0 edges
+        var single = SubtaskPlan.Linear(new[] { "code_implementation" });
+        Assert.Single(single.Subtasks);
+        Assert.Empty(single.Dependencies);
     }
 
     // ─── Test 24（Stage 70）：SubtaskPlanParser JSON 解析 + code fence strip + 失敗 fallback ─

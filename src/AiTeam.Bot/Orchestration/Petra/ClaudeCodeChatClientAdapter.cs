@@ -45,7 +45,10 @@ internal sealed class ClaudeCodeChatClientAdapter(
     string workingDir,
     AiTeam.Bot.Services.TokenLogService? tokenLogService,   // nullable: production DI 必注入 / xUnit test 可傳 null（adapter dispatch 驗 不驗 token_logs 寫入）
     ILogger<ClaudeCodeChatClientAdapter> logger,
-    PromptResolver? promptResolver = null) : IChatClient    // Stage 72：nullable / null = test path 退既有 Resources/CLAUDE_<X>.md file fallback（Test 7/13 0 改）
+    PromptResolver? promptResolver = null,                  // Stage 72：nullable / null = test path 退既有 Resources/CLAUDE_<X>.md file fallback（Test 7/13 0 改）
+    Guid? talentId = null,                                  // Stage 74：dispatch site 傳 talentId（既有 ITalent.Id）/ null = test path 或 v5 既有 path
+    TalentSkillModelResolver? talentSkillModelResolver = null   // Stage 74：null = ctor model 當 final / 非 null = 動態 resolve 三層 fallback chain
+) : IChatClient
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
 
@@ -90,7 +93,20 @@ internal sealed class ClaudeCodeChatClientAdapter(
             prompt = enforceSection + "\n\n" + prompt;
         }
 
-        logger.LogInformation("ClaudeCodeChatClientAdapter dispatch worker={Worker} capability={Capability} promptLen={Len}", workerName, capability, prompt.Length);
+        // Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 動態 resolve（三層 fallback chain：per-Skill > per-Talent > runtime）。
+        // resolver=null / talentId=null → 走 ctor default model（v5 既有 path + xUnit test 0 regression）。
+        var resolvedModel = model;
+        if (talentSkillModelResolver is not null && talentId is { } tid)
+        {
+            var resolved = await talentSkillModelResolver.ResolveAsync(tid, capability, cancellationToken);
+            resolvedModel = resolved.Model;
+            // Provider 暫不 propagate 進 CLI subprocess（既有 IClaudeCodeService.RunXxxAsync 簽名只吃 model + apiKey）
+            // — Phase 3 真實要切 GPT-4o / Gemini 時 evaluate IClaudeCodeService DI proxy 升級
+        }
+
+        logger.LogInformation(
+            "ClaudeCodeChatClientAdapter dispatch worker={Worker} capability={Capability} model={Model} promptLen={Len}",
+            workerName, capability, resolvedModel, prompt.Length);
 
         // Stage 65 子項 1：CLAUDE.md inject ritual 修根因 — 改用 CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
         // 取代 Stage 64 backup/write/finally restore 整段：讀 template content → systemPrompt 透傳 → ClaudeCodeService.BuildArgs 加 conditional --append-system-prompt flag。
@@ -137,7 +153,7 @@ internal sealed class ClaudeCodeChatClientAdapter(
         Exception? capturedException = null;
         try
         {
-            var result = await DispatchWithRetryAsync(prompt, systemPrompt, cancellationToken);
+            var result = await DispatchWithRetryAsync(prompt, systemPrompt, resolvedModel, cancellationToken);
             capturedUsage = result.Usage;
 
             var responseMessage = new ChatMessage(ChatRole.Assistant, result.Output ?? "");
@@ -155,7 +171,7 @@ internal sealed class ClaudeCodeChatClientAdapter(
                 try
                 {
                     var usageForLog = capturedUsage ?? new TokenUsage(0, 0, 0, 0, 0m, false);
-                    await tokenLogService.LogCliUsageAsync(workerName, model, "PetraOrchestratorV5", null, null, usageForLog, CancellationToken.None);
+                    await tokenLogService.LogCliUsageAsync(workerName, resolvedModel, "PetraOrchestratorV5", null, null, usageForLog, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -192,12 +208,12 @@ internal sealed class ClaudeCodeChatClientAdapter(
     /// 非 transient（auth/quota / Mock fail / 真實 logic error）→ 直接 return 不重試。
     /// token_logs 寫入由 caller 負責一次（retry 內部 attempt 不寫 — 對齊「最終 result.Usage 一次寫」契約）。
     /// </summary>
-    private async Task<ClaudeCodeResult> DispatchWithRetryAsync(string prompt, string? systemPrompt, CancellationToken ct)
+    private async Task<ClaudeCodeResult> DispatchWithRetryAsync(string prompt, string? systemPrompt, string resolvedModel, CancellationToken ct)
     {
         ClaudeCodeResult? last = null;
         for (var attempt = 1; attempt <= RetryDelaysMs.Length + 1; attempt++)
         {
-            last = await DispatchAsync(prompt, systemPrompt, ct);
+            last = await DispatchAsync(prompt, systemPrompt, resolvedModel, ct);
             if (last.Success) return last;
 
             if (!IsTransient5xx(last.Output))
@@ -229,15 +245,16 @@ internal sealed class ClaudeCodeChatClientAdapter(
 
     // Stage 65 子項 1：每個 capability dispatch 透傳 systemPrompt（IClaudeCodeService 6 method default null 對 v4 caller 透明 —
     // systemPrompt 簽名位置在 ct 之後，v5 adapter 用 named arg `systemPrompt:` 顯式傳）。
-    private Task<ClaudeCodeResult> DispatchAsync(string prompt, string? systemPrompt, CancellationToken ct) => capability switch
+    // Stage 74：model 改 resolvedModel propagate（三層 fallback chain resolve 後）。
+    private Task<ClaudeCodeResult> DispatchAsync(string prompt, string? systemPrompt, string resolvedModel, CancellationToken ct) => capability switch
     {
-        "code_implementation"     => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
-        "code_review"             => claudeCode.RunReviewAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
-        "qa_testing"              => claudeCode.RunQaAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
-        "documentation"           => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "requirements_extraction" => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "ui_design"               => claudeCode.RunReadOnlyAsync(workingDir, prompt, model, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, model, apiKey, ct, systemPrompt: systemPrompt),
+        "code_implementation"     => claudeCode.RunAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "code_review"             => claudeCode.RunReviewAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "qa_testing"              => claudeCode.RunQaAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "documentation"           => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "requirements_extraction" => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "ui_design"               => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
         _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 63B PoC 7 capability）"),
     };
 

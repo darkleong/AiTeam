@@ -32,6 +32,7 @@ internal sealed class DefaultTalentFactory(
     IClaudeCodeService claudeCode,
     TokenLogService tokenLogService,
     PromptResolver promptResolver,
+    TalentSkillModelResolver talentSkillModelResolver,                       // Stage 74
     ILoggerFactory loggerFactory) : ITalentFactory
 {
     public async Task<IReadOnlyList<ITalent>> GetAllAsync(CancellationToken ct = default)
@@ -49,7 +50,8 @@ internal sealed class DefaultTalentFactory(
         var workerTalents = talents.Where(t => t.Skills.Count > 0).ToList();
 
         return workerTalents
-            .Select(ITalent (t) => new GenericAgentTool(t, claudeCode, tokenLogService, loggerFactory, promptResolver))
+            .Select(ITalent (t) => new GenericAgentTool(
+                t, claudeCode, tokenLogService, loggerFactory, promptResolver, talentSkillModelResolver))   // Stage 74
             .ToList();
     }
 }

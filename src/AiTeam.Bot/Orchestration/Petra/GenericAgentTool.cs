@@ -24,6 +24,8 @@ public sealed class GenericAgentTool : ITalent
     private readonly TokenLogService _tokenLogService;
     private readonly ILoggerFactory _loggerFactory;
     private readonly PromptResolver? _promptResolver;
+    private readonly TalentSkillModelResolver? _talentSkillModelResolver;   // Stage 74
+    private readonly Guid _talentId;                                         // Stage 74
 
     public string Name { get; }
     public IReadOnlyList<string> Skills { get; }
@@ -33,14 +35,17 @@ public sealed class GenericAgentTool : ITalent
         IClaudeCodeService claudeCode,
         TokenLogService tokenLogService,
         ILoggerFactory loggerFactory,
-        PromptResolver? promptResolver = null)
+        PromptResolver? promptResolver = null,
+        TalentSkillModelResolver? talentSkillModelResolver = null)            // Stage 74
     {
         Name = talent.Name;
         Skills = talent.Skills.Select(s => s.SkillName).ToList();
+        _talentId = talent.Id;                                                // Stage 74
         _claudeCode = claudeCode;
         _tokenLogService = tokenLogService;
         _loggerFactory = loggerFactory;
         _promptResolver = promptResolver;
+        _talentSkillModelResolver = talentSkillModelResolver;
     }
 
     /// <summary>
@@ -48,6 +53,7 @@ public sealed class GenericAgentTool : ITalent
     /// capability=skill 動態傳（解 Talent 兼多 Skill 問題）。
     /// instructions=null 對齊 v5 既有 path — ClaudeCodeChatClientAdapter dispatch 內 systemPrompt 由 capability → CLAUDE_*.md 動態載入。
     /// Stage 72：propagate PromptResolver（feature flag UseV5PromptDb=true 時 adapter 走 DB SkillPrompt path / flag=false 退既有 file fallback）。
+    /// Stage 74：propagate _talentId + TalentSkillModelResolver — adapter dispatch 時走三層 fallback chain（per-Skill > per-Talent > runtime）動態選 Model。
     /// </summary>
     public AIAgent CreateAgent(PetraSessionContext ctx, string skill)
     {
@@ -59,6 +65,8 @@ public sealed class GenericAgentTool : ITalent
             ctx: ctx,
             tokenLogService: _tokenLogService,
             loggerFactory: _loggerFactory,
-            promptResolver: _promptResolver);
+            promptResolver: _promptResolver,
+            talentId: _talentId,                                              // Stage 74
+            talentSkillModelResolver: _talentSkillModelResolver);             // Stage 74
     }
 }

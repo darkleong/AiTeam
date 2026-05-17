@@ -106,6 +106,9 @@ builder.Services.AddScoped<MemoryRepository>();
 builder.Services.AddScoped<PromptRepository>();
 builder.Services.AddSingleton<PromptResolver>();
 
+// Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 三層 fallback chain（Singleton + 5-min TTL cache + IServiceScopeFactory 對齊 PromptResolver pattern）
+builder.Services.AddSingleton<TalentSkillModelResolver>();
+
 // Stage 67：v5.5 Phase 1 Step 2 — Skill registry (code-defined / Singleton) + Talent factory (runtime DB query / Singleton + IServiceScopeFactory)
 // Talent register 走 ITalentFactory.GetAllAsync(ct) 取代「DI scan IEnumerable<ITalent>」pattern — 解 app.Build 時 DB 還沒 ready 的時序問題 + Phase 3 dynamic CRUD 自然解
 builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Petra.Skills.ISkillRegistry, AiTeam.Bot.Orchestration.Petra.Skills.DefaultSkillRegistry>();

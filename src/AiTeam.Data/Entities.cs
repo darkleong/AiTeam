@@ -348,6 +348,10 @@ public class TalentSkill
     /// <summary>Stage 67：同 Talent 多 Skill dispatch 排序（同 IsPrimary 群內 ASC）。</summary>
     public int Priority { get; set; }
     public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Stage 74：v5.5 Phase 3 Step 8 — per-Skill Provider override（null = fallback per-Talent Talent.Provider / 最終 fallback runtime Agents:Dev:Provider）。</summary>
+    public string? Provider { get; set; }
+    /// <summary>Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model override（null = fallback per-Talent Talent.Model / 最終 fallback runtime Agents:Dev:Model）。</summary>
+    public string? Model { get; set; }
 
     public Talent? Talent { get; set; }
 }

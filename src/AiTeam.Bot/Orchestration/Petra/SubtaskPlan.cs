@@ -35,13 +35,20 @@ internal sealed record SubtaskPlan(
 
     /// <summary>
     /// Backwards-compatible 線性 chain — 由 Stage 69 既有「Skill 序列字串」轉成 SubtaskPlan。
-    /// 0 dependency edges → <see cref="SubtaskPlanTopologicalSort.Sort"/> 自然回 Id 升序 = 原 skill 順序 = 既有 dispatch 行為。
+    /// Stage 74 修根因：Linear semantic = 真正 sequential chain（後 Talent 依賴前 Talent output / BuildNextWorkerInput 把 prior summaries 餵下個）→ 必須加 sequential edges 1→2, 2→3, ..., n-1→n。
+    /// 對齊 Stage 74 DAG fan-out level grouping 紀律：Linear chain 每 level 1 subtask = sequential = 0 regression（Trial baseline 3 subtask Cody→Vera→Quinn 行為保留）。
+    /// Stage 70 設定 0 deps 是 DAG fan-out 未引入前的設計簡化；Stage 74 LevelGrouping 引入後 Linear 必須真實 sequential 避誤為「全並行 level 0」。
     /// </summary>
     public static SubtaskPlan Linear(IReadOnlyList<string> skills)
     {
         if (skills.Count == 0) return Empty;
         var subs = skills.Select((s, i) => new Subtask(i + 1, s, string.Empty)).ToList();
-        return new SubtaskPlan(subs, Array.Empty<DependencyEdge>());
+        var edges = new List<DependencyEdge>(Math.Max(0, skills.Count - 1));
+        for (var i = 1; i < skills.Count; i++)
+        {
+            edges.Add(new DependencyEdge(i, i + 1, DependencyType.Sequential));
+        }
+        return new SubtaskPlan(subs, edges);
     }
 }
 
@@ -216,5 +223,63 @@ internal static class SubtaskPlanTopologicalSort
                 $"SubtaskPlan dependency cycle detected — sorted {result.Count} of {plan.Subtasks.Count} subtasks");
         }
         return result;
+    }
+}
+
+/// <summary>
+/// Stage 74：v5.5 Phase 3 Step 8 — SubtaskPlan 依 dependency level 分組（DAG fan-out 並行 dispatch 用）。
+///
+/// 設計：Kahn-style BFS 分層 — Level 0 = inDegree=0 / Level N+1 = Level N 處理完後 inDegree drop 到 0 的 subtask。
+///
+/// 紀律：
+/// - 0 dependency edges（Linear plan）→ 每 level 1 subtask = caller 自然走 sequential = 0 regression（對齊 Trial baseline 3 subtask 線性場景）
+/// - 同 level 多 subtask → caller 用 Task.WhenAll 並行 dispatch（業界 1.4-2.4× speedup）
+/// - cycle detected → throw <see cref="InvalidOperationException"/>（對齊 SubtaskPlanTopologicalSort 紀律）
+/// - 同 level 內 deterministic 升序（test 可重現）
+/// </summary>
+internal static class SubtaskPlanLevelGrouping
+{
+    public static List<List<int>> Group(SubtaskPlan plan)
+    {
+        if (plan.Subtasks.Count == 0) return new List<List<int>>();
+
+        var inDegree = plan.Subtasks.ToDictionary(s => s.Id, _ => 0);
+        var adj = plan.Subtasks.ToDictionary(s => s.Id, _ => new List<int>());
+        foreach (var edge in plan.Dependencies)
+        {
+            if (!inDegree.ContainsKey(edge.ToId) || !adj.ContainsKey(edge.FromId)) continue;
+            adj[edge.FromId].Add(edge.ToId);
+            inDegree[edge.ToId]++;
+        }
+
+        var levels = new List<List<int>>();
+        var current = plan.Subtasks
+            .Where(s => inDegree[s.Id] == 0)
+            .Select(s => s.Id)
+            .OrderBy(id => id)
+            .ToList();
+        var processed = 0;
+        while (current.Count > 0)
+        {
+            levels.Add(current);
+            processed += current.Count;
+            var next = new List<int>();
+            foreach (var id in current)
+            {
+                foreach (var nb in adj[id])
+                {
+                    if (--inDegree[nb] == 0) next.Add(nb);
+                }
+            }
+            current = next.OrderBy(id => id).ToList();
+        }
+
+        if (processed != plan.Subtasks.Count)
+        {
+            throw new InvalidOperationException(
+                $"SubtaskPlan dependency cycle detected — grouped {processed} of {plan.Subtasks.Count} subtasks");
+        }
+
+        return levels;
     }
 }

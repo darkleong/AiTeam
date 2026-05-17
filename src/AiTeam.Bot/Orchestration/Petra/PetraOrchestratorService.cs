@@ -544,127 +544,208 @@ public class PetraOrchestratorService(
         var compactKeep = memoryEnabled ? await workflowResolver.GetV5MemoryCompactKeepCountAsync(ct) : 0;
         var compactThresholdPct = memoryEnabled ? await workflowResolver.GetV5MemoryCompactThresholdPercentAsync(ct) : 0;
 
-        // Stage 70：topological sort — Linear plan (0 deps) 自然回 Id 升序 = 既有 dispatch 順序 = 0 regression
-        var orderedIds = SubtaskPlanTopologicalSort.Sort(plan);
-        // subtask Id → plan.Subtasks index（caller talentPicks / talentAgents 與 plan.Subtasks 同 index 對齊）
+        // Stage 70：subtask Id → plan.Subtasks index（caller talentPicks / talentAgents 與 plan.Subtasks 同 index 對齊）
         var idToIndex = new Dictionary<int, int>(plan.Subtasks.Count);
         for (var i = 0; i < plan.Subtasks.Count; i++) idToIndex[plan.Subtasks[i].Id] = i;
-        // dependsOn 觀察用 lookup（per subtask 直接 depends 的 from Id 集合）
+        // Stage 70：dependsOn 觀察用 lookup（per subtask 直接 depends 的 from Id 集合）
         var dependsOnLookup = plan.Subtasks.ToDictionary(s => s.Id, _ => new List<int>());
         foreach (var edge in plan.Dependencies)
         {
             if (dependsOnLookup.ContainsKey(edge.ToId)) dependsOnLookup[edge.ToId].Add(edge.FromId);
         }
 
+        // Stage 74：v5.5 Phase 3 Step 8 — DAG fan-out level grouping 取代既有 TopologicalSort flat list。
+        // Linear plan (0 deps) → 每 level 1 subtask = sequential = 對齊 Trial baseline 3 subtask 線性場景 0 regression。
+        // 真並行場景（同 level 多 subtask）→ Task.WhenAll LLM dispatch 並行（業界 1.4-2.4× speedup）+ DB write 並行段結束後 sequential（保 AppDbContext thread-safe）。
+        var levels = SubtaskPlanLevelGrouping.Group(plan);
+
         var summaries = new List<WorkerDispatchSummary>(talentAgents.Length);
-        for (var dispatchIndex = 0; dispatchIndex < orderedIds.Count; dispatchIndex++)
+        for (var levelIdx = 0; levelIdx < levels.Count; levelIdx++)
         {
-            var subtaskId = orderedIds[dispatchIndex];
-            var i = idToIndex[subtaskId];
-            var talentAgent = talentAgents[i];
-            var talentName = talentPicks[i].Name;
-            var skill = plan.Subtasks[i].SkillName;
+            var level = levels[levelIdx];
+            // snapshot summaries before level start — level 內並行各 subtask 共用同一份 baseInput（前 level 累積 / WorkerDispatchSummary 是 immutable record shallow copy 安全）
+            var summariesSnapshot = summaries.ToList();
 
-            // 1. 組 input messages（base chain + 可選 memory inject）— 對齊既有「prior summaries 全餵下個」紀律
-            var baseInput = dispatchIndex == 0
-                ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
-                : BuildNextWorkerInput(taskInput, summaries);
-
-            List<ChatMessage> inputMessages;
-            if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentId))
+            if (level.Count > 1)
             {
-                var taskMems = await memoryRepo.GetTaskMemoriesAsync(sessionId, ct);
-                var talentMems = await memoryRepo.GetTalentMemoriesAsync(talentId, projectId: null, tagFilter: null, ct);
-                var memoryContext = BuildMemoryContext(taskMems, talentMems);
-                if (!string.IsNullOrEmpty(memoryContext))
+                // 並行段 — 路線 A 紀律：LLM dispatch 並行 / DB write 並行段結束後 sequential（AppDbContext 非 thread-safe）
+                logger.LogInformation(
+                    "PetraOrchestrator v5.5 自管 chain dispatch Level={Level}/{TotalLevels} 並行 subtaskIds=[{Ids}] talents=[{Talents}] sessionId={SessionId}",
+                    levelIdx + 1, levels.Count, string.Join(",", level),
+                    string.Join(",", level.Select(id => talentPicks[idToIndex[id]].Name)), sessionId);
+
+                // LLM dispatch 並行段（只跑 talentAgent.RunAsync — IClaudeCodeService subprocess 各自獨立 / TokenLogService 自開 scope 寫 token_logs / Resolver 自管 lock）
+                var levelTasks = level.Select(async subtaskId =>
                 {
-                    inputMessages = new List<ChatMessage>(baseInput.Count + 1)
-                    {
-                        new(ChatRole.System, memoryContext),
-                    };
-                    inputMessages.AddRange(baseInput);
-                    logger.LogInformation(
-                        "Petra v5.5 dispatch 注入 memory talent={Talent} taskMemoryCount={TaskN} talentMemoryCount={TalentN}",
-                        talentName, taskMems.Count, talentMems.Count);
-                }
-                else
+                    var i = idToIndex[subtaskId];
+                    var inputMessages = await BuildInputMessagesForSubtaskAsync(
+                        taskInput, summariesSnapshot, levelIdx,
+                        talentPicks[i].Name, talentNameToIdMap, memoryEnabled, sessionId, ct);
+                    var response = await talentAgents[i].RunAsync(inputMessages, session: null, options: null, ct);
+                    return (SubtaskId: subtaskId, OutputText: response.Text ?? "", Index: i);
+                }).ToList();
+                var levelResults = await Task.WhenAll(levelTasks);
+
+                // sequential：DB write + summaries append + memory upsert + compact threshold（subtask Id 升序 deterministic）
+                foreach (var r in levelResults.OrderBy(x => x.SubtaskId))
                 {
-                    inputMessages = baseInput;
+                    await ProcessSubtaskResultAsync(
+                        r.SubtaskId, r.OutputText, r.Index, sessionId, summaries,
+                        plan, talentPicks, dependsOnLookup, talentNameToIdMap, memoryEnabled,
+                        compactKeep, compactThresholdPct, levels.Count, levelIdx, isParallel: true, ct);
                 }
             }
             else
             {
-                inputMessages = baseInput;
+                // 單 subtask level — sequential（對齊 Trial baseline 3 subtask 線性場景 0 regression）
+                var subtaskId = level[0];
+                var i = idToIndex[subtaskId];
+                var talentName = talentPicks[i].Name;
+                var skill = plan.Subtasks[i].SkillName;
+
+                var inputMessages = await BuildInputMessagesForSubtaskAsync(
+                    taskInput, summariesSnapshot, levelIdx,
+                    talentName, talentNameToIdMap, memoryEnabled, sessionId, ct);
+
+                logger.LogInformation(
+                    "PetraOrchestrator v5.5 自管 chain dispatch Level={Level}/{TotalLevels} sequential subtaskId={SubtaskId} talent={Talent} skill={Skill} dependsOn=[{DependsOn}] inputMsgs={N} sessionId={SessionId}",
+                    levelIdx + 1, levels.Count, subtaskId, talentName, skill,
+                    string.Join(",", dependsOnLookup[subtaskId]), inputMessages.Count, sessionId);
+
+                var response = await talentAgents[i].RunAsync(inputMessages, session: null, options: null, ct);
+                var outputText = response.Text ?? "";
+
+                await ProcessSubtaskResultAsync(
+                    subtaskId, outputText, i, sessionId, summaries,
+                    plan, talentPicks, dependsOnLookup, talentNameToIdMap, memoryEnabled,
+                    compactKeep, compactThresholdPct, levels.Count, levelIdx, isParallel: false, ct);
             }
-
-            // Stage 70：dispatch log 含 subtaskId + dependsOn — Linear plan dependsOn=[] 對齊既有 dispatch 觀察點
-            var dependsOnIds = dependsOnLookup[subtaskId];
-            logger.LogInformation(
-                "PetraOrchestrator v5.5 自管 chain dispatch {DispatchIndex}/{Total} subtaskId={SubtaskId} talent={Talent} skill={Skill} dependsOn=[{DependsOn}] inputMsgs={N} sessionId={SessionId}",
-                dispatchIndex + 1, orderedIds.Count, subtaskId, talentName, skill,
-                string.Join(",", dependsOnIds), inputMessages.Count, sessionId);
-
-            var response = await talentAgent.RunAsync(inputMessages, session: null, options: null, ct);
-            var outputText = response.Text ?? "";
-
-            var toolCallId = Guid.NewGuid().ToString("N");
-            var toolMessage = BuildToolMessage(talentName, skill, outputText);
-            await sessionRepo.AppendMessageAsync(sessionId, "tool", toolMessage, toolCallId, ct);
-
-            // 2. memory 寫回（useV5Memory=true 時 dispatch 後 upsert TaskMemory + TalentMemory）
-            if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentIdForWrite))
-            {
-                if (outputText.Length == 0)
-                {
-                    logger.LogWarning(
-                        "Petra v5.5 dispatch worker output empty skip memory write talent={Talent} skill={Skill} sessionId={SessionId}",
-                        talentName, skill, sessionId);
-                }
-                else
-                {
-                    var truncated = outputText.Length > 500 ? outputText[..500] : outputText;
-                    await memoryRepo.UpsertTaskMemoryAsync(
-                        sessionId, projectId: null,
-                        key: $"decision/{talentName}-output-summary",
-                        content: truncated,
-                        createdByTalent: talentName,
-                        ct);
-                    await memoryRepo.UpsertTalentMemoryAsync(
-                        talentIdForWrite, projectId: null,
-                        key: "last-task-summary",
-                        content: truncated,
-                        tags: null,
-                        ct);
-                    logger.LogInformation(
-                        "Petra v5.5 dispatch 完成寫回 TaskMemory key=decision/{Talent}-output-summary + TalentMemory key=last-task-summary",
-                        talentName);
-                }
-            }
-
-            await db.SaveChangesAsync(ct);
-
-            // 3. compact threshold 檢查（buffer-above-keep 模型：count >= keep * (100 + thresholdPct) / 100）
-            if (memoryEnabled)
-            {
-                var taskMemCount = await memoryRepo.CountTaskMemoriesAsync(sessionId, ct);
-                var triggerAt = compactKeep + (compactKeep * compactThresholdPct / 100);
-                if (taskMemCount >= triggerAt && triggerAt > 0)
-                {
-                    var deleted = await memoryRepo.CompactTaskMemoryAsync(sessionId, compactKeep, ct);
-                    await db.SaveChangesAsync(ct);
-                    logger.LogInformation(
-                        "Memory compact 觸發 PetraSessionId={SessionId} beforeCount={Before} afterCount={After} deleted={Deleted}",
-                        sessionId, taskMemCount, taskMemCount - deleted, deleted);
-                }
-            }
-
-            logger.LogInformation(
-                "PetraOrchestrator v5.5 自管 chain dispatch 完成 {DispatchIndex}/{Total} subtaskId={SubtaskId} talent={Talent} outputLen={Len} toolCallId={ToolCallId}",
-                dispatchIndex + 1, orderedIds.Count, subtaskId, talentName, outputText.Length, toolCallId);
-
-            summaries.Add(new WorkerDispatchSummary(talentName, skill, outputText, toolCallId));
         }
         return summaries;
+    }
+
+    /// <summary>
+    /// Stage 74：v5.5 Phase 3 Step 8 — 抽出既有 dispatch input messages 構造（base chain + 可選 memory inject）。
+    /// 純讀 / 0 DB write — 並行段（多 subtask 同 level）+ sequential 段（單 subtask）共用 helper。
+    /// memory 走 IServiceScopeFactory query / talentNameToIdMap caller 傳（lookup 0 db.Talents query）。
+    /// </summary>
+    private async Task<List<ChatMessage>> BuildInputMessagesForSubtaskAsync(
+        string taskInput,
+        List<WorkerDispatchSummary> summariesSnapshot,
+        int levelIdx,
+        string talentName,
+        IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
+        bool memoryEnabled,
+        Guid sessionId,
+        CancellationToken ct)
+    {
+        var baseInput = levelIdx == 0
+            ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
+            : BuildNextWorkerInput(taskInput, summariesSnapshot);
+
+        if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentId))
+        {
+            var taskMems = await memoryRepo.GetTaskMemoriesAsync(sessionId, ct);
+            var talentMems = await memoryRepo.GetTalentMemoriesAsync(talentId, projectId: null, tagFilter: null, ct);
+            var memoryContext = BuildMemoryContext(taskMems, talentMems);
+            if (!string.IsNullOrEmpty(memoryContext))
+            {
+                var inputMessages = new List<ChatMessage>(baseInput.Count + 1)
+                {
+                    new(ChatRole.System, memoryContext),
+                };
+                inputMessages.AddRange(baseInput);
+                logger.LogInformation(
+                    "Petra v5.5 dispatch 注入 memory talent={Talent} taskMemoryCount={TaskN} talentMemoryCount={TalentN}",
+                    talentName, taskMems.Count, talentMems.Count);
+                return inputMessages;
+            }
+        }
+        return baseInput;
+    }
+
+    /// <summary>
+    /// Stage 74：v5.5 Phase 3 Step 8 — 抽出既有 dispatch 副作用（sessionRepo.AppendMessageAsync / memory upsert / compact threshold / db.SaveChangesAsync / summaries.Add）。
+    /// 路線 A 紀律：並行 LLM dispatch 結束後此 helper 在 caller 內 sequential 跑（subtask Id 升序）— 保 AppDbContext thread-safe。
+    /// 內部副作用順序對齊既有 Stage 69-73 baseline（不改 message 寫入 / memory upsert / compact threshold 邏輯，純結構抽出）。
+    /// </summary>
+    private async Task ProcessSubtaskResultAsync(
+        int subtaskId,
+        string outputText,
+        int i,
+        Guid sessionId,
+        List<WorkerDispatchSummary> summaries,
+        SubtaskPlan plan,
+        IReadOnlyList<ITalent> talentPicks,
+        Dictionary<int, List<int>> dependsOnLookup,
+        IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
+        bool memoryEnabled,
+        int compactKeep,
+        int compactThresholdPct,
+        int totalLevels,
+        int levelIdx,
+        bool isParallel,
+        CancellationToken ct)
+    {
+        var talentName = talentPicks[i].Name;
+        var skill = plan.Subtasks[i].SkillName;
+
+        var toolCallId = Guid.NewGuid().ToString("N");
+        var toolMessage = BuildToolMessage(talentName, skill, outputText);
+        await sessionRepo.AppendMessageAsync(sessionId, "tool", toolMessage, toolCallId, ct);
+
+        // memory 寫回（useV5Memory=true 時 dispatch 後 upsert TaskMemory + TalentMemory）
+        if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentIdForWrite))
+        {
+            if (outputText.Length == 0)
+            {
+                logger.LogWarning(
+                    "Petra v5.5 dispatch worker output empty skip memory write talent={Talent} skill={Skill} sessionId={SessionId}",
+                    talentName, skill, sessionId);
+            }
+            else
+            {
+                var truncated = outputText.Length > 500 ? outputText[..500] : outputText;
+                await memoryRepo.UpsertTaskMemoryAsync(
+                    sessionId, projectId: null,
+                    key: $"decision/{talentName}-output-summary",
+                    content: truncated,
+                    createdByTalent: talentName,
+                    ct);
+                await memoryRepo.UpsertTalentMemoryAsync(
+                    talentIdForWrite, projectId: null,
+                    key: "last-task-summary",
+                    content: truncated,
+                    tags: null,
+                    ct);
+                logger.LogInformation(
+                    "Petra v5.5 dispatch 完成寫回 TaskMemory key=decision/{Talent}-output-summary + TalentMemory key=last-task-summary",
+                    talentName);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // compact threshold 檢查（buffer-above-keep 模型：count >= keep * (100 + thresholdPct) / 100）
+        if (memoryEnabled)
+        {
+            var taskMemCount = await memoryRepo.CountTaskMemoriesAsync(sessionId, ct);
+            var triggerAt = compactKeep + (compactKeep * compactThresholdPct / 100);
+            if (taskMemCount >= triggerAt && triggerAt > 0)
+            {
+                var deleted = await memoryRepo.CompactTaskMemoryAsync(sessionId, compactKeep, ct);
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation(
+                    "Memory compact 觸發 PetraSessionId={SessionId} beforeCount={Before} afterCount={After} deleted={Deleted}",
+                    sessionId, taskMemCount, taskMemCount - deleted, deleted);
+            }
+        }
+
+        logger.LogInformation(
+            "PetraOrchestrator v5.5 自管 chain dispatch 完成 Level={Level}/{TotalLevels} subtaskId={SubtaskId} talent={Talent} parallel={Parallel} outputLen={Len} toolCallId={ToolCallId}",
+            levelIdx + 1, totalLevels, subtaskId, talentName, isParallel, outputText.Length, toolCallId);
+
+        summaries.Add(new WorkerDispatchSummary(talentName, skill, outputText, toolCallId));
     }
 
     /// <summary>
