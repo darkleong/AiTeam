@@ -2,14 +2,17 @@
 
 ## 專案背景
 
-這是一個 AI 團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達指令，AI 團隊（Victoria CEO / Cody Dev / Petra PM / Rosa / Demi / Vera / Quinn / Sage / Rena / Maya 等）負責執行軟體開發與部署任務。
+這是一個 AI 團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達指令，AI 團隊（**v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員）負責執行軟體開發任務。
+
+> **v4 既有 4 agent**（Rosa Requirements / Demi UI Design / Rena Release / Maya Ops）已隨 v5.5 Phase 1 Step 1 baseline 拍板（2026-05-15）砍進 Petra orchestrator 範圍 / 0 production fire / Phase 4 dead code 清理候選。詳見 [Future_Feature_v5.5.md](docs/planning/Future_Feature_v5.5.md)。
 
 **核心工具：**
 - 溝通：Discord（Discord.Net）
-- 記憶/規則：PostgreSQL `rules` 資料表
+- 記憶/規則：PostgreSQL（rules + skill_prompts + talent_prompts + task_memories + talent_memories + petra_sessions 等）
 - 詳細 log：PostgreSQL（EF Core + Npgsql）
 - 視覺化：Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）
-- LLM：Claude Code CLI（Victoria / Cody / Vera / Quinn / Petra 走 session-based CLI）+ Anthropic API（Rosa / Demi / Sage / Release / Ops 走直接 API call）
+- LLM：**v5.5 production active 6 Talent 全走 Claude Code CLI subprocess**（Petra / Cody / Vera / Quinn / Sage via ClaudeCodeChatClientAdapter，Victoria 是 flag forward only 不直接 call LLM）
+  > csproj 內 `Anthropic.SDK 5.10.0` + `Microsoft.Agents.AI.Anthropic 1.3.0-preview` 是 v4 既有 path 遺留（對應已砍 4 agent service class）/ 0 production fire / Phase 4 清理候選。
 - 部署：Docker Compose on Windows 11（本機，非雲端）
 
 ---
