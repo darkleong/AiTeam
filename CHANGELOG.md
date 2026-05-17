@@ -12,10 +12,9 @@
 ## [Unreleased]
 
 - **Trial_v21 🟡 部分過**（2026-05-17 / [Trial_v21_Plan.md](docs/experiments/Trial_v21_Plan.md)）：Stage 75 Layer 1 接收層 ✅ 完整生效 + Layer 2 執行層 code path 真實 wire / **但揭 1 🔴 設計實作落差**（PetraInboxProcessor sequential await vs 議題 1 拍板「multi-session 並存」/ per-Talent lock production 0 機會 fire contention）。中段順手修 PetraInboxProcessor Status='failed' bug commit `9b433a4` + 環境設定 Token 月限放寬 10M → 15M。業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost per file $0.058 新最優 ROI baseline。
-- **下個動作候選 — 3 路徑待 Christ 拍板**：
-  - 🥇 路徑 A：Stage 76 順手修 PetraInboxProcessor fire-and-forget（範圍：WebUI Talent CRUD + Effort 擴展 + fire-and-forget 修法 ~10 行 + Trial_v22 驗）/ **推薦** — v5.5 Phase 3 完整收口
-  - 🥈 路徑 B：Phase 4 候選不修 fire-and-forget（current single-Bot sequential 也能用 / per-Talent lock 為未來 horizontal scaling 預留）/ Stage 76 範圍維持原計劃
-  - 🥉 路徑 C：立 Stage 75.1 hotfix（不建議 — Stage 編號連續紀律不開小數點）
+- **Christ 2026-05-18 拍板 A2 業界推薦完整版路線 + Stage 76 範圍重排「功能性 + 修補類」+ WebUI 推 Stage 78+**：Aria 計劃前 WebSearch 完成 #4 fire-and-forget 業界紀律（Stephen Cleary 警示 + .NET BackgroundService + Channel 業界主流）+ #2 retry/resume 機制紀律（PG queue retry pattern + multi-agent 5 failure modes + LLM retry 標準 config + Polly/Hangfire 選型 + 人工介入路徑）→ Stage 76 順手簡單版升級為 Stage 77 完整版（Channel + drain + bounded fan-out）+ Stage 76 範圍重排對齊修補類主軸。
+- **下個動作候選**：[Stage 76](docs/planning/Stage_76_Roadmap.md) task retry / resume 機制基礎建設 + Trial_v21 修補類項目（v3.66.0 / 規模 M+ / Opus 200K + high 推薦 / cost $3-5）— PetraInbox schema 擴 4 欄（AttemptCount + MaxAttempts + NextRetryAt + DeadAt）+ PetraInboxProcessor retry path（exponential backoff 30s×2×max3 + ±20% jitter）+ PetraErrorClassifier（Transient/BusinessRule/Permanent）+ Dead Letter pattern + queuePosition race 修法 + Dashboard 重跑 failed/dead task 按鈕 + xUnit 8 case → Trial_v22 真實業務驗 → 通過後進 Stage 77。
+- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76**（retry 機制 + 修補類）→ **77 預留**（fire-and-forget A2 完整版 Channel + drain + bounded fan-out）→ **78+ 預留**（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。
 
 ---
 
