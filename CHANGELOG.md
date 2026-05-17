@@ -11,7 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v21 真實業務驗（沿用 Trial_v6-v20 同 prompt + 多 task 並送場景 / Aria 9-step 模板第 11 次實踐 / aria-trial-run skill 第 5 次實踐 / 驗 Stage 75 兩層 queue 配套真實生效 + per-Talent serialization lock 真實 wire + Dashboard UX status live update）→ 通過 → Stage 76 開（v5.5 Phase 3 最後一步 WebUI Talent CRUD / 預估 cost $2-4 per cycle）。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76（WebUI Talent CRUD 最後做）→ v5.5 完整收口。
+- **Trial_v21 🟡 部分過**（2026-05-17 / [Trial_v21_Plan.md](docs/experiments/Trial_v21_Plan.md)）：Stage 75 Layer 1 接收層 ✅ 完整生效 + Layer 2 執行層 code path 真實 wire / **但揭 1 🔴 設計實作落差**（PetraInboxProcessor sequential await vs 議題 1 拍板「multi-session 並存」/ per-Talent lock production 0 機會 fire contention）。中段順手修 PetraInboxProcessor Status='failed' bug commit `9b433a4` + 環境設定 Token 月限放寬 10M → 15M。業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost per file $0.058 新最優 ROI baseline。
+- **下個動作候選 — 3 路徑待 Christ 拍板**：
+  - 🥇 路徑 A：Stage 76 順手修 PetraInboxProcessor fire-and-forget（範圍：WebUI Talent CRUD + Effort 擴展 + fire-and-forget 修法 ~10 行 + Trial_v22 驗）/ **推薦** — v5.5 Phase 3 完整收口
+  - 🥈 路徑 B：Phase 4 候選不修 fire-and-forget（current single-Bot sequential 也能用 / per-Talent lock 為未來 horizontal scaling 預留）/ Stage 76 範圍維持原計劃
+  - 🥉 路徑 C：立 Stage 75.1 hotfix（不建議 — Stage 編號連續紀律不開小數點）
 
 ---
 

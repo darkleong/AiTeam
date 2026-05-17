@@ -259,7 +259,15 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Aria 二檢 0 Critical + 6 Warning 全 gate1 自驗綠**（W1 runtime fallback 對齊既有 chain / W2 DispatchAsync 7 case propagate / W3 GenericAgentTool propagation 對齊既有 / W4 WorkerDispatchSummary record immutable 安全 / W5 DependencyType.Sequential enum 真實對齊 / W6 SkillDescriptor breaking change baseline test 同步 update）
 - **production 真實生效**：talent_skills 6 row Provider=Model=NULL（runtime fallback baseline）+ reload-cache wire 串接驗 200 + Migration apply 成功
 
-**Step 9（Stage 75）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization** ✅ **已完成**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 9 Stage 0 follow-up bug fix / 17 檔 +1990/-25 / Aria gate1 6 Warning 全套 grep verify 通過 / 大規模架構級重構新類型第 3 資料點累積 raw 451K Christ 選 Opus 1M + Extra high / 待 Trial_v21 真實業務驗）
+**Step 9（Stage 75）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization** 🟡 **Trial_v21 部分過**（Stage 75 ✅ Forge 結案 v3.65.0 + Trial_v21 真實業務驗 🟡 揭 1 🔴 設計實作落差 / 修法路徑待 Christ 拍板）
+
+- **Stage 75 結案**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 9 Stage 0 follow-up bug fix / 17 檔 +1990/-25 / Aria gate1 6 Warning 全套 grep verify 通過 / 大規模架構級重構新類型第 3 資料點累積 raw 451K Christ 選 Opus 1M + Extra high）
+- **Trial_v21 真實業務驗 🟡 部分過**（[Trial_v21_Plan.md](../experiments/Trial_v21_Plan.md) / 業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost $3.75 / cost per file $0.058 新最優 ROI baseline）
+  - Layer 1 接收層 ✅ 完整生效（CeoAgentService 不 await Petra + PetraInbox + FIFO + Dashboard live update + Reply「task 已接收 + 排隊位 N」）
+  - Layer 2 執行層 🟡 code path 真實 wire（每 Talent dispatch acquire/release lock 真實 fire）/ **但 production 0 機會 fire contention**（PetraInboxProcessor sequential await / row A 跑完才接 row B / 兩 Petra 不同時 dispatch / per-Talent lock 永遠 acquire-immediate-release）
+- **🔴 揭 Stage 75 設計實作落差**：v2.0 紀錄 §2「fire-and-forget per row」+ 議題 1 拍板「multi-session 並存」vs 真實 [`PetraInboxProcessor.cs:89`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs#L89) sequential await
+- **3 路徑待 Christ 拍板**：🥇 Stage 76 順手修 fire-and-forget（推薦） / 🥈 Phase 4 候選不修 / 🥉 立 Stage 75.1 hotfix（不建議）
+- **Trial_v21 中段 Aria 順手修 bug** commit `9b433a4`：PetraInboxProcessor `MarkCompletedAsync` 0 check `result.Success` → check `Success` 拆 Success/Failure 路徑（對齊 Stage 75 Roadmap §2「失敗 → 切 Status='failed' + ErrorMessage」設計）+ 環境設定 Token 月限放寬 10M → 15M（cache 加權失控揭）
 
 > ⚠️ **Stage 編號對齊紀律**（Christ 2026-05-17 拍板「數字順序執行」）— 既有 Step 6 「WebUI Talent CRUD」改對應 Stage 76 / 既有 Step 9 「兩層 queue 配套」改對應 Stage 75 ✅ 已完成。
 
