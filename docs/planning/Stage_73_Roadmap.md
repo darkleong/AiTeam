@@ -1,8 +1,8 @@
 # Stage 73 Roadmap — v5.5 Phase 3 Step 7：Prompt content 升級 + Petra TalentPrompt persona seed
 
 > 目標版本：**v3.63.0**（minor — v5.5 Phase 3 第一步 / 一般架構級重構：6 SkillPrompt content 從「步驟紀律」升級「品質目標 + 業界 best practice」+ Petra TalentPrompt persona seed 新加）
-> 狀態：📝 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-17）
+> 文件版本：v2.0
 > 範圍：6 SkillPrompt content 升級 + Petra TalentPrompt persona seed + PetraPromptTemplate.Template 同步 + CLAUDE_*.md source 檔同步 + xUnit baseline 對齊 + Directory.Build.props bump
 > 規模：M+
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 3 Step 7
@@ -257,8 +257,83 @@ Stage 73 升級透過 DbSeeder helper 在 Bot 啟動時自動跑 → DB content 
 
 ---
 
+## 實作紀錄（v2.0）
+
+**Forge 實作 commit**：[`cb47648`](https://github.com/darkleong/AiTeam/commit/cb47648) — feat(stage73): Prompt content 升級 v3.63.0 — 6 SkillPrompt v1→v2 + Petra TalentPrompt persona seed
+**實作日期**：2026-05-17
+**Forge session 規模**：12 檔變動（705 ++ / 418 −−）+ 2 新檔（PetraPersonaSeed.cs / Stage73UpgradeTests.cs）
+
+### 實作完成項目（對齊 Roadmap 8 子項）
+
+| 子項 | 實作摘要 |
+|---|---|
+| **1. 6 SkillPrompt content 升級** | 5 .md source 檔（Cody/Vera/Quinn/Sage/Victoria）+ PetraPromptTemplate.cs 全 overwrite「品質目標 + 業界 best practice + 邊界紅線 + 對等和互相」內容。DB skill_prompts table 6 SkillName 各從 v1 升 v2（v1 切 IsActive=false / v2 IsActive=true + CreatedByUser='stage73-upgrade'）— production SQL 驗證 12 rows 對齊。 |
+| **2. Petra TalentPrompt persona seed** | 新立 [`PetraPersonaSeed.cs`](../../src/AiTeam.Data/SeedContent/PetraPersonaSeed.cs) 常數檔（對齊 PetraPromptTemplate.cs source-of-truth symmetric pattern）+ DbSeeder.EnsurePetraTalentPromptAsync helper（race-safe 單 entity detach）+ talent_prompts production 1 row 真實寫入（907 chars / 4 拍板特質關鍵字「謹慎/冗餘/持續/對等」全 hit）。 |
+| **3. PetraPromptTemplate.Template 同步** | [`PetraPromptTemplate.cs`](../../src/AiTeam.Data/SeedContent/PetraPromptTemplate.cs) Template 常數對齊新版 petra_orchestration content（開頭 `v5 動態架構` → `v5.5 動態架構` + 新加「派工夥伴」對等精神段 + 「品質目標」3 點 / 3 placeholder `{{capabilityRoster}}` / `{{decompositionSection}}` / `{{outputSection}}` 完整保留 runtime 注入機制）。 |
+| **4. CLAUDE_*.md 5 source 檔同步升級** | 5 檔 overwrite（v4 既有 DevAgentService/ReviewerAgentService/QaAgentService/DocAgentService/CeoAgentService fallback path 自動拿到新 content / v5.5 path 走 DB / 兩 path 0 分裂）。 |
+| **5. UpgradeSkillPromptsToV2Async helper** | DbSeeder 內新立（[`DbSeeder.cs`](../../src/AiTeam.Data/DbSeeder.cs)）— 走 PromptRepository.UpsertSkillPromptAsync versioning path / 同 SkillName VersionNumber>=2 active row 已存在 → skip 幂等 / race-safe 單 entity detach 對齊 Stage 72 EnsureSkillPromptsAsync pattern。SeedAsync 接入順序：`EnsureSkillPromptsAsync` → `UpgradeSkillPromptsToV2Async` → `EnsurePetraTalentPromptAsync`。 |
+| **6. PromptResolver cache invalidate** | reload-cache API wire 真實生效驗（Aria 結案後 `curl /internal/reload-cache?scope=all` 觸發 / Bot log `Bot Cache 已清除（scope=all）`）— 完整 BuildPetraSystemPromptForRuntimeAsync persona prepend 真實 hit 留 Trial_v19 真實 Petra dispatch 場景。 |
+| **7. xUnit test 補強** | 新立 [`Stage73UpgradeTests.cs`](../../src/AiTeam.Bot.Tests/Orchestration/Stage73UpgradeTests.cs) 5 case：T1 v1→v2 升級（INLINE path）/ T2 幂等 skip v2 已存在 / T3 Petra persona seed + 4 關鍵字驗 / T4 EnsurePetra... 幂等 / T5 PetraPromptTemplate 升級 marker 驗 / 既有 Test47 `v5 動態架構` → `v5.5 動態架構` assertion 同步 update。75/75 全綠。 |
+| **8. Directory.Build.props bump** | v3.62.0 → v3.63.0。 |
+
+### 關鍵設計決策
+
+1. **PetraPersonaSeed.cs 走抽常數 vs inline 進 DbSeeder.cs** — Plan Mode 議題 1 拍板走抽常數 / 對齊 PetraPromptTemplate.cs 既有「SeedContent/ 抽常數」前例 symmetric pattern（DbSeeder seed + 未來 xUnit / WebUI rollback 都可共用 source-of-truth / 0 重複維護）。
+2. **BuildPetraSystemPromptForRuntimeAsync persona prepend 位置** — Plan Mode 議題 4 拍板走 base template 上方 + separator（`────────────────────────────` 四個全形破折號 / 視覺分區明顯 / persona 個性框架先讀、職務 base 後讀 — 對齊「個性會帶進所有 dispatch 決策」邏輯順序）。
+3. **PetraOrchestratorService.BuildPetraSystemPromptForRuntimeAsync 用既有注入 db** — Gate1 verified `AppDbContext db` 直接注入（非 IDbContextFactory / line 40 primary constructor）— 直接用 `db.Talents.AsNoTracking().FirstOrDefaultAsync(...)` 不需重構 DI / 0 lifecycle 雷。
+4. **Quinn JSON schema 維持既有不改**（Aria 二檢 C1 修法）— `QaReport` class 5 欄位 `{status, passed_tests, failed_tests, no_test_reason, summary}` + Write tool 直寫測試檔 pattern + status 三值 + 兩類失敗語意分離全保留 — 只升級文字 wording / 紀律強調 / 對等和互相段，避免 production breaking change（`QaCoordinationService.HandleQaCompletedAsync` 依 status 走 3 條 routing path）。
+5. **fresh DB v1+v2 假 audit trail 接受現狀**（Aria 二檢 W3 修法）— fresh DB 是 rare event（CI test / 開發機初始化）/ production 升級才是主場景 / 改進方案會破壞 Stage 72 既有 EnsureSkillPromptsAsync 幂等紀律 — trade-off 不值得，已在 commit message + 本紀錄段明寫。
+6. **Petra persona 第 3 條「持續迭代」wording 對齊 Stage 76 兩層 queue 配套**（Aria 二檢 W4 修法）— evaluate dispatch 序列但**不取消已派出的 Worker 既有 subtask**（Worker 執行層 per-Talent 1 task at a time / 對齊 Stage 76 未來範疇）。
+7. **DbSeeder helper race-safe 用單 entity detach**（Aria 二檢 W2 修法）— `db.Entry(newEntity).State = EntityState.Detached`（對齊 Stage 72 既有 `EnsureSkillPromptsAsync` pattern，避免 over-engineered detach 全部 ChangeTracker entries 影響 loop 內後續 query state）。
+
+### 驗收後修正
+
+**無**。一次 commit `cb47648` 通過 dotnet build / dotnet test / production SQL 驗證 / 6 場景自驗（A-D 內 Forge 範圍全綠 / E-H 留 Aria gate2 + Trial_v19 範疇）— 0 follow-up bug fix commit。
+
+### Mock 覆蓋情況
+
+不適用 — Stage 73 是 prompt content + DbSeeder + DI wire 升級，**無 Mock scenario 範疇**。驗收走 production SQL query + Bot startup log 證據鏈 + xUnit unit test 三層。
+
+### 踩坑紀錄
+
+1. **Branch 對齊 origin/main 多 3 docs commit**（rebase 前發現）— Aria 在 main 平行跑 3 docs commit（Stage_73_Roadmap.md 規劃書建立 + Future_Feature_v5.5 補強 Stage 76 兩層 queue 配套 + Phase 3 順序重排）。修法：`git stash` → `git pull --rebase origin main` → `git stash pop` → commit + push。0 source code 衝突（純 docs commit）。對齊 workflow_aria_stage_closing.md「掃 git log 必含 git fetch 紀律」（Stage 67 結案踩雷 follow-up）。
+2. **petra_orchestration v2 SkillPrompt body 不含「對等」字符是 expected** — Petra base template 用「派工夥伴」表達同概念 / 「對等和互相」明文化在 Petra TalentPrompt persona body（兩層分離 / 不重複）— production SQL 驗證時揭露 cross-check「對等」keyword 在 5 .md / 不在 petra_orchestration base template / 在 talent_prompts persona body。架構正確、非 bug。
+
+### Gate1 自驗紀律已套（Aria 規劃書要求）
+
+1. `grep "v5 動態架構"` 全 Tests 範圍 → 揭唯一 assertion 衝突 = Test47 line 1047 → 同步 update `v5.5 動態架構`。
+2. `PetraOrchestratorService` ctor 注入確認為 `AppDbContext db`（非 IDbContextFactory / line 40）→ `ResolvePetraPersonaAsync` 直接用 db 不需重構 DI。
+3. `dotnet test --filter "FullyQualifiedName~PetraOrchestratorServiceTests"` 確認 Test9/27/28/46/47 全綠（含 Test47 update）。
+
+### 本機驗證結果
+
+| 項目 | 結果 |
+|---|---|
+| `dotnet build AiTeam.slnx` | ✅ Build succeeded 0 error（102 warnings 全 pre-existing）|
+| `dotnet test AiTeam.Bot.Tests` | ✅ 75/75 全綠（含新 5 Stage 73 case + Test47 v5→v5.5 update + 既有 Test9/27/28/46 baseline 全保留）|
+| CI/CD self-hosted runner deploy | ✅ `Deploy main (cb47648)（done）` InternalController log 確認 |
+| Production DB skill_prompts | ✅ 12 rows（6 SkillName × 2 version）/ partial unique index `(SkillName) WHERE IsActive=true` 真實 enforced |
+| Production DB talent_prompts | ✅ 1 row Petra / IsActive=true / 907 chars / 4 拍板特質關鍵字全 hit |
+| reload-cache wire | ✅ `Bot Cache 已清除（scope=all）` log 真實生效 |
+
+### 場景驗收對應
+
+| 場景 | 對應驗證手段 | 結果 |
+|---|---|---|
+| A：6 SkillPrompt v1→v2 + audit trail | SQL query skill_prompts + Bot startup log 6 UPDATE+6 INSERT | ✅ Forge 範圍 |
+| B：DbSeeder Upgrade 幂等 | xUnit T2 case | ✅ Forge 範圍 |
+| C：Petra TalentPrompt persona seed + 4 關鍵字 | SQL query talent_prompts + POSITION 關鍵字驗 | ✅ Forge 範圍 |
+| D：BuildPetraSystemPrompt persona prepend | reload-cache wire 驗 + xUnit T5 content marker 驗 / 完整 runtime prepend 留 Trial_v19 | ✅ 部分 Forge 範圍 |
+| E：persona missing fallback | xUnit T5 + Test47 baseline 保留驗（v1 baseline path 0 regression） | ✅ Forge 範圍 |
+| F：Trial_v19 真實業務驗 | Aria gate2 / Trial_v19 範疇 | ⏳ 留 Aria + Christ 觸發 |
+| G：rollback 機制驗 | Aria 結案後手動 SQL + curl reload-cache 驗 | ⏳ 留 Aria 範疇 |
+| H：v4 path 0 regression | Aria gate2 / 切 flag 跑 mock task 驗 | ⏳ 留 Aria 範疇 |
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-17 | **Forge 實作完成 + 本機驗證 + Forge 自驗通過 — commit [`cb47648`](https://github.com/darkleong/AiTeam/commit/cb47648)**。8 子項全交付（6 SkillPrompt v1→v2 升級 + Petra TalentPrompt persona seed + PetraPromptTemplate.Template 同步 + CLAUDE_*.md 5 source 檔同步 + DbSeeder 2 新 helper + PromptResolver cache reload-cache wire + xUnit 5 新 case + Directory.Build.props bump）。本機驗證：dotnet build 0 error + dotnet test 75/75 全綠 + CI/CD 部署成功 + production SQL 6×2=12 SkillPrompt rows + 1 Petra TalentPrompt row（4 拍板特質關鍵字全 hit）+ reload-cache wire 真實生效。**踩坑 2 條**（branch 對齊 origin/main 多 3 docs commit rebase / petra_orchestration v2 不含「對等」字符 expected — 兩層分離 base template vs persona body）。**0 follow-up bug fix commit**。場景 F-H 留 Aria gate2 + Trial_v19 範疇。 |
 | v1.0 | 2026-05-17 | 規劃書建立 — v3.63.0 / M+ 規模 / v5.5 Phase 3 Step 7 Prompt content 升級 + Petra TalentPrompt persona seed。**範圍**：6 個 SkillPrompt content 升級對齊「品質 > 做法」精神（VersionNumber=1 → 2 走 UpsertSkillPromptAsync versioning path / 舊版保留 audit trail）+ Petra TalentPrompt persona seed 1 row（4 拍板特質：謹慎拍板 / 對冗餘不容忍 / 持續迭代 / 對等和互相）+ PetraPromptTemplate.Template 對齊 + CLAUDE_*.md 5 source 檔同步升級（v4 fallback path 自動拿到新 content）+ DbSeeder UpgradeSkillPromptsToV2Async helper（幂等 + race-safe）+ xUnit 3-5 case + Directory.Build.props bump。**戰略脈絡**：Stage 72 schema 已搬家完成 / Stage 73 升級「內容」對齊「品質 > 做法」精神（自省點 #35 / Trial_v17 戰略級觀察延伸）+ 業界 Orchestrator persona pattern（既有 Future_Feature_v5.5.md WebSearch 結論延用 / 不重複觸發）。**核心紀律**：具體 prompt 文案由 Forge 起草 + Christ Plan Mode review（Aria 寫 scope / 設計原則 / 邊界 / 驗收）。**校準錨預期**：一般架構級重構區間 ×0.43-0.60（Stage 67/68/69/70/72 5 資料點 baseline / Stage 73 = 第 6 資料點累積）。**驗收**：8 場景 — A 6 SkillPrompt 升級 v2 + audit trail / B 升級幂等 / C Petra TalentPrompt persona seed + 真實返回 / D feature flag=true + persona 組合 / E feature flag=true + persona 不存在 fallback / F **Trial_v19 真實業務驗（Aria 9-step 第 5 次實踐）** / G rollback 真實生效 / H v4 path 0 regression。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Trial_v19 真實任務驗 → 通過後 Stage 74 開（真並行 dispatch + 3 agent debate）。**Phase 3 完整收口路徑**：73（prompt 升級）→ 74（並行 + debate）→ 76（兩層 queue 配套）→ 75（WebUI Talent CRUD 最後做）→ v5.5 完整收口。 |
