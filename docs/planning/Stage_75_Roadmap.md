@@ -1,8 +1,8 @@
 # Stage 75 Roadmap — v5.5 Phase 3 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent 1 task at a time
 
 > 目標版本：**v3.65.0**（minor — v5.5 Phase 3 第三步 / 大規模架構級重構：Petra 接收層 queue + Worker 執行層 per-Talent serialization + UX status 顯示）
-> 狀態：📝 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-17）
+> 文件版本：v2.0
 > 範圍：PetraInbox table + Migration + PetraInboxProcessor BackgroundService + CeoAgentService 寫 inbox path + per-Talent serialization lock + Dashboard UX status + Discord ACK + xUnit + Directory.Build.props bump
 > 規模：M+（對齊 Stage 73+74 真實落點 baseline / 大規模架構級重構新類型第 3 資料點候選）
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 3（既有 doc 寫 Step 9 對應 Stage 76 — Christ 2026-05-17 拍板「數字順序執行」/ Step 9 範圍 → Stage 75 / Step 6 範圍 → Stage 76 WebUI 最後做 / 結案第二段順手 update doc）
@@ -303,8 +303,113 @@ flag=true → DbContext.PetraInbox.Add(new PetraInbox { UserInput, Source="dashb
 
 ---
 
+## 實作紀錄（v2.0 — Forge 結案第一段 / 2026-05-17）
+
+### 實作完成項目（依子項列出）
+
+| Roadmap 子項 | 實作對應檔 | 狀態 |
+|---|---|---|
+| 1. PetraInbox table + Migration | [`src/AiTeam.Data/Entities.cs`](../../src/AiTeam.Data/Entities.cs) PetraInbox class + [`AppDbContext.cs`](../../src/AiTeam.Data/AppDbContext.cs) DbSet + index `ix_petra_inbox_status_enqueued` + Migration `20260517121324_Stage75PetraInbox` | ✅ |
+| 2. PetraInboxProcessor BackgroundService | [`src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs)（3 秒 polling / 啟動延遲 10s / Crash Recovery / fire-and-forget per row 開 Scoped instance）+ [`PetraInboxRepository.cs`](../../src/AiTeam.Data/Repositories/PetraInboxRepository.cs)（7 method：Enqueue / GetNextPendingAsync / CountPendingBySourceAsync / TryMarkRunningAsync / MarkCompletedAsync / MarkFailedAsync / RecoverStuckRunningAsync / GetRecentAsync）| ✅ |
+| 3. CeoAgentService 改寫成「寫 inbox + ack」 | [`CeoAgentService.cs:100-122`](../../src/AiTeam.Bot/Agents/CeoAgentService.cs#L100) v5.5 flag forward path 從 direct await Petra 改寫成 Enqueue + Reply 含 inbox id 短碼 + 排隊位 | ✅ |
+| 4. per-Talent serialization lock | [`TalentDispatchLockService.cs`](../../src/AiTeam.Bot/Services/TalentDispatchLockService.cs) Singleton + ConcurrentDictionary<Guid, SemaphoreSlim>（議題 2 Christ 拍板 🥇 SemaphoreSlim） + [`PetraOrchestratorService.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs) DispatchTalentsAsync 並行段 + sequential 段 lock wire | ✅ |
+| 5. Dashboard UX status 顯示 | [`InteractionCenter.razor`](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor) PetraInbox 接收狀態 section（最近 5 筆 / SignalR live update）+ [`.razor.cs`](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs) LoadRecentInboxAsync + IServiceScopeFactory 注入 + GetInboxStatusColor helper | ✅ 部分（TaskCenter 跳過 — 見「踩坑紀錄」）|
+| 6. SignalR Hub 通知 | 沿用既有 [`DashboardPushService.PushInteractionUpdateAsync`](../../src/AiTeam.Bot/Services/DashboardPushService.cs)（PetraInboxProcessor 切 Status 時 fire / InteractionCenter 收 callback re-load 同包含 PetraInbox）— 0 加新 endpoint | ✅ |
+| 7. xUnit test 補強 | [`Stage75InboxQueueTests.cs`](../../src/AiTeam.Bot.Tests/Orchestration/Stage75InboxQueueTests.cs) 7 case 全綠（T1-T3 PetraInboxRepository / T4-T5 TalentDispatchLockService / T6-T7 MarkFailed + CountPendingBySource）+ Stage 67/69/70/71/72/73/74 既有 baseline 全保留 | ✅ |
+| 8. Directory.Build.props v3.64.0 → v3.65.0 | [`src/Directory.Build.props`](../../src/Directory.Build.props) | ✅ |
+
+### 關鍵設計決策
+
+1. **議題 2 Christ 拍板 🥇 SemaphoreSlim per-Talent**（vs 🥈 PostgreSQL Advisory Lock）— 對齊 AiTeam 單 Bot instance + v4 既有多處 SemaphoreSlim production-active 紀律（[`AgentQueueProcessor.cs:54-56`](../../src/AiTeam.Bot/Orchestration/AgentQueueProcessor.cs#L54) 8 instance + [`CeoAgentService.cs:41`](../../src/AiTeam.Bot/Agents/CeoAgentService.cs#L41) Victoria lock + `PromptResolver` + `TalentSkillModelResolver`） + 0 PG connection pool 雷 + 0 schema 擾動。Forge 計劃前 WebSearch 完整對齊（業界 2026 single-instance scenario reference）。
+
+2. **議題 1 已 Christ 拍板 🥇 1 session 1 task / multi-session 並存** — 既有 PetraOrchestratorService Scoped lifetime 保留，PetraInboxProcessor 每 row `IServiceScopeFactory.CreateAsyncScope()` 開新 Scoped instance dispatch / 0 改 PetraSession 紀律。
+
+3. **FIFO 紀律 / 不引入 priority preemption** — EnqueuedAt ASC polling / 對齊「自己用爽 / 不過早 over-engineer」精神（Christ 2026-05-15 拍板）。
+
+4. **PetraInboxRepository DI 移到 `AddAiTeamData` extension** — Bot + Dashboard 共用 Repository pattern（InteractionCenter UI 段也需要 PetraInboxRepository），對齊既有 TaskRepository / BossInteractionRepository 紀律。0 在 Bot/Program.cs 額外註冊（避免 duplicate）。
+
+5. **鎖範圍只包 LLM dispatch / 不包 DB write** — 對齊 Stage 74 路線 A「LLM dispatch + DB write 分階段」紀律 + 0 transaction 跨 dispatch 雷。`using var lockHandle = await talentLockService.AcquireAsync(talentId, ct)` block 內僅 `talentAgent.RunAsync` / `ProcessSubtaskResultAsync` 在 release 後跑。
+
+6. **SignalR 沿用既有 InteractionUpdate / 0 加新 endpoint** — 對齊「修根因 > 補丁」哲學。PetraInbox 是「操作中心」一部分，PetraInboxProcessor 切 Status 時 `_ = pushService.PushInteractionUpdateAsync()` 觸發既有廣播即可。
+
+7. **W2 trade-off 紀律明寫** — `PetraInboxRepository.TryMarkRunningAsync` 用「先 read 再 UPDATE」非真正 atomic，單 Bot instance OK / 未來多 instance 才踩。entity class XML doc + Repository method XML doc 同步寫明。
+
+### ⭐ Forge spike 揭架構盲點修根因（對齊 Stage 58 結論第 N 次累積）
+
+**問題**：Stage 69 v2.1 起 `talentNameToIdMap` 只在 `useV5Memory=true` 才 build（[`PetraOrchestratorService.cs` 既有 line 117-126 條件 build](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L117)）— Stage 75 per-Talent 鎖**永遠需要** Talent Id（不分 memory flag）。
+
+**修根因**：
+- `StartAsync` 把 `talentNameToIdMap` build 提前到 useV5Memory 判斷之外（永遠 build / memory 段繼續用同個 map）
+- `DispatchTalentsAsync` + `BuildInputMessagesForSubtaskAsync` + `ProcessSubtaskResultAsync` 三 method 簽名 `IReadOnlyDictionary<string, Guid>?` → 改 non-nullable / 拿掉 `!` null forgive
+- `memoryEnabled` 判斷簡化 `useV5Memory && talentNameToIdMap is not null` → `useV5Memory`
+
+**驗證**：Test29/30（Stage 71 memory test）既有 reflection invoke 已用 non-nullable `IReadOnlyDictionary<string, Guid>` → 0 baseline test 破。
+
+### 驗收後修正
+
+**0 follow-up bug fix commits** — clean delivery。Forge 自驗（場景 A-G xUnit + production schema + Migration apply + Bot startup + Processor polling）全綠，0 自診修。
+
+### Aria gate1 6 Warning 全套（grep verify W1-W4）
+
+| # | 自驗動作 | 結果 |
+|---|---|---|
+| **W1** | grep `PetraOrchestratorResult` 含 `SessionId` field — plan B.2 line `result.SessionId` 真實對齊 | ✅ [`PetraOrchestratorResult.cs:6`](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorResult.cs#L6) `record PetraOrchestratorResult(Guid SessionId, ...)` |
+| **W2** | TryMarkRunningAsync 「先 read 再 UPDATE」非 atomic trade-off 必明寫 | ✅ entity class XML doc + Repository method XML doc 雙處寫明 |
+| **W3** | grep `DashboardPushService` lifetime — BackgroundService ctor 直接注入 / 必驗 Singleton | ✅ [`Program.cs:131`](../../src/AiTeam.Bot/Program.cs#L131) `AddSingleton<DashboardPushService>()` |
+| **W4** | grep `CeoResponseActions.PetraV5Dispatched` 既有 caller route — Reply 訊息格式升級 0 break | ✅ 既有 2 caller（[`ButtonCallbackRouter.cs:397`](../../src/AiTeam.Bot/Discord/Routing/ButtonCallbackRouter.cs#L397) + [`ProposalConfirmationService.cs:51`](../../src/AiTeam.Bot/Orchestration/Proposal/ProposalConfirmationService.cs#L51)）都只 check Action 不依賴 Reply 訊息格式 |
+| **W5** | `GetRecentAsync(limit: 5)` 性能 — limit 5 + EnqueuedAt index 已有 | ✅ FF 候選追蹤不擋 plan |
+| **W6** | `TalentDispatchLockService` SemaphoreSlim cleanup — talent 數量有限 | ✅ FF 候選追蹤不擋 plan（XML doc 寫明 100+ Talent 才需評估）|
+
+### Mock 覆蓋情況分配
+
+| 場景 | Mock 工具 | 範圍 |
+|---|---|---|
+| A schema + Migration | xUnit T1 + production SQL `\d petra_inbox` verify | Forge 自驗（gate1）|
+| B FIFO polling | xUnit T2 + production Bot log `SELECT FROM petra_inbox ORDER BY EnqueuedAt` polling SQL 真實 fire | Forge 自驗 |
+| C atomic check | xUnit T3 | Forge 自驗 |
+| D CeoAgentService 寫 inbox + ack | xUnit + production 真實 task 觸發留 Aria gate2 / Trial_v21 | Aria gate2 |
+| E 同 Talent serialization | xUnit T4 | Forge 自驗 |
+| F 不同 Talent 平行 | xUnit T5 | Forge 自驗 |
+| G MarkFailed ErrorMessage | xUnit T6 | Forge 自驗 |
+| H Dashboard UX live update | 視覺驗收 | Aria gate2 |
+| I Trial_v21 真實業務驗（多 task 並送）| 真實 LLM dispatch | Aria gate2 / Christ 觸發 |
+| J v4 path 0 regression | flag UsePetraOrchestratorV5=false 切換驗 | Aria gate2 |
+
+### 踩坑紀錄
+
+1. **計劃 §E.2 TaskCenter queue position column 跳過 — Forge spike 揭 Dashboard 0 PetraSession 列表頁存在**
+   - 原 plan 假設「既有 PetraSession 列表加 column」— grep verify Dashboard `PetraSession` reference = 0
+   - 修根因：對齊「修根因 > 補丁」哲學，§E.1 InteractionCenter PetraInbox section 已 cover「task 已接收 + queue position」主要 UX 需求 + Discord/Dashboard CeoAgentService Reply 訊息 cover「排隊位 N」
+   - 留 Stage 76 WebUI Talent CRUD 評估再做（PetraSession 列表頁是新 UI scope / 不在 Stage 75 範圍）
+
+2. **既有 PetraOrchestratorServiceTests 3 處 ctor invocation 必更新**
+   - Stage 75 ctor 加 `TalentDispatchLockService` required param → Test 12 + CreateMinimalOrchestratorForReflection + CreateMemoryTestServices 三處必更新
+   - 修法：3 處全加 `talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService()` named param
+   - 對齊 Stage 74 既有相同 pattern（ctor 加 required param → test fixture 同步更新）
+
+3. **CeoAgentService ctor 加 DI `AppDbContext` lifetime 對齊**
+   - 既有 ctor 已注入 `PetraOrchestratorService`（Scoped）+ `petra*` Repository（Scoped）— `AppDbContext` 同層 Scoped 安全
+   - Pre-Stage 75 既有 Action XML doc 不需更新（只 Reply 訊息升級 / Action 語意 0 變）
+
+### 本機驗證 + Production 驗證
+
+| 項目 | 結果 |
+|---|---|
+| `dotnet ef migrations add Stage75PetraInbox` | ✅ Migration 產生（`20260517121324_Stage75PetraInbox`）|
+| `dotnet build AiTeam.slnx` | ✅ **0 error / 54 warning（全 pre-existing — NU1902 / MSTEST0037 / Mock obsolete / 0 新增）** |
+| `dotnet test` | ✅ AiTeam.Bot.Tests **89/89 passed**（Stage 74 既有 82 + Stage 75 新 7）+ Tests.Generated **127/127 passed** |
+| CI/CD deploy（[gh run 25990587355](https://github.com/darkleong/AiTeam/actions/runs/25990587355)）| ✅ success / 4m34s |
+| Bot 容器啟動 | ✅ `Application started. Press Ctrl+C to shut down` / `Hosting environment: Production` / 0 startup exception |
+| Migration apply on production | ✅ `Applying migration '20260517121324_Stage75PetraInbox'` log 真實出現 + `CREATE TABLE petra_inbox` + `CREATE INDEX ix_petra_inbox_status_enqueued` |
+| production petra_inbox schema | ✅ 9 column（Id / UserInput / Source / Status / PetraSessionId / EnqueuedAt / StartedAt / CompletedAt / ErrorMessage）+ PK + index 真實存在 |
+| PetraInboxProcessor polling | ✅ 真實 fire `SELECT FROM petra_inbox ORDER BY EnqueuedAt` SQL（每 3s）|
+| Production app_settings v5.5 flag | ✅ 5 v5.5 flag 全 `true`（UsePetraOrchestratorV5 / UseTalentSkillSeparation / UseV5Memory / UseV5PromptDb / UseV5SubtaskPlanning）|
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
 | v1.0 | 2026-05-17 | 規劃書建立 — v3.65.0 / M+ 規模 / v5.5 Phase 3 兩層 queue 配套（Christ 2026-05-17 拍板「數字順序執行」/ Stage 75 = 兩層 queue / Stage 76 = WebUI 最後做）。**範圍**：Layer 1 PetraInbox table + Migration + PetraInboxProcessor BackgroundService / Layer 2 per-Talent serialization lock（議題 2 拍板候選：PostgreSQL Advisory Lock vs SemaphoreSlim per-Talent — Aria 傾向 SemaphoreSlim 對齊 v4 既有 AgentQueueProcessor pattern / 單 Bot instance 場景 / 0 PG connection pool 雷）/ CeoAgentService 改寫成「寫 inbox + ack」/ Dashboard UX status（InteractionCenter + TaskCenter）/ Discord ACK 「排隊位 N」/ xUnit 7 case + Directory.Build.props bump。**戰略脈絡**：Trial_v20 🟡 部分過 + Stage 74 收口拍板閘門通過 + Christ「Agent 像人類處理事件」精神（PM 接收並行 / 執行管理）+ 業界 70% production Orchestrator-Worker pattern 對齊 + WebSearch 完全支持（議題 1 1 session 1 task 對齊 message queue scale better / 議題 2 PostgreSQL Advisory Lock 業界經典 worker serialization pattern — 修正 Aria 之前推「table 加 IsExecuting flag」次優判斷）。**核心紀律**：FIFO（EnqueuedAt ASC polling / 不引入 priority preemption）+ per-Talent 鎖（非 per-Skill 鎖 / 對齊 v5.5 horizontal scaling 未來 Cody-1 + Cody-2 平行設計）+ 1 session 1 task multi-session 並存（既有 PetraOrchestratorService Scoped 紀律保留）+ backwards-compatible 守護 6 層延續。**校準錨預期**：對齊 Stage 73/74 連續兩 Stage 教訓（自省點 #37 第 3 次累積反向防呆紀律）— **大規模架構級重構新類型第 3 資料點候選**（raw 125-180K × 1.6 = 200-288K 總 context / Opus 200K + high 或 Opus 1M + ultrathink）/ cost $3-5（升級既有 $2-4 預估）。**驗收**：10 場景 — A schema + Migration / B Processor FIFO polling / C 0 雙重 process / D CeoAgentService 寫 inbox + ack / E 同 Talent serialization / F 不同 Talent 平行 / G failed status ErrorMessage / H Dashboard UX status live update（Aria gate2）/ I **Trial_v21 真實業務驗（多 task 並送）** / J v4 path 0 regression。**下一步**：Forge 實作 + 議題 2 拍板（advisory lock vs SemaphoreSlim）+ Aria gate1 Tier 0+1+Tier 2 #3 build + Trial_v21 真實任務驗 → 通過後 Stage 76 開（WebUI Talent CRUD 最後做）= v5.5 完整收口。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75（兩層 queue 配套 / 本 Stage）→ 76（WebUI Talent CRUD 最後做）→ v5.5 完整收口。 |
+| **v2.0** | **2026-05-17** | **實作紀錄章節新增（Forge 結案第一段）** — Stage 75 v3.65.0 ✅ 完整收口 / commit `fd8975f` + Aria gate1 通過（議題 2 Christ 拍板 🥇 SemaphoreSlim + 6 Warning W1-W6 全套）+ 場景 A-G Forge 自驗全綠（xUnit 7 case + production schema + Migration apply + Bot startup + Processor polling）+ 0 follow-up bug fix。**8 子項全 ✅**：PetraInbox entity + Migration / PetraInboxProcessor + Repository / CeoAgentService 改寫 / TalentDispatchLockService SemaphoreSlim per-Talent / Dashboard InteractionCenter UX section / SignalR 沿用既有 InteractionUpdate / xUnit 7 case / version bump v3.65.0。**Forge spike 揭架構盲點修根因** ⭐：`talentNameToIdMap` 從 Stage 69 conditional build → Stage 75 unconditional build + `DispatchTalentsAsync` / `BuildInputMessagesForSubtaskAsync` / `ProcessSubtaskResultAsync` 三 method 簽名 `IReadOnlyDictionary<string, Guid>?` → 改 non-nullable（對齊 Stage 58 結論「Forge spike 揭露架構盲點紀律」第 N 次累積）。**踩坑紀錄**：plan §E.2 TaskCenter queue position column 跳過 — Forge spike 揭 Dashboard 0 PetraSession 列表頁存在（v5.5 path 未來 Stage 76 WebUI Talent CRUD 評估再做） + 既有 PetraOrchestratorServiceTests 3 處 ctor invocation 必更新 `TalentDispatchLockService` required param。**Mock 覆蓋分配**：A-C/E-G Forge 自驗 xUnit + production schema verify / D production 真實業務驗（CeoAgentService 寫 inbox + ack）+ H Dashboard UX live update + I Trial_v21 真實業務驗（多 task 並送）+ J v4 path 0 regression 全留 Aria gate2 範圍。**Aria gate1 6 Warning 全套**：W1 PetraOrchestratorResult.SessionId 真實存在 / W2 trade-off 雙處寫明（entity + Repository XML doc）/ W3 DashboardPushService=Singleton / W4 PetraV5Dispatched 既有 2 caller 只 check Action / W5+W6 FF 候選追蹤不擋 plan。**校準錨**：待 Aria 結案第二段計算（raw 預估 125-180K × 1.6 = 200-288K — 對齊大規模架構級重構新類型第 3 資料點 baseline）。**Phase 3 進度**：73 ✅ → 74 ✅ → **75 ✅** → 76（WebUI Talent CRUD 最後做）→ v5.5 完整收口。**下一步**：Aria 結案第二段（CHANGELOG v3.65.0 + Future_Feature.md v9.1 + Future_Feature_v5.5.md Step 9 ✅ + Top 5 重排）→ Trial_v21 真實業務驗 Aria gate2 範圍 → 通過後 Stage 76 開啟。 |
