@@ -97,6 +97,119 @@ public class AgentSettingsTests
         GetField<bool>(instance, "_isSavingLlm").Should().BeTrue("guard clause 提早返回後旗標應未被 finally 重置");
     }
 
+    // ── SaveTrustLevelAsync：_formError 管理 ─────────────────────────────
+
+    [Fact]
+    public async Task SaveTrustLevelAsync_例外時_formError應包含錯誤說明()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+        // _trustLevels 為空 dict → KeyNotFoundException 在 try 中被 catch 捕捉
+
+        await InvokeAsync(instance, "SaveTrustLevelAsync", agent);
+
+        var formError = GetField<string?>(instance, "_formError");
+        formError.Should().NotBeNull("例外應觸發 _formError 設定");
+        formError.Should().StartWith("信任等級儲存失敗：", "訊息應帶有識別前綴");
+    }
+
+    [Fact]
+    public async Task SaveTrustLevelAsync_例外時_Snackbar應被呼叫()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTrustLevelAsync", agent);
+
+        snackbar.Received(1).Add(
+            Arg.Is<string>(s => s.StartsWith("信任等級儲存失敗：")),
+            Severity.Error,
+            Arg.Any<Action<SnackbarOptions>?>());
+    }
+
+    [Fact]
+    public async Task SaveTrustLevelAsync_例外時_isSaving應重置為False()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTrustLevelAsync", agent);
+
+        GetField<bool>(instance, "_isSaving").Should().BeFalse("finally 區塊應重置 _isSaving");
+    }
+
+    [Fact]
+    public async Task SaveTrustLevelAsync_入口應清除舊formError()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        SetField(instance, "_formError", "舊錯誤訊息");
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTrustLevelAsync", agent);
+
+        // 入口 _formError = null 後被 catch 設定新值，舊訊息應消失
+        GetField<string?>(instance, "_formError").Should().NotBe("舊錯誤訊息", "入口 _formError = null 應清除舊訊息");
+    }
+
+    // ── SaveTokenLimitsAsync：_formError 管理（exception path）────────────
+
+    [Fact]
+    public async Task SaveTokenLimitsAsync_例外時_formError應被設定()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+        // AgentService 為 null → NullReferenceException 在 try 中被 catch 捕捉
+
+        await InvokeAsync(instance, "SaveTokenLimitsAsync", agent);
+
+        GetField<string?>(instance, "_formError").Should().NotBeNull("例外應觸發 _formError 設定");
+    }
+
+    [Fact]
+    public async Task SaveTokenLimitsAsync_例外時_Snackbar應被呼叫()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTokenLimitsAsync", agent);
+
+        snackbar.Received(1).Add(
+            Arg.Any<string>(),
+            Severity.Error,
+            Arg.Any<Action<SnackbarOptions>?>());
+    }
+
+    [Fact]
+    public async Task SaveTokenLimitsAsync_例外時_isSavingLlm應重置為False()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTokenLimitsAsync", agent);
+
+        GetField<bool>(instance, "_isSavingLlm").Should().BeFalse("finally 區塊應重置 _isSavingLlm");
+    }
+
+    [Fact]
+    public async Task SaveTokenLimitsAsync_入口應清除舊formError()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = CreateInstanceWithSnackbar(snackbar);
+        SetField(instance, "_formError", "舊錯誤訊息");
+        var agent = new AgentConfigDto { Id = Guid.NewGuid(), Name = "TestAgent" };
+
+        await InvokeAsync(instance, "SaveTokenLimitsAsync", agent);
+
+        GetField<string?>(instance, "_formError").Should().NotBe("舊錯誤訊息", "入口 _formError = null 應清除舊訊息");
+    }
+
     // ── OnProviderChangedAsync：舊 Model 不在新 Provider 清單 ─────────────
 
     [Fact]

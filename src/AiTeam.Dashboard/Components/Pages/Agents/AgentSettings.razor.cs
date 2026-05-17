@@ -37,6 +37,7 @@ public partial class AgentSettings
     private bool                  _isSavingLlm;
     private string?               _saveMessage;
     private string?               _loadError;
+    private string?               _formError;
 
     // 重啟 Bot
     private bool  _showRestartConfirm;
@@ -100,6 +101,7 @@ public partial class AgentSettings
     {
         _isSaving    = true;
         _saveMessage = null;
+        _formError   = null;
         try
         {
             await AgentService.UpdateTrustLevelAsync(agent.Id, _trustLevels[agent.Id]);
@@ -108,7 +110,8 @@ public partial class AgentSettings
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"信任等級儲存失敗：{ex.Message}", Severity.Error);
+            _formError = $"信任等級儲存失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
         finally
         {
@@ -168,6 +171,7 @@ public partial class AgentSettings
     {
         if (_isSavingLlm) return;
         _isSavingLlm = true;
+        _formError   = null;
         try
         {
             var ok = await AgentService.UpdateTokenLimitsAsync(
@@ -176,7 +180,8 @@ public partial class AgentSettings
                 agent.MonthlyTokenLimitK);
             if (!ok)
             {
-                Snackbar.Add($"{agent.Name} Token Limit 儲存失敗：查無 Agent", Severity.Error);
+                _formError = $"{agent.Name} Token Limit 儲存失敗：查無 Agent";
+                Snackbar.Add(_formError, Severity.Error);
                 return;
             }
             await BotService.ReloadCacheAsync("agent-config");
@@ -190,7 +195,8 @@ public partial class AgentSettings
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            _formError = $"儲存失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
         finally
         {

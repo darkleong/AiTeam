@@ -86,6 +86,11 @@ else
                     }
                     <MudDivider Class="mb-3" />
 
+                    @if (_formError is not null)
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-3">@_formError</MudAlert>
+                    }
+
                     <div class="d-flex align-center justify-space-between mb-3">
                         <MudText Typo="Typo.body2">啟用狀態</MudText>
                         <MudSwitch T="bool"
