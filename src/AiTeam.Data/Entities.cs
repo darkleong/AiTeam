@@ -450,3 +450,29 @@ public class TalentPrompt
 
     public Talent? Talent { get; set; }
 }
+
+/// <summary>
+/// Stage 75：v5.5 Phase 3 — Petra 接收層 queue（Layer 1）— FIFO DB-as-Queue 對齊 Stage 27 既有 agent_queues 紀律。
+/// 設計核心：每次 CeoAgentService.ProcessWithClaudeCodeAsync v5.5 flag forward 一個 task → 寫一筆 PetraInbox row → 立即 ack；
+/// PetraInboxProcessor BackgroundService polling pending → 開新 Scoped PetraOrchestratorService 處理。
+/// 對齊 Christ「Agent 像人類處理事件」精神延伸（PM 接收並行 / 執行管理）+ 業界 70% production Orchestrator-Worker pattern。
+///
+/// W2 trade-off 紀律（Aria gate1）：Repository TryMarkRunningAsync 用「先 read 再 UPDATE」非 atomic — 單 Bot instance 場景 OK；
+/// 未來多 instance 才踩 race / 對齊 AiTeam 單 Bot 真實架構約束。
+/// </summary>
+public class PetraInbox
+{
+    public Guid Id { get; set; }
+    /// <summary>Christ 送的 task description（從 CeoAgentService userInput 傳入）。</summary>
+    public string UserInput { get; set; } = "";
+    /// <summary>來源：「discord」/「dashboard」(對齊既有 BossCommandLog.Source 紀律)。</summary>
+    public string Source { get; set; } = "";
+    /// <summary>「pending」 / 「running」 / 「completed」 / 「failed」。</summary>
+    public string Status { get; set; } = "pending";
+    /// <summary>對應 PetraSession（accept 後 Processor 處理時 set）。null = 尚未開 session。</summary>
+    public Guid? PetraSessionId { get; set; }
+    public DateTime EnqueuedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? ErrorMessage { get; set; }
+}

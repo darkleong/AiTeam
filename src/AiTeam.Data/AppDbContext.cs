@@ -34,6 +34,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SkillPrompt>  SkillPrompts  => Set<SkillPrompt>();
     public DbSet<TalentPrompt> TalentPrompts => Set<TalentPrompt>();
 
+    // Stage 75：v5.5 Phase 3 — Petra 接收層 queue（FIFO DB-as-Queue / BackgroundService polling）
+    public DbSet<PetraInbox> PetraInbox => Set<PetraInbox>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Team>(e =>
@@ -302,6 +305,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasFilter("\"IsActive\" = true")
                 .HasDatabaseName("ix_talent_prompts_active_per_talent");
             e.HasIndex(x => new { x.TalentId, x.VersionNumber });
+        });
+
+        // Stage 75：v5.5 Phase 3 — PetraInbox（接收層 queue）
+        modelBuilder.Entity<PetraInbox>(e =>
+        {
+            e.ToTable("petra_inbox");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.UserInput).HasColumnType("text");
+            e.Property(x => x.ErrorMessage).HasColumnType("text");
+            // polling 用 index（Status + EnqueuedAt — FIFO 紀律）
+            e.HasIndex(x => new { x.Status, x.EnqueuedAt })
+                .HasDatabaseName("ix_petra_inbox_status_enqueued");
         });
     }
 }

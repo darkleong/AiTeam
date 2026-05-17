@@ -98,6 +98,10 @@ builder.Services.AddScoped<PetraSessionRepository>();
 builder.Services.AddScoped<PetraOrchestratorService>();
 builder.Services.AddHostedService<PetraSessionRecoveryService>();
 
+// Stage 75：v5.5 Phase 3 — PetraInbox 接收層 queue（Layer 1）
+// PetraInboxRepository 已由 AddAiTeamData extension 註冊（Bot + Dashboard 共用 Repository pattern）
+builder.Services.AddHostedService<PetraInboxProcessor>();
+
 // Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 Repository
 builder.Services.AddScoped<MemoryRepository>();
 
@@ -108,6 +112,9 @@ builder.Services.AddSingleton<PromptResolver>();
 
 // Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 三層 fallback chain（Singleton + 5-min TTL cache + IServiceScopeFactory 對齊 PromptResolver pattern）
 builder.Services.AddSingleton<TalentSkillModelResolver>();
+
+// Stage 75：v5.5 Phase 3 — per-Talent serialization lock（Singleton + ConcurrentDictionary<Guid, SemaphoreSlim> / 議題 2 Christ 拍板 SemaphoreSlim 對齊 AgentQueueProcessor v4 既有紀律）
+builder.Services.AddSingleton<TalentDispatchLockService>();
 
 // Stage 67：v5.5 Phase 1 Step 2 — Skill registry (code-defined / Singleton) + Talent factory (runtime DB query / Singleton + IServiceScopeFactory)
 // Talent register 走 ITalentFactory.GetAllAsync(ct) 取代「DI scan IEnumerable<ITalent>」pattern — 解 app.Build 時 DB 還沒 ready 的時序問題 + Phase 3 dynamic CRUD 自然解

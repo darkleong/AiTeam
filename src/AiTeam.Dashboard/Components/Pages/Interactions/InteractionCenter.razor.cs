@@ -1,6 +1,9 @@
+using AiTeam.Data;
 using AiTeam.Data.Hubs;
+using AiTeam.Data.Repositories;
 using AiTeam.Shared.Dtos;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Interactions;
@@ -24,12 +27,16 @@ public partial class InteractionCenter : IAsyncDisposable
     [Inject]
     private InteractionRespondService RespondService { get; set; } = null!;
 
+    [Inject]
+    private IServiceScopeFactory ScopeFactory { get; set; } = null!;   // Stage 75：Dashboard 直連 Bot 的 AppDbContext / PetraInboxRepository
+
     #endregion
 
     #region Private Variables
 
     private List<BossInteractionDto> _pending      = [];
     private List<BossInteractionDto> _historyItems = [];
+    private List<PetraInbox>?        _recentInbox  = null;   // Stage 75：v5.5 Phase 3 — Petra 接收層 queue 最近 5 筆
     private bool                     _isLoading    = true;
     private bool                     _historyLoading = false;
 
@@ -64,6 +71,8 @@ public partial class InteractionCenter : IAsyncDisposable
         try
         {
             _pending = await TaskService.GetPendingInteractionsAsync();
+            // Stage 75：v5.5 Phase 3 — 同時 load PetraInbox 接收狀態
+            await LoadRecentInboxAsync();
         }
         finally
         {
@@ -71,6 +80,22 @@ public partial class InteractionCenter : IAsyncDisposable
             await InvokeAsync(StateHasChanged);
         }
         await LoadHistoryAsync();
+    }
+
+    /// <summary>Stage 75：v5.5 Phase 3 — load 最近 5 筆 PetraInbox（Dashboard UX status 顯示 / SignalR 即時拉取 pattern）。</summary>
+    private async Task LoadRecentInboxAsync()
+    {
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<PetraInboxRepository>();
+            _recentInbox = await repo.GetRecentAsync(limit: 5, CancellationToken.None);
+        }
+        catch
+        {
+            // PetraInbox table 未 migrate 時容錯（fresh DB 場景）— 不擋既有 InteractionCenter 功能
+            _recentInbox = null;
+        }
     }
 
     private async Task LoadHistoryAsync()
@@ -233,6 +258,16 @@ public partial class InteractionCenter : IAsyncDisposable
         "devplan_abort"                                                                           => Color.Error,
         "propose_adjust" or "kickoff_modify" or "design_modify"                                  => Color.Info,
         _                                                                                         => Color.Default
+    };
+
+    /// <summary>Stage 75：PetraInbox status 對應顏色（對齊 pending/running/completed/failed 4 種 status）。</summary>
+    internal static Color GetInboxStatusColor(string status) => status switch
+    {
+        "pending"   => Color.Warning,
+        "running"   => Color.Info,
+        "completed" => Color.Success,
+        "failed"    => Color.Error,
+        _           => Color.Default,
     };
 
     #endregion

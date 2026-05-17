@@ -42,6 +42,7 @@ public class PetraOrchestratorService(
     GitHubService gitHubService,
     IConfiguration configuration,
     PromptResolver promptResolver,
+    TalentDispatchLockService talentLockService,   // Stage 75：per-Talent serialization lock
     ILoggerFactory loggerFactory,
     ILogger<PetraOrchestratorService> logger)
 {
@@ -114,15 +115,13 @@ public class PetraOrchestratorService(
                 // Stage 69 v2.1：v5.5 Phase 2 Step 3 — v5Memory flag 三 flag 連動（必須 v5 + v5.5 + memory 同時 true 才生效）
                 // scope = PetraSession（不是 v4 TaskGroup）— session.Id 100% 有值，移除 taskGroupId gate
                 var useV5Memory = await workflowResolver.GetUseV5MemoryAsync(ct);
+                // Stage 75：talentNameToIdMap 提前 build — per-Talent serialization lock 永遠需要 Talent Id（不分 memory flag）
+                //          既有 Stage 69 conditional build 修根因為「永遠 build」+ memory 段繼續用同個 map（Forge spike 揭架構盲點）
                 // talentName → Talent.Id lookup map（v5.5 baseline 全 ProjectId=null 全域 Talent / Phase 3 per-Project Talent 加入時需擴展此 query）
-                Dictionary<string, Guid>? talentNameToIdMap = null;
-                if (useV5Memory)
-                {
-                    var names = talentPicks.Select(t => t.Name).Distinct().ToList();
-                    talentNameToIdMap = await db.Talents
-                        .Where(t => names.Contains(t.Name) && t.ProjectId == null)
-                        .ToDictionaryAsync(t => t.Name, t => t.Id, ct);
-                }
+                var names = talentPicks.Select(t => t.Name).Distinct().ToList();
+                var talentNameToIdMap = await db.Talents
+                    .Where(t => names.Contains(t.Name) && t.ProjectId == null)
+                    .ToDictionaryAsync(t => t.Name, t => t.Id, ct);
 
                 await DispatchTalentsAsync(
                     session.Id, taskInput, plan, talentPicks, talentAgents,
@@ -536,11 +535,11 @@ public class PetraOrchestratorService(
         IReadOnlyList<ITalent> talentPicks,
         AIAgent[] talentAgents,
         bool useV5Memory,
-        IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
+        IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（per-Talent lock 永遠用到 / Forge spike 揭架構盲點修根因）
         CancellationToken ct)
     {
-        // 三 flag 連動 + lookup map 必須備好（caller useV5Memory=true 時應已 build / 缺則退為 false 保險）
-        var memoryEnabled = useV5Memory && talentNameToIdMap is not null;
+        // Stage 75：talentNameToIdMap 永遠非 null（caller StartAsync 提前 build）— memoryEnabled 直接看 useV5Memory flag
+        var memoryEnabled = useV5Memory;
         var compactKeep = memoryEnabled ? await workflowResolver.GetV5MemoryCompactKeepCountAsync(ct) : 0;
         var compactThresholdPct = memoryEnabled ? await workflowResolver.GetV5MemoryCompactThresholdPercentAsync(ct) : 0;
 
@@ -575,12 +574,22 @@ public class PetraOrchestratorService(
                     string.Join(",", level.Select(id => talentPicks[idToIndex[id]].Name)), sessionId);
 
                 // LLM dispatch 並行段（只跑 talentAgent.RunAsync — IClaudeCodeService subprocess 各自獨立 / TokenLogService 自開 scope 寫 token_logs / Resolver 自管 lock）
+                // Stage 75：per-Talent serialization lock — 同 talent_id 序列化（鎖只包 LLM dispatch / 不包 DB write 對齊 Stage 74 路線 A 紀律）
                 var levelTasks = level.Select(async subtaskId =>
                 {
                     var i = idToIndex[subtaskId];
+                    var talentName = talentPicks[i].Name;
+                    var talentId = talentNameToIdMap[talentName];   // Stage 75：map 永遠 build / 必有
+
                     var inputMessages = await BuildInputMessagesForSubtaskAsync(
                         taskInput, summariesSnapshot, levelIdx,
-                        talentPicks[i].Name, talentNameToIdMap, memoryEnabled, sessionId, ct);
+                        talentName, talentNameToIdMap, memoryEnabled, sessionId, ct);
+
+                    using var lockHandle = await talentLockService.AcquireAsync(talentId, ct);
+                    logger.LogInformation(
+                        "PetraOrchestrator v5.5 dispatch acquire per-Talent lock talent={Talent} talentId={TalentId} subtaskId={SubtaskId} sessionId={SessionId}",
+                        talentName, talentId, subtaskId, sessionId);
+
                     var response = await talentAgents[i].RunAsync(inputMessages, session: null, options: null, ct);
                     return (SubtaskId: subtaskId, OutputText: response.Text ?? "", Index: i);
                 }).ToList();
@@ -602,6 +611,7 @@ public class PetraOrchestratorService(
                 var i = idToIndex[subtaskId];
                 var talentName = talentPicks[i].Name;
                 var skill = plan.Subtasks[i].SkillName;
+                var talentId = talentNameToIdMap[talentName];   // Stage 75：map 永遠 build / 必有
 
                 var inputMessages = await BuildInputMessagesForSubtaskAsync(
                     taskInput, summariesSnapshot, levelIdx,
@@ -612,8 +622,16 @@ public class PetraOrchestratorService(
                     levelIdx + 1, levels.Count, subtaskId, talentName, skill,
                     string.Join(",", dependsOnLookup[subtaskId]), inputMessages.Count, sessionId);
 
-                var response = await talentAgents[i].RunAsync(inputMessages, session: null, options: null, ct);
-                var outputText = response.Text ?? "";
+                // Stage 75：per-Talent serialization lock（鎖只包 LLM dispatch / 不包 DB write 對齊 Stage 74 路線 A 紀律）
+                string outputText;
+                using (var lockHandle = await talentLockService.AcquireAsync(talentId, ct))
+                {
+                    logger.LogInformation(
+                        "PetraOrchestrator v5.5 dispatch acquire per-Talent lock talent={Talent} talentId={TalentId} subtaskId={SubtaskId} sessionId={SessionId}",
+                        talentName, talentId, subtaskId, sessionId);
+                    var response = await talentAgents[i].RunAsync(inputMessages, session: null, options: null, ct);
+                    outputText = response.Text ?? "";
+                }
 
                 await ProcessSubtaskResultAsync(
                     subtaskId, outputText, i, sessionId, summaries,
@@ -634,7 +652,7 @@ public class PetraOrchestratorService(
         List<WorkerDispatchSummary> summariesSnapshot,
         int levelIdx,
         string talentName,
-        IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
+        IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（caller 永遠 build）
         bool memoryEnabled,
         Guid sessionId,
         CancellationToken ct)
@@ -643,7 +661,7 @@ public class PetraOrchestratorService(
             ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
             : BuildNextWorkerInput(taskInput, summariesSnapshot);
 
-        if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentId))
+        if (memoryEnabled && talentNameToIdMap.TryGetValue(talentName, out var talentId))
         {
             var taskMems = await memoryRepo.GetTaskMemoriesAsync(sessionId, ct);
             var talentMems = await memoryRepo.GetTalentMemoriesAsync(talentId, projectId: null, tagFilter: null, ct);
@@ -678,7 +696,7 @@ public class PetraOrchestratorService(
         SubtaskPlan plan,
         IReadOnlyList<ITalent> talentPicks,
         Dictionary<int, List<int>> dependsOnLookup,
-        IReadOnlyDictionary<string, Guid>? talentNameToIdMap,
+        IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（caller 永遠 build）
         bool memoryEnabled,
         int compactKeep,
         int compactThresholdPct,
@@ -695,7 +713,7 @@ public class PetraOrchestratorService(
         await sessionRepo.AppendMessageAsync(sessionId, "tool", toolMessage, toolCallId, ct);
 
         // memory 寫回（useV5Memory=true 時 dispatch 後 upsert TaskMemory + TalentMemory）
-        if (memoryEnabled && talentNameToIdMap!.TryGetValue(talentName, out var talentIdForWrite))
+        if (memoryEnabled && talentNameToIdMap.TryGetValue(talentName, out var talentIdForWrite))
         {
             if (outputText.Length == 0)
             {

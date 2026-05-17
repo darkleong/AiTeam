@@ -30,6 +30,8 @@ public class CeoAgentService(
     TokenLogService tokenLogService,
     WorkflowSettingsResolver workflowResolver,
     PetraOrchestratorService petraOrchestrator,
+    AiTeam.Data.Repositories.PetraInboxRepository petraInboxRepository,   // Stage 75
+    AiTeam.Data.AppDbContext db,                                            // Stage 75（CeoAgentService 是 Scoped — 安全）
     ILogger<CeoAgentService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -98,14 +100,25 @@ public class CeoAgentService(
         IReadOnlyList<string>? availableProjects = null)
     {
         // ── Stage 63B：v5 動態架構 PoC flag forward（path simplified — Victoria 純 facade Router + RouteToPetra Tool Set 完整化留 Stage 64+）
+        // ── Stage 75：v5.5 Phase 3 — forward 改成「寫 PetraInbox row + return ack 含 queue position」（議題 1 Christ 拍板實踐 / multi-session 並存）
+        //              既有 direct await 模式打斷 Christ 並行送 task — Stage 75 改 inbox + PetraInboxProcessor BackgroundService FIFO 派工
         if (await workflowResolver.GetUsePetraOrchestratorV5Async(cancellationToken))
         {
-            logger.LogInformation("Victoria flag UsePetraOrchestratorV5=true → forward 到 PetraOrchestratorService（v5 動態架構 PoC）");
-            var petraResult = await petraOrchestrator.StartAsync(taskGroupId: null, userInput, cancellationToken);
+            // 來源紀律：對齊 BossCommandLog.Source 既有 pattern — Dashboard / Discord 兩通道（CeoCommandController 是目前唯一 caller / Discord 直接呼叫 path 留未來）
+            var source = "dashboard";
+            var row = petraInboxRepository.Enqueue(userInput, source);
+            await db.SaveChangesAsync(cancellationToken);
+            var pendingCount = await petraInboxRepository.CountPendingBySourceAsync(source, cancellationToken);
+            var queuePosition = pendingCount;   // 自己已 pending — 排隊位 = 同 source pending 數
+
+            logger.LogInformation(
+                "Victoria flag UsePetraOrchestratorV5=true → 寫 PetraInbox row={Id} source={Source} queuePosition={Pos}（議題 1 拍板實踐 — 多 task 並存）",
+                row.Id, source, queuePosition);
+
             return new CeoResponse
             {
-                Reply = $"[v5 PoC] Petra 已動態調度：{petraResult.Summary}（session={petraResult.SessionId} dispatched={petraResult.DispatchedWorkerCount}）",
-                Action = CeoResponseActions.PetraV5Dispatched
+                Reply = $"[v5.5] Task 已接收（inbox={row.Id.ToString("N")[..8]} / 排隊位 {queuePosition}）— Petra 將依 FIFO 順序拆解派工，請於操作中心追蹤進度。",
+                Action = CeoResponseActions.PetraV5Dispatched,
             };
         }
 

@@ -265,6 +265,7 @@ public class PetraOrchestratorServiceTests
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
+            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -863,6 +864,7 @@ public class PetraOrchestratorServiceTests
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
+            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -898,6 +900,7 @@ public class PetraOrchestratorServiceTests
             gitHubService: null!,
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
+            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
             loggerFactory: NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
         return (db, resolver, sessionRepo, memoryRepo, orch);
