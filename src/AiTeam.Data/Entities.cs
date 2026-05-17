@@ -475,4 +475,17 @@ public class PetraInbox
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
+
+    // Stage 76：v5.5 Phase 3 補強 — task retry / resume 機制 schema 擴
+    /// <summary>已重試次數（首次 dispatch=0 / 每次 retry +1）— 對齊業界 PG queue attempt count 紀律。</summary>
+    public int AttemptCount { get; set; } = 0;
+
+    /// <summary>上限重試次數（exhausted 後切 Status='dead' 進 Dead Letter）— default 3。</summary>
+    public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>下次 retry 允許時間（NULL = 立即 pickup pending / 非 NULL = 守 exponential backoff timing）。</summary>
+    public DateTime? NextRetryAt { get; set; }
+
+    /// <summary>進 Dead Letter 時間（exhausted attempts 後標）— NULL = 未進 DLQ。</summary>
+    public DateTime? DeadAt { get; set; }
 }

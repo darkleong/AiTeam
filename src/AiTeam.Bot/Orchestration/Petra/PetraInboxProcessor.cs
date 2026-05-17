@@ -1,6 +1,7 @@
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -24,6 +25,23 @@ public class PetraInboxProcessor(
 {
     private const int PollingIntervalMs = 3000;
     private const int StartupDelaySeconds = 10;
+
+    // Stage 76：retry path config — 對齊業界 LLM retry 紀律標準（base 30s × 2 × max 3 attempts + ±20% jitter）
+    private const int RetryBaseDelaySeconds = 30;
+    private const double RetryJitterFactor  = 0.2;   // ±20% AWS finding reduce retry storm 60-80%
+    // 用 Random.Shared（.NET 6+ 內建 thread-safe / 0 instance 管理 — Aria 議題 3 nit）
+
+    /// <summary>Stage 76：計算下次 retry 時間 — exponential backoff（base × 2^(attempt-1)）+ ±20% jitter。</summary>
+    private static DateTime ComputeNextRetryAt(int newAttemptCount)
+    {
+        // exponential backoff：base × 2^(attempt-1) — attempt=1 → 30s / attempt=2 → 60s / attempt=3 → 120s
+        var backoffSeconds = RetryBaseDelaySeconds * Math.Pow(2, newAttemptCount - 1);
+        // ±20% jitter — 對齊 AWS finding
+        var jitter = backoffSeconds * RetryJitterFactor;
+        var jitterDelta = (Random.Shared.NextDouble() * 2 - 1) * jitter;   // [-jitter, +jitter] — Random.Shared thread-safe（Aria 議題 3 nit）
+        var finalSeconds = backoffSeconds + jitterDelta;
+        return DateTime.UtcNow.AddSeconds(finalSeconds);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -91,6 +109,7 @@ public class PetraInboxProcessor(
 
             // Trial_v21 揭：PetraOrchestratorService 內部 catch Exception 後 return Failure result 而非拋出，
             // 須 check result.Success 才能對齊 Status='failed' 語意（避免 escalated session 仍標 completed 的事後 monitoring 誤判）。
+            // Stage 76 擴：result.Success=false 進 ErrorClassifier 分類 → Transient retry / BusinessRule 立即 failed / Permanent 立即 failed
             await using (var doneScope = serviceProvider.CreateAsyncScope())
             {
                 var doneRepo = doneScope.ServiceProvider.GetRequiredService<PetraInboxRepository>();
@@ -106,11 +125,45 @@ public class PetraInboxProcessor(
                 else
                 {
                     var errorMessage = result.ErrorMessage ?? result.Summary;
-                    await doneRepo.MarkFailedAsync(rowId, errorMessage, ct);
-                    await doneDb.SaveChangesAsync(ct);
-                    logger.LogWarning(
-                        "PetraInboxProcessor 標 failed row={Id} sessionId={SessionId} error={Error}",
-                        rowId, result.SessionId, errorMessage);
+                    var category = PetraErrorClassifier.Classify(errorMessage);
+
+                    // 取最新 AttemptCount + MaxAttempts（避免 stale snapshot — 對齊 W2 trade-off 紀律延伸）
+                    var currentRow = await doneDb.PetraInbox.FirstOrDefaultAsync(x => x.Id == rowId, ct);
+                    if (currentRow is null)
+                    {
+                        logger.LogWarning("PetraInboxProcessor row={Id} 處理結束時消失 — 忽略", rowId);
+                        return;
+                    }
+
+                    // Stage 76：3 路分支 — Transient retry / Transient exhausted → DLQ / BusinessRule+Permanent fail-fast
+                    if (category == PetraErrorCategory.Transient && currentRow.AttemptCount + 1 < currentRow.MaxAttempts)
+                    {
+                        var newAttemptCount = currentRow.AttemptCount + 1;
+                        var nextRetryAt = ComputeNextRetryAt(newAttemptCount);
+                        await doneRepo.MarkPendingWithRetryAsync(rowId, newAttemptCount, errorMessage, nextRetryAt, ct);
+                        await doneDb.SaveChangesAsync(ct);
+                        logger.LogWarning(
+                            "PetraInboxProcessor row={Id} transient fail — retry path attempt={Attempt}/{Max} nextRetryAt={NextRetryAt} error={Error}",
+                            rowId, newAttemptCount, currentRow.MaxAttempts, nextRetryAt, errorMessage);
+                    }
+                    else if (category == PetraErrorCategory.Transient)
+                    {
+                        // exhausted attempts → Dead Letter
+                        await doneRepo.MarkDeadAsync(rowId, errorMessage, ct);
+                        await doneDb.SaveChangesAsync(ct);
+                        logger.LogError(
+                            "PetraInboxProcessor row={Id} exhausted attempts={Attempts} → Dead Letter（等 Dashboard 重跑介入） error={Error}",
+                            rowId, currentRow.AttemptCount + 1, errorMessage);
+                    }
+                    else
+                    {
+                        // BusinessRule / Permanent → fail-fast 不 retry
+                        await doneRepo.MarkFailedAsync(rowId, errorMessage, ct);
+                        await doneDb.SaveChangesAsync(ct);
+                        logger.LogWarning(
+                            "PetraInboxProcessor row={Id} fail-fast category={Category} sessionId={SessionId} error={Error}",
+                            rowId, category, result.SessionId, errorMessage);
+                    }
                 }
             }
         }

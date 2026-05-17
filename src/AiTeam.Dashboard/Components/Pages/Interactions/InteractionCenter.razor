@@ -33,6 +33,7 @@
                     <MudTh>來源</MudTh>
                     <MudTh>狀態</MudTh>
                     <MudTh>EnqueuedAt</MudTh>
+                    <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@(context.UserInput.Length > 80 ? context.UserInput[..80] + "..." : context.UserInput)</MudTd>
@@ -47,6 +48,17 @@
                         </MudChip>
                     </MudTd>
                     <MudTd>@context.EnqueuedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudTd>
+                    <MudTd>
+                        @* Stage 76：v5.5 Phase 3 補強 — 重跑 failed/dead row（PetraInboxProcessor 下次 polling tick 接） *@
+                        @if (context.Status == "failed" || context.Status == "dead")
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Replay"
+                                       OnClick="@(() => HandleRequeueAsync(context.Id))">
+                                重跑
+                            </MudButton>
+                        }
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </MudCardContent>

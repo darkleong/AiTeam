@@ -318,6 +318,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // polling 用 index（Status + EnqueuedAt — FIFO 紀律）
             e.HasIndex(x => new { x.Status, x.EnqueuedAt })
                 .HasDatabaseName("ix_petra_inbox_status_enqueued");
+            // Stage 76：retry path polling 紀律（Status + NextRetryAt — 守 backoff timing）
+            e.HasIndex(x => new { x.Status, x.NextRetryAt })
+                .HasDatabaseName("ix_petra_inbox_status_next_retry");
         });
     }
 }

@@ -102,22 +102,21 @@ public class CeoAgentService(
         // ── Stage 63B：v5 動態架構 PoC flag forward（path simplified — Victoria 純 facade Router + RouteToPetra Tool Set 完整化留 Stage 64+）
         // ── Stage 75：v5.5 Phase 3 — forward 改成「寫 PetraInbox row + return ack 含 queue position」（議題 1 Christ 拍板實踐 / multi-session 並存）
         //              既有 direct await 模式打斷 Christ 並行送 task — Stage 75 改 inbox + PetraInboxProcessor BackgroundService FIFO 派工
+        // ── Stage 76：v5.5 Phase 3 補強 — queuePosition 簡化顯示路線（🥇 拍板）— 拿掉 CountPendingBySourceAsync race condition / Dashboard PetraInbox section 已 cover live update
         if (await workflowResolver.GetUsePetraOrchestratorV5Async(cancellationToken))
         {
             // 來源紀律：對齊 BossCommandLog.Source 既有 pattern — Dashboard / Discord 兩通道（CeoCommandController 是目前唯一 caller / Discord 直接呼叫 path 留未來）
             var source = "dashboard";
             var row = petraInboxRepository.Enqueue(userInput, source);
             await db.SaveChangesAsync(cancellationToken);
-            var pendingCount = await petraInboxRepository.CountPendingBySourceAsync(source, cancellationToken);
-            var queuePosition = pendingCount;   // 自己已 pending — 排隊位 = 同 source pending 數
 
             logger.LogInformation(
-                "Victoria flag UsePetraOrchestratorV5=true → 寫 PetraInbox row={Id} source={Source} queuePosition={Pos}（議題 1 拍板實踐 — 多 task 並存）",
-                row.Id, source, queuePosition);
+                "Victoria flag UsePetraOrchestratorV5=true → 寫 PetraInbox row={Id} source={Source}（議題 1 拍板實踐 — 多 task 並存 / Stage 76 簡化顯示 — 不算精準 queuePosition）",
+                row.Id, source);
 
             return new CeoResponse
             {
-                Reply = $"[v5.5] Task 已接收（inbox={row.Id.ToString("N")[..8]} / 排隊位 {queuePosition}）— Petra 將依 FIFO 順序拆解派工，請於操作中心追蹤進度。",
+                Reply = $"[v5.5] Task 已接收（inbox={row.Id.ToString("N")[..8]}）— Petra 將依 FIFO 順序拆解派工，請於 Dashboard 操作中心追蹤進度。",
                 Action = CeoResponseActions.PetraV5Dispatched,
             };
         }

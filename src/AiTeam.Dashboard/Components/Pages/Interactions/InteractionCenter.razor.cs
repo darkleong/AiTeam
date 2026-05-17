@@ -138,6 +138,37 @@ public partial class InteractionCenter : IAsyncDisposable
         await LoadHistoryAsync();
     }
 
+    /// <summary>Stage 76：v5.5 Phase 3 補強 — Dashboard 重跑 failed/dead PetraInbox row（PetraInboxProcessor 下次 polling tick 自動接）。</summary>
+    private async Task HandleRequeueAsync(Guid rowId)
+    {
+        try
+        {
+            bool success;
+            await using (var scope = ScopeFactory.CreateAsyncScope())
+            {
+                var repo = scope.ServiceProvider.GetRequiredService<PetraInboxRepository>();
+                var db   = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                success = await repo.RequeueAsync(rowId, CancellationToken.None);
+                if (success) await db.SaveChangesAsync(CancellationToken.None);
+            }
+
+            if (success)
+            {
+                Snackbar.Add("已重新排隊，PetraInboxProcessor 下次 polling tick（3 秒內）將自動接手。", Severity.Success);
+                // 本機 reload — Bot 端 PetraInboxProcessor 接手後會自然 fire SignalR 廣播給其他 client
+                await LoadAsync();
+            }
+            else
+            {
+                Snackbar.Add("重跑失敗：row 不存在或狀態非 failed/dead。", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"重跑時發生錯誤：{ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task HandleResponseAsync(ResponseRequest request)
     {
         try
@@ -260,13 +291,14 @@ public partial class InteractionCenter : IAsyncDisposable
         _                                                                                         => Color.Default
     };
 
-    /// <summary>Stage 75：PetraInbox status 對應顏色（對齊 pending/running/completed/failed 4 種 status）。</summary>
+    /// <summary>Stage 75：PetraInbox status 對應顏色（Stage 76 加 dead → Dark 區分 failed）。</summary>
     internal static Color GetInboxStatusColor(string status) => status switch
     {
         "pending"   => Color.Warning,
         "running"   => Color.Info,
         "completed" => Color.Success,
         "failed"    => Color.Error,
+        "dead"      => Color.Dark,   // Stage 76：Dead Letter（等人工介入）
         _           => Color.Default,
     };
 
