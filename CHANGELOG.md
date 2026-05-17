@@ -11,9 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Stage 74 開（v5.5 Phase 3 Step 8 — 真並行 dispatch + 戰略決策層 3 agent debate / 預估 cost $3-5 per cycle）。Trial_v19 🟢 全綠驗收通過 + v5.5 Phase 3 Step 7 正式完整收口（Stage 73 升級後 prompt content 真實生效 + Petra TalentPrompt persona 4 拍板特質 production 真實實證 + 連續 9 Trial 業務級成功 v10-v19 + 連續 7 Stage 0 follow-up 67-73）。**Phase 3 完整收口路徑**：73 ✅ → 74 → 76（兩層 queue 配套）→ 75（WebUI Talent CRUD 最後做）→ v5.5 完整收口。
+- **下個動作候選**：Trial_v20 真實業務驗（沿用 Trial_v6-v19 同 prompt / Aria 9-step 模板第 10 次實踐 / aria-trial-run skill 第 4 次實踐 / 含手動 SQL UPDATE Sage `documentation` Model=Haiku cost optimization 短期實驗 / 驗 Stage 74 per-Skill Model 真實生效 + 線性 chain 0 regression）→ 通過 → Stage 76 開（v5.5 Phase 3 Step 9 兩層 queue 配套 — Petra 接收層 queue + Worker 執行層 per-Talent 1 task at a time / 預估 cost $2-4 per cycle）。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 76（兩層 queue 配套）→ 75（WebUI Talent CRUD 最後做）→ v5.5 完整收口。
 
 ---
+
+## [3.64.0] — 2026-05-17 — [Stage 74](docs/planning/Stage_74_Roadmap.md) v5.5 Phase 3 Step 8 per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展（TalentSkill schema 擴 Provider/Model + TalentSkillModelResolver 三層 fallback + ClaudeCodeChatClientAdapter 動態 Model 整合 + SubtaskPlanLevelGrouping DAG fan-out 路線 A + SkillDescriptor metadata 對齊 Agent Skills open standard / 連續 8 Stage 0 follow-up bug fix）
 
 ## [3.63.0] — 2026-05-17 — [Stage 73](docs/planning/Stage_73_Roadmap.md) v5.5 Phase 3 Step 7 Prompt content 升級 + Petra TalentPrompt persona seed（6 SkillPrompt v1→v2 走 versioning path + 4 拍板特質 persona + 對齊「品質 > 做法」精神 / 連續 7 Stage 0 follow-up bug fix）
 

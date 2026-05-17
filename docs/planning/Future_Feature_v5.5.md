@@ -241,12 +241,23 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Aria 二檢 1 Critical + 5 Warning 全修正對齊**（C1 Quinn schema 維持既有不改 / W1 Cody 三段補回 / W2 detach single-entity / W3 fresh DB trade-off Implementation Note 明寫 / W4 Petra persona 第 3 條對齊 Stage 76 / W5 baseline test 對照表 + Test47 update + grep 紀律）
 - **production 真實生效**：12 row skill_prompts（6 × 2 version / partial unique index enforced）+ 1 row talent_prompts Petra（907 chars / 4 拍板特質關鍵字全 hit）+ reload-cache wire 真實生效
 
-**Step 8（Stage 74）— 真並行 dispatch + 戰略決策層 3 agent debate**（規模 M / 預估 cost $3-5 per cycle）
+**Step 8（Stage 74）— per-Skill Model + 真並行 dispatch DAG fan-out + Skill registry metadata 擴展** ✅ **已完成**（v3.64.0 / 2026-05-17 / M+ 規模 / commit `3a66f88` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 8 Stage 0 follow-up bug fix / 待 Trial_v20 真實業務驗）
 
-- 真並行 dispatch — 同 dependency level subtask 平行跑（既有 SubtaskPlan Independent dependency 純設計 surface → 真實 dispatch 並行）
-- 戰略決策層 3 agent debate — 從 Talent pool 選 3 個（2 opposing + 1 synthesizer）/ 觸發場景：大型新 feature 設計 / 客戶專案啟動
-- 設計依賴 Stage 73 升級後 prompt content（debate 機制用「升級後品質目標 prompt」設計才精準）
-- xUnit + Trial_v20 真實驗
+> **戰略 question 點破史**（規劃前置 / Christ 2026-05-17 連續兩 question）：① 仲裁是 Agent 還是權責？→ 撤回 Cora Talent 建議（Petra 內建職責）② 權責能不能設 Model？→ Aria grep 實證揭真實架構缺口（per-Skill Model 沒做）→ 修根因紀律「先補完 per-Skill Model 三層架構 / debate 機制延後 Phase 4」
+
+- ① ✅ **TalentSkill schema 擴 Provider + Model nullable + Migration**（Stage74TalentSkillModel / 純 ADD COLUMN nullable / 0 既有 row 影響）
+- ② ✅ **TalentSkillModelResolver 三層 fallback chain**（per-Skill > per-Talent > Agents:Dev:Model runtime）+ Singleton + 5-min TTL cache + SemaphoreSlim + IServiceScopeFactory 對齊 Stage 72 PromptResolver pattern
+- ③ ✅ **ClaudeCodeChatClientAdapter Model 動態整合**（ctor 加 Guid? talentId + TalentSkillModelResolver? optional / GetResponseAsync 內 resolvedModel 動態 / DispatchAsync 7 case 簽名 propagate / log 加 model field / token_logs LogCliUsageAsync 用 resolvedModel）
+- ④ ✅ **DI propagation chain**（BuildAgent + GenericAgentTool + DefaultTalentFactory + Program.cs AddSingleton 全鏈打通 / C# default value 自動套 0 既有 caller 改）
+- ⑤ ✅ **DAG fan-out 真並行 dispatch 路線 A**（Christ 議題 1 拍板 — LLM dispatch Task.WhenAll 並行 / DB write 並行段結束後 sequential 對齊「session message order sequential」既有紀律 + 0 race risk）+ 新立 `SubtaskPlanLevelGrouping` Kahn-style BFS helper + 抽 `BuildInputMessagesForSubtaskAsync` + `ProcessSubtaskResultAsync` 2 helper
+- ⑥ ✅ **ISkillRegistry SkillDescriptor metadata 擴展**（加 RecommendedModelTier + ReturnTypeDescription / 6 row 對齊 Christ 議題 2 拍板：standard×3（code_implementation / qa_testing / release_publishing）+ strategic×2（code_review / ui_design）+ cost-efficient×1（documentation））— 對齊業界 Agent Skills open standard format 第一步
+- ⑦ ✅ **DbSeeder 既有 6 TalentSkill seed Provider=Model=null 維持**（runtime fallback / Christ 後續手動 SQL UPDATE 或 WebUI 設定 / 不強塞推薦值）
+- ⑧ ✅ **InternalController reload-cache scope=all 串接** `talentSkillModelResolver.InvalidateCache()`
+- ⑨ ✅ **xUnit Stage74TalentSkillModelTests.cs 7 case**（T1-T4 Resolver 三層 fallback + InvalidateCache / T5 Linear chain 0 regression / T6 DAG fan-out 同 level 並行 / T7 6 SkillDescriptor metadata + tier 分類）+ 82/82 全綠
+- **Backwards-compatible 5 層守護**：v4 既有 path / v5 既有 path / v5.5 既有 hardcoded fallback / Stage 70 SubtaskPlan schema / Stage 72+73 既有 PromptResolver + Petra persona prepend — 全 0 動
+- **Forge spike 揭架構盲點修根因** ⭐：`SubtaskPlan.Linear` factory Stage 70 設計 0 deps 與 Stage 74 DAG fan-out 語意衝突（會被誤為「全並行 level 0」破壞 Trial baseline sequential 紀律）→ Forge 加 sequential edges (1→2, ..., n-1→n) 對齊真實語意 + Test23 baseline update 連動（對齊 Stage 58 結論「Forge spike 揭露架構盲點紀律」第 N 次累積）
+- **Aria 二檢 0 Critical + 6 Warning 全 gate1 自驗綠**（W1 runtime fallback 對齊既有 chain / W2 DispatchAsync 7 case propagate / W3 GenericAgentTool propagation 對齊既有 / W4 WorkerDispatchSummary record immutable 安全 / W5 DependencyType.Sequential enum 真實對齊 / W6 SkillDescriptor breaking change baseline test 同步 update）
+- **production 真實生效**：talent_skills 6 row Provider=Model=NULL（runtime fallback baseline）+ reload-cache wire 串接驗 200 + Migration apply 成功
 
 **Step 9（Stage 76）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Agent 1 task at a time**（規模 S-M / 預估 cost $2-4 per cycle）⭐ **2026-05-17 WebSearch 揭 + Christ 拍板新立**
 

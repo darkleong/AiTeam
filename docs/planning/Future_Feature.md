@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v8.9
+> 版本：v9.0
 > 建立日期：2026-04-01
-> 最後更新：2026-05-17（Stage 73 ✅ 結案 — v5.5 Phase 3 Step 7 Prompt content 升級 + Petra TalentPrompt persona seed / 6 SkillPrompt v1→v2 走 versioning path + 4 拍板特質 persona / 連續 7 Stage 0 follow-up / Trial_v19 啟動條件達成）
+> 最後更新：2026-05-17（Stage 74 ✅ 結案 — v5.5 Phase 3 Step 8 per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展 / TalentSkill schema 擴 Provider/Model + 三層 fallback + DAG fan-out 路線 A / 連續 8 Stage 0 follow-up / Trial_v20 啟動條件達成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---
