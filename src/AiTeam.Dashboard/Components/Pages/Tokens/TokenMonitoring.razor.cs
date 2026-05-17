@@ -26,13 +26,17 @@ public partial class TokenMonitoring : IAsyncDisposable
     [Inject]
     private IOptions<AgentTokenLimits> AgentLimitsOptions { get; set; } = null!;
 
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = null!;
+
     private AgentTokenLimits AgentLimits => AgentLimitsOptions.Value;
 
     #endregion
 
     #region Private Variables
 
-    private bool             _loading = true;
+    private bool             _loading   = true;
+    private string?          _loadError;
     private string           _period  = "today";
     private TokenSummaryDto  _summary = new();
     private ChartSeries[]    _chartSeries = [];
@@ -68,31 +72,42 @@ public partial class TokenMonitoring : IAsyncDisposable
 
     private async Task LoadDataAsync()
     {
-        _loading = true;
+        _loading   = true;
+        _loadError = null;
         StateHasChanged();
 
-        var now = DateTime.UtcNow;
-        var (from, to) = _period switch
+        try
         {
-            "week"  => (now.Date.AddDays(-(int)now.DayOfWeek), now),
-            "month" => (new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc), now),
-            _       => (now.Date.ToUniversalTime(), now)
-        };
+            var now = DateTime.UtcNow;
+            var (from, to) = _period switch
+            {
+                "week"  => (now.Date.AddDays(-(int)now.DayOfWeek), now),
+                "month" => (new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc), now),
+                _       => (now.Date.ToUniversalTime(), now)
+            };
 
-        // 讀取費率設定
-        var inputSetting  = await AppSettingsService.GetAsync("TokenPricing:InputPer1kUsd");
-        var outputSetting = await AppSettingsService.GetAsync("TokenPricing:OutputPer1kUsd");
-        decimal.TryParse(inputSetting?.Value,  System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var inputRate);
-        decimal.TryParse(outputSetting?.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var outputRate);
-        if (inputRate  == 0) inputRate  = 0.003m;
-        if (outputRate == 0) outputRate = 0.015m;
+            // 讀取費率設定
+            var inputSetting  = await AppSettingsService.GetAsync("TokenPricing:InputPer1kUsd");
+            var outputSetting = await AppSettingsService.GetAsync("TokenPricing:OutputPer1kUsd");
+            decimal.TryParse(inputSetting?.Value,  System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var inputRate);
+            decimal.TryParse(outputSetting?.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var outputRate);
+            if (inputRate  == 0) inputRate  = 0.003m;
+            if (outputRate == 0) outputRate = 0.015m;
 
-        _summary = await TokenService.GetSummaryAsync(from, to, inputRate, outputRate);
+            _summary = await TokenService.GetSummaryAsync(from, to, inputRate, outputRate);
 
-        BuildChart();
-
-        _loading = false;
-        StateHasChanged();
+            BuildChart();
+        }
+        catch (Exception ex)
+        {
+            _loadError = $"Token 資料載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task ConnectSignalRAsync()

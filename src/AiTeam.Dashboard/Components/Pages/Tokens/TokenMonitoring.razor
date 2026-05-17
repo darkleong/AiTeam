@@ -23,6 +23,10 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 }
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_loadError</MudAlert>
+}
 else
 {
     <!-- 上方：Agent 卡片 -->

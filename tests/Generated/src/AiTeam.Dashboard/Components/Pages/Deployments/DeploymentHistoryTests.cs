@@ -71,7 +71,7 @@ public class DeploymentHistoryTests
 
         var method = typeof(DeploymentHistory)
             .GetMethod("OnRowClickAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var args = new TableRowClickEventArgs<TaskItemDto>();
+        var args = new TableRowClickEventArgs<TaskItemDto>(new MouseEventArgs(), null!, null);
         Func<Task> act = async () => await (Task)method.Invoke(instance, new object[] { args })!;
 
         await act.Should().NotThrowAsync();
@@ -89,10 +89,8 @@ public class DeploymentHistoryTests
 
         var method = typeof(DeploymentHistory)
             .GetMethod("OnRowClickAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var args = new TableRowClickEventArgs<TaskItemDto>
-        {
-            Item = new TaskItemDto { Id = Guid.NewGuid(), Title = "Test Deploy" }
-        };
+        var args = new TableRowClickEventArgs<TaskItemDto>(new MouseEventArgs(), null!,
+            new TaskItemDto { Id = Guid.NewGuid(), Title = "Test Deploy" });
         await (Task)method.Invoke(instance, new object[] { args })!;
 
         GetField<bool>(instance, "_isDrawerOpen").Should().BeFalse("GetTaskLogsAsync 失敗時 Drawer 不應帶空資料開啟");
@@ -107,10 +105,8 @@ public class DeploymentHistoryTests
 
         var method = typeof(DeploymentHistory)
             .GetMethod("OnRowClickAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var args = new TableRowClickEventArgs<TaskItemDto>
-        {
-            Item = new TaskItemDto { Id = Guid.NewGuid(), Title = "Test Deploy" }
-        };
+        var args = new TableRowClickEventArgs<TaskItemDto>(new MouseEventArgs(), null!,
+            new TaskItemDto { Id = Guid.NewGuid(), Title = "Test Deploy" });
         Func<Task> act = async () => await (Task)method.Invoke(instance, new object[] { args })!;
 
         await act.Should().NotThrowAsync();
