@@ -82,25 +82,37 @@ public class PetraInboxProcessor(
         // 處理段 — 開新 Scoped PetraOrchestratorService instance（議題 1 拍板實踐 / multi-session 並存）
         try
         {
-            Guid? sessionId = null;
+            PetraOrchestratorResult result;
             await using (var runScope = serviceProvider.CreateAsyncScope())
             {
                 var orchestrator = runScope.ServiceProvider.GetRequiredService<PetraOrchestratorService>();
-                var result = await orchestrator.StartAsync(taskGroupId: null, userInput, ct);
-                sessionId = result.SessionId;
+                result = await orchestrator.StartAsync(taskGroupId: null, userInput, ct);
             }
 
+            // Trial_v21 揭：PetraOrchestratorService 內部 catch Exception 後 return Failure result 而非拋出，
+            // 須 check result.Success 才能對齊 Status='failed' 語意（避免 escalated session 仍標 completed 的事後 monitoring 誤判）。
             await using (var doneScope = serviceProvider.CreateAsyncScope())
             {
                 var doneRepo = doneScope.ServiceProvider.GetRequiredService<PetraInboxRepository>();
                 var doneDb   = doneScope.ServiceProvider.GetRequiredService<AppDbContext>();
-                await doneRepo.MarkCompletedAsync(rowId, sessionId, ct);
-                await doneDb.SaveChangesAsync(ct);
+                if (result.Success)
+                {
+                    await doneRepo.MarkCompletedAsync(rowId, result.SessionId, ct);
+                    await doneDb.SaveChangesAsync(ct);
+                    logger.LogInformation(
+                        "PetraInboxProcessor 完成 row={Id} sessionId={SessionId}",
+                        rowId, result.SessionId);
+                }
+                else
+                {
+                    var errorMessage = result.ErrorMessage ?? result.Summary;
+                    await doneRepo.MarkFailedAsync(rowId, errorMessage, ct);
+                    await doneDb.SaveChangesAsync(ct);
+                    logger.LogWarning(
+                        "PetraInboxProcessor 標 failed row={Id} sessionId={SessionId} error={Error}",
+                        rowId, result.SessionId, errorMessage);
+                }
             }
-
-            logger.LogInformation(
-                "PetraInboxProcessor 完成 row={Id} sessionId={SessionId}",
-                rowId, sessionId);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
