@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v9.1
+> 版本：v9.2
 > 建立日期：2026-04-01
-> 最後更新：2026-05-17（Trial_v20 🟡 結案 — Stage 74 v5.5 Phase 3 Step 8 收口拍板閘門通過 / 業務評分 4.5/5 + Stage 74 核心驗收 4 訊號全綠 + Quinn fail Stage 71 guard 兜底 / 連續 10 Trial 業務級成功 + 連續 8 Stage 0 follow-up / Stage 76 啟動條件達成）
+> 最後更新：2026-05-17（Stage 75 ✅ 結案 — v5.5 Phase 3 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization / PetraInbox + PetraInboxProcessor + TalentDispatchLockService SemaphoreSlim per-Talent + Forge spike 修根因 talentNameToIdMap unconditional build / 連續 9 Stage 0 follow-up / Trial_v21 啟動條件達成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---

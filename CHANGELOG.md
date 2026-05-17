@@ -11,9 +11,11 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Stage 76 開（v5.5 Phase 3 Step 9 — 兩層 queue 配套：Layer 1 Petra 接收層 queue + Layer 2 Worker 執行層 per-Talent 1 task at a time / 業界 70% production Orchestrator-Worker pattern 對齊 / 預估 cost $2-4 per cycle）。Trial_v20 🟡 部分過驗收通過 + Stage 74 v5.5 Phase 3 Step 8 收口拍板閘門通過（Stage 74 核心驗收 4 訊號全綠 + 業務評分 4.5/5 + Quinn fail Stage 71 outputLen=0 guard 紀律真實 production 兜底 + 連續 10 Trial 業務級成功 v10-v20 + 連續 8 Stage 0 follow-up 67-74 + cost per file $0.074 最優 ROI baseline）。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 76（兩層 queue 配套）→ 75（WebUI Talent CRUD 最後做）→ v5.5 完整收口。
+- **下個動作候選**：Trial_v21 真實業務驗（沿用 Trial_v6-v20 同 prompt + 多 task 並送場景 / Aria 9-step 模板第 11 次實踐 / aria-trial-run skill 第 5 次實踐 / 驗 Stage 75 兩層 queue 配套真實生效 + per-Talent serialization lock 真實 wire + Dashboard UX status live update）→ 通過 → Stage 76 開（v5.5 Phase 3 最後一步 WebUI Talent CRUD / 預估 cost $2-4 per cycle）。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76（WebUI Talent CRUD 最後做）→ v5.5 完整收口。
 
 ---
+
+## [3.65.0] — 2026-05-17 — [Stage 75](docs/planning/Stage_75_Roadmap.md) v5.5 Phase 3 兩層 queue 配套 — Petra 接收層 + Worker 執行層 per-Talent serialization（PetraInbox table + PetraInboxProcessor BackgroundService + CeoAgentService 寫 inbox + ack + TalentDispatchLockService SemaphoreSlim per-Talent + DispatchTalentsAsync per-Talent lock wire + Forge spike 修根因 talentNameToIdMap unconditional build + 三 method 簽名 non-nullable + Dashboard UX status / 連續 9 Stage 0 follow-up bug fix）
 
 ## [3.64.0] — 2026-05-17 — [Stage 74](docs/planning/Stage_74_Roadmap.md) v5.5 Phase 3 Step 8 per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展（TalentSkill schema 擴 Provider/Model + TalentSkillModelResolver 三層 fallback + ClaudeCodeChatClientAdapter 動態 Model 整合 + SubtaskPlanLevelGrouping DAG fan-out 路線 A + SkillDescriptor metadata 對齊 Agent Skills open standard / 連續 8 Stage 0 follow-up bug fix）
 

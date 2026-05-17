@@ -259,7 +259,38 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Aria 二檢 0 Critical + 6 Warning 全 gate1 自驗綠**（W1 runtime fallback 對齊既有 chain / W2 DispatchAsync 7 case propagate / W3 GenericAgentTool propagation 對齊既有 / W4 WorkerDispatchSummary record immutable 安全 / W5 DependencyType.Sequential enum 真實對齊 / W6 SkillDescriptor breaking change baseline test 同步 update）
 - **production 真實生效**：talent_skills 6 row Provider=Model=NULL（runtime fallback baseline）+ reload-cache wire 串接驗 200 + Migration apply 成功
 
-**Step 9（Stage 76）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Agent 1 task at a time**（規模 S-M / 預估 cost $2-4 per cycle）⭐ **2026-05-17 WebSearch 揭 + Christ 拍板新立**
+**Step 9（Stage 75）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization** ✅ **已完成**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 9 Stage 0 follow-up bug fix / 17 檔 +1990/-25 / Aria gate1 6 Warning 全套 grep verify 通過 / 大規模架構級重構新類型第 3 資料點累積 raw 451K Christ 選 Opus 1M + Extra high / 待 Trial_v21 真實業務驗）
+
+> ⚠️ **Stage 編號對齊紀律**（Christ 2026-05-17 拍板「數字順序執行」）— 既有 Step 6 「WebUI Talent CRUD」改對應 Stage 76 / 既有 Step 9 「兩層 queue 配套」改對應 Stage 75 ✅ 已完成。
+
+**主軸 8 子項全交付**：
+- ① ✅ **PetraInbox table + Migration**（9 欄位 / index Status+EnqueuedAt FIFO polling 用 / 對齊 Stage 27 既有 agent_queues DB-as-Queue pattern）
+- ② ✅ **PetraInboxProcessor BackgroundService**（3 秒 polling + 啟動延遲 10s + Crash Recovery + IServiceScopeFactory.CreateAsyncScope per row 開新 Scoped PetraOrchestratorService → multi-session 並存 OK / 議題 1 拍板實踐）
+- ③ ✅ **PetraInboxRepository**（7 method：Enqueue / GetNextPendingAsync / CountPendingBySourceAsync / TryMarkRunningAsync / MarkCompletedAsync / MarkFailedAsync / RecoverStuckRunningAsync / GetRecentAsync）+ DI 移到 AddAiTeamData extension Bot+Dashboard 共用
+- ④ ✅ **CeoAgentService v5.5 flag forward path 改寫**（既有直接 await Petra → 寫 PetraInbox row + return ack 含 inbox id 短碼 + 排隊位 N）
+- ⑤ ✅ **TalentDispatchLockService**（議題 2 Christ 拍板 🥇 SemaphoreSlim per-Talent — Singleton + ConcurrentDictionary<Guid, SemaphoreSlim> + IDisposable using 自動 release / 對齊 v4 既有 AgentQueueProcessor 8 SemaphoreSlim production-active 紀律 + 0 PG connection pool 雷）
+- ⑥ ✅ **PetraOrchestratorService DispatchTalentsAsync per-Talent lock wire**（並行段 + sequential 段全 wire / 鎖範圍只包 LLM dispatch 不包 DB write — 對齊 Stage 74 路線 A 紀律）
+- ⑦ ✅ **Dashboard UX status InteractionCenter PetraInbox section**（最近 5 筆 / SignalR live update / 沿用既有 PushInteractionUpdateAsync 不加新 endpoint — 對齊「修根因 > 補丁」哲學）
+- ⑧ ✅ **xUnit Stage75InboxQueueTests.cs 7 case 全綠**（T1-T3 PetraInboxRepository / T4-T5 TalentDispatchLockService 同 Talent 序列化 + 不同 Talent 平行 / T6-T7 MarkFailed + CountPendingBySource）+ AiTeam.Bot.Tests 89/89 + Tests.Generated 127/127 全綠
+
+**⭐ Forge spike 揭架構盲點修根因**（對齊 Stage 58 結論第 N+1 次累積）：
+- Stage 69 v2.1 既有 `talentNameToIdMap` conditional build（`useV5Memory=true` 才 build）— Stage 75 per-Talent 鎖**永遠需要** Talent Id
+- Forge 提到 unconditional build + 三 method 簽名 `IReadOnlyDictionary<string, Guid>?` → 改 non-nullable / 拿掉 `!` null forgive
+- 影響範圍：DispatchTalentsAsync + BuildInputMessagesForSubtaskAsync + ProcessSubtaskResultAsync 三 method + memoryEnabled 判斷簡化 / 0 baseline test 破
+
+**Aria gate1 6 Warning 全套 grep verify 通過**（W1 PetraOrchestratorResult.SessionId 真實 / W2 TryMarkRunning trade-off doc 明寫 / W3 DashboardPushService=Singleton 對齊 / W4 PetraV5Dispatched caller 只 check Action / W5 GetRecentAsync limit 5 + EnqueuedAt index FF 候選追蹤 / W6 SemaphoreSlim cleanup FF 候選追蹤）
+
+**Forge healthy 偏離 plan 2 處合理**：
+1. §E.2 TaskCenter queue position column 跳過 — Forge spike 揭 Dashboard 0 PetraSession 列表頁存在 / 留 Stage 76 評估
+2. PetraInboxRepository DI 移到 DataServiceExtensions — Bot+Dashboard 共用 Repository pattern 對齊既有 TaskRepository / BossInteractionRepository 紀律
+
+**校準錨**：大規模架構級重構新類型第 3 資料點累積（Stage 72/74/75 baseline 367K/336K/**451K** 新上界）/ Aria prep-session 預估倍率 ×1.57-2.26 **收斂趨勢** vs Stage 73/74 ×2.21-3.69（自省點 #37 第 4 次累積實證紀律累積成熟度進化曲線 ⭐）/ Christ 選 Opus 1M + Extra high 連續 3 Stage（73/74/75）真實使用模式校準。
+
+**production 真實生效**：CI/CD deploy success + Migration apply on production（CREATE TABLE petra_inbox + CREATE INDEX ix_petra_inbox_status_enqueued）+ Bot 啟動 0 exception + PetraInboxProcessor polling 真實 fire SELECT FROM petra_inbox（每 3s）+ 5 v5.5 flag production active 維持。
+
+---
+
+**Step 9 既有業界 WebSearch 結論**（已 incorporated 進 Stage 75 Roadmap）：
 
 - **業界 WebSearch 結論**（[7 AI Agent Orchestration Patterns - DEV Community](https://dev.to/dohkoai/7-ai-agent-orchestration-patterns-for-scaling-concurrent-systems-with-production-code-1onc) + [Multi-Agent Orchestration Guide](https://gurusup.com/blog/multi-agent-orchestration-guide)）：業界 70% production Orchestrator-Worker pattern 主流做法 = **「Orchestrator 接收層 queue accept 多 task + 執行層 per-Agent 1 task at a time + UX status 顯示」**（不是「Agent 像人類同時間只 1 task」極端 / 也不是「無限制平行」極端）
 - 對齊「Agent 像人類處理事件」精神延伸 — 真實 PM 接收並行 / 執行管理（手上多 task 但同時間深度做 1 個）
@@ -294,10 +325,14 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 - 可選 backpressure mechanism（Petra 太忙時通知 user — 例：queue 累積 5+ task 提醒 Christ）
 - xUnit + Trial 真實驗（多 task 並送場景）
 
-**Step 6（Stage 75）— WebUI Talent CRUD**（規模 S-M / 預估 cost $2-4 per cycle）— **最後做**
+**Step 6（Stage 76）— WebUI Talent CRUD**（規模 S-M / 預估 cost $2-4 per cycle）— **最後做 / Phase 3 完整收口** ⭐
+
+> ⚠️ **Stage 編號對齊紀律**（Christ 2026-05-17 拍板「數字順序執行」）— 此 Step 6「WebUI Talent CRUD」對應 Stage 76（Phase 3 最後一步）/ Step 9「兩層 queue 配套」對應 Stage 75 ✅ 已完成。
 
 - Dashboard 加 Talent 管理頁（新增 / 編輯 / 刪除 Talent）
-- Skill 多選 assignment + prompt 編輯器（含版本歷史 + rollback UI）
+- Skill 多選 assignment（含 Stage 74 加的 Provider/Model 編輯）+ prompt 編輯器（含版本歷史 + rollback UI）
+- TalentPrompt persona 編輯（含 Petra persona / 未來其他 Talent persona）
+- 順便補：TaskCenter PetraInbox queue position column（Stage 75 留的 §E.2 範圍）
 - ⚠️ **Phase 3 最後做**（Christ 2026-05-17 拍板 — 核心功能完成且可運作前 WebUI 排最後 / 避免 UI 提早做被核心功能改變動）
 
 ### Phase 3 撤除規劃（既有 Step 8 v4 砍 / 改 Phase 4 候選）
