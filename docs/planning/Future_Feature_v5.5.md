@@ -227,13 +227,19 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 → v5.5 完整收口
 ```
 
-**Step 7（Stage 73）— prompt content 升級 + Petra TalentPrompt persona seed**（規模 M+ / 預估 cost $3-4.5 per cycle）
+**Step 7（Stage 73）— prompt content 升級 + Petra TalentPrompt persona seed** ✅ **已完成**（v3.63.0 / 2026-05-17 / M+ 規模 / commit `cb47648` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 7 Stage 0 follow-up bug fix）
 
-- 6 個 SkillPrompt content 重寫對齊「品質 > 做法」精神（自省點 #35 / Trial_v17 戰略觀察延伸）— 從「步驟紀律」升級成「品質目標 + 業界 best practice」
-- **Petra TalentPrompt persona seed**（2026-05-17 WebSearch 揭業界 Orchestrator 也有 persona / Christ 直覺對齊 + Aria 自省點 #36 真實再評估）— DbSeeder 加 1 條 TalentPrompt row / 內容 = PM 個性風格（謹慎拍板 / 對冗餘不容忍 / 持續迭代 / 對等和互相）
-- 對齊 Trial_v18 觀察：Cody 已主動補測試 / 主動識別「不適用」場景 — Stage 73 把這個精神**明文化進 prompt**
-- 含 Trial_v18 議題 1（SystemSettings inconsistent pattern）順手對齊
-- xUnit test 補強 + Trial_v19 真實驗
+- ① ✅ **6 個 SkillPrompt content v1→v2 升級**（走 PromptRepository.UpsertSkillPromptAsync versioning path / 舊 v1 切 IsActive=false 保 audit trail + rollback ready）對齊「品質 > 做法」精神（自省點 #35 延伸）— 從「步驟紀律」升「品質目標 + 業界 best practice + 邊界紅線」/ 保留結構性硬規則（Vera 唯三 Critical + 唯二例外 / Quinn JSON 5 欄位 schema / Cody Dev_plan 結構 / 廣範圍對照表 / Sage CHANGELOG+archive 格式 / Victoria ACTION XML）
+- ② ✅ **Petra TalentPrompt persona seed 1 row**（DbSeeder.EnsurePetraTalentPromptAsync helper / race-safe 單 entity detach 對齊 Stage 67 EnsureTalentsAsync pattern）— 4 拍板特質完整文案：謹慎拍板 / 對冗餘不容忍 / 持續迭代（對齊 Stage 76 兩層 queue 配套精神：不取消已派 Worker subtask）/ 對等和互相
+- ③ ✅ **PetraPromptTemplate.Template 同步升級**（開頭 v5 → v5.5 + 「派工夥伴」對等精神段 + 「品質目標」3 點 / 3 placeholder `{{capabilityRoster}}` / `{{decompositionSection}}` / `{{outputSection}}` 完整保留 runtime 注入機制）
+- ④ ✅ **5 CLAUDE_*.md source 檔同步升級**（v4 既有 DevAgentService / ReviewerAgentService / QaAgentService / DocAgentService / CeoAgentService fallback path 自動拿到新 content / v5.5 path 走 DB / 兩 path 0 分裂 — 對齊「修根因 > 補丁」哲學）
+- ⑤ ✅ **DbSeeder.UpgradeSkillPromptsToV2Async helper**（幂等：同 SkillName VersionNumber>=2 active row 已存在則 skip / race-safe 單 entity detach 對齊 Stage 72 EnsureSkillPromptsAsync pattern）+ **EnsurePetraTalentPromptAsync helper** — SeedAsync 接入順序：`EnsureSkillPromptsAsync` → `UpgradeSkillPromptsToV2Async` → `EnsurePetraTalentPromptAsync`
+- ⑥ ✅ **PetraPersonaSeed.cs 常數抽取**（新立 / 對齊 PetraPromptTemplate.cs 既有「SeedContent/ 抽常數」前例 symmetric pattern / DbSeeder seed + 未來 xUnit / WebUI rollback 共用 source-of-truth）
+- ⑦ ✅ **PetraOrchestratorService.BuildPetraSystemPromptForRuntimeAsync persona prepend**（flag-gated + TalentPrompt 存在才注入 / 不存在 fallback 純 base template — backwards-compatible 守護 0 regression + 新立 ResolvePetraPersonaAsync helper）
+- ⑧ ✅ **xUnit Stage73UpgradeTests.cs 5 case**（T1 v1→v2 升級 INLINE path / T2 升級幂等 / T3 Petra persona seed + 4 關鍵字驗 / T4 EnsurePetraTalentPrompt 幂等 / T5 PetraPromptTemplate 升級 marker 驗）+ Test47 line 1047 `v5 動態架構` → `v5.5 動態架構` 同步 update / 75/75 全綠
+- **Backwards-compatible 4 層守護**：v4 既有 path（拿升級後 .md content）/ v5 既有 path / v5.5 既有 hardcoded path（feature flag=false fallback）/ Stage 70+71+72 累積 prompt 紀律保留（動態 skill roster + hierarchical decomposition + 線性整包邊界 + 兩層 schema + versioning）— 全保留
+- **Aria 二檢 1 Critical + 5 Warning 全修正對齊**（C1 Quinn schema 維持既有不改 / W1 Cody 三段補回 / W2 detach single-entity / W3 fresh DB trade-off Implementation Note 明寫 / W4 Petra persona 第 3 條對齊 Stage 76 / W5 baseline test 對照表 + Test47 update + grep 紀律）
+- **production 真實生效**：12 row skill_prompts（6 × 2 version / partial unique index enforced）+ 1 row talent_prompts Petra（907 chars / 4 拍板特質關鍵字全 hit）+ reload-cache wire 真實生效
 
 **Step 8（Stage 74）— 真並行 dispatch + 戰略決策層 3 agent debate**（規模 M / 預估 cost $3-5 per cycle）
 
