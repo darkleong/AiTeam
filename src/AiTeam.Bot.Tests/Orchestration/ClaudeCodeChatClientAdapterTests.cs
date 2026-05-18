@@ -14,7 +14,7 @@ namespace AiTeam.Bot.Tests.Orchestration;
 /// - T3 驗 workspace 原本無 CLAUDE.md → dispatch 後仍 0 動（取代原 T3「inject 後刪除」）
 /// - T4 transient 5xx retry 保留
 /// - T5 null-safe Usage 保留
-/// - T6 release_publishing 走 RunAsync + systemPrompt=null（取代原 T6「skip inject + workspace 0 動」）
+/// - T6（Stage 78a 砍 release_publishing test）
 /// - T7 新增：dispatch 拋例外 exception 仍 propagate（驗 Stage 65 子項 2 try-finally 結構正確）
 ///
 /// 設計：
@@ -49,8 +49,7 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
     [InlineData("code_review",         "CLAUDE_Vera.md")]
     [InlineData("qa_testing",          "CLAUDE_Quinn.md")]
     [InlineData("documentation",       "CLAUDE_Sage.md")]
-    [InlineData("requirements_extraction", "CLAUDE_Rosa.md")]
-    [InlineData("ui_design",           "CLAUDE_Demi.md")]
+    // Stage 78a：砍 requirements_extraction / ui_design 對應 2 InlineData — v5.5 4 Worker baseline。
     public async Task T1_SystemPromptForwardsTemplate_WorkspaceClaudeMdUntouched(string capability, string templateName)
     {
         // arrange: workspace 原已有 CLAUDE.md（不應該被 adapter 動到）
@@ -146,28 +145,7 @@ public class ClaudeCodeChatClientAdapterTests : IDisposable
         Assert.Contains("[ok with null usage]", response.Text ?? "");
     }
 
-    // ─── T6：release_publishing 走 RunAsync + systemPrompt=null + workspace CLAUDE.md 0 動 ─
-    [Fact]
-    public async Task T6_ReleasePublishing_NoTemplate_DispatchWithNullSystemPrompt()
-    {
-        var claudeMd = Path.Combine(_workingDir, "CLAUDE.md");
-        var originalContent = $"[ORIGINAL-RELEASE]-{Guid.NewGuid()}";
-        await File.WriteAllTextAsync(claudeMd, originalContent);
-        var releaseTpl = Path.Combine(_resourcesDir, "CLAUDE_Release.md");
-        if (File.Exists(releaseTpl)) File.Delete(releaseTpl);
-
-        var stub = new RecordingClaudeCodeService();
-        var adapter = NewAdapter(stub, "release_publishing");
-
-        var response = await adapter.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "release v3.55.0") });
-
-        // release_publishing → 對應 template = null → systemPrompt = null
-        Assert.Null(stub.CapturedSystemPrompt);
-        // workspace CLAUDE.md 0 動
-        Assert.Equal(originalContent, await File.ReadAllTextAsync(claudeMd));
-        Assert.Equal("RunAsync", stub.LastInvokedMethod);
-        Assert.NotNull(response);
-    }
+    // Stage 78a：砍 T6 release_publishing test — release_publishing capability 隨 ReleaseAgentService class 整套砍 / v5.5 4 Worker baseline 0 該 capability dispatch。
 
     // ─── T7：dispatch 拋 LlmApiFailureException 仍 propagate（Stage 65 子項 2 try-finally 結構正確）──
     [Fact]

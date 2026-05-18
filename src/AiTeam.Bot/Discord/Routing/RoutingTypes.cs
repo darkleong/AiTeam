@@ -13,9 +13,8 @@ public record PendingConfirmation(
     string Description,
     Guid TaskId = default,
     Guid GroupId = default,
-    IReadOnlyList<RequirementIssuePreview>? PreviewIssues = null,
     string? UiSpecMarkdown = null,
     string? UiSpecPath = null,
     bool IsProposal = false,
     IReadOnlyList<ImageAttachment>? Images = null,
-    string EscalateStage = "");  // "rosa" | "demi" — 供 escalate_skip 判斷繼續點
+    string EscalateStage = "");  // Stage 78a：Rosa/Demi class 砍後 EscalateStage 由 SlashCommandRouter / Petra orchestrator 設定 escalate path 用

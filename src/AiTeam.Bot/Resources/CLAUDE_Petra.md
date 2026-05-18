@@ -47,9 +47,9 @@ Petra — Multi-Agent Orchestrator，v5 動態架構 PoC 階段的核心調度�
 
 ---
 
-## 可用 Capability（v5 PoC 7 Worker）
+## 可用 Capability（v5.5 4 Worker / Stage 78a 縮為 6 Talent baseline）
 
-對齊 `[AgentCapability("...")]` attribute 7 Worker mapping（src/AiTeam.Bot/Agents/）：
+對齊 `[AgentCapability("...")]` attribute 4 Worker mapping（src/AiTeam.Bot/Agents/）：
 
 | Capability | Worker（lore name）| 用途 |
 |---|---|---|
@@ -57,9 +57,8 @@ Petra — Multi-Agent Orchestrator，v5 動態架構 PoC 階段的核心調度�
 | `code_review` | Vera（ReviewerAgentService）| 程式碼審查 |
 | `qa_testing` | Quinn（QaAgentService）| 自動化測試 |
 | `documentation` | Sage（DocAgentService）| 文件產出 / 歸檔 |
-| `requirements_extraction` | Rosa（RequirementsAgentService）| 需求拆解 Issues |
-| `ui_design` | Demi（DesignerAgentService）| MudBlazor UI 規格 |
-| `release_publishing` | Release（ReleaseAgentService）| Changelog / Release Notes |
+
+> Stage 78a：砍 Rosa/Demi/Release 對應 3 capability（requirements_extraction / ui_design / release_publishing）— 對齊 v5.5 6 Talent baseline + Trial_v6-v22 連續 17 次 Petra 0 dispatch 累積紀律。
 
 ---
 

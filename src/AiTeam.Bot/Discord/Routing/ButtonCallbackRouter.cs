@@ -281,17 +281,6 @@ public class ButtonCallbackRouter(
                 await interaction.FollowupAsync("❌ 找不到要取消的任務。");
             }
         }
-        else if (id == "req_yes")
-        {
-            await interaction.DeferAsync();
-            await interaction.FollowupAsync(
-                $"⏳ Requirements Agent 開始建立 {pending.PreviewIssues?.Count ?? 0} 個 Issues，完成後通知 #{_settings.Channels.TaskUpdates}。");
-            _ = Task.Run(async () =>
-            {
-                try { await ExecuteRequirementsFromPreviewAsync(pending); }
-                catch (Exception ex) { logger.LogError(ex, "Requirements 背景執行失敗（TaskId={TaskId}）", pending.TaskId); }
-            }, CancellationToken.None);
-        }
         else if (id == "propose_adjust")
         {
             await interaction.RespondAsync(
@@ -360,7 +349,7 @@ public class ButtonCallbackRouter(
             await interaction.FollowupAsync("❌ 已放棄此任務的開發流程。");
             logger.LogInformation("老闆放棄 Dev_plan escalation：GroupId={Id}", pending.GroupId);
         }
-        else // confirm_no、exec_no、req_no、propose_no
+        else // confirm_no、exec_no、propose_no
         {
             await interaction.RespondAsync("❌ 已取消。");
 
@@ -469,158 +458,55 @@ public class ButtonCallbackRouter(
     {
         await interaction.DeferAsync();
 
-        if (pending.CeoResponse.TargetAgent == AgentNames.Requirements)
+        // Stage 78a：v4 Requirements 第三層確認 path 砍（RequirementsAgentService 整套砍 / type reference 連帶清理）
+        var wfType = ResolveWorkflowType(pending.CeoResponse);
+        TaskGroup? createdGroup = null;
+        if (wfType.HasValue && pending.GroupId == Guid.Empty)
         {
-            await ShowRequirementsPreviewAsync(interaction, pending);
+            createdGroup = await taskGroupService.CreateGroupAsync(
+                pending.CeoResponse.Task?.Title ?? pending.Description,
+                pending.Project,
+                wfType.Value);
+            pending = pending with { GroupId = createdGroup.Id };
+        }
+
+        if (wfType == WorkflowType.TechImprovement && createdGroup is not null)
+        {
+            await interaction.FollowupAsync(
+                "⏳ CEO Orchestrator 啟動：Cody 開始制定實作計畫書，Petra 審核後自動進入 coding...");
+            var groupForPipeline = createdGroup;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await taskGroupService.FireStepsAsync(groupForPipeline,
+                        [new WorkflowStep("Dev_plan")]);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "TechImprovement Dev_plan 觸發失敗（Group={Id}）", groupForPipeline.Id);
+                }
+            }, CancellationToken.None);
         }
         else
         {
-            var wfType = ResolveWorkflowType(pending.CeoResponse);
-            TaskGroup? createdGroup = null;
-            if (wfType.HasValue && pending.GroupId == Guid.Empty)
-            {
-                createdGroup = await taskGroupService.CreateGroupAsync(
-                    pending.CeoResponse.Task?.Title ?? pending.Description,
-                    pending.Project,
-                    wfType.Value);
-                pending = pending with { GroupId = createdGroup.Id };
-            }
+            await interaction.FollowupAsync(
+                $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
 
-            if (wfType == WorkflowType.TechImprovement && createdGroup is not null)
+            _ = Task.Run(async () =>
             {
-                await interaction.FollowupAsync(
-                    "⏳ CEO Orchestrator 啟動：Cody 開始制定實作計畫書，Petra 審核後自動進入 coding...");
-                var groupForPipeline = createdGroup;
-                _ = Task.Run(async () =>
+                try { await ExecuteAgentTaskAsync(pending); }
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        await taskGroupService.FireStepsAsync(groupForPipeline,
-                            [new WorkflowStep("Dev_plan")]);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "TechImprovement Dev_plan 觸發失敗（Group={Id}）", groupForPipeline.Id);
-                    }
-                }, CancellationToken.None);
-            }
-            else
-            {
-                await interaction.FollowupAsync(
-                    $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
-
-                _ = Task.Run(async () =>
-                {
-                    try { await ExecuteAgentTaskAsync(pending); }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
-                    }
-                }, CancellationToken.None);
-            }
+                    logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
+                }
+            }, CancellationToken.None);
         }
     }
 
-    // ========== Requirements 第三層確認 ==========
-
-    private async Task ShowRequirementsPreviewAsync(SocketMessageComponent interaction, PendingConfirmation pending)
-    {
-        try
-        {
-            await using var scope = serviceProvider.CreateAsyncScope();
-            var taskRepo   = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-            var reqService = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
-
-            var task = await taskRepo.GetByIdAsync(pending.TaskId);
-            if (task is null)
-            {
-                await interaction.FollowupAsync("❌ 找不到任務記錄，請查看 log。");
-                return;
-            }
-
-            await interaction.FollowupAsync("🔍 Requirements Agent 正在分析需求，請稍候...");
-
-            var issues = await reqService.AnalyzeOnlyAsync(task);
-            if (issues.Count == 0)
-            {
-                await interaction.FollowupAsync("❌ 需求分析未能產出有效 Issue，請調整描述後重新下指令。");
-                return;
-            }
-
-            var previewMsg = await interaction.FollowupAsync(
-                embed: BuildRequirementsPreviewEmbed(task.Title, issues),
-                components: BuildConfirmButtons("req_yes", "req_no"));
-
-            store.RegisterConfirmation(previewMsg.Id, pending with { PreviewIssues = issues });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Requirements 需求預覽失敗");
-            await interaction.FollowupAsync("❌ 分析需求時發生錯誤，請查看 log。");
-        }
-    }
-
-    private async Task ExecuteRequirementsFromPreviewAsync(PendingConfirmation pending)
-    {
-        var owner = _gitHubSettings.Owner;
-        var repo  = pending.Project;
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo   = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var reqService = scope.ServiceProvider.GetRequiredService<RequirementsAgentService>();
-
-        var task = await taskRepo.GetByIdAsync(pending.TaskId);
-        if (task is null)
-        {
-            logger.LogError("找不到 TaskItem（Id={Id}）", pending.TaskId);
-            return;
-        }
-
-        taskRepo.UpdateStatus(task, "running");
-        await taskRepo.SaveAsync();
-
-        var pushService   = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
-        var alertChannel  = FindChannel(_settings.Channels.Alerts);
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = task.Id,
-            Title     = task.Title,
-            AgentName = task.AssignedAgent,
-            Status    = "running"
-        });
-
-        var result = await reqService.CreateIssuesFromPreviewAsync(task, owner, repo, pending.PreviewIssues!);
-
-        var finalStatus = result.Success ? "done" : "failed";
-        taskRepo.UpdateStatus(task, finalStatus);
-        await taskRepo.SaveAsync();
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = task.Id,
-            Title     = task.Title,
-            AgentName = task.AssignedAgent,
-            Status    = finalStatus
-        });
-
-        var embed = new EmbedBuilder()
-            .WithTitle(result.Success ? "✅ Requirements Agent 執行完成" : "❌ Requirements Agent 執行失敗")
-            .WithColor(result.Success ? Color.Green : Color.Red)
-            .AddField("任務", task.Title)
-            .AddField("摘要", result.Summary)
-            .WithTimestamp(DateTimeOffset.UtcNow);
-
-        if (!string.IsNullOrEmpty(result.OutputUrl))
-            embed.AddField("連結", result.OutputUrl);
-
-        if (notifyChannel is not null)
-            await notifyChannel.SendMessageAsync(embed: embed.Build());
-        else if (!result.Success && alertChannel is not null)
-            await alertChannel.SendMessageAsync(
-                $"🚨 **Requirements Agent 失敗**\n任務：{task.Title}\n錯誤：{result.Summary}");
-    }
+    // Stage 78a：v4 Requirements 第三層確認 path 砍（RequirementsAgentService class 整套砍 / type reference 連帶清理）—
+    // 既有 ShowRequirementsPreviewAsync / ExecuteRequirementsFromPreviewAsync / BuildRequirementsPreviewEmbed 全砍。
+    // v5.5 path Petra orchestrator 走 PetraInbox + dynamic dispatch / 0 經過此 v4 Requirements branch。
 
     // ========== 提案流程（共用 UI Flow — 暴露 internal 供 CommandHandler / SlashCommandRouter） ==========
 
@@ -1118,28 +1004,6 @@ public class ButtonCallbackRouter(
                 "[Stage61-FF45] SupersedePriorFailedTasks：group {Id} 標 {Count} 個前置 failed/needs_intervention task → cancelled（reason={Reason}）",
                 group.Id, supersededCount, reason);
         }
-    }
-
-    internal static Embed BuildRequirementsPreviewEmbed(string taskTitle, IReadOnlyList<RequirementIssuePreview> issues)
-    {
-        var issueLines = issues.Select((iss, i) =>
-        {
-            var labels = iss.Labels.Count > 0 ? string.Join(", ", iss.Labels) : "無";
-            return $"{i + 1}. **{iss.Title}** — `{labels}`";
-        });
-
-        var issueList = string.Join("\n", issueLines);
-
-        if (issueList.Length > 3900)
-            issueList = issueList[..3900] + "\n…（清單過長，已截斷）";
-
-        return new EmbedBuilder()
-            .WithTitle("📋 Requirements Agent — 請確認 Issue 清單")
-            .WithColor(Color.Gold)
-            .AddField("任務", taskTitle)
-            .WithDescription(issueList)
-            .WithFooter($"共 {issues.Count} 個 Issue，確認後開始建立，取消則中止。")
-            .Build();
     }
 
     internal static Embed BuildProposalEmbed(string title, string? description)

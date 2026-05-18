@@ -1,4 +1,3 @@
-using AiTeam.Bot.Configuration;
 using AiTeam.Data.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -7,12 +6,11 @@ namespace AiTeam.Bot.Orchestration.Petra;
 
 /// <summary>
 /// Stage 63B：Bot 啟動時 scan running Petra session → 重啟 rebuild context（v5 動態架構 PoC）。
+/// Stage 78a：flag check 砍 / Recovery 永遠 active（v4 path 完整砍 / 對齊 v5.5 production default 紀律 / Stage 77 完整收口 + Trial_v6-v22 累積 17 次 0 v4 caller 紀律延續）。
 ///
 /// 紀律對齊 5 挑戰拍板 #5 — 重啟重跑不從 checkpoint resume：
 /// - 從 task 原始 input + 已 responded BossInteraction 紀錄重跑 DecideAsync + BuildSequential
 /// - 不雙重 ask Christ
-///
-/// 僅在 feature flag UsePetraOrchestratorV5=true 時啟動（default=false 不影響 v4 production）。
 /// </summary>
 public class PetraSessionRecoveryService(
     IServiceProvider rootSp,
@@ -25,12 +23,6 @@ public class PetraSessionRecoveryService(
         catch (OperationCanceledException) { return; }
 
         using var scope = rootSp.CreateScope();
-        var resolver = scope.ServiceProvider.GetRequiredService<WorkflowSettingsResolver>();
-        if (!await resolver.GetUsePetraOrchestratorV5Async(stoppingToken))
-        {
-            logger.LogDebug("PetraSessionRecoveryService skip — feature flag UsePetraOrchestratorV5 = false");
-            return;
-        }
 
         try
         {

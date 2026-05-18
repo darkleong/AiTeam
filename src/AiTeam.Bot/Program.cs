@@ -57,41 +57,28 @@ builder.Services.AddSingleton<AppSettingsService>();
 // Stage 38：Agent Provider/Model 動態設定快取（DB 權威，Dashboard 可改，TTL 5 分）
 builder.Services.AddSingleton<AgentConfigCache>();
 
-// Agents（保留具名型別註冊以維持現有相依；同時加上 Keyed 介面，供 CommandHandler 動態分派）
+// Agents（v5.5 production active 6 Talent baseline）
+// Stage 78a：v4 path 整套砍 — 3 純 v4 class（Rosa/Demi/Release）砍 + 4 雙路徑 class（Doc/Dev/Reviewer/Qa）砍 v4 IAgentExecutor 實作留 v5.5 IAgentTool
+// IAgentExecutor keyed registration 剩 OpsAgent（Stage 78b 評估含 AgentQueueProcessor + ButtonCallbackRouter v4 routing 整套砍）
 builder.Services.AddScoped<CeoAgentService>();
 
 builder.Services.AddScoped<DevAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, DevAgentService>(AgentNames.Dev);
 
 builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依
 builder.Services.AddKeyedSingleton<IAgentExecutor, OpsAgentService>(AgentNames.Ops);
 
 builder.Services.AddScoped<QaAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, QaAgentService>(AgentNames.Qa);
 
 builder.Services.AddScoped<DocAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, DocAgentService>(AgentNames.Doc);
-
-builder.Services.AddScoped<RequirementsAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, RequirementsAgentService>(AgentNames.Requirements);
 
 builder.Services.AddScoped<ReviewerAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, ReviewerAgentService>(AgentNames.Reviewer);
 
-builder.Services.AddScoped<ReleaseAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, ReleaseAgentService>(AgentNames.Release);
-
-builder.Services.AddScoped<DesignerAgentService>();
-builder.Services.AddKeyedScoped<IAgentExecutor, DesignerAgentService>(AgentNames.Designer);
-
-// Stage 63B：Worker IAgentTool multi-registration（v5 動態架構 PoC — Petra Orchestrator 透過 IEnumerable<IAgentTool> DI scan 取所有 7 Worker）
+// Stage 63B：Worker IAgentTool multi-registration（v5 動態架構 — Petra Orchestrator 透過 IEnumerable<IAgentTool> DI scan 取所有 Worker）
+// Stage 78a：縮為 4 Worker（Cody/Vera/Quinn/Sage）— 砍 Rosa/Demi/Release（不在 v5.5 6 Talent baseline / Trial_v6-v22 連續 17 次 0 dispatch 累積）
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DevAgentService>());
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReviewerAgentService>());
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<QaAgentService>());
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DocAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<RequirementsAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DesignerAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReleaseAgentService>());
 
 // Stage 63B：Petra Orchestrator + Session Repository + Recovery hosted service（v5 動態架構 PoC）
 builder.Services.AddScoped<PetraSessionRepository>();

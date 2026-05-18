@@ -106,9 +106,7 @@ public class PetraOrchestratorServiceTests
     [InlineData(typeof(ReviewerAgentService),    "code_review")]
     [InlineData(typeof(QaAgentService),          "qa_testing")]
     [InlineData(typeof(DocAgentService),         "documentation")]
-    [InlineData(typeof(RequirementsAgentService),"requirements_extraction")]
-    [InlineData(typeof(DesignerAgentService),    "ui_design")]
-    [InlineData(typeof(ReleaseAgentService),     "release_publishing")]
+    // Stage 78a：砍 Rosa/Demi/Release 對應 3 InlineData — v5.5 4 Worker baseline。
     public void Test6_WorkerCapabilityAttribute_MapsToExpectedTag(Type workerType, string expectedCapability)
     {
         var attrs = workerType.GetCustomAttributes(typeof(AgentCapabilityAttribute), inherit: false)
@@ -121,13 +119,11 @@ public class PetraOrchestratorServiceTests
     // ─── Test 7：BuildSequential + ChatClientAgent + Adapter 三層 wrapper 真實生效 ──
     // 路線 A 限制 (b) workaround 驗證 — adapter capability dispatch 7 capability 對應 IClaudeCodeService method
     [Theory]
-    [InlineData("code_implementation",     "RunAsync")]
-    [InlineData("code_review",             "RunReviewAsync")]
-    [InlineData("qa_testing",              "RunQaAsync")]
-    [InlineData("documentation",           "RunReadOnlyAsync")]
-    [InlineData("requirements_extraction", "RunReadOnlyAsync")]
-    [InlineData("ui_design",               "RunReadOnlyAsync")]
-    [InlineData("release_publishing",      "RunAsync")]
+    [InlineData("code_implementation", "RunAsync")]
+    [InlineData("code_review",         "RunReviewAsync")]
+    [InlineData("qa_testing",          "RunQaAsync")]
+    [InlineData("documentation",       "RunReadOnlyAsync")]
+    // Stage 78a：砍 Rosa/Demi/Release 對應 3 capability InlineData — v5.5 4 Worker baseline。
     public async Task Test7_ClaudeCodeChatClientAdapter_DispatchesByCapability(string capability, string expectedMethod)
     {
         var stub = new StubClaudeCodeService();

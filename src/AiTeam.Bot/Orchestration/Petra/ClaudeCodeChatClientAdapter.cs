@@ -13,14 +13,13 @@ namespace AiTeam.Bot.Orchestration.Petra;
 /// `ChatClientAgent(IChatClient, ...)` ctor 要 IChatClient 才能掛進 framework — adapter 是必要 wrap 層。
 /// （原 Stage 63A spike 誤判「base AIAgent subclass 不被 dispatch」根因 = 漏 TurnToken trigger / Stage 63B commit `ac048ef` 已修。）
 ///
-/// Capability → IClaudeCodeService method dispatch（對齊 [IClaudeCodeService.cs](src/AiTeam.Bot/Agents/IClaudeCodeService.cs) 7 method）：
+/// Capability → IClaudeCodeService method dispatch（對齊 [IClaudeCodeService.cs](src/AiTeam.Bot/Agents/IClaudeCodeService.cs) 4 method / Stage 78a 縮為 v5.5 6 Talent baseline）：
 /// - code_implementation        → RunAsync（完整開發模式）         + CLAUDE_Cody.md
 /// - code_review                → RunReviewAsync                  + CLAUDE_Vera.md
 /// - qa_testing                 → RunQaAsync                      + CLAUDE_Quinn.md
 /// - documentation              → RunReadOnlyAsync                + CLAUDE_Sage.md
-/// - requirements_extraction    → RunReadOnlyAsync                + CLAUDE_Rosa.md
-/// - ui_design                  → RunReadOnlyAsync                + CLAUDE_Demi.md
-/// - release_publishing         → RunAsync                        + (無 CLAUDE_Release.md — skip inject + warning log)
+///
+/// Stage 78a：砍 3 capability（requirements_extraction / ui_design / release_publishing）對齊 v5.5 6 Talent baseline + Trial_v6-v22 連續 17 次 Petra 0 dispatch 累積。
 ///
 /// Stage 64 補強：
 /// 1. ~~CLAUDE.md 注入儀式~~（Stage 65 子項 1 修根因 — 移除 ritual 改用 CLI --append-system-prompt，見下方 Stage 65 補強）。
@@ -65,16 +64,13 @@ internal sealed class ClaudeCodeChatClientAdapter(
     // Stage 64 6b：exponential backoff delay（attempt 1 後 1s / attempt 2 後 2s / attempt 3 後 4s — 第 4 次不重試直接 return）。
     private static readonly int[] RetryDelaysMs = { 1000, 2000, 4000 };
 
-    // Stage 64 1：capability → CLAUDE_<X>.md 對應表（release_publishing 無對齊 template → fallback warning + skip，路線 A）。
+    // Stage 78a：capability → CLAUDE_<X>.md 對應表 — v5.5 4 Worker baseline（Cody/Vera/Quinn/Sage / 砍 Rosa/Demi/Release 對應 3 capability）。
     private static readonly Dictionary<string, string?> CapabilityToTemplate = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["code_implementation"]     = "CLAUDE_Cody.md",
-        ["code_review"]             = "CLAUDE_Vera.md",
-        ["qa_testing"]              = "CLAUDE_Quinn.md",
-        ["documentation"]           = "CLAUDE_Sage.md",
-        ["requirements_extraction"] = "CLAUDE_Rosa.md",
-        ["ui_design"]               = "CLAUDE_Demi.md",
-        ["release_publishing"]      = null,   // 對齊 v4 ReleaseAgentService 本身不用 inject ritual + Stage 65+ 評估是否新增 CLAUDE_Release.md
+        ["code_implementation"] = "CLAUDE_Cody.md",
+        ["code_review"]         = "CLAUDE_Vera.md",
+        ["qa_testing"]          = "CLAUDE_Quinn.md",
+        ["documentation"]       = "CLAUDE_Sage.md",
     };
 
     public async Task<ChatResponse> GetResponseAsync(
@@ -248,14 +244,11 @@ internal sealed class ClaudeCodeChatClientAdapter(
     // Stage 74：model 改 resolvedModel propagate（三層 fallback chain resolve 後）。
     private Task<ClaudeCodeResult> DispatchAsync(string prompt, string? systemPrompt, string resolvedModel, CancellationToken ct) => capability switch
     {
-        "code_implementation"     => claudeCode.RunAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
-        "code_review"             => claudeCode.RunReviewAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
-        "qa_testing"              => claudeCode.RunQaAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
-        "documentation"           => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "requirements_extraction" => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "ui_design"               => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
-        "release_publishing"      => claudeCode.RunAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
-        _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 63B PoC 7 capability）"),
+        "code_implementation" => claudeCode.RunAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "code_review"         => claudeCode.RunReviewAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "qa_testing"          => claudeCode.RunQaAsync(workingDir, prompt, resolvedModel, apiKey, ct, systemPrompt: systemPrompt),
+        "documentation"       => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
+        _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 78a 縮為 v5.5 4 Worker baseline）"),
     };
 
     /// <summary>

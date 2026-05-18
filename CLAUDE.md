@@ -4,15 +4,18 @@
 
 這是一個 AI 團隊管理系統。Christ 擔任老闆角色，透過 Discord 下達指令，AI 團隊（**v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員）負責執行軟體開發任務。
 
-> **v4 既有 4 agent**（Rosa Requirements / Demi UI Design / Rena Release / Maya Ops）已隨 v5.5 Phase 1 Step 1 baseline 拍板（2026-05-15）砍進 Petra orchestrator 範圍 / 0 production fire / Phase 4 dead code 清理候選。詳見 [Future_Feature_v5.5.md](docs/planning/Future_Feature_v5.5.md)。
+> **v4 既有 path 已 Stage 78a 砍**（2026-05-18）：3 純 v4 class（Rosa Requirements / Demi UI Design / Release Publishing）+ 4 雙路徑 class v4 method（Doc/Dev/Reviewer/Qa 留 v5.5 IAgentTool）+ CeoAgentService flag check + 1 dead nuget。OpsAgent + IAgentExecutor + AgentQueueProcessor + ButtonCallbackRouter v4 routing 留 Stage 78b 評估。詳見 [Future_Feature_v5.5.md](docs/planning/Future_Feature_v5.5.md)。
 
 **核心工具：**
 - 溝通：Discord（Discord.Net）
 - 記憶/規則：PostgreSQL（rules + skill_prompts + talent_prompts + task_memories + talent_memories + petra_sessions 等）
 - 詳細 log：PostgreSQL（EF Core + Npgsql）
 - 視覺化：Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）
-- LLM：**v5.5 production active 6 Talent 全走 Claude Code CLI subprocess**（Petra / Cody / Vera / Quinn / Sage via ClaudeCodeChatClientAdapter，Victoria 是 flag forward only 不直接 call LLM）
-  > csproj 內 `Anthropic.SDK 5.10.0` + `Microsoft.Agents.AI.Anthropic 1.3.0-preview` 是 v4 既有 path 遺留（對應已砍 4 agent service class）/ 0 production fire / Phase 4 清理候選。
+- LLM：**v5.5 production active 6 Talent**：
+  - **Victoria** flag forward only（CeoAgentService 寫 PetraInbox + return ack / 不直接 call LLM）
+  - **Petra** 走 `LlmProviderFactory.Create("PM")`（Gemini default per Trial_v22 token_logs 驗 / 可選 Anthropic）— PetraOrchestratorService.cs:227/407/474 真實 3 call sites decide capability / skill / SubtaskPlan
+  - **Cody / Vera / Quinn / Sage** 走 Claude Code CLI subprocess（via ClaudeCodeChatClientAdapter）
+  > csproj 內 `Anthropic.SDK 5.10.0` 保留（Petra 透過 LlmProviderFactory + AnthropicProvider 仍可選 Anthropic）。Stage 78a 砍 1 dead nuget `Microsoft.Agents.AI.Anthropic 1.3.0-preview`（src/ 0 import 真實 dead）。
 - 部署：Docker Compose on Windows 11（本機，非雲端）
 
 ---

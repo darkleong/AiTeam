@@ -22,25 +22,18 @@ public class CeoAgentService(
     LlmProviderFactory providerFactory,
     TaskRepository taskRepository,
     GitHubService gitHubService,
-    IClaudeCodeService claudeCodeService,
-    CeoConversationRepository conversationRepository,
-    CeoMemoryRepository memoryRepository,
     IOptions<GitHubSettings> gitHubSettings,
-    IConfiguration configuration,
-    TokenLogService tokenLogService,
-    WorkflowSettingsResolver workflowResolver,
-    PetraOrchestratorService petraOrchestrator,
     AiTeam.Data.Repositories.PetraInboxRepository petraInboxRepository,   // Stage 75
     AiTeam.Data.AppDbContext db,                                            // Stage 75（CeoAgentService 是 Scoped — 安全）
     ILogger<CeoAgentService> logger)
 {
+    // Stage 78a：v4 Claude Code fallback path 砍 — IClaudeCodeService claudeCodeService / IConfiguration configuration / WorkflowSettingsResolver workflowResolver / VictoriaLock /
+    // CeoConversationRepository conversationRepository / CeoMemoryRepository memoryRepository / TokenLogService tokenLogService / PetraOrchestratorService petraOrchestrator 全砍
+    //（ProcessWithClaudeCodeAsync v4 fallback + BuildVictoriaPrompt + TryParseActionBlock + Session 解析 + 對話歷史 + 長期記憶 + Claude Code token log 砍後 0 caller）。
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
-
-    /// <summary>確保 CLAUDE.md swap 的序列化，避免同時觸發兩個 Victoria Claude Code session 時互相覆寫。</summary>
-    private static readonly SemaphoreSlim VictoriaLock = new(1, 1);
 
     private readonly GitHubSettings _github = gitHubSettings.Value;
 
@@ -99,281 +92,25 @@ public class CeoAgentService(
         IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<string>? availableProjects = null)
     {
-        // ── Stage 63B：v5 動態架構 PoC flag forward（path simplified — Victoria 純 facade Router + RouteToPetra Tool Set 完整化留 Stage 64+）
-        // ── Stage 75：v5.5 Phase 3 — forward 改成「寫 PetraInbox row + return ack 含 queue position」（議題 1 Christ 拍板實踐 / multi-session 並存）
-        //              既有 direct await 模式打斷 Christ 並行送 task — Stage 75 改 inbox + PetraInboxProcessor BackgroundService FIFO 派工
-        // ── Stage 76：v5.5 Phase 3 補強 — queuePosition 簡化顯示路線（🥇 拍板）— 拿掉 CountPendingBySourceAsync race condition / Dashboard PetraInbox section 已 cover live update
-        if (await workflowResolver.GetUsePetraOrchestratorV5Async(cancellationToken))
+        // Stage 78a：v4 fallback 整套砍 — 強制走 v5.5 path（v4 path 0 production active 連續 17 次 Trial 累積 / SQL flag row 保留 Phase 5+ 評估）。
+        // 對應 Stage 63B/75/76 v5.5 path 設計：flag forward only / Victoria 不直接 call LLM / 寫 PetraInbox + return ack。
+        // 來源紀律：對齊 BossCommandLog.Source 既有 pattern — Dashboard / Discord 兩通道（CeoCommandController 是目前唯一 caller / Discord 直接呼叫 path 留未來）。
+        var source = "dashboard";
+        var row = petraInboxRepository.Enqueue(userInput, source);
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Victoria → 寫 PetraInbox row={Id} source={Source}（Stage 78a：v4 fallback 砍 / v5.5 path 強制 / 議題 1 拍板實踐 — 多 task 並存 / Stage 76 簡化顯示）",
+            row.Id, source);
+
+        return new CeoResponse
         {
-            // 來源紀律：對齊 BossCommandLog.Source 既有 pattern — Dashboard / Discord 兩通道（CeoCommandController 是目前唯一 caller / Discord 直接呼叫 path 留未來）
-            var source = "dashboard";
-            var row = petraInboxRepository.Enqueue(userInput, source);
-            await db.SaveChangesAsync(cancellationToken);
-
-            logger.LogInformation(
-                "Victoria flag UsePetraOrchestratorV5=true → 寫 PetraInbox row={Id} source={Source}（議題 1 拍板實踐 — 多 task 並存 / Stage 76 簡化顯示 — 不算精準 queuePosition）",
-                row.Id, source);
-
-            return new CeoResponse
-            {
-                Reply = $"[v5.5] Task 已接收（inbox={row.Id.ToString("N")[..8]}）— Petra 將依 FIFO 順序拆解派工，請於 Dashboard 操作中心追蹤進度。",
-                Action = CeoResponseActions.PetraV5Dispatched,
-            };
-        }
-
-        // ── 1. Session 解析 ──────────────────────────────────────────────
-        var sessionId = await conversationRepository.GetActiveSessionIdAsync(userId, cancellationToken);
-
-        // ── 2. 載入對話歷史（最近 20 筆） ───────────────────────────────
-        var historyTurns = await conversationRepository.GetSessionHistoryAsync(sessionId, cancellationToken);
-
-        // ── 3. 載入長期記憶（最多 100 筆） ──────────────────────────────
-        var memories = await memoryRepository.GetActiveMemoriesAsync(userId, cancellationToken);
-
-        // ── 4. 取得 repo 副本（與其他 Agent 一致的 CloneOrPull 機制）────
-        // 容器內無法存取 Windows host 路徑，必須透過 CloneOrPull 取得本地副本。
-        var repoName = !string.IsNullOrWhiteSpace(projectName) ? projectName : _github.DefaultRepo;
-        string? repoPath = null;
-        string? fallbackReason = null;   // 降級原因，會附在 Discord 回應供診斷
-
-        if (!string.IsNullOrWhiteSpace(repoName) && !string.IsNullOrWhiteSpace(_github.Owner))
-        {
-            try
-            {
-                repoPath = gitHubService.CloneOrPull(_github.Owner, repoName, "victoria");
-                logger.LogInformation("Victoria repo 準備完成（path={Path}）", repoPath);
-            }
-            catch (Exception ex)
-            {
-                fallbackReason = $"CloneOrPull 失敗：{ex.Message}";
-                logger.LogWarning(ex, "Victoria CloneOrPull 失敗，降級使用直接 LLM 模式");
-            }
-        }
-        else
-        {
-            fallbackReason = $"無法確定 repo（projectName='{projectName}', DefaultRepo='{_github.DefaultRepo}', Owner='{_github.Owner}'）";
-            logger.LogWarning("Victoria 無法確定 repo（projectName={P}, DefaultRepo={D}），降級使用直接 LLM 模式",
-                projectName, _github.DefaultRepo);
-        }
-
-        // ── 5. 組裝 GitHub 上下文（與 repo 路徑無關，先行取得） ──────────
-        var githubContext = await BuildGitHubContextAsync(
-            _github.Owner,
-            string.IsNullOrWhiteSpace(projectName) ? _github.DefaultRepo : projectName,
-            cancellationToken);
-
-        // ── 6. 若有 repo 路徑，執行 Claude Code 模式；否則降級 ─────────
-        CeoResponse? ceoResponse = null;
-
-        if (repoPath is not null)
-        {
-            var claudeMd     = Path.Combine(repoPath, "CLAUDE.md");
-            var claudeBak    = Path.Combine(repoPath, "CLAUDE.md.bak");
-            var templatePath = Path.Combine(AppContext.BaseDirectory, "Resources", "CLAUDE_Victoria.md");
-
-            // 4a. Crash 自動修復：若 CLAUDE.md 開頭是 Victoria 標記代表上次未還原
-            if (File.Exists(claudeMd))
-            {
-                try
-                {
-                    using var reader = new StreamReader(claudeMd);
-                    var firstLine = await reader.ReadLineAsync(cancellationToken) ?? "";
-                    if (firstLine.StartsWith("# Victoria", StringComparison.Ordinal))
-                    {
-                        logger.LogWarning("偵測到 Victoria CLAUDE.md 未還原（上次 crash？），嘗試從 .bak 還原");
-                        if (File.Exists(claudeBak))
-                            File.Copy(claudeBak, claudeMd, overwrite: true);
-                        else
-                            File.Delete(claudeMd);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "CLAUDE.md crash 修復失敗，繼續執行");
-                }
-            }
-
-            var prompt = BuildVictoriaPrompt(
-                userInput, projectName, agentList, rules, historyTurns, memories,
-                availableProjects, githubContext, images);
-
-            var apiKey = configuration["AITEAM_ANTHROPIC_KEY"]
-                      ?? configuration["Anthropic:ApiKey"]
-                      ?? "";
-            var model  = configuration["Agents:CEO:Model"] ?? "claude-sonnet-4-6";
-
-            ClaudeCodeResult? claudeResult = null;
-            string? originalMd = null;
-
-            await VictoriaLock.WaitAsync(cancellationToken);
-            try
-            {
-                if (File.Exists(claudeMd))
-                    originalMd = await File.ReadAllTextAsync(claudeMd, cancellationToken);
-
-                // 備份（防 process kill 導致 CLAUDE.md 未還原）
-                if (originalMd is not null)
-                    await File.WriteAllTextAsync(claudeBak, originalMd, cancellationToken);
-
-                // 寫入 Victoria 模板
-                if (File.Exists(templatePath))
-                    await File.WriteAllTextAsync(claudeMd,
-                        await File.ReadAllTextAsync(templatePath, cancellationToken),
-                        cancellationToken);
-
-                claudeResult = await claudeCodeService.RunVictoriaAsync(
-                    repoPath, prompt, model, apiKey, images, cancellationToken);
-                // Stage 44：寫 token_logs（AgentName=CEO / Stage=CEO，無 task / round 語意）
-                await tokenLogService.LogCliUsageAsync(
-                    "CEO", model, "CEO", round: null, taskId: null, claudeResult.Usage, cancellationToken);
-            }
-            finally
-            {
-                try
-                {
-                    if (originalMd is not null)
-                        await File.WriteAllTextAsync(claudeMd, originalMd, CancellationToken.None);
-                    else if (File.Exists(claudeMd))
-                        File.Delete(claudeMd);
-
-                    if (File.Exists(claudeBak))
-                        File.Delete(claudeBak);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "CLAUDE.md 還原失敗");
-                }
-                VictoriaLock.Release();
-            }
-
-            if (claudeResult is not null)
-            {
-                ceoResponse = TryParseActionBlock(claudeResult.Output)
-                           ?? TryParseResponse(claudeResult.Output);
-            }
-
-            if (ceoResponse is null)
-            {
-                fallbackReason = $"Claude Code 回應解析失敗（Success={claudeResult?.Success}）";
-                logger.LogWarning(
-                    "Claude Code 回應解析失敗（Success={S}），降級使用直接 LLM",
-                    claudeResult?.Success);
-            }
-        }
-
-        // ── 7. LLM 降級（repoPath 為 null 或 Claude Code 回應解析失敗） ─
-        if (ceoResponse is null)
-        {
-            var llmResponse = await ProcessAsync(
-                userInput, projectName, agentList, rules,
-                cancellationToken, images, null, availableProjects);
-
-            // 附加診斷訊息，讓 Discord 可見降級原因（無需翻 Docker log）
-            if (fallbackReason is not null)
-                llmResponse.Reply = $"⚠️ *（LLM 降級模式：{fallbackReason}）*\n\n{llmResponse.Reply}";
-
-            ceoResponse = llmResponse;
-        }
-
-        // ── 8. 持久化對話 turn ────────────────────────────────────────────
-        await conversationRepository.AddTurnAsync(
-            sessionId, userId, "user", userInput, cancellationToken);
-        await conversationRepository.AddTurnAsync(
-            sessionId, userId, "assistant", ceoResponse.Reply, cancellationToken);
-
-        // ── 9. 持久化長期記憶 ─────────────────────────────────────────────
-        if (ceoResponse.MemoriesToSave is { Count: > 0 })
-        {
-            var toSave = ceoResponse.MemoriesToSave
-                .Select(m => new AiTeam.Data.Repositories.MemoryToSave(m.Content, m.Category))
-                .ToList();
-            await memoryRepository.SaveMemoriesAsync(userId, toSave, cancellationToken);
-            logger.LogInformation("Victoria 儲存了 {Count} 筆長期記憶", toSave.Count);
-        }
-
-        return ceoResponse;
+            Reply = $"[v5.5] Task 已接收（inbox={row.Id.ToString("N")[..8]}）— Petra 將依 FIFO 順序拆解派工，請於 Dashboard 操作中心追蹤進度。",
+            Action = CeoResponseActions.PetraV5Dispatched,
+        };
     }
 
-    /// <summary>組裝 Victoria Claude Code 模式的完整 Prompt。</summary>
-    private string BuildVictoriaPrompt(
-        string userInput,
-        string projectName,
-        IReadOnlyList<AgentDescriptor> agentList,
-        IReadOnlyList<string> rules,
-        IReadOnlyList<CeoConversation> historyTurns,
-        IReadOnlyList<AiTeam.Data.CeoMemory> memories,
-        IReadOnlyList<string>? availableProjects,
-        string githubContext,
-        IReadOnlyList<ImageAttachment>? images)
-    {
-        var agents = string.Join("\n", agentList.Select(a =>
-            string.IsNullOrWhiteSpace(a.Description) ? $"- {a.Name}" : $"- {a.Name}：{a.Description}"));
-
-        var ruleList = rules.Count > 0
-            ? string.Join("\n", rules.Select(r => $"- {r}"))
-            : "（尚無規則）";
-
-        var projectListBlock = availableProjects is { Count: > 1 }
-            ? $"\n可用專案清單：{string.Join("、", availableProjects)}"
-            : "";
-
-        // 長期記憶（升冪排列供 Prompt 閱讀）
-        var memoryBlock = memories.Count > 0
-            ? string.Join("\n", memories
-                .OrderBy(m => m.CreatedAt)
-                .Select(m => $"[{m.Category}] {m.Content}"))
-            : "（無長期記憶）";
-
-        // Session 對話歷史
-        var historyBlock = historyTurns.Count > 0
-            ? string.Join("\n", historyTurns.Select(t =>
-                t.Role == "user" ? $"[user] {t.Content}" : $"[assistant] {t.Content}"))
-            : "（新 Session，無歷史）";
-
-        // 圖片說明（若有）
-        var imageNote = images is { Count: > 0 }
-            ? $"\n\n（老闆附上了 {images.Count} 張圖片，請在分析時考慮圖片內容。）"
-            : "";
-
-        return $"""
-            ## 可用 Agent
-            {agents}
-
-            ## 規則清單
-            {ruleList}
-
-            ## 當前專案
-            {(string.IsNullOrWhiteSpace(projectName) ? "（未指定）" : projectName)}{projectListBlock}
-
-            ## 近期 GitHub 上下文
-            {githubContext}
-
-            ## 你的長期記憶
-            {memoryBlock}
-
-            ## 本 Session 對話歷史
-            {historyBlock}
-
-            ## 老闆指令
-            {userInput}{imageNote}
-            """;
-    }
-
-    /// <summary>從 Claude Code 輸出中提取 &lt;ACTION&gt;...&lt;/ACTION&gt; XML 區塊並解析為 CeoResponse。</summary>
-    private static CeoResponse? TryParseActionBlock(string rawOutput)
-    {
-        if (string.IsNullOrWhiteSpace(rawOutput)) return null;
-        try
-        {
-            var match = Regex.Match(rawOutput, @"<ACTION>\s*(\{[\s\S]*?\})\s*</ACTION>");
-            if (!match.Success) return null;
-            return JsonSerializer.Deserialize<CeoResponse>(match.Groups[1].Value, JsonOptions);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    // Stage 78a：BuildVictoriaPrompt + TryParseActionBlock 砍 — v4 Claude Code path 唯一 caller（ProcessWithClaudeCodeAsync v4 fallback）砍後 0 caller。
 
     private static string BuildSystemPrompt(IReadOnlyList<AgentDescriptor> agentList, IReadOnlyList<string> rules)
     {
