@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v9.4
+> 版本：v9.5
 > 建立日期：2026-04-01
-> 最後更新：2026-05-18（Stage 76 ✅ 結案 — v5.5 Phase 3 補強 / task retry/resume 機制基礎建設 + Trial_v21 修補類 v3.66.0 — PetraInbox schema 擴 4 欄 + retry path 3 路分支 exponential backoff + PetraErrorClassifier + Dead Letter + queuePosition race 修 + Dashboard 重跑按鈕 / 連續 10 Stage 0 follow-up bug fix / Forge spike 揭架構盲點修根因 1 處 Migration MaxAttempts defaultValue 0→3 patch / ef-core.md 升級紀律 / Trial_v22 啟動條件達成）
+> 最後更新：2026-05-18（Stage 77 ✅ 結案 — v5.5 Phase 3 補強 / fire-and-forget A2 業界推薦完整版 v3.67.0 — PetraInboxChannel BoundedChannel + PetraDispatchWorker N=3 multi-consumer + PetraInboxProcessor 退化 pure producer + Stage 76 retry path 整套搬遷 0 邏輯改變 + dispatch CT 解耦 + StopAsync drain 30min + MaxConcurrentPetra AppSetting + PetraOrchestratorService.StartAsync virtual + xUnit 15 case 全綠 / 業界 7 議題 WebSearch incorporated / Aria 二檢 4 點修正 incorporated / 連續 11 Stage 0 follow-up bug fix / Trial_v22 啟動條件達成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---

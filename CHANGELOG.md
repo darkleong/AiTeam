@@ -11,8 +11,12 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v22 真實業務驗（多 task 並送 + retry path 真實 fire 驗 / Aria 9-step 模板第 12 次實踐 / aria-trial-run skill 第 6 次實踐 / per-Talent lock contention 仍 0 fire 留 Stage 77 修 fire-and-forget）→ 通過 → Stage 77 開（fire-and-forget A2 完整版 Channel + drain + bounded fan-out / 對齊業界 BackgroundService + Channel 紀律）→ Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。
-- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76 ✅** → **77 預留**（fire-and-forget A2 完整版）→ **78+ 預留**（WebUI + Effort + G monitoring）→ v5.5 完整收口。
+- **下個動作候選**：Trial_v22 真實業務驗（Stage 75+76+77 三 Stage 整套機制完整生效 — 多 task 並送 + per-Talent lock contention 真實 fire + retry path 真實 fire 機會 / Aria 9-step 模板第 12 次實踐 / aria-trial-run skill 第 6 次實踐）→ 通過 → Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）+ Phase 4 候選評估（HITL plan confirmation 閘門 + 動態 re-planning）→ v5.5 完整收口。
+- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76 ✅ → **77 ✅** → **78+ 預留**（WebUI + Effort + G monitoring）→ Phase 4 候選 → v5.5 完整收口。
+
+---
+
+## [3.67.0] — 2026-05-18 — [Stage 77](docs/planning/Stage_77_Roadmap.md) v5.5 Phase 3 補強 — fire-and-forget A2 業界推薦完整版（PetraInboxChannel BoundedChannel + PetraDispatchWorker N=3 multi-consumer Task.WhenAll + PetraInboxProcessor 退化 pure producer + Stage 76 retry path 整套搬遷 0 邏輯改變 + dispatch CT 跟 stoppingToken 解耦 + StopAsync graceful shutdown drain 4 階段 30 min timeout + Workflow:MaxConcurrentPetra default 3 範圍 [1,10] + Migration InsertData seed + PetraOrchestratorService.StartAsync virtual + xUnit 15 case 全綠 — 業界 7 議題 WebSearch 完整 incorporated / Aria 二檢 4 點修正 incorporated / Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 5 層守門全綠 / 連續 11 Stage 0 follow-up bug fix / Trial_v22 啟動條件達成）
 
 ---
 

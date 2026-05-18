@@ -264,7 +264,34 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Stage 75 結案**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 17 檔 +1990/-25）
 - **Trial_v21 真實業務驗 🟡 部分過**（[Trial_v21_Plan.md](../experiments/Trial_v21_Plan.md) / 業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost $3.75 / cost per file $0.058 新最優 ROI baseline）
   - Layer 1 ✅ 完整生效 / Layer 2 🟡 code path 真實 wire 但 production 0 機會 fire contention（PetraInboxProcessor sequential await）
-- **Christ 2026-05-18 拍板 A2 業界推薦完整版路線** — Stage 76 範圍重排「功能性 + 修補類」+ Stage 77 預留 fire-and-forget A2 完整版 + WebUI + Effort + G Token monitoring 推 Stage 78+
+- **Christ 2026-05-18 拍板 A2 業界推薦完整版路線** — Stage 76 範圍重排「功能性 + 修補類」+ Stage 77 ✅ fire-and-forget A2 完整版（v3.67.0 / 2026-05-18 / commit `c3972f1` + Forge 結案 `e08a885`）+ WebUI + Effort + G Token monitoring 推 Stage 78+
+
+**Step 9 補強 II（Stage 77 / 2026-05-18）— fire-and-forget A2 業界推薦完整版（Channel + multi-consumer + bounded fan-out + graceful shutdown drain）** ✅ **已完成**（v3.67.0 / S/M 規模 / commit `c3972f1` + Forge 結案 `e08a885` + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / **連續 11 Stage 0 follow-up bug fix** ⭐⭐ / 11 檔 +2071/-127）
+
+**主軸 11 子項全交付**：
+- ① ✅ **WorkflowSettings + Resolver 加 `GetMaxConcurrentPetraAsync`**（default 3 / 範圍守 [1,10] / 新 `GetIntInRangeAsync` 私有 helper / 不動既有 5 caller 簽名）
+- ② ✅ **PetraInboxChannel 新檔 Singleton**（Bounded Capacity=20 const + FullMode=Wait + SingleWriter=true + SingleReader=false / 對齊業界 7 議題 WebSearch 結論完整）
+- ③ ✅ **PetraInboxProcessor 退化 pure producer**（213→107 行 / -50% / push channel + 0 dispatch logic）+ **Aria 議題 3 `ChannelClosedException` explicit catch**（shutdown 場景視為正常 / 不算 polling 異常 log noise）
+- ④ ✅ **PetraDispatchWorker 新檔 multi-consumer BackgroundService**（~270 行 / N=3 default × Task.WhenAll + 3 scope per dispatch + dispatch CT 跟 stoppingToken 解耦 + 設計紀律 8 條完整）
+- ⑤ ✅ **Stage 76 retry path 3 路分支整套搬遷 0 邏輯改變** — Transient retry / Transient exhausted → DLQ / BusinessRule+Permanent fail-fast / ErrorClassifier / MarkPendingWithRetryAsync caller 算 newAttemptCount 傳入 / Random.Shared / ComputeNextRetryAt / worst-case outer catch fail-fast 全套搬遷 / **T6 整合 invoke `DispatchOneAsync` 真實 regression test cover**（Aria 議題 1 方案 A）
+- ⑥ ✅ **StopAsync graceful shutdown drain 4 階段**（`channel.Writer.TryComplete` → `WaitAsync(30 min)` → `_dispatchCts.Cancel` fallback → `base.StopAsync` / 3 場景路徑 — 正常 drain / timeout / host cancel）
+- ⑦ ✅ **xUnit 15 case 全綠**（T1-T6 + T7 9 InlineData / Bot.Tests 113/113 + Generated 127/127 / Stage 75+76 既有 baseline 全保留 / 0 regression）
+- ⑧ ✅ **Migration `Stage77MaxConcurrentPetraSeed` InsertData 純 seed**（new key in production / 0 conflict risk / idempotency 紀律明示）
+- ⑨ ✅ **Directory.Build.props v3.66.0 → v3.67.0**
+- ⑩ ✅ **Program.cs DI 註冊 2 行**（`PetraInboxChannel` Singleton + `PetraDispatchWorker` HostedService / `[InternalsVisibleTo]` 既有 csproj 已立 / 0 新增）
+- ⑪ ✅ **`PetraOrchestratorService.StartAsync` 標 `virtual` 1 keyword**（Aria 議題 1 拍板 / 0 caller 簽名動 / 0 既有 invoke 行為變化 / 供 xUnit T6 `StubPetraOrchestratorService` test-only subclass override stub）
+
+**Aria 計劃前 WebSearch 7 議題完整 incorporated**（Stage 76 規劃前 4 議題 + Stage 77 規劃前 3 議題）：Fire-and-forget 雷 + BackgroundService+Channel 業界主流 + BoundedChannelOptions config + multi-consumer Task.WhenAll pattern + Anthropic rate limit + Graceful shutdown drain + IServiceScopeFactory CreateAsyncScope per Task
+
+**Aria 二檢 4 點修正全 incorporated**（Plan v1.0 → v1.1）：🟡 議題 1 T6 拍板走方案 A（virtual + stub override 整合驗收）/ 🟢 議題 2 N 啟動讀一次紀律明示（§D 設計紀律 #8）/ 🟢 議題 3 ChannelClosedException explicit catch（§C）/ 🟢 議題 4 Migration InsertData idempotency 紀律明示（§G）
+
+**Aria gate1 Tier 0+1+Tier 2 #3 build 全套通過** — commit 範圍對齊 Plan v1.1 / Stage 76 retry path 搬遷邏輯 line-by-line 等價變換 verify / T6 整合驗收 NextRetryAt 區間 23-37s 對齊 ComputeNextRetryAt 公式（30s ± 20% jitter）/ dotnet build 0 error 103 warning 全 pre-existing
+
+**Forge production 5 層守門全綠**：CI/CD run [26028038857](https://github.com/darkleong/AiTeam/actions/runs/26028038857) success 5m38s + Migration apply + PetraInboxChannel 初始化 log `capacity=20 fullMode=Wait singleWriter=true singleReader=false` + PetraDispatchWorker `consumer count=3 drainTimeout=30min` + consumer=0/1/2 啟動 3 條訊號 + 5 v5.5 flag + MaxConcurrentPetra=3 production active
+
+**0 follow-up bug** — clean delivery 連續第三次（Stage 75 + Stage 76 + Stage 77）/ 自驗期間 0 揭 issue / 0 修根因 / 0 二次 commit
+
+**驗收場景**：A/B/C/D/E/F/G xUnit 15 case 全綠 / H/I 留 Aria gate2 範圍（H v4 path 0 regression / I Trial_v22 真實業務驗多 task 並送 + per-Talent lock contention 真實 fire + retry path 真實 fire 機會 / Stage 75+76+77 三 Stage 整套機制完整生效驗）
 
 **Step 9 補強（Stage 76 / 2026-05-18）— task retry/resume 機制基礎建設 + Trial_v21 修補類** ✅ **已完成**（v3.66.0 / M+ 規模 / commit `051d9df` + Forge 結案 `3dc6eec` + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / **連續 10 Stage 0 follow-up bug fix** ⭐ / 13 檔 +1857/-18）
 
