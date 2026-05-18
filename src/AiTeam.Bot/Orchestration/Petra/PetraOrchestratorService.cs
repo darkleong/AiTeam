@@ -51,8 +51,9 @@ public class PetraOrchestratorService(
     // Stage 67：v5.5 path round-robin counter（PetraOrchestratorService 是 Scoped — session 級無需 thread-safe）。
     private int _roundRobinCounter;
 
-    /// <summary>啟動新 session — Petra 動態決策 + BuildSequential dispatch。taskGroupId 可為 null（spike forward path 無 TaskGroup）。</summary>
-    public async Task<PetraOrchestratorResult> StartAsync(
+    /// <summary>啟動新 session — Petra 動態決策 + BuildSequential dispatch。taskGroupId 可為 null（spike forward path 無 TaskGroup）。
+    /// Stage 77：標 virtual 供 xUnit T6 test-only subclass override stub（Stage 76 retry path 搬遷整合 regression test cover）。</summary>
+    public virtual async Task<PetraOrchestratorResult> StartAsync(
         Guid? taskGroupId,
         string taskInput,
         CancellationToken ct = default)

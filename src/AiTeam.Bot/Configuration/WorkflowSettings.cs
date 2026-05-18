@@ -106,4 +106,11 @@ public class WorkflowSettings
     /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 第三步 = Phase 2 第二步之上演進）。
     /// AppSettings 表 key = "Workflow:UseV5PromptDb"，DB 優先，appsettings.json fallback。</summary>
     public bool UseV5PromptDb { get; set; } = false;
+
+    /// <summary>Stage 77：v5.5 Phase 3 補強 — PetraDispatchWorker multi-consumer 並行上限。
+    /// 預設 3（業界 Anthropic Tier 1-2 個人帳號保守紀律 / 配 Stage 76 retry path 兜底 transient 429/5xx）。
+    /// 範圍守 [1, 10]（超出 fallback default / 對齊 token rate limit 真實上限）。
+    /// AppSettings 表 key = "Workflow:MaxConcurrentPetra"，DB 優先，appsettings.json fallback。
+    /// 啟動時讀一次：後續 SQL UPDATE 需 Bot 重啟生效（動態 reload N consumer 非當前 Stage 範圍 / 對齊「自己用爽 / 不過早 over-engineer」）。</summary>
+    public int MaxConcurrentPetra { get; set; } = 3;
 }

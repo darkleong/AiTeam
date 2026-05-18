@@ -100,7 +100,13 @@ builder.Services.AddHostedService<PetraSessionRecoveryService>();
 
 // Stage 75：v5.5 Phase 3 — PetraInbox 接收層 queue（Layer 1）
 // PetraInboxRepository 已由 AddAiTeamData extension 註冊（Bot + Dashboard 共用 Repository pattern）
+// Stage 77：v5.5 Phase 3 補強 — fire-and-forget A2 完整版（Channel + multi-consumer + bounded fan-out + graceful shutdown drain）
+//   PetraInboxChannel Singleton（process-wide Bounded queue / Capacity=20 / FullMode=Wait）
+//   PetraInboxProcessor 退化為 pure producer（poll DB → push channel）
+//   PetraDispatchWorker N=3 default consumer loop（multi-consumer Task.WhenAll + Stage 76 retry path 整套搬遷）
+builder.Services.AddSingleton<PetraInboxChannel>();
 builder.Services.AddHostedService<PetraInboxProcessor>();
+builder.Services.AddHostedService<PetraDispatchWorker>();
 
 // Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 Repository
 builder.Services.AddScoped<MemoryRepository>();

@@ -98,6 +98,10 @@ public class WorkflowSettingsResolver(
     public Task<bool> GetUseV5PromptDbAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseV5PromptDb", Defaults.UseV5PromptDb, ct);
 
+    /// <summary>Stage 77：v5.5 Phase 3 補強 — PetraDispatchWorker multi-consumer 並行上限（範圍守 [1, 10] / 超出 fallback default）。</summary>
+    public Task<int> GetMaxConcurrentPetraAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:MaxConcurrentPetra", Defaults.MaxConcurrentPetra, 1, 10, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);
@@ -108,5 +112,13 @@ public class WorkflowSettingsResolver(
     {
         var raw = await appSettings.GetAsync(key, ct);
         return bool.TryParse(raw, out var v) ? v : fallback;
+    }
+
+    /// <summary>Stage 77：範圍守 [min, max] 變體（既有 GetIntAsync 只守 v &gt; 0 不夠 / 避免無腦 N=100）。</summary>
+    private async Task<int> GetIntInRangeAsync(string key, int fallback, int min, int max, CancellationToken ct)
+    {
+        var raw = await appSettings.GetAsync(key, ct);
+        if (int.TryParse(raw, out var v) && v >= min && v <= max) return v;
+        return fallback;
     }
 }
