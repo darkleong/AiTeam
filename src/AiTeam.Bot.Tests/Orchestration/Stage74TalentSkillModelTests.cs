@@ -210,13 +210,14 @@ public class Stage74TalentSkillModelTests
     }
 
     // ─── T7：場景 F SkillDescriptor metadata 擴展 ─────────────────────────
+    // Stage 78a：v4 path 砍後 Skill registry 縮為 4 Skill baseline（砍 ui_design + release_publishing）
     [Fact]
-    public void T7_SkillDescriptor_NewMetadataFields_PopulatedOnAll6Skills()
+    public void T7_SkillDescriptor_NewMetadataFields_PopulatedOnAll4Skills()
     {
         var registry = new DefaultSkillRegistry();
         var validTiers = new HashSet<string> { "cost-efficient", "standard", "strategic" };
 
-        Assert.Equal(6, registry.All.Count);
+        Assert.Equal(4, registry.All.Count);
 
         foreach (var skill in registry.All)
         {
@@ -230,11 +231,10 @@ public class Stage74TalentSkillModelTests
         }
 
         // 對齊 Plan §E + 議題 2 Christ 拍板的 tier 分類
+        // Stage 78a：砍 ui_design + release_publishing tier assert（對應 SkillRegistry 砍 / Rosa/Demi/Release class 整套砍）
         Assert.Equal("standard",       registry.GetByName("code_implementation")!.RecommendedModelTier);
         Assert.Equal("strategic",      registry.GetByName("code_review")!.RecommendedModelTier);
         Assert.Equal("standard",       registry.GetByName("qa_testing")!.RecommendedModelTier);
         Assert.Equal("cost-efficient", registry.GetByName("documentation")!.RecommendedModelTier);
-        Assert.Equal("strategic",      registry.GetByName("ui_design")!.RecommendedModelTier);
-        Assert.Equal("standard",       registry.GetByName("release_publishing")!.RecommendedModelTier);
     }
 }

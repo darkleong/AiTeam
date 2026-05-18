@@ -192,23 +192,22 @@ public class PetraOrchestratorServiceTests
         Assert.Contains("code_implementation, code_review", prompt);
     }
 
-    // ─── Test 10（Stage 64）：ClaudeCodeChatClientAdapter dispatch 7 capability 完整 cover ──
-    // 對齊 Roadmap 場景 6 chain 驗證精神（多 worker dispatch）— 既有 Test7 已 cover 7 capability 各自 dispatch
-    // 此 test 補強：capability 字典本身完整 cover 7 個（防回歸 — 對齊 IClaudeCodeService 7 method）
+    // ─── Test 10（Stage 64 / Stage 78a update）：ClaudeCodeChatClientAdapter dispatch 4 capability 完整 cover ──
+    // Stage 78a：v4 path 砍後 ClaudeCodeChatClientAdapter dispatch 4 capability baseline（砍 requirements_extraction / ui_design / release_publishing）。
+    // 對齊既有 Test7 Theory data — 4 個 capability 與 4 個 expectedMethod 對齊（不重複驗 dispatch，只驗 capability 列表完整性）。
     [Fact]
-    public void Test10_AdapterCapabilityDispatch_CoversAllSevenCapabilities()
+    public void Test10_AdapterCapabilityDispatch_CoversAllFourCapabilities()
     {
-        // 對齊 IClaudeCodeService 7 method（除了 RunVictoriaAsync/RunMeetingSessionAsync 是 v4 special path 不在 v5 dispatch）
+        // Stage 78a：v5.5 4 Worker baseline — code_implementation / code_review / qa_testing / documentation
         var expectedCapabilities = new[]
         {
-            "code_implementation", "code_review", "qa_testing",
-            "documentation", "requirements_extraction", "ui_design",
-            "release_publishing"
+            "code_implementation", "code_review", "qa_testing", "documentation"
         };
 
-        // 對齊既有 Test7 Theory data — 7 個 capability 與 7 個 expectedMethod 對齊（不重複驗 dispatch，只驗 capability 列表完整性）
-        Assert.Equal(7, expectedCapabilities.Length);
-        Assert.Contains("release_publishing", expectedCapabilities);   // 議題 1 路線 A — 仍在 dispatch 表內
+        Assert.Equal(4, expectedCapabilities.Length);
+        Assert.DoesNotContain("requirements_extraction", expectedCapabilities);   // Stage 67 砍（合進 Petra system prompt）
+        Assert.DoesNotContain("ui_design", expectedCapabilities);                 // Stage 78a 砍（Demi class 整套砍）
+        Assert.DoesNotContain("release_publishing", expectedCapabilities);        // Stage 78a 砍（Release class 整套砍）
     }
 
     // ─── Test 11（Stage 64 Aria 必修 2）：BuildSessionContext CloneOrPull wire 對齊 v4 紀律 ──
@@ -338,19 +337,22 @@ public class PetraOrchestratorServiceTests
         }
     }
 
-    // ─── Test 14（Stage 67）：Skill registry 6 Skill 完整載入 + 0 含 requirements_extraction（合進 Petra）─
+    // ─── Test 14（Stage 67 / Stage 78a update）：Skill registry 4 Skill 完整載入 + 0 含 v4 capability ─
     [Fact]
-    public void Test14_DefaultSkillRegistry_LoadsSixSkills_WithoutRequirementsExtraction()
+    public void Test14_DefaultSkillRegistry_LoadsFourSkills_WithoutV4Capabilities()
     {
         var registry = new AiTeam.Bot.Orchestration.Petra.Skills.DefaultSkillRegistry();
 
-        Assert.Equal(6, registry.All.Count);
+        // Stage 78a：4 Skill baseline（砍 ui_design + release_publishing — Rosa/Demi/Release class 整套砍對應）
+        Assert.Equal(4, registry.All.Count);
         Assert.NotNull(registry.GetByName("code_implementation"));
         Assert.NotNull(registry.GetByName("code_review"));
         Assert.NotNull(registry.GetByName("qa_testing"));
         Assert.NotNull(registry.GetByName("documentation"));
-        Assert.NotNull(registry.GetByName("ui_design"));
-        Assert.NotNull(registry.GetByName("release_publishing"));
+
+        // Stage 78a：v4 path 砍 — ui_design + release_publishing 對應 Demi/Release class 砍後 Skill registry 同步砍
+        Assert.Null(registry.GetByName("ui_design"));
+        Assert.Null(registry.GetByName("release_publishing"));
 
         // Stage 67 baseline：requirements_extraction 砍掉合進 Petra orchestrator system prompt
         Assert.Null(registry.GetByName("requirements_extraction"));

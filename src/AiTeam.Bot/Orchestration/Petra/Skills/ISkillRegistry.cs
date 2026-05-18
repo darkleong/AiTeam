@@ -2,10 +2,10 @@ namespace AiTeam.Bot.Orchestration.Petra.Skills;
 
 /// <summary>
 /// Stage 67：v5.5 Phase 1 Step 2 — Skill registry（code-defined / DI Singleton 安全）。
-/// 6 Final Skill baseline（從 7 砍 1 → 6 / Christ 2026-05-15 拍板對齊業界 finding sweet spot 5-7）：
+/// Stage 78a：4 Final Skill baseline（v4 path 砍後縮為 v5.5 6 Talent baseline 對應 capability）：
 /// - 必備 4：code_implementation / code_review / qa_testing / documentation
-/// - 進階 2：ui_design / release_publishing
-/// - ❌ 砍 requirements_extraction（合進 Petra orchestrator system prompt — Petra 自然拆需求紀律）
+/// - ❌ Stage 78a 砍 ui_design + release_publishing（對應 Rosa/Demi/Release class 整套砍 / ClaudeCodeChatClientAdapter 4 capability baseline / Petra LLM dispatch roster 真實縮限避 throw "未知 capability"）
+/// - ❌ Stage 67 砍 requirements_extraction（合進 Petra orchestrator system prompt — Petra 自然拆需求紀律）
 /// </summary>
 public interface ISkillRegistry
 {
@@ -17,13 +17,14 @@ public interface ISkillRegistry
 }
 
 /// <summary>
-/// Stage 67：預設 Skill registry 實作 — 6 Skill hardcode。
-/// 對齊 v5 既有 ClaudeCodeChatClientAdapter capability dispatch（保留同 name 兼容 v5 fallback path）。
+/// Stage 67：預設 Skill registry 實作。
+/// Stage 78a：4 Skill hardcode（對齊 ClaudeCodeChatClientAdapter 4 capability baseline / v5.5 6 Talent baseline）。
 /// </summary>
 internal sealed class DefaultSkillRegistry : ISkillRegistry
 {
-    // Stage 74：v5.5 Phase 3 Step 8 — 6 SkillDescriptor 全含 RecommendedModelTier + ReturnTypeDescription metadata
+    // Stage 74：v5.5 Phase 3 Step 8 — SkillDescriptor 全含 RecommendedModelTier + ReturnTypeDescription metadata
     //                                 對齊業界 Agent Skills open standard format 第一步（簡化版避過早 over-engineer JSON Schema parameters 全套）。
+    // Stage 78a：4 SkillDescriptor（砍 ui_design + release_publishing — Rosa/Demi/Release class 砍對應）。
     private static readonly IReadOnlyList<SkillDescriptor> _skills = new[]
     {
         new SkillDescriptor(
@@ -46,16 +47,6 @@ internal sealed class DefaultSkillRegistry : ISkillRegistry
             "寫文件 + README + commit message + PR body（dispatch RunReadOnlyAsync）",
             "cost-efficient",
             "CHANGELOG entry + 歸檔 markdown（含實作摘要 / 審查摘要 / PR 連結 / 版本號）"),
-        new SkillDescriptor(
-            "ui_design",           "UI Design",
-            "UI/UX 設計（特定 UI 任務 Petra dispatch — dispatch RunReadOnlyAsync）",
-            "strategic",
-            "UI spec markdown — 含 component 結構 / interaction flow / 設計理由"),
-        new SkillDescriptor(
-            "release_publishing",  "Release Publishing",
-            "Release notes + version bump + 部署協調（dispatch RunAsync）",
-            "standard",
-            "version bump diff + release notes markdown + 部署確認 log"),
     };
 
     public IReadOnlyList<SkillDescriptor> All => _skills;

@@ -197,7 +197,7 @@ public static class DbSeeder
         {
             ("Victoria", "Victoria", "Orchestrator - 接 Christ 指令、forward 任務（無 Skill assignment）"),
             ("Petra",    "Petra",    "Orchestrator - 拆解任務 / 派 Talent / 吸收 requirements_extraction 紀律（無 Skill assignment）"),
-            ("Cody",     "Cody",     "code_implementation 主 + ui_design + release_publishing 兼"),
+            ("Cody",     "Cody",     "code_implementation 主"),   // Stage 78a：砍 ui_design + release_publishing 兼 — 對應 SkillRegistry 縮為 4 Skill baseline
             ("Vera",     "Vera",     "code_review 主"),
             ("Quinn",    "Quinn",    "qa_testing 主"),
             ("Sage",     "Sage",     "documentation 主"),
@@ -207,8 +207,7 @@ public static class DbSeeder
         var skillSeeds = new (string TalentName, string SkillName, bool IsPrimary, int Priority)[]
         {
             ("Cody",  "code_implementation", true,  0),
-            ("Cody",  "ui_design",           false, 0),
-            ("Cody",  "release_publishing",  false, 1),
+            // Stage 78a：砍 Cody-ui_design + Cody-release_publishing 兼 Skill assignment — 對應 SkillRegistry 縮為 4 Skill baseline / production 既有 TalentSkill row 不自動清（無 fresh seed reference）
             ("Vera",  "code_review",         true,  0),
             ("Quinn", "qa_testing",          true,  0),
             ("Sage",  "documentation",       true,  0),
