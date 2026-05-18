@@ -11,8 +11,10 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：Trial_v22 真實業務驗（Stage 75+76+77 三 Stage 整套機制完整生效 — 多 task 並送 + per-Talent lock contention 真實 fire + retry path 真實 fire 機會 / Aria 9-step 模板第 12 次實踐 / aria-trial-run skill 第 6 次實踐）→ 通過 → Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）+ Phase 4 候選評估（HITL plan confirmation 閘門 + 動態 re-planning）→ v5.5 完整收口。
-- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76 ✅ → **77 ✅** → **78+ 預留**（WebUI + Effort + G monitoring）→ Phase 4 候選 → v5.5 完整收口。
+- **Trial_v22 🟢 全綠**（2026-05-18 / [Trial_v22_Plan.md](docs/experiments/Trial_v22_Plan.md)）：Stage 75+76+77 整套 5 訊號全綠 + **per-Talent lock contention 真實 fire 量化首次實證** ⭐⭐⭐（Cody slot 連續 3 接力等鎖 4m18s + 8m31.5s / Vera slot 連續 3 接力 / 不同 Talent 真實平行 12:30:10 同秒 Cody+Vera）+ 業務評分 5/5 滿分 + 連續 12 Trial 業務級成功 + Total cycle 並行 -50% 時間縮短首次實證 + cost per file $0.041 新最優 ROI baseline。
+- **🎉 v5.5 Phase 3 完整收口**（Stage 73+74+75+76+77 5 Stage 連續實證完成）⭐⭐⭐⭐⭐
+- **下個動作候選**：Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）+ Phase 4 候選評估（HITL plan confirmation 閘門 + 動態 re-planning）→ v5.5 完整收口。
+- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76 ✅ → 77 ✅ → **Trial_v22 ⭐⭐⭐⭐⭐ 全綠** → 78+ 預留（WebUI + Effort + G monitoring）→ Phase 4 候選 → v5.5 完整收口。
 
 ---
 
