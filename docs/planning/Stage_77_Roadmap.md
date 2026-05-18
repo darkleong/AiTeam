@@ -1,8 +1,8 @@
 # Stage 77 Roadmap — fire-and-forget A2 完整版（Channel + multi-consumer + bounded fan-out + graceful shutdown drain）
 
 > 目標版本：**v3.67.0**（minor — v5.5 Phase 3 補強 / 一般架構級重構：PetraInboxProcessor 從 sequential await → BackgroundService + Channel multi-consumer 真實多 task 並送）
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-18）
+> 文件版本：v2.0
 > 範圍：PetraInboxProcessor 重構（sequential await → Channel-based multi-consumer）+ BoundedChannelOptions config + `Workflow:MaxConcurrentPetra` AppSetting + graceful shutdown drain + multi-consumer loop + xUnit + version bump
 > 規模：S/M（對齊一般架構級重構區間 ×0.43-0.60 / 第 6 資料點候選）
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 3 補強段（Trial_v21 揭 Stage 75 設計實作落差 + Christ 2026-05-18 拍板 A2 業界推薦完整版路線）
@@ -302,8 +302,131 @@ Aria 2026-05-18 計劃前共 7 議題完整 incorporated（Stage 76 規劃前 4 
 
 ---
 
+## 實作紀錄（v2.0 — Forge 結案第一段 / 2026-05-18）
+
+> Forge commit `c3972f1` — feat(stage77): fire-and-forget A2 完整版 v3.67.0 — v5.5 Phase 3 補強。
+> Plan v1.1（Aria gate1 4 點修正 incorporated）+ Roadmap v1.0 規範完整對齊 + 0 follow-up bug fix（Stage 75/76 baseline 連續第三次 clean delivery）。
+
+### 實作完成項目（依 Roadmap 8 子項 + Plan v1.1 #11 對齊）
+
+| # | 子項 | 對應檔案 | 狀態 |
+|---|---|---|---|
+| 1 | `Workflow:MaxConcurrentPetra` AppSetting + Resolver method（default 3 / 範圍 [1, 10]）| [`WorkflowSettings.cs:111`](../../src/AiTeam.Bot/Configuration/WorkflowSettings.cs#L111) + [`WorkflowSettingsResolver.cs:102`](../../src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs#L102) + 新 `GetIntInRangeAsync` private helper | ✅ |
+| 2 | PetraInboxChannel 新檔（Singleton / Bounded Capacity=20 / FullMode=Wait / SingleWriter=true / SingleReader=false）| [`PetraInboxChannel.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxChannel.cs)（40 行 / 對齊業界 BackgroundService + Channel 紀律）| ✅ |
+| 3 | PetraInboxProcessor 退化 pure producer（push channel / 0 dispatch logic）+ Aria 議題 3 `ChannelClosedException` explicit catch | [`PetraInboxProcessor.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs)（213 行 → 107 行 / **-50%**）| ✅ |
+| 4 | PetraDispatchWorker 新檔 multi-consumer BackgroundService（N=3 default × Task.WhenAll + 3 scope per dispatch + Stage 76 retry path 整套搬遷 0 邏輯改變 + dispatch CT 跟 stoppingToken 解耦）| [`PetraDispatchWorker.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraDispatchWorker.cs)（~270 行 / 設計紀律 8 條完整）| ✅ |
+| 5 | Stage 76 retry path 3 路分支整套搬遷（Transient retry / Transient exhausted DLQ / BusinessRule+Permanent fail-fast）| 搬到 `PetraDispatchWorker.DispatchOneAsync` 內 / 邏輯 0 改變（W2 trade-off / Random.Shared / ComputeNextRetryAt helper / outer catch fallback MarkFailed 全延續）| ✅ |
+| 6 | StopAsync graceful shutdown drain 4 階段（`channel.Writer.TryComplete` + `WaitAsync(30 min)` + `_dispatchCts.Cancel` fallback + `base.StopAsync`）| `PetraDispatchWorker.StopAsync` override / 3 場景路徑（正常 drain / timeout / host cancel） | ✅ |
+| 7 | xUnit 7 case 補強 + `[InternalsVisibleTo]` 既有沿用 + T6 Aria 議題 1 方案 A（`PetraOrchestratorService.StartAsync` 標 `virtual` + `StubPetraOrchestratorService` override 整合 invoke `DispatchOneAsync` 驗 retry path）| [`Stage77MultiConsumerTests.cs`](../../src/AiTeam.Bot.Tests/Orchestration/Stage77MultiConsumerTests.cs)（~360 行 / 7 method = T1-T6 + T7 9 InlineData = 15 test）| ✅ |
+| 8 | Migration `Stage77MaxConcurrentPetraSeed` InsertData 純 seed（idempotency 紀律明示）| [`20260518102303_Stage77MaxConcurrentPetraSeed.cs`](../../src/AiTeam.Data/Migrations/20260518102303_Stage77MaxConcurrentPetraSeed.cs) | ✅ |
+| 9 | `Directory.Build.props` v3.66.0 → v3.67.0 | [`Directory.Build.props`](../../src/Directory.Build.props) | ✅ |
+| 10 | Program.cs DI 註冊 2 行（`PetraInboxChannel` Singleton + `PetraDispatchWorker` HostedService）| [`Program.cs:103-110`](../../src/AiTeam.Bot/Program.cs#L103) / `[InternalsVisibleTo]` 既有已在 [`AiTeam.Bot.csproj:44`](../../src/AiTeam.Bot/AiTeam.Bot.csproj#L44) 立 / 0 新增 | ✅ |
+| 11 | `PetraOrchestratorService.StartAsync` 標 `virtual`（Aria 議題 1 拍板 / xUnit T6 stub 用 / 1 keyword / 0 caller 簽名動）| [`PetraOrchestratorService.cs:56`](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L56) | ✅ |
+
+### 關鍵設計決策（為什麼這樣選）
+
+1. **producer-consumer 分離 pattern** — PetraInboxProcessor 退化 pure producer + PetraDispatchWorker 接 pure consumer / 對齊業界 .NET `BackgroundService + Channel` 紀律（Stephen Cleary 警示 / `Task.Run` 3 大雷 — exception swallowing / orphan task / Scoped service lifetime 全避開）。
+2. **Channel BoundedChannel `FullMode=Wait` + Capacity=20 const** — production safest / 0 task drop / channel full 時 producer 自然 backpressure / Singleton ctor 不能 await AppSettings（沒做動態讀）/ 「自己用爽 / 不過早 over-engineer」。
+3. **MaxConcurrentPetra default 3 / 範圍 [1, 10]** — 業界 Anthropic Tier 1-2 個人帳號保守紀律 / 配 Stage 76 retry path 兜底 transient 429/5xx / 既有 `GetIntAsync` 只守 `v > 0` 不夠 → 加新 `GetIntInRangeAsync` 私有 helper 守 max。
+4. **dispatch CT 跟 stoppingToken 解耦** — `_dispatchCts` 獨立 lifecycle / 守 drain 期間 in-flight Petra 不被 host stop cancel 中斷 / 只在 drain timeout 30 min 後才 force cancel（對齊 Roadmap §6「不 kill in-flight」精神）。
+5. **MaxConcurrentPetra 啟動時讀一次 / SQL UPDATE 需 Bot 重啟生效**（Aria 議題 2 紀律）— 動態 reload N consumer 非當前 Stage 範圍 / 對齊「自己用爽 / 不過早 over-engineer」精神 / Roadmap §G 場景驗收明寫「Bot 重啟（or 動態 reload）後生效」走 Bot 重啟 path。
+6. **Stage 76 retry path 整合搬遷 0 邏輯改變**（業界紀律「搬遷 = 等價變換」）— ErrorClassifier / MarkPendingWithRetryAsync caller 算 newAttemptCount 傳入 / MarkDeadAsync / MarkFailedAsync / `AttemptCount + 1 < MaxAttempts` 條件 / Transient vs BusinessRule+Permanent 判斷 / ComputeNextRetryAt + Random.Shared / 全套搬遷紀律守 T6 整合 invoke `DispatchOneAsync` 驗。
+7. **ChannelClosedException explicit catch**（Aria 議題 3 紀律）— PetraDispatchWorker.StopAsync TryComplete 後 PetraInboxProcessor.WriteAsync 拋 ChannelClosedException / 視為正常 shutdown（不算 polling 異常 log noise）/ row 仍標 running / 下次 Bot 重啟 RecoverStuckRunningAsync 救回。
+8. **T6 整合驗收方案 A virtual + stub override**（Aria 議題 1 拍板）— `PetraOrchestratorService.StartAsync` 標 `virtual` 1 keyword 最小 invasive / `StubPetraOrchestratorService` test-only subclass override stub / 整合 invoke `DispatchOneAsync` 驗 ErrorClassifier 分類 + MarkPendingWithRetryAsync caller args 正確（Stage 76 retry path 0 邏輯改變紀律真實 regression test cover / 不只各別 method 行為驗）。
+9. **backwards-compatible 守護 8 層延續** — v4 / v5 / v5.5 hardcoded / Stage 70 / Stage 72+73 / Stage 74 / Stage 75 / Stage 76 retry — 全 0 動（既有 Success=true 路徑 0 行為改變 / Trial_v22 Aria gate2 場景 H SQL 切 `UsePetraOrchestratorV5=false` 驗證 v4 path 0 regression）。
+
+### Aria gate1 4 點修正 incorporated（Plan v1.0 → v1.1）
+
+| 嚴重度 | 議題 | 修法 | Plan 對應段 |
+|---|---|---|---|
+| 🟡 必修 | T6 採方案 B「拆兩 sub-case 驗 ErrorClassifier + Repository mark」跳過 Stage 76 retry path 整合驗收 | **走方案 A** — PetraOrchestratorService.StartAsync 標 virtual + test-only subclass override / 整合 invoke DispatchOneAsync 真實 regression test cover | §F + R8 + Critical Files + 子項對應 #11 |
+| 🟢 nit | N 啟動讀一次紀律未明示 | §D 設計紀律 #8 明寫「MaxConcurrentPetra 啟動讀一次 / SQL UPDATE 需 Bot 重啟生效」| §D 設計紀律 #8 |
+| 🟢 nit | PetraInboxProcessor outer catch shutdown 場景視為 polling 異常 log noise | 加 explicit `ChannelClosedException` 分支（shutdown 場景視為正常）| §C |
+| 🟢 nit | Migration InsertData idempotency 紀律未明示 | 「new key in production / 0 conflict risk / 對齊 Stage 74/75/76 紀律延續」明寫 | §G |
+
+### Mock 覆蓋情況（xUnit + production 5 層守門）
+
+| 場景 | 覆蓋手段 | 結果 |
+|---|---|---|
+| **A** PetraInboxChannel Bounded config baseline | xUnit T1（new + Writer.WriteAsync round-trip） | ✅ |
+| **B** PetraInboxProcessor 退化 pure producer（push channel / 0 dispatch logic） | xUnit T2（reflection invoke private `ProcessOnePendingAsync` + verify channel.Reader 拿到 rowId + Status='running'）| ✅ |
+| **C** Multi-consumer 並行 pickup | xUnit T3（seed 3 rowId + 3 consumer loop / ConcurrentBag 紀錄 worker index / verify 3 distinct workers）| ✅ |
+| **D** Bounded fan-out cap 守 max concurrent | xUnit T4（seed 5 rowId / N=3 cap / 慢 dispatch 150ms / peakParallel ≤ 3 / peakParallel ≥ 2）| ✅ |
+| **E** Graceful shutdown drain in-flight | xUnit T5（channel.Writer.TryComplete + verify Completion.IsCompleted=true / 30 min timeout fire 簡化驗 production 範圍）| ✅ |
+| **F** Stage 76 retry path 0 regression 整合驗收 | xUnit T6（Aria 議題 1 方案 A — virtual + stub override / 整合 invoke DispatchOneAsync / verify Status='pending' + AttemptCount=1 + NextRetryAt 對齊 ComputeNextRetryAt 區間 23~37s）| ✅ |
+| **G** MaxConcurrentPetra AppSetting 動態讀取 + 範圍守 [1, 10] | xUnit T7 Theory 9 InlineData（valid 1/3/5/10 + out-of-range 0/11/-1 + invalid abc/empty / 全 fallback to default=3）| ✅ |
+| **production 5 層守門** | Forge 自驗 — CI/CD 部署 + Migration apply + PetraInboxChannel 初始化 log + PetraDispatchWorker N=3 啟動 + 5 v5.5 flag + MaxConcurrentPetra production active | ✅ |
+| **H** v4 path 0 regression（SQL 切 flag false） | Aria gate2 範圍 / Christ 觸發 | ⏸ |
+| **I** Trial_v22 真實業務驗（多 task 並送 + per-Talent lock contention 真實 fire + 「PetraInboxProcessor push row to channel」+「PetraDispatchWorker consumer={Index} pickup row」3 條同時段訊號） | Aria gate2 + Christ 觸發 | ⏸ |
+
+### 踩坑紀錄（Forge 自驗 catch + 自修）
+
+#### 1. xUnit `PetraOrchestratorResult` positional record 編譯錯（dotnet build 第一次 5 error）
+
+**踩雷**：T3/T4/T5/T6 stub return value 用 object initializer `new PetraOrchestratorResult { Success = true, ... }` — 但 `PetraOrchestratorResult` 是 `sealed record` with positional ctor `(Guid SessionId, bool Success, int DispatchedWorkerCount, IReadOnlyList<string> DecidedCapabilities, string Summary, string? ErrorMessage = null)` / required parameters 不允許 object initializer。
+
+**修法**：改用 static factory method（Done / Failure / Empty）— 更乾淨：
+- T3/T4/T5 success → `PetraOrchestratorResult.Done(Guid.NewGuid(), Array.Empty<string>(), "stub ok")`
+- T6 failure → `PetraOrchestratorResult.Failure(Guid.NewGuid(), Array.Empty<string>(), "HTTP 500 Internal Server Error")`
+
+#### 2. `PetraDispatchWorker` ctor named arg `resolver:` 應為 `workflowResolver:`（dotnet build 1 error）
+
+**踩雷**：T3 ctor invoke 用了 `workflowResolver` shorthand 寫法 `resolver: null!`，與 PetraDispatchWorker primary constructor 真實參數名 `workflowResolver` 不對齊。
+
+**修法**：改 `workflowResolver: null!`（其餘 ctor 參數 0 動）。
+
+#### 3. Forge spike 揭架構盲點：base ctor 14 deps stub 設計選擇
+
+**踩坑**：Aria 議題 1 拍板方案 A 後 / Forge 實作時面臨 stub 路徑兩選擇 — (a) all null base ctor / (b) BuildServiceProvider DI resolve。Aria 提示「BuildServiceProvider DI resolve 推 — 對齊 Stage75InboxQueueTests pattern」。
+
+**真實落地**：採綜合方案 — `StubPetraOrchestratorService` 用 `base(null!, null!, ..., NullLoggerFactory.Instance, NullLogger<>.Instance)` all-null + 透過 `ServiceCollection.AddScoped<PetraOrchestratorService>(_ => new StubPetraOrchestratorService(stubFactory))` 註冊取代真實 service / `DispatchOneAsync` 內 `runScope.ServiceProvider.GetRequiredService<PetraOrchestratorService>()` 拿到 stub。0 base method invoke / nullable runtime 容忍 / 對齊 BuildServiceProvider DI resolve 紀律。
+
+#### 4. PetraOrchestratorService.StartAsync 標 virtual 0 caller 簽名動驗證（Aria 提醒）
+
+**踩坑前置驗證**：Aria 議題 1 拍板後 / Aria gate1 prompt 提醒「grep 既有 caller 確認 0 簽名動 / 0 既有 invoke 行為變化 / 若有 sealed class context 衝突則 escalate Christ」。
+
+**grep 結果**：
+- caller #1：[`PetraInboxProcessor.cs:107`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs#L107) `orchestrator.StartAsync(...)` — Stage 77 改寫退化 producer 後此 line 已刪 / 0 影響
+- caller #2：[`CeoAgentService.cs:32`](../../src/AiTeam.Bot/Agents/CeoAgentService.cs#L32) `petraOrchestrator` inject 但 line 106+ 不再 call StartAsync（Stage 75 改寫 PetraInbox 後 ack）/ 0 既有 invoke
+
+**結論**：`PetraOrchestratorService` 非 sealed / `StartAsync` 標 `virtual` 0 caller 簽名動 / 0 既有 invoke 行為變化 / 0 escalate Christ 需求 / 直接改 1 keyword。
+
+### 驗收結果
+
+**本機驗證**（Plan §Verification 對齊）：
+
+| # | 驗證動作 | 結果 |
+|---|---|---|
+| 1 | `dotnet ef migrations add Stage77MaxConcurrentPetraSeed --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext` | ✅ Migration + Designer 雙檔生成 / 手動加 `InsertData` + `DeleteData` |
+| 2 | `dotnet build AiTeam.slnx` | ✅ **0 error / 0 新 warning**（修 2 處 test 編譯錯後通過） |
+| 3 | `dotnet test`（含 Stage 77 新 case） | ✅ AiTeam.Bot.Tests **113/113 passed**（Stage 77 新 15 case = T1-T6 + T7 9 InlineData / Stage 75+76 既有 baseline 全綠） |
+| 4 | `dotnet test` AiTeam.Tests.Generated | ✅ **127/127 passed**（Stage 77 0 動 Generated test）|
+
+**Forge 自驗 production 5 層守門全綠**（Christ 觸發 forge-self-verify SOP）：
+
+| # | 守門 | 結果 |
+|---|---|---|
+| 1 | CI/CD `run 26028038857` 部署完成 | ✅ success 5m38s（10:30:53 UTC start → 10:36:31 UTC done）|
+| 2 | Migration `Stage77MaxConcurrentPetraSeed` apply | ✅ `Applying migration '20260518102303_Stage77MaxConcurrentPetraSeed'` + INSERT `Workflow:MaxConcurrentPetra` = `3` |
+| 3 | PetraInboxChannel 初始化 log | ✅ `capacity=20 fullMode=Wait singleWriter=true singleReader=false`（完整對齊 Plan §B BoundedChannelOptions）|
+| 4 | PetraDispatchWorker N=3 consumer 啟動 | ✅ `consumer count=3 drainTimeout=30min` + `consumer=0/1/2 啟動` 3 條訊號 |
+| 5 | 5 v5.5 flag + MaxConcurrentPetra production active | ✅ `app_settings` 16 row（5 v5.5 flag 全 `true` + `MaxConcurrentPetra=3` baseline）|
+
+**0 follow-up bug fix 紀律 — Stage 75/76 baseline 連續第三次 clean delivery**：
+- Stage 75（commit `fd8975f`）— Forge 自驗 0 fix → Aria gate2 場景補強第二次 commit
+- Stage 76（commit `051d9df`）— Forge 自驗 0 fix → Aria gate2 場景 F 視覺驗收
+- **Stage 77（commit `c3972f1`）— Forge 自驗 0 fix → Aria gate2 場景 H+I 留 Christ 觸發**
+
+### 留 Aria gate2 + Christ 觸發範圍
+
+- **場景 H**（v4 path 0 regression — SQL 切 `UsePetraOrchestratorV5=false` + Mock task / Bot log 0 含「PetraDispatchWorker」字樣）— **Aria gate2 範圍**
+- **場景 I**（Trial_v22 真實業務驗 — Bot log 「PetraInboxProcessor push row to channel」+「PetraDispatchWorker consumer={Index} pickup row」3 條同時段訊號 + per-Talent lock contention「acquire per-Talent lock talent=Cody talentId=... — waiting」訊號真實 fire）— **Aria gate2 + Christ 觸發 Trial_v22 真實業務 task** 範圍
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-18 | Forge 結案第一段 — 實作紀錄章節立 / commit `c3972f1` feat(stage77) 11 file changed +2071/-127 / Plan v1.1（Aria gate1 4 點修正 incorporated）+ Roadmap v1.0 規範完整對齊 / **0 follow-up bug fix**（Stage 75/76 baseline 連續第三次 clean delivery）/ 本機驗證 `dotnet build` 0 error + `dotnet test` 113/113 passed（Stage 77 新 15 case）+ Generated 127/127 / Forge 自驗 production 5 層守門全綠（CI/CD `run 26028038857` success 5m38s + Migration apply + PetraInboxChannel 初始化 + PetraDispatchWorker N=3 啟動 + 5 v5.5 flag + MaxConcurrentPetra=3 baseline）/ 場景 A-G xUnit 全 cover + 場景 H/I 留 Aria gate2 + Christ 觸發。**Forge spike 揭架構盲點 0 處**（對比 Stage 76 MaxAttempts patch 0→3 揭 EF Migration 不讀 C# property initializer / Stage 77 全程順利）。**踩坑 4 條**：① xUnit PetraOrchestratorResult positional record 編譯錯（object initializer 不能用 / 改 static factory Done/Failure）② PetraDispatchWorker ctor named arg `resolver:` → `workflowResolver:` ③ base ctor 14 deps stub 設計綜合方案（all-null base + BuildServiceProvider DI resolve 取代）④ PetraOrchestratorService.StartAsync 標 virtual 前 grep 既有 caller 確認 0 簽名動。**等 Aria 接手第二段**：CHANGELOG v3.67.0 + Future_Feature.md 同步 + Future_Feature_v5.5.md Phase 3 補強 Step 10 ✅（Stage 77 ✅ 標完成）+ Top 5 重排（Trial_v22 升 #1 / Stage 78+ WebUI Talent CRUD + Effort + G Token monitoring 視覺化 #2 / Phase 4 候選 HITL + 動態 replan #3）。 |
 | v1.0 | 2026-05-18 | 規劃書建立 — v3.67.0 / S/M 規模 / v5.5 Phase 3 補強（fire-and-forget A2 業界推薦完整版 — Channel + multi-consumer + bounded fan-out + graceful shutdown drain）。**戰略脈絡**：Trial_v21 🟡 部分過揭 Stage 75 設計實作落差（PetraInboxProcessor sequential await vs 議題 1 拍板 multi-session 並存）+ Christ 2026-05-18 戰略 question 點破 Phase 4 候選（HITL / 動態 replan / debate）+ Aria 計劃前 WebSearch 3 議題（HITL 紀律 + 動態 replan 警示 + multi-agent debate 業界反向 finding）→ 拍板 Stage 77 範圍邊界收緊「fire-and-forget A2 完整版 only」+ 不擴 3 Phase 4 候選（HITL + 動態 replan 留 Phase 4 評估 / debate 直接刪除對齊 Stage 74 撤回判斷 + 業界研究反向 finding）。**8 子項**：① MaxConcurrentPetra AppSetting + WorkflowSettingsResolver method ② PetraInboxChannel Singleton（Bounded Capacity=20 + FullMode=Wait + SingleWriter=true + SingleReader=false）③ PetraInboxProcessor 退化為 pure producer（push channel / 0 dispatch logic）④ PetraDispatchWorker 新檔 BackgroundService（N=3 multi-consumer Task.WhenAll）⑤ Stage 76 retry path 整合搬到 PetraDispatchWorker（0 邏輯改變）⑥ Graceful shutdown drain（StopAsync 等 N in-flight Petra 完成 / timeout 30 min）⑦ xUnit 7 case ⑧ version bump v3.67.0。**計劃前 WebSearch 結論段 7 議題完整 incorporated**（Fire-and-forget 雷 + BackgroundService+Channel 業界主流 + Channel BoundedChannelOptions config + multi-consumer Task.WhenAll pattern + Anthropic rate limit + MaxConcurrent 紀律 + Graceful shutdown drain + IServiceScopeFactory CreateAsyncScope per Task）。**設計決策核心**：producer-consumer 分離 + Stage 76 retry 整合 0 邏輯改變 + per-Task CreateAsyncScope + backwards-compatible 守護 8 層延續 + 不擴 3 Phase 4 候選。**驗收 9 場景**：A Channel Bounded config / B Producer 退化 / C Multi-consumer 並行 pickup / D Bounded fan-out cap 守 / E Graceful shutdown drain / F Stage 76 retry path 0 regression / G MaxConcurrentPetra AppSetting 動態 / H v4 path 0 regression / I **Trial_v22 真實業務驗（per-Talent lock contention 真實 fire）**。**校準錨預期**：對齊一般架構級重構區間 ×0.43-0.60 第 6 資料點候選 / raw 105-150K × 0.50 ≈ 50-75K 總 context / Opus 200K + high 推薦 + Opus 1M+Extra high 自升兜底 / cost $3-5。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76 ✅ → **77**（fire-and-forget A2 完整版 / 本 Stage）→ **78+ 預留**（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ Phase 4 候選（HITL plan confirmation 閘門 / 動態 re-planning / Token rate limit headers monitoring）→ v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1+Tier 2 #3 build + Trial_v22 真實業務驗（per-Talent lock contention 真實 fire 機會 → 驗 Stage 75+76+77 三 Stage 整套機制完整生效）。 |
