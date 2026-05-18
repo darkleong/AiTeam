@@ -177,19 +177,45 @@ await _dbContext.SaveChangesAsync();
 ## Migration 工作流程
 
 ```bash
-# 新增 Migration
-dotnet ef migrations add [MigrationName] --project AiTeam.Data --startup-project AiTeam.AppHost
+# 新增 Migration（startup-project 必用 src/AiTeam.Dashboard / 含 EF Core Design / 多 DbContext 必加 --context）
+dotnet ef migrations add [MigrationName] --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
 
 # 套用到本機資料庫（Aspire 啟動後執行）
-dotnet ef database update --project AiTeam.Data --startup-project AiTeam.AppHost
+dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
 
 # 確認即將執行的 SQL
-dotnet ef migrations script --project AiTeam.Data --startup-project AiTeam.AppHost
+dotnet ef migrations script --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
 ```
 
 **命名慣例：** `Add{Entity}Table`、`Add{Column}To{Table}`、`Update{Table}{描述}`
 
 > 每個 Stage 的 Migration 應在 PR 說明中明確列出，並在驗收前確認已 `database update`。
+
+### ⚠️ Migration AddColumn 必檢視 `defaultValue` 對齊 entity C# property initializer（Stage 76 揭）
+
+EF Core auto-generated Migration **不識別 C# property initializer** — 對 `public int X { get; set; } = 3;` 這類 entity 屬性，自動生成的 Migration `AddColumn<int>` 只會給 `defaultValue: 0`（C# 型別 default），不會把 `= 3` initializer 帶進 DB column default。
+
+**結果**：production apply Migration 後，**既有 row** 該欄位被填成 `0`（不是 entity C# 寫的 `3`）。未來業務邏輯如 `if (AttemptCount < MaxAttempts)` 判斷會永遠 false（MaxAttempts=0）→ 整個 retry path 失效。
+
+**紀律**：
+
+1. 每次 `dotnet ef migrations add` 後**檢視產生的 Migration `.cs` 檔**
+2. 每個 `AddColumn<T>` 看 `defaultValue:` 是否對齊 entity C# property initializer
+3. 不一致 → **手動 patch Migration `defaultValue`**（不是改 entity / 因為 entity initializer 對「**新建立**的 row」紀律正確 / 只是對「既有 row backfill」DB layer 要補）
+4. 加註解標明對齊原因（避免後續維護者誤改）
+
+**典型場景**：
+
+| Entity 屬性 | EF auto-generated | 必手動 patch |
+|---|---|---|
+| `public int MaxAttempts { get; set; } = 3;` | `defaultValue: 0` | `defaultValue: 3` |
+| `public bool IsActive { get; set; } = true;` | `defaultValue: false` | `defaultValue: true` |
+| `public string Status { get; set; } = "pending";` | `defaultValue: ""` | `defaultValue: "pending"` |
+| nullable 欄（`int?`、`DateTime?`） | `nullable: true` ✓ | 不需 patch（NULL OK） |
+
+**Stage 76 真實案例**：[`20260517164001_Stage76RetrySchema.cs:32`](../../src/AiTeam.Data/Migrations/20260517164001_Stage76RetrySchema.cs#L32) `MaxAttempts defaultValue 0 → 3` 手動 patch。
+
+**對齊既有紀律**：Trial_v9 + Stage 67 揭「PostgreSQL NULL unique 雷三層修根因」同類根因延伸 — Migration 不全照 entity C# 行為 / 必檢視。
 
 ## Repository 模式
 

@@ -259,15 +259,41 @@ Stage 73 prompt content 升級 → Stage 74 真並行 dispatch + 3 agent debate
 - **Aria 二檢 0 Critical + 6 Warning 全 gate1 自驗綠**（W1 runtime fallback 對齊既有 chain / W2 DispatchAsync 7 case propagate / W3 GenericAgentTool propagation 對齊既有 / W4 WorkerDispatchSummary record immutable 安全 / W5 DependencyType.Sequential enum 真實對齊 / W6 SkillDescriptor breaking change baseline test 同步 update）
 - **production 真實生效**：talent_skills 6 row Provider=Model=NULL（runtime fallback baseline）+ reload-cache wire 串接驗 200 + Migration apply 成功
 
-**Step 9（Stage 75）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization** 🟡 **Trial_v21 部分過**（Stage 75 ✅ Forge 結案 v3.65.0 + Trial_v21 真實業務驗 🟡 揭 1 🔴 設計實作落差 / 修法路徑待 Christ 拍板）
+**Step 9（Stage 75）— 兩層 queue 配套：Petra 接收層 + Worker 執行層 per-Talent serialization** 🟡 **Trial_v21 部分過**（Stage 75 ✅ Forge 結案 v3.65.0 + Trial_v21 真實業務驗 🟡 揭 1 🔴 設計實作落差 / Christ 2026-05-18 拍板 A2 完整版路線 → Stage 77 預留）
 
-- **Stage 75 結案**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 連續 9 Stage 0 follow-up bug fix / 17 檔 +1990/-25 / Aria gate1 6 Warning 全套 grep verify 通過 / 大規模架構級重構新類型第 3 資料點累積 raw 451K Christ 選 Opus 1M + Extra high）
+- **Stage 75 結案**（v3.65.0 / 2026-05-17 / M+ 規模 / commit `fd8975f` + Forge 結案 + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / 17 檔 +1990/-25）
 - **Trial_v21 真實業務驗 🟡 部分過**（[Trial_v21_Plan.md](../experiments/Trial_v21_Plan.md) / 業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost $3.75 / cost per file $0.058 新最優 ROI baseline）
-  - Layer 1 接收層 ✅ 完整生效（CeoAgentService 不 await Petra + PetraInbox + FIFO + Dashboard live update + Reply「task 已接收 + 排隊位 N」）
-  - Layer 2 執行層 🟡 code path 真實 wire（每 Talent dispatch acquire/release lock 真實 fire）/ **但 production 0 機會 fire contention**（PetraInboxProcessor sequential await / row A 跑完才接 row B / 兩 Petra 不同時 dispatch / per-Talent lock 永遠 acquire-immediate-release）
-- **🔴 揭 Stage 75 設計實作落差**：v2.0 紀錄 §2「fire-and-forget per row」+ 議題 1 拍板「multi-session 並存」vs 真實 [`PetraInboxProcessor.cs:89`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs#L89) sequential await
-- **3 路徑待 Christ 拍板**：🥇 Stage 76 順手修 fire-and-forget（推薦） / 🥈 Phase 4 候選不修 / 🥉 立 Stage 75.1 hotfix（不建議）
-- **Trial_v21 中段 Aria 順手修 bug** commit `9b433a4`：PetraInboxProcessor `MarkCompletedAsync` 0 check `result.Success` → check `Success` 拆 Success/Failure 路徑（對齊 Stage 75 Roadmap §2「失敗 → 切 Status='failed' + ErrorMessage」設計）+ 環境設定 Token 月限放寬 10M → 15M（cache 加權失控揭）
+  - Layer 1 ✅ 完整生效 / Layer 2 🟡 code path 真實 wire 但 production 0 機會 fire contention（PetraInboxProcessor sequential await）
+- **Christ 2026-05-18 拍板 A2 業界推薦完整版路線** — Stage 76 範圍重排「功能性 + 修補類」+ Stage 77 預留 fire-and-forget A2 完整版 + WebUI + Effort + G Token monitoring 推 Stage 78+
+
+**Step 9 補強（Stage 76 / 2026-05-18）— task retry/resume 機制基礎建設 + Trial_v21 修補類** ✅ **已完成**（v3.66.0 / M+ 規模 / commit `051d9df` + Forge 結案 `3dc6eec` + Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / **連續 10 Stage 0 follow-up bug fix** ⭐ / 13 檔 +1857/-18）
+
+**主軸 8 子項全交付**：
+- ① ✅ **PetraInbox schema 擴 4 欄 + Migration**（AttemptCount/MaxAttempts/NextRetryAt/DeadAt + 新 index `ix_petra_inbox_status_next_retry` 守 retry backoff timing polling / **Migration MaxAttempts defaultValue 0→3 手動 patch** — Forge spike 揭架構盲點修根因）
+- ② ✅ **PetraInboxProcessor retry path 3 路分支**（exponential backoff 30s × 2^(attempt-1) + ±20% jitter / Random.Shared thread-safe — Aria 議題 3 nit）— Transient retry / Transient exhausted → DLQ / BusinessRule+Permanent fail-fast
+- ③ ✅ **PetraErrorClassifier 新檔**（Transient / BusinessRule / Permanent 3 分類）— Token 守門 / 月限 / 日限 / quota / rate limit / 已暫停 pattern → BusinessRule fail-fast（對齊 multi-agent mode 4 紀律）/ timeout / HttpException / 5xx / JsonException / TaskCanceledException / SocketException → Transient auto retry
+- ④ ✅ **Dead Letter pattern**（Status='dead' + DeadAt + MarkDeadAsync / 不再 pickup / 等人工介入）
+- ⑤ ✅ **queuePosition race condition 修法（🥇 簡化顯示）** — CeoAgentService 拿掉 `CountPendingBySourceAsync` race + Reply 改顯示「Task 已接收（inbox=<short_id>）— 請於 Dashboard 操作中心追蹤進度」
+- ⑥ ✅ **Dashboard 重跑 failed/dead task 按鈕** — InteractionCenter PetraInbox section 加「動作」column + HandleRequeueAsync + RequeueAsync（守 failed/dead 才允許）+ GetInboxStatusColor 加 dead → Color.Dark
+- ⑦ ✅ **xUnit 9 case 全綠**（T1-T9 schema baseline + MarkPendingWithRetry 直接 set + ErrorClassifier 3 路 + MarkDeadAsync + RequeueAsync 5 欄 reset + GetNextPendingAsync 守 backoff + RequeueAsync 反向防呆）+ Bot.Tests 89→98 + Tests.Generated 127/127 全綠 + 0 既有 regression
+- ⑧ ✅ Directory.Build.props v3.66.0
+
+**⭐ Forge spike 揭架構盲點修根因**（對齊 Stage 58 結論 N-th 累積 / Trial_v9 + Stage 67 同類根因延伸）：
+- **Migration MaxAttempts defaultValue 0→3 手動 patch** — EF auto-generated 不識別 C# property initializer / 預設 `defaultValue: 0` 對既有 row 不安全（永遠 fail-fast）/ 手動 patch 對齊 entity C# initializer
+
+**Aria 二檢 3 點修正全 incorporated**（Plan v1.0 → v1.1）：① MarkPendingWithRetryAsync 簽名加 `int newAttemptCount` caller 算 / method 直接 set（0 雙處 +1 耦合）② CountPendingBySourceAsync XML doc 標記 0 caller + 保留意圖 ③ Random.Shared 替代 instance Random（thread-safe）
+
+**Aria gate1 Tier 0+1+Tier 2 #3 build 全套通過** — commit 範圍對齊 Plan / Aria 二檢 3 點 incorporated 真實 / 9 case assertion 抽樣驗（不只 mock pass）/ dotnet build 0 error 103 warning 全 pre-existing 0 新增
+
+**ef-core.md 升級紀律** — 加「Migration AddColumn defaultValue 對齊 entity C# property initializer」紀律段（Stage 56→59 / Trial_v9 / Stage 67 同類根因紀律延伸）+ 順手修 startup-project `AiTeam.AppHost` → `src/AiTeam.Dashboard` 對齊 CLAUDE.md
+
+**校準錨**：raw 預估 95-140K × 0.50 ≈ 50-70K → **真實 Forge Opus 1M+high 結案完畢 241K** / ratio **×1.72-2.54 落在大規模架構級重構區間下緣**（Stage 72/74/75 baseline ×1.57-3.69）— Aria 推估「一般架構級重構」嚴重低估（vs Christ 選 Opus 1M+high 自己升一級兜底 — **自省點 #37 第 5 次累積實證 Aria raw 偏低紀律持續**）
+
+**production 真實生效**：CI/CD run [25996680029](https://github.com/darkleong/AiTeam/actions/runs/25996680029) success + Migration apply log confirmed + Bot startup OK + petra_inbox 13 欄 + 2 index + MaxAttempts default 3 patch 生效 + 5 v5.5 flag production active + PetraInboxProcessor 新 polling SQL fire confirmed
+
+**驗收場景**：A/B/C/D/E/G xUnit 9 case 全綠 / F/H/I 留 Aria gate2 範圍（F Dashboard 重跑按鈕視覺驗 / H v4 path 0 regression / I Trial_v22 真實業務驗多 task 並送 + retry path 真實 fire）
+
+**0 follow-up bug** — clean delivery 連續第二次（Stage 75 + Stage 76）/ Forge 自驗期間 0 揭 issue / 0 修根因 / 0 二次 commit
 
 > ⚠️ **Stage 編號對齊紀律**（Christ 2026-05-17 拍板「數字順序執行」）— 既有 Step 6 「WebUI Talent CRUD」改對應 Stage 76 / 既有 Step 9 「兩層 queue 配套」改對應 Stage 75 ✅ 已完成。
 

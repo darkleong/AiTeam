@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v9.3
+> 版本：v9.4
 > 建立日期：2026-04-01
-> 最後更新：2026-05-17（Trial_v21 🟡 部分過 — Stage 75 Layer 1 接收層 ✅ 完整生效 + Layer 2 執行層 code path 真實 wire / 揭 1 🔴 設計實作落差「PetraInboxProcessor sequential await vs 議題 1 拍板 multi-session 並存」+ 順手修 Status='failed' bug commit `9b433a4` + Token 月限放寬 10M → 15M / 業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost per file $0.058 新最優 ROI baseline / 3 修法路徑待 Christ 拍板）
+> 最後更新：2026-05-18（Stage 76 ✅ 結案 — v5.5 Phase 3 補強 / task retry/resume 機制基礎建設 + Trial_v21 修補類 v3.66.0 — PetraInbox schema 擴 4 欄 + retry path 3 路分支 exponential backoff + PetraErrorClassifier + Dead Letter + queuePosition race 修 + Dashboard 重跑按鈕 / 連續 10 Stage 0 follow-up bug fix / Forge spike 揭架構盲點修根因 1 處 Migration MaxAttempts defaultValue 0→3 patch / ef-core.md 升級紀律 / Trial_v22 啟動條件達成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---

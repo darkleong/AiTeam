@@ -11,10 +11,12 @@
 
 ## [Unreleased]
 
-- **Trial_v21 🟡 部分過**（2026-05-17 / [Trial_v21_Plan.md](docs/experiments/Trial_v21_Plan.md)）：Stage 75 Layer 1 接收層 ✅ 完整生效 + Layer 2 執行層 code path 真實 wire / **但揭 1 🔴 設計實作落差**（PetraInboxProcessor sequential await vs 議題 1 拍板「multi-session 並存」/ per-Talent lock production 0 機會 fire contention）。中段順手修 PetraInboxProcessor Status='failed' bug commit `9b433a4` + 環境設定 Token 月限放寬 10M → 15M。業務評分 5/5 滿分 + 連續 11 Trial 業務級成功 + cost per file $0.058 新最優 ROI baseline。
-- **Christ 2026-05-18 拍板 A2 業界推薦完整版路線 + Stage 76 範圍重排「功能性 + 修補類」+ WebUI 推 Stage 78+**：Aria 計劃前 WebSearch 完成 #4 fire-and-forget 業界紀律（Stephen Cleary 警示 + .NET BackgroundService + Channel 業界主流）+ #2 retry/resume 機制紀律（PG queue retry pattern + multi-agent 5 failure modes + LLM retry 標準 config + Polly/Hangfire 選型 + 人工介入路徑）→ Stage 76 順手簡單版升級為 Stage 77 完整版（Channel + drain + bounded fan-out）+ Stage 76 範圍重排對齊修補類主軸。
-- **下個動作候選**：[Stage 76](docs/planning/Stage_76_Roadmap.md) task retry / resume 機制基礎建設 + Trial_v21 修補類項目（v3.66.0 / 規模 M+ / Opus 200K + high 推薦 / cost $3-5）— PetraInbox schema 擴 4 欄（AttemptCount + MaxAttempts + NextRetryAt + DeadAt）+ PetraInboxProcessor retry path（exponential backoff 30s×2×max3 + ±20% jitter）+ PetraErrorClassifier（Transient/BusinessRule/Permanent）+ Dead Letter pattern + queuePosition race 修法 + Dashboard 重跑 failed/dead task 按鈕 + xUnit 8 case → Trial_v22 真實業務驗 → 通過後進 Stage 77。
-- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76**（retry 機制 + 修補類）→ **77 預留**（fire-and-forget A2 完整版 Channel + drain + bounded fan-out）→ **78+ 預留**（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。
+- **下個動作候選**：Trial_v22 真實業務驗（多 task 並送 + retry path 真實 fire 驗 / Aria 9-step 模板第 12 次實踐 / aria-trial-run skill 第 6 次實踐 / per-Talent lock contention 仍 0 fire 留 Stage 77 修 fire-and-forget）→ 通過 → Stage 77 開（fire-and-forget A2 完整版 Channel + drain + bounded fan-out / 對齊業界 BackgroundService + Channel 紀律）→ Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。
+- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76 ✅** → **77 預留**（fire-and-forget A2 完整版）→ **78+ 預留**（WebUI + Effort + G monitoring）→ v5.5 完整收口。
+
+---
+
+## [3.66.0] — 2026-05-18 — [Stage 76](docs/planning/Stage_76_Roadmap.md) v5.5 Phase 3 補強 — task retry / resume 機制基礎建設 + Trial_v21 修補類（PetraInbox schema 擴 4 欄 AttemptCount/MaxAttempts/NextRetryAt/DeadAt + Migration + PetraInboxProcessor retry path 3 路分支（Transient retry exponential backoff 30s×2×max3 + ±20% jitter / BusinessRule+Permanent fail-fast）+ PetraErrorClassifier 新檔 3 分類（Transient/BusinessRule/Permanent）+ Dead Letter pattern + queuePosition race condition 修法（🥇 簡化顯示）+ Dashboard 重跑 failed/dead task 按鈕 + xUnit 9 case 全綠 / 連續 10 Stage 0 follow-up bug fix / Forge spike 揭架構盲點修根因 1 處 — Migration MaxAttempts defaultValue 0→3 patch / ef-core.md 升級 Migration AddColumn defaultValue 對齊 entity C# initializer 紀律 / Aria 二檢 3 點修正全 incorporated）
 
 ---
 
