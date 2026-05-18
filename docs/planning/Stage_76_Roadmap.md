@@ -1,8 +1,8 @@
 # Stage 76 Roadmap — task retry / resume 機制基礎建設 + Trial_v21 修補類項目（v5.5 Phase 3 補強）
 
 > 目標版本：**v3.66.0**（minor — v5.5 Phase 3 補強 / 一般架構級重構：PetraInbox schema 擴 4 欄 + retry path + error classification + DLQ + queuePosition race fix + Dashboard 重跑按鈕）
-> 狀態：📋 規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-18）
+> 文件版本：v2.0
 > 範圍：PetraInbox schema 擴 4 欄 + Migration + PetraInboxProcessor retry path（exponential backoff + jitter）+ Error type classification（retryable vs non-retryable）+ Dead Letter pattern + queuePosition race condition 修法 + Dashboard 重跑 failed task 按鈕 + xUnit + version bump
 > 規模：M+（對齊一般架構級重構區間 ×0.43-0.60 / 第 5 資料點候選）
 > 對應 v5.5 規劃：[Future_Feature_v5.5.md](Future_Feature_v5.5.md) Phase 3 Step 9 補強段（Stage 75 Trial_v21 揭 retry/resume 機制 + queuePosition race）
@@ -300,8 +300,77 @@ Aria 2026-05-18 計劃前 WebSearch 4 議題（task retry / multi-agent failure 
 
 ---
 
+## 實作紀錄（v2.0 — Forge 結案第一段 2026-05-18）
+
+### 實作完成項目（對齊 Roadmap 8 子項）
+
+| 子項 | 完成 | 對應 commit / 檔案 |
+|---|---|---|
+| 1. PetraInbox schema 擴 4 欄 + Migration | ✅ | [`Entities.cs:474-486`](../../src/AiTeam.Data/Entities.cs#L474) + [`AppDbContext.cs:322-324`](../../src/AiTeam.Data/AppDbContext.cs#L322) + [`20260517164001_Stage76RetrySchema.cs`](../../src/AiTeam.Data/Migrations/20260517164001_Stage76RetrySchema.cs) — AttemptCount/MaxAttempts/NextRetryAt/DeadAt 4 欄 + 新 index `ix_petra_inbox_status_next_retry`（Migration MaxAttempts defaultValue 手動 patch 0→3） |
+| 2. PetraInboxProcessor retry path | ✅ | [`PetraInboxProcessor.cs:30-44`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs#L30) ComputeNextRetryAt helper + [`PetraInboxProcessor.cs:113-156`](../../src/AiTeam.Bot/Orchestration/Petra/PetraInboxProcessor.cs#L113) 3 路分支（Transient retry / Transient exhausted DLQ / BusinessRule+Permanent fail-fast）— 30s × 2^(attempt-1) ±20% jitter / Random.Shared |
+| 3. PetraErrorClassifier 新檔 + ErrorCategory enum | ✅ | [`PetraErrorClassifier.cs`](../../src/AiTeam.Bot/Orchestration/Petra/PetraErrorClassifier.cs) — 3 分類（Transient / BusinessRule / Permanent）+ Token 守門 / 月限 / 日限 / quota / rate limit / 已暫停 pattern + HTTP 5xx / timeout / Exception 類 pattern |
+| 4. Dead Letter pattern | ✅ | [`PetraInboxRepository.cs:97-105`](../../src/AiTeam.Data/Repositories/PetraInboxRepository.cs#L97) MarkDeadAsync + [`PetraInboxRepository.cs:138-143`](../../src/AiTeam.Data/Repositories/PetraInboxRepository.cs#L138) GetDeadLetterAsync — Status='dead' + DeadAt + 不再 pickup |
+| 5. queuePosition 簡化顯示 | ✅ | [`CeoAgentService.cs:108-123`](../../src/AiTeam.Bot/Agents/CeoAgentService.cs#L108) — 拿掉 CountPendingBySourceAsync race / Reply 改顯示「Task 已接收（inbox=&lt;short_id&gt;）— 請於 Dashboard 操作中心追蹤進度」 |
+| 6. Dashboard 重跑按鈕 | ✅ | [`InteractionCenter.razor:36-62`](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor#L36) 加「動作」column + 重跑按鈕（MudButton + Replay icon）+ [`InteractionCenter.razor.cs:141-169`](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs#L141) HandleRequeueAsync + GetInboxStatusColor 加 dead → Color.Dark |
+| 7. xUnit 9 case | ✅ | [`Stage76RetryMechanismTests.cs`](../../src/AiTeam.Bot.Tests/Orchestration/Stage76RetryMechanismTests.cs) — T1 schema baseline / T2 MarkPendingWithRetry / T3-T5 ErrorClassifier 3 路 / T6 MarkDeadAsync / T7+T9 RequeueAsync / T8 GetNextPendingAsync 守 backoff timing |
+| 8. Directory.Build.props v3.66.0 | ✅ | [`Directory.Build.props`](../../src/Directory.Build.props) — v3.65.0 → v3.66.0 |
+
+### 關鍵設計決策
+
+1. **MaxAttempts defaultValue 手動 patch 0→3**（Forge spike 揭架構盲點）— EF Migration 自動生成 `defaultValue: 0` 對既有 row 不安全（上限=0 永遠 fail-fast / 永遠不會 retry），手動 patch 成 `defaultValue: 3` 對齊 entity C# initializer。**對齊 Stage 58 結論「Forge spike 揭露架構盲點紀律」N-th 累積**。
+2. **MarkPendingWithRetryAsync caller 算 newAttemptCount 傳入 / method 直接 set**（Aria 議題 1 拍板）— 避免 caller + method 雙處 +1 邏輯耦合 / 未來改 caller 邊界邏輯（如手動 AttemptCount=2 起跳測 Dead Letter）不踩雷。
+3. **CountPendingBySourceAsync 保留不刪 + 加 XML doc 標記 0 caller**（Aria 議題 2 nit）— Stage 76 後 CeoAgentService 已不再使用，但保留 method 給未來 Dashboard metrics / queue depth monitoring 用 / 避免後續維護者誤判用法。
+4. **Random.Shared（.NET 6+ 內建 thread-safe）替代 instance Random**（Aria 議題 3 nit）— 0 instance 管理 / lock-free / 更乾淨。
+5. **ErrorClassifier pattern match 順序**：BusinessRule（明確 quota / 守門 pattern）→ Transient（infra fail signal）→ Permanent（unknown）— 保 Token 守門 不被誤分類成 Transient（守 mode 4 fail-fast 紀律避免無限循環燒 cost）。
+6. **鎖範圍 worst-case catch 不走 classifier**（紀律明寫）— 外層 catch (Exception ex) 直接 `MarkFailedAsync` / ErrorClassifier 只走 `result.Success=false` 主分支 — 避免 worst-case catch 進無限 retry 循環。
+7. **Dashboard HandleRequeueAsync 不主動觸發 SignalR Push**（避免 Dashboard scope 取 Bot Singleton 服務）— InteractionCenter 直接 `await LoadAsync()` 本機重新拉取 / Bot 端 PetraInboxProcessor 下次 polling tick 接手後自然 fire SignalR 廣播給其他 Dashboard client。
+
+### Aria 二檢回饋 incorporated（Plan v1.0 → v1.1）
+
+3 點全 incorporated（議題 1 邏輯耦合解 + 議題 2/3 nit）→ Aria 二檢通過 → Christ 觸發實作。
+
+### Mock 覆蓋情況
+
+- **xUnit 9 case 覆蓋驗收場景 A-E + G**（100% 全綠 / Stage 76 Bot.Tests 89 → 98 case / 0 既有 regression）
+- 場景 F（Dashboard 重跑按鈕 production 真實驗）/ 場景 H（v4 path 0 regression / SQL 切 flag false）/ 場景 I（Trial_v22 真實業務驗多 task 並送 + retry path 真實 fire）— 留 Aria gate2 範圍 / Christ 觸發
+
+### 驗證結果
+
+**本機驗證**：
+- ✅ `dotnet ef migrations add Stage76RetrySchema` — 產生 4 ADD COLUMN + 1 CREATE INDEX
+- ✅ `dotnet build AiTeam.slnx` — 0 error / 103 warning 全 pre-existing
+- ✅ `dotnet test` — 98/98（Bot.Tests）+ 127/127（Tests.Generated）
+
+**production deployment 自驗**（forge-self-verify skill SOP）：
+| 驗證項目 | 結果 |
+|---|---|
+| CI/CD run 25996680029 | ✅ success（commit 051d9df） |
+| Migration apply log | ✅ `Applying migration '20260517164001_Stage76RetrySchema'` confirmed |
+| Bot startup | ✅ `Now listening on http://[::]:8080` + `Application started` / 0 fatal exception |
+| petra_inbox schema | ✅ 13 欄（9 既有 + 4 新）+ 2 index（含新 `ix_petra_inbox_status_next_retry`） |
+| MaxAttempts default 3 | ✅ patch 生效（既有 row 不會 fail-fast） |
+| 5 v5.5 flag production active | ✅ UsePetraOrchestratorV5 / UseTalentSkillSeparation / UseV5Memory / UseV5PromptDb / UseV5SubtaskPlanning |
+| PetraInboxProcessor 新 polling SQL fire | ✅ `WHERE Status='pending' AND (NextRetryAt IS NULL OR NextRetryAt <= @now)` 每 3 秒 fire confirmed / 13 欄 SELECT 全含 |
+
+### 0 follow-up bug — clean delivery
+
+自驗期間 0 揭 follow-up issue / 0 修根因 / 0 二次 commit — 對齊 Stage 75 clean delivery baseline 連續第二次。
+
+### 踩坑紀錄
+
+1. **Migration MaxAttempts defaultValue 0 雷**（Forge spike 揭）— EF auto-generated Migration 不識別 C# property initializer，預設 `defaultValue: 0`。若 production 既有 row（Trial_v21 留下 5+ row）apply 後 MaxAttempts=0 → 任何 transient fail 立刻 fail-fast 進 Dead Letter（永遠 0 retry）。修法：手動 patch Migration 行 32 `defaultValue: 0 → 3` + 加註解標明對齊 entity initializer。**Trial_v9/Stage 67 「PostgreSQL NULL unique 雷三層修根因」same 紀律延伸 — Migration 不全照 entity C# initializer / 必檢視。**
+2. **CountPendingBySourceAsync 保留 vs 刪 trade-off**（Aria 議題 2 拍板）— Stage 76 後 0 caller 但保留 method 給未來 metrics 用 + 加 XML doc 標記避免後續維護者誤判。對齊「自己用爽 / 不過早 over-engineer / 也不刪可能未來用的 helper」精神平衡點。
+3. **InMemory DB 不模擬 PostgreSQL backoff timing 真實行為**（T8 設計取捨）— xUnit InMemory DB 直接 `NextRetryAt = NOW().AddSeconds(60)` → repo.GetNextPendingAsync 返回 null 已 cover 守 backoff timing 邏輯驗證 / 真實 PostgreSQL polling tick 等待留 Aria gate2 Trial_v22 真實驗。
+
+### Forge spike 揭架構盲點修根因清單
+
+- **MaxAttempts defaultValue 0→3 patch**（對應 Stage 58 結論「Forge spike 揭露架構盲點紀律」N-th 累積 / Trial_v9 + Stage 67 同類根因延伸）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.0 | 2026-05-18 | Forge 結案第一段 — 實作完成 commit [`051d9df`](https://github.com/darkleong/AiTeam/commit/051d9df) + 本機驗證（`dotnet build` 0 error / `dotnet test` 98/98 + 127/127）+ production 自驗全綠（CI/CD run 25996680029 success / Migration apply / Bot startup OK / petra_inbox 13 欄 + 2 index / MaxAttempts default 3 patch 生效 / 5 v5.5 flag production active / PetraInboxProcessor 新 polling SQL fire confirmed）。**Aria gate1 5 議題（Plan v1.1 3 點修正 incorporated）全收口**。**Forge spike 揭架構盲點修根因 1 處**：MaxAttempts Migration defaultValue 0→3 patch（對齊 Stage 58 結論 N-th 累積）。**0 follow-up bug**：自驗期間 0 揭 issue / 0 修根因 / 0 二次 commit（對齊 Stage 75 clean delivery baseline 連續第二次）。**驗收場景**：A/B/C/D/E/G xUnit 9 case 全綠（100% 覆蓋）/ F/H/I 留 Aria gate2 範圍。**校準錨**：raw 100-130K × ? = ? 總 context（Aria 結案後計算 — 對齊一般架構級重構區間 ×0.43-0.60 第 5 資料點候選）。**等 Aria 接手第二段做 CHANGELOG v3.66.0 + Future_Feature.md v9.3 + Future_Feature_v5.5.md Phase 3 補強 Stage 76 ✅ + Top 5 重排（Trial_v22 升 #1 / Stage 77 fire-and-forget A2 完整版 #2 / Stage 78+ WebUI Talent CRUD + Effort + G Token monitoring #3）**。 |
 | v1.0 | 2026-05-18 | 規劃書建立 — v3.66.0 / M+ 規模 / v5.5 Phase 3 補強（task retry / resume 機制基礎建設 + Trial_v21 揭修補類項目）。**戰略脈絡**：Trial_v21 🟡 部分過揭 1 🔴 設計實作落差（fire-and-forget 留 Stage 77）+ 2 🟡 工程細節（queuePosition race + Status='failed' bug 已修）+ Christ 戰略 question 點破「task 意外停止後架構是否能重跑？」答案「不行」揭 production resilience gap → Christ 2026-05-18 拍板 A2 完整版路線 + Stage 76 範圍重排「功能性 + 修補類」+ WebUI Talent CRUD + Effort + G Token monitoring 推 Stage 78+。**8 子項**：① PetraInbox schema 擴 4 欄（AttemptCount + MaxAttempts + NextRetryAt + DeadAt）+ Migration ② PetraInboxProcessor retry path（exponential backoff 30s × 2 × max 3 + ±20% jitter）③ PetraErrorClassifier（Transient / BusinessRule / Permanent ErrorCategory enum）④ Dead Letter pattern（Status='dead' + DeadAt + MarkDeadAsync）⑤ queuePosition race 修法（🥇 簡化顯示 / 不算精準 N）⑥ Dashboard 重跑按鈕（InteractionCenter PetraInbox section 加 action + RequeueAsync）⑦ xUnit 8 case ⑧ version bump v3.66.0。**計劃前 WebSearch 結論段 5 議題完整 incorporated**（PG queue retry pattern + multi-agent 5 failure modes + LLM retry 標準 config + Polly/Hangfire/BackgroundService 選型 + 人工介入路徑業界紀律）。**設計決策核心**：business rule rejection fail-fast 不 retry（Token 守門 mode 4 紀律）+ Dead Letter 等人工介入（Anthropic claude-progress.txt + Dashboard 重跑按鈕 hybrid 業界主流）+ Discord /retry-task 推 Phase 4（Dashboard cover 主要 use case）+ Stage 76 不修 fire-and-forget 留 Stage 77 互補。**驗收 9 場景**：A schema + Migration / B transient retry exponential backoff / C business rule fail-fast / D Dead Letter exhausted attempts / E queuePosition 簡化顯示 / F Dashboard 重跑按鈕 / G Trial_v21 Status='failed' fix 0 regression / H v4 path 0 regression / I Trial_v22 真實業務驗（多 task 並送 + retry path 真實 fire / per-Talent lock contention 仍 0 fire 留 Stage 77）。**校準錨預期**：對齊一般架構級重構區間 ×0.43-0.60 第 5 資料點候選 / raw 95-140K × 0.50 ≈ 50-70K 總 context / Opus 200K + high 推薦 / cost $3-5。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76**（retry 機制 + 修補類 / 本 Stage）→ **77 預留**（fire-and-forget A2 完整版 Channel + drain + bounded fan-out）→ **78+ 預留**（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Trial_v22 真實業務驗 → 通過後 Stage 77 開（fire-and-forget A2 完整版）。 |
