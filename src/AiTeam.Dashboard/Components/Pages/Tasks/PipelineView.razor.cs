@@ -45,9 +45,11 @@ public partial class PipelineView : IAsyncDisposable
     #region Private State
 
     private List<PipelineStepViewModel> _steps = [];
-    private bool _loading;
-    private int  _activeStepIndex;
-    private bool _pauseBusy;
+    private bool    _loading;
+    private int     _activeStepIndex;
+    private bool    _pauseBusy;
+    private string? _actionError;
+    private string? _loadError;
     // Stage 51：HITL 中途介入按鈕（v4 漸進遷移第三步試點）
     private bool _useFrameworkKickoffMidInterrupt;
     private bool _midInterruptBusy;
@@ -142,8 +144,9 @@ public partial class PipelineView : IAsyncDisposable
     {
         if (Group is null) return;
 
-        _loading = true;
-        _steps   = [];
+        _loading   = true;
+        _loadError = null;
+        _steps     = [];
 
         try
         {
@@ -161,7 +164,8 @@ public partial class PipelineView : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Pipeline 步驟載入失敗：{ex.Message}", Severity.Error);
+            _loadError = $"Pipeline 步驟載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
         }
         finally
         {
@@ -215,18 +219,23 @@ public partial class PipelineView : IAsyncDisposable
     private async Task HandlePauseClickAsync()
     {
         if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
+        _pauseBusy   = true;
+        _actionError = null;
         try
         {
             var ok = await BotService.PauseTaskGroupAsync(Group.Id);
-            Snackbar.Add(ok ? "已暫停下階段啟動，當前階段跑完不會轉下階段" : "暫停指令送出失敗",
-                ok ? Severity.Success : Severity.Error);
             if (ok)
             {
+                Snackbar.Add("已暫停下階段啟動，當前階段跑完不會轉下階段", Severity.Success);
                 // 樂觀更新（fresh read 由 SignalR / 重新載入觸發）
                 Group.IsPaused = true;
                 Group.PausedAt = DateTime.UtcNow;
                 Group.PausedBy = "Dashboard";
+            }
+            else
+            {
+                _actionError = "暫停指令送出失敗";
+                Snackbar.Add(_actionError, Severity.Error);
             }
         }
         finally { _pauseBusy = false; }
@@ -236,17 +245,22 @@ public partial class PipelineView : IAsyncDisposable
     private async Task HandleResumeClickAsync()
     {
         if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
+        _pauseBusy   = true;
+        _actionError = null;
         try
         {
             var ok = await BotService.ResumeTaskGroupAsync(Group.Id);
-            Snackbar.Add(ok ? "已送出恢復指令，下階段即將啟動" : "恢復指令送出失敗",
-                ok ? Severity.Success : Severity.Error);
             if (ok)
             {
+                Snackbar.Add("已送出恢復指令，下階段即將啟動", Severity.Success);
                 Group.IsPaused = false;
                 Group.PausedAt = null;
                 Group.PausedBy = null;
+            }
+            else
+            {
+                _actionError = "恢復指令送出失敗";
+                Snackbar.Add(_actionError, Severity.Error);
             }
         }
         finally { _pauseBusy = false; }
@@ -256,13 +270,21 @@ public partial class PipelineView : IAsyncDisposable
     private async Task HandlePauseEpicClickAsync()
     {
         if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
+        _pauseBusy   = true;
+        _actionError = null;
         try
         {
             var ok = await BotService.PauseEpicAsync(Group.Id);
-            Snackbar.Add(ok ? "Epic 已暫停 — sub-task 不再啟動下個 Phase" : "暫停 Epic 失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok) Group.EpicPaused = true;
+            if (ok)
+            {
+                Snackbar.Add("Epic 已暫停 — sub-task 不再啟動下個 Phase", Severity.Success);
+                Group.EpicPaused = true;
+            }
+            else
+            {
+                _actionError = "暫停 Epic 失敗";
+                Snackbar.Add(_actionError, Severity.Error);
+            }
         }
         finally { _pauseBusy = false; }
     }
@@ -271,13 +293,21 @@ public partial class PipelineView : IAsyncDisposable
     private async Task HandleResumeEpicClickAsync()
     {
         if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
+        _pauseBusy   = true;
+        _actionError = null;
         try
         {
             var ok = await BotService.ResumeEpicAsync(Group.Id);
-            Snackbar.Add(ok ? "Epic 已恢復 — 觸發下個 pending sub-task" : "恢復 Epic 失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok) Group.EpicPaused = false;
+            if (ok)
+            {
+                Snackbar.Add("Epic 已恢復 — 觸發下個 pending sub-task", Severity.Success);
+                Group.EpicPaused = false;
+            }
+            else
+            {
+                _actionError = "恢復 Epic 失敗";
+                Snackbar.Add(_actionError, Severity.Error);
+            }
         }
         finally { _pauseBusy = false; }
     }
@@ -288,14 +318,19 @@ public partial class PipelineView : IAsyncDisposable
     {
         if (Group is null || _midInterruptBusy) return;
         _midInterruptBusy = true;
+        _actionError      = null;
         try
         {
             var (ok, err) = await CeoCommandService.TriggerKickoffMidInterruptAsync(Group.Id);
-            Snackbar.Add(
-                ok
-                    ? "✏️ 中途介入旗標已送，下個 Petra Round 邊界會收到 Discord/Dashboard 介入卡"
-                    : $"中途介入觸發失敗：{err ?? "未知錯誤"}",
-                ok ? Severity.Success : Severity.Error);
+            if (ok)
+            {
+                Snackbar.Add("✏️ 中途介入旗標已送，下個 Petra Round 邊界會收到 Discord/Dashboard 介入卡", Severity.Success);
+            }
+            else
+            {
+                _actionError = $"中途介入觸發失敗：{err ?? "未知錯誤"}";
+                Snackbar.Add(_actionError, Severity.Error);
+            }
         }
         finally { _midInterruptBusy = false; }
     }

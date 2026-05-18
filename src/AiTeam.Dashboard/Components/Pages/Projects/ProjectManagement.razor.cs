@@ -23,6 +23,7 @@ public partial class ProjectManagement
     private ProjectDto?      _selectedProject;
     private bool             _isDrawerOpen;
     private string?          _loadError;
+    private string?          _formError;
 
     #endregion
 
@@ -65,6 +66,7 @@ public partial class ProjectManagement
 
     private async Task ToggleIsActiveAsync(ProjectDto project, bool isActive)
     {
+        _formError = null;
         try
         {
             await ProjectService.ToggleProjectActiveAsync(project.Id, isActive);
@@ -72,7 +74,8 @@ public partial class ProjectManagement
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"狀態切換失敗：{ex.Message}", Severity.Error);
+            _formError = $"狀態切換失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
     }
 

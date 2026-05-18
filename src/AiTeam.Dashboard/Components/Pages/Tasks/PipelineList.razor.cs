@@ -33,6 +33,7 @@ public partial class PipelineList : IAsyncDisposable
     private TaskGroupDto?           _selectedGroup;
     private bool                    _isPipelineDrawerOpen;
     private IEnumerable<string>     _statusFilters        = [];
+    private string?                 _loadError;
 
     #endregion
 
@@ -104,6 +105,7 @@ public partial class PipelineList : IAsyncDisposable
         TableState state,
         CancellationToken cancellationToken)
     {
+        _loadError = null;
         try
         {
             var result = await TaskService.GetTaskGroupsPagedAsync(
@@ -119,7 +121,8 @@ public partial class PipelineList : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"任務群組載入失敗：{ex.Message}", Severity.Error);
+            _loadError = $"任務群組載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
             return new TableData<TaskGroupDto> { Items = [], TotalItems = 0 };
         }
     }

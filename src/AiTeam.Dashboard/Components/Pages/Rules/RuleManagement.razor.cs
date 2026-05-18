@@ -60,6 +60,7 @@ public partial class RuleManagement
     private List<Rule> _rules    = [];
     private bool       _isReloading;
     private string?    _loadError;
+    private string?    _formError;
 
     #endregion
 
@@ -131,6 +132,7 @@ public partial class RuleManagement
 
     private async Task ToggleActiveAsync(Rule rule, bool isActive)
     {
+        _formError = null;
         try
         {
             await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
@@ -138,12 +140,14 @@ public partial class RuleManagement
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"狀態切換失敗：{ex.Message}", Severity.Error);
+            _formError = $"狀態切換失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
     }
 
     private async Task DeleteRuleAsync(Guid id)
     {
+        _formError = null;
         try
         {
             await RuleService.DeleteRuleAsync(id);
@@ -151,7 +155,8 @@ public partial class RuleManagement
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"刪除失敗：{ex.Message}", Severity.Error);
+            _formError = $"刪除失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
     }
 

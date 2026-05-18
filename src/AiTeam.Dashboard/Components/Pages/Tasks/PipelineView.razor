@@ -119,9 +119,18 @@ else if (Group.Status is not "done" and not "failed" and not "cancelled")
     }
 }
 
+@if (_actionError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-2 mt-2">@_actionError</MudAlert>
+}
+
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+}
+else if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-2">@_loadError</MudAlert>
 }
 else if (_steps.Count == 0)
 {

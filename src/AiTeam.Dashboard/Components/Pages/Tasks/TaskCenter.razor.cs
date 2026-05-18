@@ -34,6 +34,7 @@ public partial class TaskCenter : IAsyncDisposable
     private List<TaskLogDto>       _selectedLogs     = [];
     private bool                   _isTaskDrawerOpen;
     private IEnumerable<string>    _statusFilters    = [];
+    private string?                _loadError;
 
     #endregion
 
@@ -84,6 +85,7 @@ public partial class TaskCenter : IAsyncDisposable
         TableState state,
         CancellationToken cancellationToken)
     {
+        _loadError = null;
         try
         {
             var result = await TaskService.GetTasksPagedAsync(
@@ -99,7 +101,8 @@ public partial class TaskCenter : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"任務清單載入失敗：{ex.Message}", Severity.Error);
+            _loadError = $"任務清單載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
             return new TableData<TaskItemDto> { Items = [], TotalItems = 0 };
         }
     }

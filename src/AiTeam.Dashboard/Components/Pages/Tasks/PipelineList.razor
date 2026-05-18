@@ -8,6 +8,11 @@
     <h2>流程追蹤</h2>
 </div>
 
+@if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_loadError</MudAlert>
+}
+
 <div class="page-filters mb-3">
     <MudSelect T="string" MultiSelection="true"
                @bind-SelectedValues="_statusFilters"
