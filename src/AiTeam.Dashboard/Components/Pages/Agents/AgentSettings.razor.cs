@@ -70,6 +70,7 @@ public partial class AgentSettings
     {
         if (_isTogglingActive) return;
         _isTogglingActive = true;
+        _formError        = null;
         try
         {
             agent.IsActive = await AgentService.UpdateIsActiveAsync(agent.Id, newValue);
@@ -77,7 +78,8 @@ public partial class AgentSettings
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{agent.Name} 狀態切換失敗：{ex.Message}", Severity.Error);
+            _formError = $"{agent.Name} 狀態切換失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
         finally
         {

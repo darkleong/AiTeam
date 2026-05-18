@@ -80,6 +80,10 @@ else
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Secondary" Class="mb-2" />
 }
+else if (_historyError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_historyError</MudAlert>
+}
 else if (_historyItems.Count == 0)
 {
     <MudAlert Severity="Severity.Normal" Class="mb-4">
