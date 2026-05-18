@@ -11,10 +11,12 @@
 
 ## [Unreleased]
 
-- **Trial_v22 🟢 全綠**（2026-05-18 / [Trial_v22_Plan.md](docs/experiments/Trial_v22_Plan.md)）：Stage 75+76+77 整套 5 訊號全綠 + **per-Talent lock contention 真實 fire 量化首次實證** ⭐⭐⭐（Cody slot 連續 3 接力等鎖 4m18s + 8m31.5s / Vera slot 連續 3 接力 / 不同 Talent 真實平行 12:30:10 同秒 Cody+Vera）+ 業務評分 5/5 滿分 + 連續 12 Trial 業務級成功 + Total cycle 並行 -50% 時間縮短首次實證 + cost per file $0.041 新最優 ROI baseline。
-- **🎉 v5.5 Phase 3 完整收口**（Stage 73+74+75+76+77 5 Stage 連續實證完成）⭐⭐⭐⭐⭐
-- **下個動作候選**：Stage 78+（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）+ Phase 4 候選評估（HITL plan confirmation 閘門 + 動態 re-planning）→ v5.5 完整收口。
-- **Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → 76 ✅ → 77 ✅ → **Trial_v22 ⭐⭐⭐⭐⭐ 全綠** → 78+ 預留（WebUI + Effort + G monitoring）→ Phase 4 候選 → v5.5 完整收口。
+- **下個動作候選**：Stage 79（A HITL plan confirmation 閘門 / 業界 LangGraph interrupt + 4 decision pattern / 規模 M）→ Stage 80（B 動態 re-planning / 業界 LangGraph cycles + max iterations / 規模 L）→ Stage 78b（ButtonCallbackRouter v4 routing + IAgentExecutor + AgentQueueProcessor + OpsAgent + CeoAgentService.ProcessAsync 評估）→ WebUI Stage（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。
+- **Phase 4 候選路徑**：78a ✅（C+D refactor 升級為 v4 dead code 整套砍）→ 79 預留（A HITL）→ 80 預留（B 動態 replan）→ 78b 預留（ButtonCallbackRouter v4 routing + 配套）→ WebUI Stage 預留 → v5.5 完整收口。
+
+---
+
+## [3.68.0] — 2026-05-18 — [Stage 78a](docs/planning/Stage_78_Roadmap.md) v5.5 Phase 4 C — v4 path dead code 整套砍除（10 子項精準範圍 / Forge spike v1+v2+v3 連續三輪揭真實 + Aria 計劃前 grep 紀律補強候選累積第 N+1~3 次延伸 + Christ + Aria 拍板 5 議題 / 砍 3 純 v4 class（Rosa/Demi/Release ~1150 行）+ 4 雙路徑 class v4 method ~2900 行（Doc/Dev/Reviewer/Qa 留 v5.5 IAgentTool）+ LlmProviderFactory 系列全保留（Petra 3 call sites active）+ 1 dead nuget 砍（Microsoft.Agents.AI.Anthropic）+ CeoAgentService v4 fallback + PetraSessionRecoveryService flag check 砍 + 配套 propagation（archive prompt + Adapter capability 7→4 + CLAUDE_Petra.md + xUnit InlineData + csproj + RoutingTypes + ButtonCallbackRouter v4 Requirements + QaReport 搬獨立檔）+ Aria gate1 🟡 修補 DefaultSkillRegistry 6→4 + Test 10/14 + Stage74 T7 + DbSeeder + CLAUDE.md production path 修根因（Petra LlmProviderFactory Gemini default / 非 Claude Code CLI）/ 22+4=26 檔變動 / net -3957 行 / xUnit Bot.Tests 113→104 + Generated 127/127 全綠 / 5 healthy 偏離 commit message 明寫 / Forge spike 揭架構盲點紀律第 N+4 次累積 / Stage 78b 預留 ButtonCallbackRouter 其他 v4 routing + IAgentExecutor + AgentQueueProcessor + OpsAgent + ProcessAsync）
 
 ---
 

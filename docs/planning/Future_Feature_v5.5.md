@@ -400,6 +400,46 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 - **v4 既有 module 砍 vs 留** — Phase 3 不做（v4 path 已被 v5.5 path 取代上線 / Trial_v18 後 5 flag production active / v4 path 留 fallback 不擾 production / 待真實業務需求觸發再評估 — 留 Phase 4 候選）
 
+### Phase 4 候選 C — v4 path dead code 整套砍除（Stage 78a / 2026-05-18） ✅ **已完成**
+
+**v3.68.0 / Stage 78a Forge 結案** — commit `c6f81d6` + Aria gate1 🟡 修補 `6fcd828` + Forge 結案第一段 `f5df1aa` / 22+4=26 檔變動 / net -3957 行 / Bot.Tests 113→104 + Generated 127/127 全綠 / **連續 12 Stage 0 follow-up bug fix + clean delivery 連續第四次** ⭐⭐⭐⭐（Stage 75+76+77+78a）
+
+**10 子項精準範圍**（v1.2 final）：
+- ① 砍 3 純 v4 class（Rosa/Demi/Release ~1150 行）含 v5.5 IAgentTool 整套 + Program.cs DI
+- ② 砍 4 雙路徑 class v4 method ~2900 行（Doc 389→25 / Dev 1030→27 / Reviewer 540→26 / Qa 399→26）/ **留 v5.5 IAgentTool.CreateAgent 3 行**
+- ③ **LlmProviderFactory + AnthropicProvider + TokenTrackingProvider + Anthropic.SDK + AnthropicClient 全保留**（PetraOrchestratorService 3 call sites active / Pm 系列 / CeoAgentService.ProcessAsync）
+- ④ 砍 1 dead nuget（**Microsoft.Agents.AI.Anthropic** 1.3.0-preview / src/ 0 import 真實 dead）/ **Anthropic.SDK 5.10.0 保留**
+- ⑤ CeoAgentService v4 fallback 砍（ProcessWithClaudeCodeAsync ~200→~15 行 + helper 砍）
+- ⑥ PetraSessionRecoveryService flag check 砍 / Recovery 永遠 active
+- ⑦ 配套 propagation 精準（archive prompt 2 檔 + Adapter capability 7→4 + CLAUDE_Petra.md + xUnit InlineData -6 + csproj + RoutingTypes + ButtonCallbackRouter v4 Requirements 連帶 + QaReport 搬獨立檔）
+- ⑧ xUnit Bot.Tests 113→104 / Generated 127/127 全綠
+- ⑨ Directory.Build.props v3.67.0 → v3.68.0
+- ⑩ **CLAUDE.md production active path 修根因**（Aria 第二層反思 — Petra 真實走 LlmProviderFactory（Gemini default）/ 非 Claude Code CLI / 對齊 Trial_v22 token_logs PM=gemini-2.5-flash 真實驗）
+
+**Forge spike 揭架構盲點紀律第 N+4 次累積**（對齊 Stage 58 結論延續）：
+- Spike v1：DevAgent 99% v4 dead code（1056 行 v5.5 path 只佔 3 行）+ ReviewerAgent/QaAgent 雙路徑 + Anthropic.SDK 不能砍 + archive prompt 真實 2 個檔
+- Spike v2：DocAgent.Name="Sage" v5.5 active（推翻 v1.1 分類錯誤）+ PetraOrchestratorService 3 call sites + LlmProviderFactory 全保留
+- Spike v3（Forge 自決連帶 healthy 偏離）：ButtonCallbackRouter v4 Requirements path build error 連帶砍 ~150 行 + RoutingTypes PreviewIssues + QaReport 搬獨立檔
+- Aria gate1 揭：DefaultSkillRegistry 6→4 silent regression risk + Test 10/14 + Stage74 T7 連帶 + DbSeeder Cody description / production safety net 紀律
+
+**Aria 計劃前 grep 紀律補強候選 3 條累積延伸**（對齊 workflow_aria.md 第三節 A 第 7 條延伸範圍 Stage 65/66/67/69/78 累積第 N+1~3 次）：
+1. 「規劃 capability 砍時必 grep 雙資料源（Adapter map + SkillRegistry + DbSeeder + xUnit test）對齊」
+2. 「v4 vs v5.5 雙路徑 class 規劃前必 grep 雙介面真實 method line range」
+3. 「CLAUDE.md production active path 更新時必 grep 真實 caller verify」
+
+→ 留 `/aria-end` session 結束 SOP 統一 update memory/workflow_aria.md
+
+**Christ + Aria 拍板 5 議題**（spike v2 後）：
+1. DocAgent 路線 A（留 class 砍 v4 method 留 v5.5 IAgentTool 3 行）
+2. LlmProviderFactory + AnthropicProvider + TokenTrackingProvider + Anthropic.SDK 全保留
+3. Rosa/Demi/Release 路線 A 砍整套（v5.5 6 Talent baseline + Trial_v6-v22 連續 17 次 Petra plan 0 拆 Rosa/Demi/Release）
+4. AgentQueueProcessor + IAgentExecutor → Stage 78b 預留
+5. ButtonCallbackRouter v4 routing → Stage 78b 預留
+
+**Stage 78b 預留範圍**：ButtonCallbackRouter v4 routing 砍 + IAgentExecutor + AgentQueueProcessor + OpsAgent + CeoAgentService.ProcessAsync 評估
+
+**Phase 4 後續路徑**：Stage 79（A HITL plan confirmation 閘門）→ Stage 80（B 動態 re-planning）→ Stage 78b（剩餘 v4 path 收口）→ WebUI Stage（K + E Token monitoring）→ v5.5 完整收口
+
 ### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
 
 | Stage | 規模 | Forge session | Trial AiTeam | per cycle |

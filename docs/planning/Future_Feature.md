@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v9.6
+> 版本：v9.7
 > 建立日期：2026-04-01
-> 最後更新：2026-05-18（Trial_v22 🟢 全綠 — Stage 75+76+77 整套 5 訊號全綠 + **per-Talent lock contention 真實 fire 量化首次實證** ⭐⭐⭐（Cody slot 連續 3 接力等鎖 4m18s + 8m31.5s / Vera slot 連續 3 接力 / 不同 Talent 真實平行 12:30:10 同秒 Cody+Vera）/ 業務評分 5/5 滿分 + 連續 12 Trial 業務級成功 / Total cycle 並行 -50% 時間縮短首次實證（3 task 並行 20 min vs sequential 推算 40 min）/ cost per file $0.041 新最優 ROI baseline / **v5.5 Phase 3 完整收口** ⭐⭐⭐⭐⭐ — Stage 73+74+75+76+77 5 Stage 連續實證完成）
+> 最後更新：2026-05-18（**Stage 78a ✅ v5.5 Phase 4 C — v4 path dead code 整套砍除** v3.68.0 / Forge spike v1+v2+v3 連續三輪揭真實 + Aria 計劃前 grep 紀律補強候選 3 條累積第 N+1~3 次延伸 / 22+4 檔變動 net -3957 行 / Bot.Tests 113→104 + Generated 127/127 全綠 / Aria gate1 🟡 修補 DefaultSkillRegistry + Test 10/14 + Stage74 T7 + DbSeeder + CLAUDE.md production path 修根因 / Stage 78b 預留 ButtonCallbackRouter v4 routing 砍 + 配套 / 連續 12 Stage 0 follow-up + clean delivery 連續第四次 ⭐⭐⭐⭐ / Trial_v22 🟢 全綠 — Stage 75+76+77 整套 5 訊號全綠 + **per-Talent lock contention 真實 fire 量化首次實證** ⭐⭐⭐（Cody slot 連續 3 接力等鎖 4m18s + 8m31.5s / Vera slot 連續 3 接力 / 不同 Talent 真實平行 12:30:10 同秒 Cody+Vera）/ 業務評分 5/5 滿分 + 連續 12 Trial 業務級成功 / Total cycle 並行 -50% 時間縮短首次實證（3 task 並行 20 min vs sequential 推算 40 min）/ cost per file $0.041 新最優 ROI baseline / **v5.5 Phase 3 完整收口** ⭐⭐⭐⭐⭐ — Stage 73+74+75+76+77 5 Stage 連續實證完成）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---
