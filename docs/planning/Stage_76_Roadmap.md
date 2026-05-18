@@ -356,6 +356,23 @@ Aria 2026-05-18 計劃前 WebSearch 4 議題（task retry / multi-agent failure 
 
 自驗期間 0 揭 follow-up issue / 0 修根因 / 0 二次 commit — 對齊 Stage 75 clean delivery baseline 連續第二次。
 
+### Aria gate2 場景 F 視覺驗收結果（v2.1 / 2026-05-18）
+
+**5 層守門全綠** — Aria gate1 Tier 0+1+Tier 2 #3 build / xUnit 9 case（含 T7 RequeueAsync 行為驗）/ Forge production 自驗（CI/CD success + Migration apply）/ **Aria gate2 場景 F 視覺驗（claude-in-chrome MCP 自驗）** ✅。
+
+**驗證方法**：Aria SQL INSERT 2 fake row（Status='failed' + Status='dead'）→ claude-in-chrome MCP navigate Dashboard `/interactions` → `get_page_text` 確認 DOM 渲染 → SQL DELETE fake row 清理。0 LLM cost / 0 Petra dispatch / 純 UX 驗收。
+
+**驗收訊號完整對齊 Plan v1.1 §F.1**：
+- 「動作」column 真實加在 PetraInbox MudTable ✓
+- failed row 顯示「重跑」按鈕 ✓
+- dead row 顯示「重跑」按鈕 ✓
+- completed row 不顯示「重跑」按鈕 ✓（條件渲染 `@if context.Status == "failed" || "dead"` 對齊）
+- Dashboard 頁腳 v3.66.0 ✓（version bump 真實落地）
+
+**順帶揭議題（不立 FF / 留檔）**：Playwright test infra discovery 整個 project 失效（MSTest 4.0.2 + .NET 10 + Playwright.MSTest 1.52 三方兼容問題 / 連既有 Stage47TokenSettingsTest + Test1 都 0 discover）— Aria 走 claude-in-chrome MCP 替代成功。未來真實需要 Playwright（PR 流程 visual regression 等）才評估修 infra。
+
+**Aria gate2 視覺驗收新模式累積**：claude-in-chrome MCP `navigate + get_page_text` pattern 對「Dashboard UX 改動視覺驗收」場景 ROI 高（5 分鐘搞定 / 0 cost / DOM 結構 + 文字內容雙驗）— 未來類似驗收（Stage 78+ WebUI Talent CRUD / G Token monitoring 視覺化）reference baseline。
+
 ### 踩坑紀錄
 
 1. **Migration MaxAttempts defaultValue 0 雷**（Forge spike 揭）— EF auto-generated Migration 不識別 C# property initializer，預設 `defaultValue: 0`。若 production 既有 row（Trial_v21 留下 5+ row）apply 後 MaxAttempts=0 → 任何 transient fail 立刻 fail-fast 進 Dead Letter（永遠 0 retry）。修法：手動 patch Migration 行 32 `defaultValue: 0 → 3` + 加註解標明對齊 entity initializer。**Trial_v9/Stage 67 「PostgreSQL NULL unique 雷三層修根因」same 紀律延伸 — Migration 不全照 entity C# initializer / 必檢視。**
@@ -372,5 +389,6 @@ Aria 2026-05-18 計劃前 WebSearch 4 議題（task retry / multi-agent failure 
 
 | 版本 | 日期 | 內容 |
 |---|---|---|
+| v2.1 | 2026-05-18 | Aria gate2 場景 F 視覺驗收完成 — Christ 拍板「跳過 Trial_v22 / 直接 Stage 77」+ 順手做場景 F 視覺驗（5 分鐘 / 0 cost）/ 不開 Trial_v22_Plan.md（紀律：Trial = 業務級驗證 / 場景 F 屬 Aria gate2 範圍 / 避免污染 Trial 編號 + 誤導未來 Aria）。**驗證方法**：Aria SQL INSERT 2 fake row（failed + dead）→ claude-in-chrome MCP `navigate + get_page_text` → SQL DELETE 清理。**5 層守門全綠**：Aria gate1 + xUnit 9 case + Forge production 自驗 + Aria gate2 場景 F ✅。**完整對齊 Plan v1.1 §F.1**：「動作」column / failed+dead 顯示重跑按鈕 / completed 不顯示 / Dashboard v3.66.0 真實落地。**順帶揭議題（留檔不立 FF）**：Playwright test infra discovery 整個 project 失效（MSTest 4.0.2 + .NET 10 + Playwright.MSTest 1.52 三方兼容問題）— Aria 走 claude-in-chrome MCP 替代成功 / 未來真實需要 Playwright 才修 infra。**新模式累積**：claude-in-chrome MCP `navigate + get_page_text` pattern 對 Dashboard UX 改動視覺驗收 ROI 高 — 未來類似驗收（Stage 78+ WebUI / G Token monitoring 視覺化）reference baseline。**Stage 76 production-ready 完整收口** / 下個動作：Stage 77 fire-and-forget A2 完整版（Channel + drain + bounded fan-out）。 |
 | v2.0 | 2026-05-18 | Forge 結案第一段 — 實作完成 commit [`051d9df`](https://github.com/darkleong/AiTeam/commit/051d9df) + 本機驗證（`dotnet build` 0 error / `dotnet test` 98/98 + 127/127）+ production 自驗全綠（CI/CD run 25996680029 success / Migration apply / Bot startup OK / petra_inbox 13 欄 + 2 index / MaxAttempts default 3 patch 生效 / 5 v5.5 flag production active / PetraInboxProcessor 新 polling SQL fire confirmed）。**Aria gate1 5 議題（Plan v1.1 3 點修正 incorporated）全收口**。**Forge spike 揭架構盲點修根因 1 處**：MaxAttempts Migration defaultValue 0→3 patch（對齊 Stage 58 結論 N-th 累積）。**0 follow-up bug**：自驗期間 0 揭 issue / 0 修根因 / 0 二次 commit（對齊 Stage 75 clean delivery baseline 連續第二次）。**驗收場景**：A/B/C/D/E/G xUnit 9 case 全綠（100% 覆蓋）/ F/H/I 留 Aria gate2 範圍。**校準錨**：raw 100-130K × ? = ? 總 context（Aria 結案後計算 — 對齊一般架構級重構區間 ×0.43-0.60 第 5 資料點候選）。**等 Aria 接手第二段做 CHANGELOG v3.66.0 + Future_Feature.md v9.3 + Future_Feature_v5.5.md Phase 3 補強 Stage 76 ✅ + Top 5 重排（Trial_v22 升 #1 / Stage 77 fire-and-forget A2 完整版 #2 / Stage 78+ WebUI Talent CRUD + Effort + G Token monitoring #3）**。 |
 | v1.0 | 2026-05-18 | 規劃書建立 — v3.66.0 / M+ 規模 / v5.5 Phase 3 補強（task retry / resume 機制基礎建設 + Trial_v21 揭修補類項目）。**戰略脈絡**：Trial_v21 🟡 部分過揭 1 🔴 設計實作落差（fire-and-forget 留 Stage 77）+ 2 🟡 工程細節（queuePosition race + Status='failed' bug 已修）+ Christ 戰略 question 點破「task 意外停止後架構是否能重跑？」答案「不行」揭 production resilience gap → Christ 2026-05-18 拍板 A2 完整版路線 + Stage 76 範圍重排「功能性 + 修補類」+ WebUI Talent CRUD + Effort + G Token monitoring 推 Stage 78+。**8 子項**：① PetraInbox schema 擴 4 欄（AttemptCount + MaxAttempts + NextRetryAt + DeadAt）+ Migration ② PetraInboxProcessor retry path（exponential backoff 30s × 2 × max 3 + ±20% jitter）③ PetraErrorClassifier（Transient / BusinessRule / Permanent ErrorCategory enum）④ Dead Letter pattern（Status='dead' + DeadAt + MarkDeadAsync）⑤ queuePosition race 修法（🥇 簡化顯示 / 不算精準 N）⑥ Dashboard 重跑按鈕（InteractionCenter PetraInbox section 加 action + RequeueAsync）⑦ xUnit 8 case ⑧ version bump v3.66.0。**計劃前 WebSearch 結論段 5 議題完整 incorporated**（PG queue retry pattern + multi-agent 5 failure modes + LLM retry 標準 config + Polly/Hangfire/BackgroundService 選型 + 人工介入路徑業界紀律）。**設計決策核心**：business rule rejection fail-fast 不 retry（Token 守門 mode 4 紀律）+ Dead Letter 等人工介入（Anthropic claude-progress.txt + Dashboard 重跑按鈕 hybrid 業界主流）+ Discord /retry-task 推 Phase 4（Dashboard cover 主要 use case）+ Stage 76 不修 fire-and-forget 留 Stage 77 互補。**驗收 9 場景**：A schema + Migration / B transient retry exponential backoff / C business rule fail-fast / D Dead Letter exhausted attempts / E queuePosition 簡化顯示 / F Dashboard 重跑按鈕 / G Trial_v21 Status='failed' fix 0 regression / H v4 path 0 regression / I Trial_v22 真實業務驗（多 task 並送 + retry path 真實 fire / per-Talent lock contention 仍 0 fire 留 Stage 77）。**校準錨預期**：對齊一般架構級重構區間 ×0.43-0.60 第 5 資料點候選 / raw 95-140K × 0.50 ≈ 50-70K 總 context / Opus 200K + high 推薦 / cost $3-5。**Phase 3 完整收口路徑**：73 ✅ → 74 ✅ → 75 ✅ → **76**（retry 機制 + 修補類 / 本 Stage）→ **77 預留**（fire-and-forget A2 完整版 Channel + drain + bounded fan-out）→ **78+ 預留**（WebUI Talent CRUD + Effort 擴展 + G Token monitoring 視覺化）→ v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Trial_v22 真實業務驗 → 通過後 Stage 77 開（fire-and-forget A2 完整版）。 |
