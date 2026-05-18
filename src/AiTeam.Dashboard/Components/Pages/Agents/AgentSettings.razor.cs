@@ -209,26 +209,25 @@ public partial class AgentSettings
         if (_isSavingLlm) return;
         if (string.IsNullOrEmpty(agent.Provider) || string.IsNullOrEmpty(agent.Model)) return;
 
-        _isSavingLlm = true;
+        _isSavingLlm   = true;
+        _formError     = null;
         try
         {
             var ok = await AgentService.UpdateProviderModelAsync(agent.Id, agent.Provider, agent.Model);
             if (!ok)
             {
-                Snackbar.Add($"{agent.Name} 儲存失敗：查無 Agent", Severity.Error);
+                _formError = $"{agent.Name} 儲存失敗：查無 Agent";
+                Snackbar.Add(_formError, Severity.Error);
                 return;
             }
             // Stage 38：通知 Bot 端快取失效，下次任務立即生效（無需重啟）
             await BotService.ReloadCacheAsync("agent-config");
             Snackbar.Add($"{agent.Name}：Provider={agent.Provider}、Model={agent.Model} 已更新，Bot Cache 已刷新。", Severity.Success);
         }
-        catch (ArgumentException ex)
-        {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
-        }
         catch (Exception ex)
         {
-            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+            _formError = $"儲存失敗：{ex.Message}";
+            Snackbar.Add(_formError, Severity.Error);
         }
         finally
         {

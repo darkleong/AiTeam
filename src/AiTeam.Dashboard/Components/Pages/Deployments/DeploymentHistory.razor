@@ -8,6 +8,11 @@
     <h2>部署紀錄</h2>
 </div>
 
+@if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_loadError</MudAlert>
+}
+
 <MudTable Items="@_deployments"
           Dense="true"
           Hover="true"

@@ -59,6 +59,7 @@ public partial class RuleManagement
 
     private List<Rule> _rules    = [];
     private bool       _isReloading;
+    private string?    _loadError;
 
     #endregion
 
@@ -72,7 +73,8 @@ public partial class RuleManagement
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"規則載入失敗：{ex.Message}", Severity.Error);
+            _loadError = $"規則載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
         }
     }
 

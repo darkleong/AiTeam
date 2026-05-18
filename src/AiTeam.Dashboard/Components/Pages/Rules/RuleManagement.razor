@@ -21,7 +21,11 @@
     </MudStack>
 </div>
 
-@if (_rules.Count == 0)
+@if (_loadError is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-3">@_loadError</MudAlert>
+}
+else if (_rules.Count == 0)
 {
     <div class="empty-state">
         <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.Assignment" Size="Size.Large" Color="Color.Default" /></div>

@@ -20,6 +20,7 @@ public partial class DeploymentHistory
     private TaskItemDto?      _selectedTask;
     private List<TaskLogDto>  _selectedLogs = [];
     private bool              _isDrawerOpen;
+    private string?           _loadError;
 
     #endregion
 
@@ -38,7 +39,8 @@ public partial class DeploymentHistory
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"部署紀錄載入失敗：{ex.Message}", Severity.Error);
+            _loadError = $"部署紀錄載入失敗：{ex.Message}";
+            Snackbar.Add(_loadError, Severity.Error);
         }
     }
 
