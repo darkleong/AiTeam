@@ -52,11 +52,14 @@ public class PetraOrchestratorService(
     private int _roundRobinCounter;
 
     /// <summary>啟動新 session — Petra 動態決策 + BuildSequential dispatch。taskGroupId 可為 null（spike forward path 無 TaskGroup）。
-    /// Stage 77：標 virtual 供 xUnit T6 test-only subclass override stub（Stage 76 retry path 搬遷整合 regression test cover）。</summary>
+    /// Stage 77：標 virtual 供 xUnit T6 test-only subclass override stub（Stage 76 retry path 搬遷整合 regression test cover）。
+    /// Stage 79：v5.5 image flow 補完 — 加 images param（PetraDispatchWorker 從 PetraInbox.Attachments 反序列化後傳入）。
+    /// images null / 0 count → 0 image propagation 純文字 dispatch 對齊 Trial_v22 baseline 0 行為改變。</summary>
     public virtual async Task<PetraOrchestratorResult> StartAsync(
         Guid? taskGroupId,
         string taskInput,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<ImageAttachment>? images = null)
     {
         var ctx = BuildSessionContext(taskGroupId);
         var session = sessionRepo.Start(taskGroupId);
@@ -84,15 +87,16 @@ public class PetraOrchestratorService(
                     session.Id, taskGroupId, talentsList.Count, useV5SubtaskPlanning, sessionWithCtx.WorkingDir);
 
                 // 1. Decide — flag=true 走 JSON SubtaskPlan / flag=false 走 Stage 69 既有 Skill 序列線性 chain（Linear 包成 SubtaskPlan 統一介面）
+                // Stage 79：images 傳 Petra LLM call sites（GeminiProvider multimodal 真實看圖 / Petra 拍板 NeedsImageContext per subtask）
                 SubtaskPlan plan;
                 List<ITalent> talentPicks;
                 if (useV5SubtaskPlanning)
                 {
-                    (plan, talentPicks) = await DecideTalentsWithPlanAsync(taskInput, talentsList, sessionWithCtx, ct);
+                    (plan, talentPicks) = await DecideTalentsWithPlanAsync(taskInput, talentsList, sessionWithCtx, ct, images);
                 }
                 else
                 {
-                    var (skills, picks) = await DecideTalentsAsync(taskInput, talentsList, sessionWithCtx, ct);
+                    var (skills, picks) = await DecideTalentsAsync(taskInput, talentsList, sessionWithCtx, ct, images);
                     plan = SubtaskPlan.Linear(skills);
                     talentPicks = picks;
                 }
@@ -126,7 +130,7 @@ public class PetraOrchestratorService(
 
                 await DispatchTalentsAsync(
                     session.Id, taskInput, plan, talentPicks, talentAgents,
-                    useV5Memory, talentNameToIdMap, ct);
+                    useV5Memory, talentNameToIdMap, images, ct);
                 await db.SaveChangesAsync(ct);
 
                 dispatchNames = talentPicks.Select(t => t.Name).ToList();
@@ -139,7 +143,8 @@ public class PetraOrchestratorService(
                     session.Id, taskGroupId, toolsList.Count, sessionWithCtx.WorkingDir);
 
                 // 1. DecideAsync — Petra LLM 動態決策 capability 序列
-                var (caps, picks) = await DecideAsync(taskInput, toolsList, sessionWithCtx, ct);
+                // Stage 79：images 傳 Petra LLM call site（v5 path 對齊 v5.5 既有紀律）
+                var (caps, picks) = await DecideAsync(taskInput, toolsList, sessionWithCtx, ct, images);
                 if (picks.Count == 0)
                 {
                     logger.LogWarning("Petra 動態決策回空序列 sessionId={SessionId}", session.Id);
@@ -153,7 +158,7 @@ public class PetraOrchestratorService(
                 //    framework BuildSequential edge 在 nuget 1.3.0 不會把 first agent output 餵下個 agent，自管 chain 完全 bypass。
                 //    BuildSequential 路徑既有 import / LogWorkflowEvent / _executorAccumulators 保留 reference（未來 framework 修 #1308 後評估回切）。
                 var workerAgents = picks.Select(t => t.CreateAgent(sessionWithCtx)).ToArray();
-                await DispatchWorkersAsync(session.Id, taskInput, caps, picks, workerAgents, ct);
+                await DispatchWorkersAsync(session.Id, taskInput, caps, picks, workerAgents, images, ct);
                 await db.SaveChangesAsync(ct);
 
                 dispatchNames = picks.Select(p => p.Name).ToList();
@@ -214,18 +219,20 @@ public class PetraOrchestratorService(
     /// <summary>
     /// DecideAsync — Petra LLM 動態決策 capability 序列。
     /// 三 trigger 條件 prompt（升級版見 BuildPetraSystemPrompt）+ 回傳 List&lt;IAgentTool&gt; picks。
+    /// Stage 79：v5.5 image flow 補完 — images 傳給 ILlmProvider.CompleteAsync（GeminiProvider multimodal 真實看圖）。
     /// </summary>
     private async Task<(List<string> Capabilities, List<IAgentTool> Picks)> DecideAsync(
         string taskInput,
         IReadOnlyList<IAgentTool> tools,
         PetraSessionContext ctx,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<ImageAttachment>? images = null)
     {
         var capabilityRoster = string.Join(", ", tools.SelectMany(t => t.Capabilities).Distinct());
         var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(capabilityRoster, useSubtaskPlanning: false, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
-        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
+        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
 
@@ -323,6 +330,7 @@ public class PetraOrchestratorService(
         IReadOnlyList<string> decidedCapabilities,
         IReadOnlyList<IAgentTool> picks,
         AIAgent[] workerAgents,
+        IReadOnlyList<ImageAttachment>? images,
         CancellationToken ct)
     {
         var summaries = new List<WorkerDispatchSummary>(workerAgents.Length);
@@ -333,8 +341,9 @@ public class PetraOrchestratorService(
             // picks 與 decidedCapabilities 同 index 對齊 — DecideAsync 已 filter unknown cap 後保持順序
             var capability = i < decidedCapabilities.Count ? decidedCapabilities[i] : picks[i].Capabilities.FirstOrDefault() ?? "";
 
+            // Stage 79：v5 path 簡化 — 第一個 worker 一律附 image（v5 path 0 SubtaskPlan / 0 NeedsImageContext flag）/ 後續 worker 純 text dispatch
             var inputMessages = i == 0
-                ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
+                ? BuildFirstWorkerInput(taskInput, images)
                 : BuildNextWorkerInput(taskInput, summaries);
 
             logger.LogInformation(
@@ -379,6 +388,29 @@ public class PetraOrchestratorService(
     }
 
     /// <summary>
+    /// Stage 79：v5.5 image flow 補完 — 第一個 worker input 構造（含 image AIContent 真實 propagate）。
+    /// v5 path（DispatchWorkersAsync caller）簡化紀律：images != null AND 第一個 worker → 附 image / 0 條件性 NeedsImageContext flag（v5 path 0 SubtaskPlan）。
+    /// v5.5 path 走 BuildInputMessagesForSubtaskAsync 條件性 dispatch（per-subtask NeedsImageContext 紀律）。
+    /// </summary>
+    private static List<ChatMessage> BuildFirstWorkerInput(
+        string taskInput,
+        IReadOnlyList<ImageAttachment>? images)
+    {
+        if (images is null || images.Count == 0)
+        {
+            return new List<ChatMessage> { new(ChatRole.User, taskInput) };
+        }
+
+        var contents = new List<AIContent> { new TextContent(taskInput) };
+        foreach (var img in images)
+        {
+            var bytes = Convert.FromBase64String(img.Base64Data);
+            contents.Add(new DataContent(bytes, img.MediaType));
+        }
+        return new List<ChatMessage> { new(ChatRole.User, contents) };
+    }
+
+    /// <summary>
     /// Stage 66：產 tool role message content — worker dispatch 結果摘要寫入 PetraSessionMessages。
     /// 抽 method 留 future prompt DB 化 inject 點（同 BuildNextWorkerInput 紀律）。
     /// </summary>
@@ -398,14 +430,16 @@ public class PetraOrchestratorService(
         string taskInput,
         IReadOnlyList<ITalent> talents,
         PetraSessionContext ctx,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<ImageAttachment>? images = null)
     {
         // skill roster 從 talent.Skills 取（vs 既有 DecideAsync 取 tools.SelectMany(Capabilities)）— 對 LLM 等價
         var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
         var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(skillRoster, useSubtaskPlanning: false, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
-        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
+        // Stage 79：v5.5 image flow 補完 — images 傳給 ILlmProvider.CompleteAsync（GeminiProvider multimodal 真實看圖）
+        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
 
@@ -466,13 +500,15 @@ public class PetraOrchestratorService(
         string taskInput,
         IReadOnlyList<ITalent> talents,
         PetraSessionContext ctx,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<ImageAttachment>? images = null)
     {
         var skillRoster = string.Join(", ", talents.SelectMany(t => t.Skills).Distinct(StringComparer.OrdinalIgnoreCase));
         var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(skillRoster, useSubtaskPlanning: true, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
-        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct);
+        // Stage 79：v5.5 image flow 補完 — images 傳給 ILlmProvider.CompleteAsync（GeminiProvider multimodal 真實看圖 + Petra 拍板 NeedsImageContext per subtask）
+        var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
 
@@ -537,6 +573,7 @@ public class PetraOrchestratorService(
         AIAgent[] talentAgents,
         bool useV5Memory,
         IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（per-Talent lock 永遠用到 / Forge spike 揭架構盲點修根因）
+        IReadOnlyList<ImageAttachment>? images,                 // Stage 79：v5.5 image flow 補完 — 條件性 per-subtask NeedsImageContext flag 才 propagate
         CancellationToken ct)
     {
         // Stage 75：talentNameToIdMap 永遠非 null（caller StartAsync 提前 build）— memoryEnabled 直接看 useV5Memory flag
@@ -584,7 +621,8 @@ public class PetraOrchestratorService(
 
                     var inputMessages = await BuildInputMessagesForSubtaskAsync(
                         taskInput, summariesSnapshot, levelIdx,
-                        talentName, talentNameToIdMap, memoryEnabled, sessionId, ct);
+                        talentName, talentNameToIdMap, memoryEnabled, sessionId,
+                        plan.Subtasks[i], images, ct);
 
                     using var lockHandle = await talentLockService.AcquireAsync(talentId, ct);
                     logger.LogInformation(
@@ -616,7 +654,8 @@ public class PetraOrchestratorService(
 
                 var inputMessages = await BuildInputMessagesForSubtaskAsync(
                     taskInput, summariesSnapshot, levelIdx,
-                    talentName, talentNameToIdMap, memoryEnabled, sessionId, ct);
+                    talentName, talentNameToIdMap, memoryEnabled, sessionId,
+                    plan.Subtasks[i], images, ct);
 
                 logger.LogInformation(
                     "PetraOrchestrator v5.5 自管 chain dispatch Level={Level}/{TotalLevels} sequential subtaskId={SubtaskId} talent={Talent} skill={Skill} dependsOn=[{DependsOn}] inputMsgs={N} sessionId={SessionId}",
@@ -647,6 +686,11 @@ public class PetraOrchestratorService(
     /// Stage 74：v5.5 Phase 3 Step 8 — 抽出既有 dispatch input messages 構造（base chain + 可選 memory inject）。
     /// 純讀 / 0 DB write — 並行段（多 subtask 同 level）+ sequential 段（單 subtask）共用 helper。
     /// memory 走 IServiceScopeFactory query / talentNameToIdMap caller 傳（lookup 0 db.Talents query）。
+    ///
+    /// Stage 79：v5.5 image flow 補完 — 條件性 image AIContent dispatch。
+    /// currentSubtask.NeedsImageContext=true AND images != null → first user message 加 image AIContent（DataContent）
+    /// currentSubtask.NeedsImageContext=false 或 images=null → 純 text dispatch（既有 baseline 0 行為改變）
+    /// 對齊業界紀律「pass images only to worker agents that need them」。
     /// </summary>
     private async Task<List<ChatMessage>> BuildInputMessagesForSubtaskAsync(
         string taskInput,
@@ -656,11 +700,30 @@ public class PetraOrchestratorService(
         IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（caller 永遠 build）
         bool memoryEnabled,
         Guid sessionId,
+        Subtask currentSubtask,                                 // Stage 79：caller 傳 plan.Subtasks[i]
+        IReadOnlyList<ImageAttachment>? images,                 // Stage 79：v5.5 image flow 補完 — 條件性 propagate
         CancellationToken ct)
     {
         var baseInput = levelIdx == 0
             ? new List<ChatMessage> { new(ChatRole.User, taskInput) }
             : BuildNextWorkerInput(taskInput, summariesSnapshot);
+
+        // Stage 79：條件性 image AIContent dispatch — NeedsImageContext=true AND images != null → 替換 first user message 為 multi-modal Contents
+        if (currentSubtask.NeedsImageContext && images is { Count: > 0 }
+            && baseInput.Count > 0 && baseInput[0].Role == ChatRole.User)
+        {
+            var firstText = baseInput[0].Text ?? "";
+            var contents = new List<AIContent> { new TextContent(firstText) };
+            foreach (var img in images)
+            {
+                var bytes = Convert.FromBase64String(img.Base64Data);
+                contents.Add(new DataContent(bytes, img.MediaType));
+            }
+            baseInput[0] = new ChatMessage(ChatRole.User, contents);
+            logger.LogInformation(
+                "Stage 79 Petra dispatch image AIContent → Worker talent={Talent} subtaskId={Id} imageCount={Count}",
+                talentName, currentSubtask.Id, images.Count);
+        }
 
         if (memoryEnabled && talentNameToIdMap.TryGetValue(talentName, out var talentId))
         {
@@ -1028,6 +1091,27 @@ public class PetraOrchestratorService(
 - 真不同 scope（拆 N subtask）：任務含真正不同性質（實作 + review + 測試 或 跨 module 獨立功能）+ 跨 Skill 串接
 - 直覺判準：「一句話描述的 code 任務」= 線性整包 / 「A 完成後才能做 B 且性質真的不同」= 拆解
 
+【判斷每個 subtask 是否需要附圖 context】（Stage 79：v5.5 image flow 補完）
+
+對齊業界紀律「only give each agent the tools it actually needs / pass images only to worker agents that need them」。
+
+判準：
+- UI 修改 / 視覺 bug / mockup 對齊 → needsImageContext: true（Cody UI 修 / Vera UI review / Quinn UI E2E test）
+- 純後端 logic / 文件 / 測試 logic → needsImageContext: false（Cody backend / Sage docs / Quinn logic test）
+- 預設 false（保守紀律：未明確要求視覺 context 時不傳）
+
+★ Few-shot 範例（UI bug case / 含 image context）：
+  輸入：「修 Dashboard 操作中心 BossInteraction 卡片排版（附截圖）」
+  輸出：{"subtasks":[{"id":1,"skill":"code_implementation","description":"修 BossInteraction 卡片排版","needsImageContext":true},{"id":2,"skill":"code_review","description":"review UI 變動","needsImageContext":true}],"dependencies":[{"from":1,"to":2,"type":"sequential"}]}
+
+★ Few-shot 範例（後端 case / 0 image context）：
+  輸入：「補 PetraInboxRepository.GetRecentAsync xUnit test」
+  輸出：{"subtasks":[{"id":1,"skill":"qa_testing","description":"補 PetraInboxRepository xUnit test","needsImageContext":false}],"dependencies":[]}
+
+★ Few-shot 範例（docs case / 0 image context）：
+  輸入：「Stage 79 結案紀錄章節寫 Roadmap.md」
+  輸出：{"subtasks":[{"id":1,"skill":"documentation","description":"寫 Stage 79 Roadmap 實作紀錄","needsImageContext":false}],"dependencies":[]}
+
 """
             : """
 
@@ -1049,6 +1133,7 @@ public class PetraOrchestratorService(
 - 反例：「我建議拆成 3 個 subtask」（錯：解釋）
 - 反例：code_implementation|code_review（錯：舊 `|` 分隔字串格式 — Stage 70 已升級 JSON）
 - 正例：{"subtasks":[{"id":1,"skill":"code_implementation","description":"..."}],"dependencies":[]}
+- 正例（Stage 79 含 needsImageContext）：{"subtasks":[{"id":1,"skill":"code_implementation","description":"...","needsImageContext":true}],"dependencies":[]}
 """
             : """
 【輸出紀律】

@@ -1,3 +1,4 @@
+using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
@@ -104,8 +105,10 @@ public class PetraDispatchWorker(
     /// <summary>Stage 77：dispatch 段 — load row + orchestrator.StartAsync + Stage 76 retry path 3 路分支（搬遷 0 邏輯改變）。</summary>
     internal async Task DispatchOneAsync(int workerIndex, Guid rowId, CancellationToken ct)
     {
-        // load row userInput（PetraInboxProcessor 已切 running + push channel / 此處只 fetch userInput）
+        // load row userInput + Attachments（PetraInboxProcessor 已切 running + push channel / 此處只 fetch）
+        // Stage 79：v5.5 image flow 補完 — 反序列化 Attachments / Type="image" → ImageAttachment list
         string userInput;
+        List<ImageAttachment>? images = null;
         await using (var loadScope = serviceProvider.CreateAsyncScope())
         {
             var loadDb = loadScope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -116,13 +119,17 @@ public class PetraDispatchWorker(
                 return;
             }
             userInput = row.UserInput;
+            if (!string.IsNullOrEmpty(row.Attachments))
+            {
+                images = DeserializeImageAttachments(row.Attachments, logger);
+            }
         }
 
         _ = pushService.PushInteractionUpdateAsync();
 
         logger.LogInformation(
-            "PetraDispatchWorker consumer={Index} pickup row={Id} userInputLen={Len} — 開新 Scoped PetraOrchestratorService",
-            workerIndex, rowId, userInput.Length);
+            "PetraDispatchWorker consumer={Index} pickup row={Id} userInputLen={Len} imageCount={ImgCount} — 開新 Scoped PetraOrchestratorService",
+            workerIndex, rowId, userInput.Length, images?.Count ?? 0);
 
         // 處理段 — 開新 Scoped PetraOrchestratorService instance（per-Task / multi-session 並存）
         try
@@ -131,7 +138,8 @@ public class PetraDispatchWorker(
             await using (var runScope = serviceProvider.CreateAsyncScope())
             {
                 var orchestrator = runScope.ServiceProvider.GetRequiredService<PetraOrchestratorService>();
-                result = await orchestrator.StartAsync(taskGroupId: null, userInput, ct);
+                // Stage 79：images 傳 StartAsync（PetraOrchestratorService 內部 propagate 3 LLM call sites + dispatch chain 條件性 worker AIContent）
+                result = await orchestrator.StartAsync(taskGroupId: null, userInput, ct, images);
             }
 
             // Trial_v21 揭：PetraOrchestratorService 內部 catch Exception 後 return Failure result 而非拋出，
@@ -264,5 +272,39 @@ public class PetraDispatchWorker(
         _dispatchCts.Dispose();
         base.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Stage 79：v5.5 image flow 補完 — 反序列化 PetraInbox.Attachments JSON。
+    /// 預期格式：[{ "type": "image", "base64Data": "...", "mediaType": "image/png" }, ...]
+    /// 半抽象 future-friendly：未知 type 略過 / 未來擴展 PDF/document 加 type 不擾既有 image dispatch。
+    /// 容錯：JSON parse 失敗 log warning + return null（caller 純文字 dispatch 0 fire-stop）。
+    /// </summary>
+    private static List<ImageAttachment>? DeserializeImageAttachments(string json, ILogger logger)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array) return null;
+
+            var list = new List<ImageAttachment>();
+            foreach (var elem in doc.RootElement.EnumerateArray())
+            {
+                if (elem.TryGetProperty("type", out var typeProp)
+                    && typeProp.GetString() == "image"
+                    && elem.TryGetProperty("base64Data", out var dataProp)
+                    && elem.TryGetProperty("mediaType", out var mediaProp))
+                {
+                    list.Add(new ImageAttachment(dataProp.GetString() ?? "", mediaProp.GetString() ?? ""));
+                }
+                // 未知 type 略過（半抽象 future-friendly 紀律）
+            }
+            return list.Count > 0 ? list : null;
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            logger.LogWarning(ex, "Stage 79：PetraInbox Attachments 反序列化失敗 jsonLen={Len}", json.Length);
+            return null;
+        }
     }
 }

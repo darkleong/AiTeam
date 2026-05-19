@@ -279,7 +279,9 @@ public class PetraOrchestratorServiceTests
         Assert.NotNull(method);
         var task = (Task)method!.Invoke(orch, new object?[]
         {
-            session.Id, "原始任務 input", caps, picks, workerAgents, CancellationToken.None
+            session.Id, "原始任務 input", caps, picks, workerAgents,
+            null,   // Stage 79：images null（Test 12 不驗 image dispatch / DispatchWorkersAsync 簽名擴 images param 對齊）
+            CancellationToken.None
         })!;
         await task;
 
@@ -660,6 +662,48 @@ public class PetraOrchestratorServiceTests
         Assert.Empty(plan5.Dependencies);   // 99 不存在 + 自指向 1→1 都 skip
     }
 
+    // ─── Test 31（Stage 79）：SubtaskPlanParser NeedsImageContext field 解析（含 missing field 自動 false / 顯式 true / 顯式 false）─
+    [Fact]
+    public void Test31_SubtaskPlanParser_HandlesNeedsImageContextField()
+    {
+        // case 1：missing field → default false（backwards-compatible 對齊 Stage 70+ Petra LLM JSON）
+        var raw1 = """{"subtasks":[{"id":1,"skill":"code_implementation","description":"impl"}],"dependencies":[]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw1, out var plan1, out _));
+        Assert.Single(plan1.Subtasks);
+        Assert.False(plan1.Subtasks[0].NeedsImageContext);
+
+        // case 2：顯式 needsImageContext: true（UI bug case）
+        var raw2 = """{"subtasks":[{"id":1,"skill":"code_implementation","description":"修 UI bug","needsImageContext":true},{"id":2,"skill":"code_review","description":"review UI","needsImageContext":true}],"dependencies":[{"from":1,"to":2,"type":"sequential"}]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw2, out var plan2, out _));
+        Assert.Equal(2, plan2.Subtasks.Count);
+        Assert.True(plan2.Subtasks[0].NeedsImageContext);
+        Assert.True(plan2.Subtasks[1].NeedsImageContext);
+
+        // case 3：顯式 needsImageContext: false（後端 / docs case）
+        var raw3 = """{"subtasks":[{"id":1,"skill":"qa_testing","description":"後端 logic test","needsImageContext":false}],"dependencies":[]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw3, out var plan3, out _));
+        Assert.False(plan3.Subtasks[0].NeedsImageContext);
+
+        // case 4：mixed（一個 true 一個 missing → 預設 false）
+        var raw4 = """{"subtasks":[{"id":1,"skill":"code_implementation","description":"UI 修","needsImageContext":true},{"id":2,"skill":"documentation","description":"寫 doc"}],"dependencies":[{"from":1,"to":2,"type":"sequential"}]}""";
+        Assert.True(SubtaskPlanParser.TryParse(raw4, out var plan4, out _));
+        Assert.True(plan4.Subtasks[0].NeedsImageContext);
+        Assert.False(plan4.Subtasks[1].NeedsImageContext);   // missing → default false
+    }
+
+    // ─── Test 32（Stage 79）：SubtaskPlan.Linear / Empty NeedsImageContext default false（backwards-compatible 守護）─
+    [Fact]
+    public void Test32_SubtaskPlan_LinearAndEmpty_DefaultNeedsImageContextFalse()
+    {
+        // Linear factory（C# record positional param default false 自動對齊）
+        var linear = SubtaskPlan.Linear(new[] { "code_implementation", "code_review", "qa_testing" });
+        Assert.Equal(3, linear.Subtasks.Count);
+        Assert.All(linear.Subtasks, s => Assert.False(s.NeedsImageContext));
+
+        // Empty factory（0 subtask）
+        Assert.Empty(SubtaskPlan.Empty.Subtasks);
+    }
+
     // ─── Test 25（Stage 70）：SubtaskPlanTopologicalSort — Linear / 鏈 / 並行 / cycle ──
     [Fact]
     public void Test25_SubtaskPlanTopologicalSort_HandlesLinearAndChainAndParallelAndCycle()
@@ -794,6 +838,7 @@ public class PetraOrchestratorServiceTests
             new AIAgent[] { agent },
             true,
             talentNameToIdMap,
+            null,   // Stage 79：images null（Test 29 不驗 image dispatch / DispatchTalentsAsync 簽名擴 images param 對齊）
             CancellationToken.None
         })!;
         await task;
@@ -833,6 +878,7 @@ public class PetraOrchestratorServiceTests
             new AIAgent[] { agent },
             true,
             talentNameToIdMap,
+            null,   // Stage 79：images null（Test 30 不驗 image dispatch / DispatchTalentsAsync 簽名擴 images param 對齊）
             CancellationToken.None
         })!;
         await task;

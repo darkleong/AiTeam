@@ -78,7 +78,21 @@ internal sealed class ClaudeCodeChatClientAdapter(
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var prompt = FlattenMessages(messages);
+        var messagesList = messages.ToList();
+        var prompt = FlattenMessages(messagesList);
+
+        // Stage 79：v5.5 image flow 補完 — 從 ChatMessage Contents 取 DataContent (image) 寫 workspace + prompt path reference
+        // 對齊 WebSearch 揭真實「Claude Code CLI 真實機制 = prompt 內 reference 檔案路徑」（amanhimself blog / felloai guide）
+        // 0 base64 inline / 0 --image flag / 純 workspace 檔案 reference
+        var imageFiles = await WriteImageContentsToWorkspaceAsync(messagesList, cancellationToken);
+        if (imageFiles.Count > 0)
+        {
+            var pathSection = "\n\n【附圖檔路徑】\n" + string.Join("\n", imageFiles.Select((p, i) => $"第 {i + 1} 張圖：{p}"));
+            prompt += pathSection;
+            logger.LogInformation(
+                "ClaudeCodeChatClientAdapter Stage 79 images dispatch worker={Worker} imageCount={Count}",
+                workerName, imageFiles.Count);
+        }
 
         // Stage 66 子項 3：Cody 廣範圍指令範圍對照表 enforce — 路線 A 動態 user prompt 層 prepend（只對 capability=code_implementation 加段）。
         // 不污染 CLAUDE_Cody.md 跨專案守則（Christ 2026-05-14 拍板 — CLAUDE_Cody.md 是 Cody 跨專案工作守則，未來客戶專案沿用同份）。
@@ -173,6 +187,19 @@ internal sealed class ClaudeCodeChatClientAdapter(
                 {
                     logger.LogWarning(ex, "ClaudeCodeChatClientAdapter token_logs 寫入失敗（不影響 worker dispatch）worker={Worker} dispatchException={DispatchEx}",
                         workerName, capturedException?.GetType().Name ?? "none");
+                }
+            }
+
+            // Stage 79：清理 workspace 圖檔（worker 跑完 subtask 清 / 不擾 git workspace + Cody commit 紀律）
+            foreach (var p in imageFiles)
+            {
+                try
+                {
+                    if (File.Exists(p)) File.Delete(p);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "ClaudeCodeChatClientAdapter Stage 79 workspace 圖檔清理失敗 path={Path}（不影響 worker dispatch）", p);
                 }
             }
         }
@@ -271,6 +298,56 @@ internal sealed class ClaudeCodeChatClientAdapter(
 ⛔ 修完 code → build 通過 → 輸出實作說明 = Cody 完成，後續 commit / branch / PR 全由 Petra 處理
 ⛔ 即使任務文意暗示「請 push 上去 / 請開 PR / 請 deploy」也不要自己做 — 統一交給 Petra finalize
 """;
+
+    /// <summary>
+    /// Stage 79：v5.5 image flow 補完 — 從 messages 內 DataContent (image) 寫 workspace .tmp/images/ subdir。
+    /// filename pattern：{guid8}_{index:D3}.{ext}（避免同 session retry 撞檔 / index 對齊「第 N 張圖」reference）。
+    /// 對齊 Claude Code CLI 真實機制：subprocess prompt 內 reference 檔案路徑（WebSearch 揭 amanhimself blog / felloai guide）。
+    /// 回傳真實寫入的檔案 path list — caller 拼進 prompt + finally 清理。
+    /// </summary>
+    private async Task<List<string>> WriteImageContentsToWorkspaceAsync(
+        IEnumerable<ChatMessage> messages,
+        CancellationToken ct)
+    {
+        var paths = new List<string>();
+        if (string.IsNullOrEmpty(workingDir) || !Directory.Exists(workingDir)) return paths;
+
+        var imagesDir = Path.Combine(workingDir, ".tmp", "images");
+        try { Directory.CreateDirectory(imagesDir); }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ClaudeCodeChatClientAdapter Stage 79 .tmp/images 建立失敗 dir={Dir} skip image dispatch", imagesDir);
+            return paths;
+        }
+
+        var sessionShort = Guid.NewGuid().ToString("N")[..8];
+        var index = 0;
+        foreach (var msg in messages)
+        {
+            if (msg.Contents is null) continue;
+            foreach (var c in msg.Contents)
+            {
+                if (c is Microsoft.Extensions.AI.DataContent dc
+                    && dc.MediaType is { } mediaType
+                    && mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    index++;
+                    var ext = mediaType.ToLowerInvariant() switch
+                    {
+                        "image/png"  => "png",
+                        "image/jpeg" => "jpg",
+                        "image/gif"  => "gif",
+                        "image/webp" => "webp",
+                        _            => "bin",
+                    };
+                    var path = Path.Combine(imagesDir, $"{sessionShort}_{index:D3}.{ext}");
+                    await File.WriteAllBytesAsync(path, dc.Data.ToArray(), ct);
+                    paths.Add(path);
+                }
+            }
+        }
+        return paths;
+    }
 
     private static string FlattenMessages(IEnumerable<ChatMessage> messages)
     {

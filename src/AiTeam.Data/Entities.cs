@@ -488,4 +488,10 @@ public class PetraInbox
 
     /// <summary>進 Dead Letter 時間（exhausted attempts 後標）— NULL = 未進 DLQ。</summary>
     public DateTime? DeadAt { get; set; }
+
+    // Stage 79：v5.5 image flow 補完 — 半抽象 future-friendly schema（Attachments jsonb + Type discriminator）
+    /// <summary>附件（半抽象 future-friendly）。JSON 結構：[{ "type": "image", "base64Data": "...", "mediaType": "image/png" }, ...]
+    /// Stage 79 baseline 只實作 Type="image" / 未來擴展 PDF / document 0 schema migration。
+    /// nullable 對齊 backwards-compatible（既有 row Attachments=NULL 不擾）。</summary>
+    public string? Attachments { get; set; }
 }

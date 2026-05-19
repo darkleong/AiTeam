@@ -22,7 +22,13 @@ internal enum DependencyType
     Nested,
 }
 
-internal sealed record Subtask(int Id, string SkillName, string Description);
+/// <summary>
+/// Stage 70：subtask 拆解單元（Id 從 1 起算 / SkillName 對齊 ISkillRegistry / Description 一句話描述 scope）。
+/// Stage 79：v5.5 image flow 補完 — 加 NeedsImageContext flag（Petra LLM 條件性決定每個 subtask 是否傳 image 給 Worker）。
+/// 對齊業界紀律「only give each agent the tools it actually needs / pass images only to worker agents that need them」。
+/// default false 對齊 backwards-compatible（Linear / Empty / 既有 Petra LLM JSON 0 field 自動 false）。
+/// </summary>
+internal sealed record Subtask(int Id, string SkillName, string Description, bool NeedsImageContext = false);
 
 internal sealed record DependencyEdge(int FromId, int ToId, DependencyType Type);
 
@@ -120,7 +126,8 @@ internal static class SubtaskPlanParser
                 error = $"subtask id={s.Id} has empty skill";
                 return false;
             }
-            subtasks.Add(new Subtask(s.Id, s.Skill.Trim(), s.Description ?? string.Empty));
+            // Stage 79：NeedsImageContext default false（既有 Petra LLM JSON 0 field 自動 false / backwards-compatible）
+            subtasks.Add(new Subtask(s.Id, s.Skill.Trim(), s.Description ?? string.Empty, s.NeedsImageContext));
         }
 
         var validIds = subtasks.Select(s => s.Id).ToHashSet();
@@ -165,6 +172,8 @@ internal static class SubtaskPlanParser
         public int Id { get; set; }
         public string? Skill { get; set; }
         public string? Description { get; set; }
+        /// <summary>Stage 79：v5.5 image flow 補完 — Petra LLM 條件性決定每個 subtask 是否傳 image 給 Worker。default false 對齊 backwards-compatible。</summary>
+        public bool NeedsImageContext { get; set; } = false;
     }
 
     private sealed class DependencyDto

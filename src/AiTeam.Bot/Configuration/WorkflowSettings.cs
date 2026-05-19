@@ -113,4 +113,14 @@ public class WorkflowSettings
     /// AppSettings 表 key = "Workflow:MaxConcurrentPetra"，DB 優先，appsettings.json fallback。
     /// 啟動時讀一次：後續 SQL UPDATE 需 Bot 重啟生效（動態 reload N consumer 非當前 Stage 範圍 / 對齊「自己用爽 / 不過早 over-engineer」）。</summary>
     public int MaxConcurrentPetra { get; set; } = 3;
+
+    /// <summary>Stage 79：v5.5 image flow 補完 — per task max attachment count（對齊 Claude Code CLI + Claude API 真實上限）。
+    /// 範圍守 [1, 20]（超出 fallback default）。
+    /// AppSettings 表 key = "Workflow:MaxAttachmentsPerTask"，DB 優先，appsettings.json fallback。</summary>
+    public int MaxAttachmentsPerTask { get; set; } = 5;
+
+    /// <summary>Stage 79：v5.5 image flow 補完 — per attachment max size MB（對齊 Claude Code CLI + Claude API 5 MB per image 真實上限）。
+    /// 範圍守 [1, 20]（超出 fallback default）。
+    /// AppSettings 表 key = "Workflow:MaxAttachmentSizeMB"，DB 優先，appsettings.json fallback。</summary>
+    public int MaxAttachmentSizeMB { get; set; } = 5;
 }

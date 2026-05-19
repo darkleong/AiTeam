@@ -13,15 +13,19 @@ namespace AiTeam.Data.Repositories;
 /// </summary>
 public class PetraInboxRepository(AppDbContext db)
 {
-    /// <summary>建新 PetraInbox row（pending 狀態 — caller SaveChangesAsync 後 Id 產生）。</summary>
-    public PetraInbox Enqueue(string userInput, string source)
+    /// <summary>
+    /// 建新 PetraInbox row（pending 狀態 — caller SaveChangesAsync 後 Id 產生）。
+    /// Stage 79：v5.5 image flow 補完 — attachmentsJson nullable（pre-serialized JSON 字串 / Data layer 0 type 依賴 / 對齊半抽象 future-friendly schema 紀律）。
+    /// </summary>
+    public PetraInbox Enqueue(string userInput, string source, string? attachmentsJson = null)
     {
         var row = new PetraInbox
         {
-            UserInput = userInput,
-            Source = source,
-            Status = "pending",
-            EnqueuedAt = DateTime.UtcNow,
+            UserInput   = userInput,
+            Source      = source,
+            Status      = "pending",
+            EnqueuedAt  = DateTime.UtcNow,
+            Attachments = attachmentsJson,
         };
         db.PetraInbox.Add(row);
         return row;

@@ -48,7 +48,7 @@
                         <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" />
                         <MudText Typo="Typo.body2">點擊選擇或拖移圖片到此處</MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            最多 5 張，每張 ≤ 5MB，支援 PNG / JPEG / GIF / WebP
+                            最多 @_maxFiles 張，每張 ≤ @(_maxFileSize / 1024 / 1024)MB，支援 PNG / JPEG / GIF / WebP
                         </MudText>
                     </MudStack>
                 </MudPaper>

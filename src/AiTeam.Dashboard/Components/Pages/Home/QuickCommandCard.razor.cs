@@ -1,3 +1,4 @@
+using AiTeam.Dashboard.Services;
 using Microsoft.AspNetCore.Components.Forms;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
@@ -12,6 +13,10 @@ public partial class QuickCommandCard
     [Inject]
     private NavigationManager Navigation { get; set; } = null!;
 
+    /// <summary>Stage 79：v5.5 image flow 補完 — Dashboard hardcoded const 改 AppSetting 動態讀（OnInitializedAsync 載入時更新 _maxFiles / _maxFileSize）。</summary>
+    [Inject]
+    private DashboardAppSettingsService AppSettings { get; set; } = null!;
+
     #endregion
 
     #region Private State
@@ -23,8 +28,26 @@ public partial class QuickCommandCard
     private string? _error;
     private IReadOnlyList<IBrowserFile>? _selectedFiles;
 
-    private const int  MaxFiles    = 5;
-    private const long MaxFileSize = 5 * 1024 * 1024; // 5MB
+    // Stage 79：default fallback 對齊 Workflow:MaxAttachmentsPerTask + Workflow:MaxAttachmentSizeMB AppSetting / OnInitializedAsync 載入後動態 update
+    private int  _maxFiles    = 5;
+    private long _maxFileSize = 5L * 1024 * 1024; // 5MB
+
+    #endregion
+
+    #region Override Methods
+
+    /// <summary>Stage 79：v5.5 image flow 補完 — 從 AppSettings 載 Workflow:MaxAttachmentsPerTask + Workflow:MaxAttachmentSizeMB（範圍守 [1, 20]）。</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        var maxCountSetting = await AppSettings.GetAsync("Workflow:MaxAttachmentsPerTask");
+        var maxSizeMBSetting = await AppSettings.GetAsync("Workflow:MaxAttachmentSizeMB");
+
+        if (int.TryParse(maxCountSetting?.Value, out var maxCount))
+            _maxFiles = Math.Max(1, Math.Min(20, maxCount));
+
+        if (int.TryParse(maxSizeMBSetting?.Value, out var maxSizeMB))
+            _maxFileSize = (long)Math.Max(1, Math.Min(20, maxSizeMB)) * 1024 * 1024;
+    }
 
     #endregion
 
@@ -53,19 +76,19 @@ public partial class QuickCommandCard
         }
 
         // 過大
-        var oversized = valid.Where(f => f.Size > MaxFileSize).ToList();
+        var oversized = valid.Where(f => f.Size > _maxFileSize).ToList();
         if (oversized.Count > 0)
         {
             var names = string.Join("、", oversized.Select(f => $"「{f.Name}」"));
-            messages.Add($"{names} 超過 5MB 限制，已略過");
+            messages.Add($"{names} 超過 {_maxFileSize / 1024 / 1024}MB 限制，已略過");
             valid = valid.Except(oversized).ToList();
         }
 
         // 超量
-        if (valid.Count > MaxFiles)
+        if (valid.Count > _maxFiles)
         {
-            messages.Add($"圖片超過 {MaxFiles} 張上限（共 {valid.Count} 張），已保留前 {MaxFiles} 張");
-            valid = valid.Take(MaxFiles).ToList();
+            messages.Add($"圖片超過 {_maxFiles} 張上限（共 {valid.Count} 張），已保留前 {_maxFiles} 張");
+            valid = valid.Take(_maxFiles).ToList();
         }
 
         if (messages.Count > 0)
@@ -100,7 +123,7 @@ public partial class QuickCommandCard
             {
                 try
                 {
-                    using var stream = file.OpenReadStream(MaxFileSize);
+                    using var stream = file.OpenReadStream(_maxFileSize);
                     var bytes = new byte[file.Size];
                     await stream.ReadExactlyAsync(bytes);
                     images.Add(new ImageUploadDto(Convert.ToBase64String(bytes), file.ContentType));

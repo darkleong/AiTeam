@@ -102,6 +102,14 @@ public class WorkflowSettingsResolver(
     public Task<int> GetMaxConcurrentPetraAsync(CancellationToken ct = default)
         => GetIntInRangeAsync("Workflow:MaxConcurrentPetra", Defaults.MaxConcurrentPetra, 1, 10, ct);
 
+    /// <summary>Stage 79：v5.5 image flow 補完 — per task max attachment count（範圍守 [1, 20] / 對齊 Claude Code CLI + Claude API 真實上限）。</summary>
+    public Task<int> GetMaxAttachmentsPerTaskAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:MaxAttachmentsPerTask", Defaults.MaxAttachmentsPerTask, 1, 20, ct);
+
+    /// <summary>Stage 79：v5.5 image flow 補完 — per attachment max size MB（範圍守 [1, 20] / 對齊 Claude Code CLI + Claude API 5 MB per image 真實上限）。</summary>
+    public Task<int> GetMaxAttachmentSizeMBAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:MaxAttachmentSizeMB", Defaults.MaxAttachmentSizeMB, 1, 20, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);

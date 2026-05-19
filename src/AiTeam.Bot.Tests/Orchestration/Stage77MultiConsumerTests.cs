@@ -61,8 +61,10 @@ public class Stage77MultiConsumerTests
             _resultFactory = resultFactory;
         }
 
+        // Stage 79：簽名擴 images param 對齊 PetraOrchestratorService.StartAsync 真實簽名（Mock fixture 不真實 propagate / Test 只驗 retry path 不驗 image）
         public override Task<PetraOrchestratorResult> StartAsync(
-            Guid? taskGroupId, string taskInput, CancellationToken ct = default)
+            Guid? taskGroupId, string taskInput, CancellationToken ct = default,
+            IReadOnlyList<AiTeam.Bot.Agents.ImageAttachment>? images = null)
             => _resultFactory(ct);
     }
 

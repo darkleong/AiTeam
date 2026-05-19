@@ -315,6 +315,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
             e.Property(x => x.UserInput).HasColumnType("text");
             e.Property(x => x.ErrorMessage).HasColumnType("text");
+            // Stage 79：v5.5 image flow 補完 — Attachments jsonb（半抽象 future-friendly）
+            e.Property(x => x.Attachments).HasColumnType("jsonb");
             // polling 用 index（Status + EnqueuedAt — FIFO 紀律）
             e.HasIndex(x => new { x.Status, x.EnqueuedAt })
                 .HasDatabaseName("ix_petra_inbox_status_enqueued");

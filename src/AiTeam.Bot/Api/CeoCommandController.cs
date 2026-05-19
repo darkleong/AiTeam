@@ -57,6 +57,25 @@ public class CeoCommandController(
         if (!ulong.TryParse(channelIdStr, out var ceoChannelId))
             return BadRequest(new { error = "CEO 指令預設頻道 ID 格式錯誤，請重新設定。" });
 
+        // Stage 79：v5.5 image flow 補完 — API 端 verify 後備層（Dashboard MudFileUpload UI 阻止 + 此處 API 後備守 + Repository / CeoAgentService 終守 — 三層守）
+        if (request.Images is { Count: > 0 })
+        {
+            var workflowResolver = HttpContext.RequestServices.GetRequiredService<WorkflowSettingsResolver>();
+            var maxCount = await workflowResolver.GetMaxAttachmentsPerTaskAsync(cancellationToken);
+            var maxSizeMB = await workflowResolver.GetMaxAttachmentSizeMBAsync(cancellationToken);
+            var maxSizeBytes = (long)maxSizeMB * 1024 * 1024;
+
+            if (request.Images.Count > maxCount)
+                return BadRequest(new { error = $"最多 {maxCount} 張附圖（收 {request.Images.Count} 張）" });
+
+            for (var i = 0; i < request.Images.Count; i++)
+            {
+                var sizeBytes = (request.Images[i].Base64Data.Length * 3L) / 4;
+                if (sizeBytes > maxSizeBytes)
+                    return BadRequest(new { error = $"第 {i + 1} 張附圖超 {maxSizeMB} MB 上限（含 {sizeBytes / 1024 / 1024} MB）" });
+            }
+        }
+
         // 轉換圖片（stream-json stdin 用）
         var images = request.Images?
             .Select(i => new ImageAttachment(i.Base64Data, i.MediaType))

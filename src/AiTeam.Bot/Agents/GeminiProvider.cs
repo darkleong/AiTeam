@@ -7,8 +7,9 @@ using Microsoft.Extensions.Logging;
 namespace AiTeam.Bot.Agents;
 
 /// <summary>
-/// Google Gemini API 實作（FF 四第一階段）：純文字輸入／輸出。
-/// Vision / Tool Use 第一階段不支援——images 參數會被忽略並 log warning。
+/// Google Gemini API 實作（FF 四第一階段）：純文字輸入／輸出 + Stage 79 multimodal（Vision）。
+/// Stage 79：v5.5 image flow 補完 — 補 Vision 支援對齊 Gemini API multimodal doc（inline_data + base64 + mime_type）。
+/// 對齊 AnthropicProvider 既有 ImageAttachment pattern / Petra LLM call sites 真實看圖。
 /// API key 走 query string（Gemini 標準做法），token 用量從 response 的 usageMetadata 取得。
 /// 錯誤處理：429 rate limit 會拋可識別訊息，其他非 2xx 拋 HttpRequestException。
 /// </summary>
@@ -30,11 +31,26 @@ public class GeminiProvider(
         CancellationToken cancellationToken = default,
         IReadOnlyList<ImageAttachment>? images = null)
     {
-        if (images is { Count: > 0 })
-            logger?.LogWarning("GeminiProvider 第一階段尚未支援 Vision，已忽略 {Count} 張圖片。", images.Count);
-
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException("Gemini API key 未設定（Gemini:ApiKey / AITEAM_GEMINI_KEY）。");
+
+        // Stage 79：v5.5 image flow 補完 — Vision 支援（inline_data + base64 + mime_type）對齊 Gemini API multimodal doc
+        var userParts = new List<GeminiPart> { new() { Text = userMessage } };
+        if (images is { Count: > 0 })
+        {
+            foreach (var img in images)
+            {
+                userParts.Add(new GeminiPart
+                {
+                    InlineData = new GeminiInlineData
+                    {
+                        MimeType = img.MediaType,
+                        Data     = img.Base64Data,   // Gemini API 接 base64 string（無 data: prefix）
+                    },
+                });
+            }
+            logger?.LogInformation("GeminiProvider Stage 79 multimodal dispatch images={Count}", images.Count);
+        }
 
         var request = new GeminiRequest
         {
@@ -47,7 +63,7 @@ public class GeminiProvider(
                 new GeminiContent
                 {
                     Role  = "user",
-                    Parts = [new GeminiPart { Text = userMessage }]
+                    Parts = userParts,
                 }
             ],
             GenerationConfig = new GeminiGenerationConfig
@@ -124,7 +140,21 @@ public class GeminiProvider(
     private sealed class GeminiPart
     {
         [JsonPropertyName("text")]
-        public string Text { get; set; } = "";
+        public string? Text { get; set; }
+
+        /// <summary>Stage 79：v5.5 image flow 補完 — Vision multimodal 支援（image inline_data part）。</summary>
+        [JsonPropertyName("inlineData")]
+        public GeminiInlineData? InlineData { get; set; }
+    }
+
+    /// <summary>Stage 79：v5.5 image flow 補完 — Gemini API multimodal inline_data DTO（對齊 Gemini API multimodal doc）。</summary>
+    private sealed class GeminiInlineData
+    {
+        [JsonPropertyName("mimeType")]
+        public string MimeType { get; set; } = "";
+
+        [JsonPropertyName("data")]
+        public string Data { get; set; } = "";
     }
 
     private sealed class GeminiGenerationConfig
