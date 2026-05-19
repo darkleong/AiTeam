@@ -2,10 +2,12 @@
 
 > 對應系統版本：v3.69.0
 > 規模：M
-> 狀態：規劃中
+> 狀態：✅ 已完成（2026-05-19）
+> 文件版本：v2.0
 > 性質：純 refactor / 0 業務變化 / 0 Migration / entry 0 使用
 > Model + Effort 建議：**Opus 1M + Extra high**（對齊 Stage 78a 大規模架構級重構新區間 ×1.57-4.07 紀律延續 + 連續 6 Stage 自選 Opus 1M 真實使用模式）
 > cost 預估：$3-5 per cycle
+> commit：[`a7c763a`](https://github.com/darkleong/AiTeam/commit/a7c763a) feat(stage78b): v4 path dead caller 整套砍除 v3.69.0 — 路線 C 折衷
 
 ---
 
@@ -333,8 +335,147 @@ cascading dependency：BuildGitHubContextAsync ← BuildUserMessageAsync ← Pro
 
 ---
 
+## 實作紀錄（v2.0 / 2026-05-19）
+
+### 實作完成項目
+
+**鏈 A — v4 routing dead caller 整套砍**：
+
+- ✅ **§A 子項 1 ButtonCallbackRouter v4 routing 砍**（路線 C 升級）
+  - 砍 5 routing case：`exec_yes` (line 267-270) / `escalate_skip` + `escalate_abort` (line 293-301) / `escalate_devplan_skip` (line 302-328) / `escalate_devplan_abort` (line 329-351)
+  - 砍 5 method：`HandleExecYesAsync` (line 457-505) / `ExecuteAgentTaskAsync` (line 707-857) / `ResolveWorkflowType` (line 932-942) / `SupersedePriorFailedTasks` (line 989-1007) / `GetAgentChannelName` (line 1056-1067)
+  - **路線 C 升級加砍**：`HandleConfirmYesAsync` v4 body line 393-454（保留 Stage 68 短路 line 386-391 + defensive log+ack fallback / method 縮為 ~15 行）
+  - **路線 C 升級 grep verify cleanup**：`BuildEscalateButtons` (0 caller after escalate_skip/abort routing 砍 → 砍) / `BuildAgentPlanEmbed` 留（ShowDirectAgentConfirmAsync line 682 仍 caller — 路線 C 預期路徑 A 確認）
+  - 連動 ctor param 砍：`rulesService` 0 caller after → 砍
+  - 變動：-362 行 (1075 → 713)
+
+- ✅ **§B 子項 2 OpsAgentService IAgentExecutor 實作砍**
+  - class declaration 移除 `: IAgentExecutor`
+  - 砍 `ExecuteTaskAsync` method (line 38-47)
+  - 砍 `using AiTeam.Bot.Agents;` (IAgentExecutor / AgentExecutionResult import 0 caller after)
+  - **保留 production active**: `MonitorDeploymentAsync` / `MonitorCiCdAsync` / `RunHealthCheckAsync` / `AlertAsync` / `HealthCheckJob` Quartz job
+  - Program.cs:68 `AddKeyedSingleton<IAgentExecutor, OpsAgentService>(AgentNames.Ops)` 砍 / line 67 `AddSingleton<OpsAgentService>()` 留（HealthCheckJob ctor inject 用）
+  - 變動：-10 行 + Program.cs 註解 update
+
+- ✅ **§C 子項 3 IAgentExecutor interface fallback 純文件標記 78c**
+  - IAgentExecutor.cs 整檔 0 動（W3 fallback 紀律守）
+  - XML doc summary 加 6 行 fallback 紀律說明：AgentQueueProcessor.cs:190 `GetKeyedService<IAgentExecutor>(executorKey)` 仍 active + `AgentExecutionResult`/`AgentResultType`/`AgentDescriptor` 廣泛使用於 PipelineState/Executors/FrameworkAppealRouter/AppealOrchestrationService/QaCoordinationService/MeetingOrchestrationService/FrameworkPipelineRouter/TaskGroupService 12+ file → Stage 78c 預備砍
+
+**鏈 B — v4 LLM-direct caller 整套砍**：
+
+- ✅ **§D 子項 4 SlashCommandRouter /task 砍**
+  - slash command 定義砍 (line 48-54)
+  - dispatch case "task" 砍 (line 151)
+  - `HandleTaskCommandAsync` 整 method 砍 (line 173-275 / ~103 行)
+  - ctor 從 11 dep → 6 dep（砍 5 dep：`buttonRouter` / `store` / `interactionService` / `appSettings` / `gitHubSettings`）
+  - 砍 2 unused using：`System.Text.Json` / `AiTeam.Bot.Agents`
+  - **保留 9 個其他 slash command**：`/reload-rules` / `/status` / `/new-session` / `/mock` / `/pause` / `/resume` / `/stop-all` / `/resume-all` / `/queue`
+  - 變動：-125 行
+
+- ✅ **§E 子項 5 WebhookController HandleIssueOpenedAsync 砍**
+  - dispatch case "issues" 砍 (line 79-81)
+  - `HandleIssueOpenedAsync` 整 method 砍 (line 105-147 / ~43 行)
+  - ctor param `rulesService` 0 caller after → 砍
+  - 砍 1 unused using：`AiTeam.Bot.Agents`
+  - **保留 3 個其他 event handler**：`HandlePrOpenedAsync` / `HandlePushAsync` / `HandlePrSynchronizedAsync`
+  - 變動：-52 行
+
+- ✅ **§F 子項 6 CeoAgentService.ProcessAsync + 4 v4 helper + ctor 4 dep 砍**
+  - `ProcessAsync` 整 method 砍 (line 44-78 / ~35 行)
+  - 4 v4 helper 砍：`BuildSystemPrompt` / `BuildUserMessageAsync` / `BuildGitHubContextAsync` / `TryParseResponse` (~191 行)
+  - ctor 從 8 dep → 3 dep（砍 4 dep：`providerFactory` / `taskRepository` / `gitHubService` / `gitHubSettings`）
+  - 砍 `_github` private field + `JsonOptions` static field + 7 unused using statements
+  - class 縮為純 v5.5 path（ProcessWithClaudeCodeAsync 寫 PetraInbox + return ack / ~50 行）
+  - 變動：-229 行
+
+**子項 7**：
+- ✅ **§G 子項 7 Directory.Build.props v3.68.0 → v3.69.0**（3 處 `<Version>` / `<AssemblyVersion>` / `<FileVersion>`）
+
+### 關鍵設計決策
+
+#### 1. W1 邊界議題 Christ 拍板路線 C 折衷（2026-05-19）
+
+Plan v1 階段 Forge spike 揭真實揭 1 邊界議題：`HandleConfirmYesAsync` v4 body line 393-454 在砍 `exec_yes` routing 後仍 fire 但會 post `exec_yes`/`exec_no` 按鈕造成 broken UI（用戶點按鈕 router 落入 else 顯示「已取消」）。
+
+Plan v1 列 3 路線給 Christ 拍板：
+- 路線 A 嚴格 Roadmap scope（不砍 v4 body / codebase incoherent / production 0 影響因 0 fire 假設）
+- 路線 B 擴範圍 cascade 砍整套含 CommandHandler / scope creep 翻倍
+- 路線 C 折衷（砍 v4 body + BuildAgentPlanEmbed grep verify 後決定 / ShowDirectAgentConfirmAsync + HandleDirectAgentChannelMessageAsync 留 Stage 78c）
+
+**Christ 拍板路線 C** — 理由：「對齊『修根因 > 補丁』+『對冗餘不容忍』+ 不擴 scope 到 CommandHandler 保 Stage 規模可控」。
+
+實作：HandleConfirmYesAsync method body 縮為 ~15 行（Stage 68 短路 + defensive log+ack fallback）/ BuildAgentPlanEmbed grep verify 後 ShowDirectAgentConfirmAsync 仍 caller → BuildAgentPlanEmbed 留 / 額外 grep verify BuildEscalateButtons 0 caller → cleanup 砍。
+
+#### 2. W3 fallback IAgentExecutor interface 整檔 0 動
+
+Forge spike grep verify：`AgentQueueProcessor.cs:190` `GetKeyedService<IAgentExecutor>(executorKey)` 仍 active + `AgentExecutionResult` / `AgentResultType` / `AgentDescriptor` record/enum 廣泛使用於 PipelineState / Executors（5 個 Stage Executor）/ FrameworkAppealRouter / AppealOrchestrationService / QaCoordinationService / MeetingOrchestrationService / FrameworkPipelineRouter / TaskGroupService **12+ file**。
+
+結論：子項 3 必 fallback — IAgentExecutor.cs 整檔 0 動 / XML doc 加 fallback 註解標記 Stage 78c 預備砍。
+
+#### 3. R6 ResolveWorkflowType 精準匹配紀律（Christ 補強 #3）
+
+`ButtonCallbackRouter.cs:932 ResolveWorkflowType` (v4 砍) vs `ProposalConfirmationService.cs:320 ResolveWorkflowTypeInternal` (v5.5 留) — 兩 method 同源命名不同檔不同實作。
+
+實作時用 word boundary `\b` 精準匹配（非 substring match）— Forge grep verify pass / ProposalConfirmationService.ResolveWorkflowTypeInternal 不誤砍。
+
+#### 4. ctor unused dep cleanup 紀律延伸
+
+砍 v4 method 後 ctor 對應 unused dep 一併砍（對齊「對冗餘不容忍」+ CS9113 warning cleanup）：
+- CeoAgentService：8 dep → 3 dep（砍 4 dep）
+- SlashCommandRouter：11 dep → 6 dep（砍 5 dep）
+- WebhookController：7 dep → 6 dep（砍 `rulesService`）
+- ButtonCallbackRouter：9 dep → 8 dep（砍 `rulesService`）
+
+Build warning 從 baseline 102 ↓ 59（-43 warnings / -42%）— v4 dead caller 砍掉的 unused ctor param + 砍掉的 method body warning 大幅清除。
+
+### Mock 覆蓋情況
+
+**N/A** — Stage 78b 為純 refactor / v4 dead caller 砍除 / 0 entry 點改動 / 0 新業務邏輯。Mock scenarios 不適用（v4 path 已砍 / v5.5 path 0 行為改變紀律守）。
+
+Forge 自驗範圍走 **grep verify 9 條件 + production deploy verify**（對齊 Plan v2 §Verification gate1 範圍）— 場景 E/F/G/H/I 留 Aria gate2 範圍 production 真實 task 驗證。
+
+### 驗收後修正
+
+**0 follow-up bug 揭露** — 一次性 commit 成功 / 0 自診修補需要 / Forge 自驗 0 issue。
+
+Forge 自驗結果（Christ 觸發 forge-self-verify skill）：
+- ✅ Plan v2 §Verification 9 grep verify 全 PASS（註解 markers 不算 code reference / 真實 code reference 唯一 `GetKeyedService<IAgentExecutor>` 1 hit at AgentQueueProcessor.cs:190 — W3 fallback 紀律守 ✓）
+- ✅ Bot startup verify：`Application started. Press Ctrl+C to shut down.` / `Hosting environment: Production` / `Scheduler QuartzScheduler_$_NON_CLUSTERED started` (HealthCheckJob 子項 2 W2 ✓) / `No migrations were applied. The database is already up to date.` / 0 fatal/error in startup log
+- ✅ v5.5 path production active：PetraInbox + PetraDispatchWorker polling running（v5.5 dispatch 0 影響）
+- ✅ CI/CD 自動部署：commit 09:52:38 → DLL build 09:54 → container recreate 09:57:54（~5 min 從 commit 到 production）
+
+### 踩坑紀錄
+
+**過程相對順利 — 0 踩坑**。對齊 Stage 78a 累積經驗紀律生效成熟：
+
+- Plan Mode 一輪 spike W1-W6 grep verify 完整（沒有像 Stage 78a 連續 3 輪 spike 揭重大議題的累積）
+- Christ 拍板 W1 邊界議題路線 C 後 Plan v2 升級 1 輪即進實作
+- 實作期 0 follow-up bug / 0 self-diag fix
+- 自驗 0 issue
+
+對齊「修根因 > 補丁」紀律延伸成熟實踐：
+- ctor unused dep cleanup 一併砍（避免 CS9113 warning 累積成 Stage 78c 範圍補丁）
+- grep verify 紀律守（W1-W6 spike + 路線 C grep verify BuildAgentPlanEmbed caller 預期路徑 A 驗證）
+- ResolveWorkflowType `\b` 精準匹配避免誤砍 ProposalConfirmationService.ResolveWorkflowTypeInternal
+
+### 校準錨數據點
+
+| 項目 | 數據 |
+|---|---|
+| **砍量** | -849 行刪 / +62 行新增 / **net -787 行** |
+| **檔案數** | 8 files changed |
+| **build warning** | 102 (baseline) → 59 (**-43 / -42%**) |
+| **xUnit baseline** | Bot.Tests 104/104 ✓ + Generated 127/127 ✓ 全綠 |
+| **commit** | `a7c763a`（單 commit / 對齊 §R5 + Stage 78a baseline） |
+| **CI/CD deploy** | ~5 min（commit 09:52:38 → DLL 09:54 → container recreate 09:57:54） |
+| **規模分類** | 架構級重構區間 ×0.58 第 8 資料點候選（Stage 66/67/78a 連續 4 次同倍率累積） |
+| **raw 預估 vs 真實 ratio** | raw 80-130K / ratio ×1.5-2.5 預估 / 真實落點待 Aria 自省點 #37 結案對照 |
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v2.0 | 2026-05-19 | **實作完成 + Forge 自驗 PASS**。commit `a7c763a` 單 commit / -849/+62 = net -787 行 / 8 files changed / build warning 102 → 59 (-43 / -42%) / xUnit baseline 104+127 全綠 / CI/CD ~5 min deploy。**W1 邊界議題 Christ 拍板路線 C 折衷實作**：HandleConfirmYesAsync v4 body line 393-454 cascade 砍 (method 縮為 ~15 行 / 保 Stage 68 短路 + defensive log+ack fallback) + BuildEscalateButtons grep verify 0 caller cleanup 砍 + BuildAgentPlanEmbed 留 (ShowDirectAgentConfirmAsync 仍 caller / 預期路徑 A)。**W3 fallback 紀律守**：IAgentExecutor.cs 整檔 0 動 / XML doc 加 fallback 註解標記 Stage 78c 預備砍。**R6 ResolveWorkflowType `\b` 精準匹配紀律守**：v4 ButtonCallbackRouter 版砍 / v5.5 ProposalConfirmationService.ResolveWorkflowTypeInternal 不誤砍。**ctor unused dep cleanup**：CeoAgentService 8→3 dep / SlashCommandRouter 11→6 dep / WebhookController + ButtonCallbackRouter 各砍 rulesService。**Forge 自驗 grep verify 9 條件全 PASS + production deploy verify**（Bot startup 0 exception / Quartz Scheduler started / v5.5 PetraInbox polling active / Migration empty）。**0 踩坑 / 0 follow-up bug** — 對齊 Stage 78a 累積經驗紀律生效成熟（Plan 1 輪 spike + Christ 拍板 1 輪即進實作 + 自驗 0 issue）。 |
 | v1.0 | 2026-05-19 | 規劃書建立 — v3.69.0 / M 規模 / v5.5 Phase 4 候選 C 後續（Stage 78a v4 path dead code 整套砍完 → 78b v4 path dead caller 整套砍 → 78c v4 Pipeline 整套砍）。**戰略脈絡**：Christ 2026-05-19 拍板「Discord slash command 完全沒在使用 + GitHub Issue webhook 完全沒用過」+ Trial_v6-v22 連續 17 次 v5.5 path 業務級驗證 0 v4 caller 累積 → 6 條 entry effective dead code 拍板砍。**6 子項**：① ButtonCallbackRouter v4 routing 砍（exec_yes / escalate_devplan_skip / escalate_devplan_abort / escalate_skip / escalate_abort + 對應 helper）② OpsAgentService IAgentExecutor 實作砍（保 HealthCheckJob production active）③ IAgentExecutor interface 砍（0 implementation + 0 caller 後 / W3 fallback 評估）④ `/task` slash command + HandleTaskCommandAsync 整段砍 ⑤ GitHub Issue webhook HandleIssueOpenedAsync 砍 ⑥ CeoAgentService.ProcessAsync 整段砍 + v4 helper（BuildSystemPrompt / BuildUserMessageAsync / BuildGitHubContextAsync / TryParseResponse）+ ctor 4 dep 砍（LlmProviderFactory / TaskRepository / GitHubService / GitHubSettings）⑦ Directory.Build.props v3.68.0 → v3.69.0。**設計決策核心**：純 refactor 性質 / 0 業務變化（entry 全 0 使用）/ 0 Migration / backwards-compatible 守護延續 v5.5 path 0 行為改變 / Stage 78c 範圍邊界明確（v4 Pipeline framework 整套留 78c）。**驗收 9 場景**：A xUnit baseline 0 regression / B ButtonCallbackRouter v4 routing 砍 v5.5 routing 0 行為改變 / C OpsAgentService IAgentExecutor 砍 HealthCheckJob production active / D IAgentExecutor interface 砍（W3 fallback 評估）/ E `/task` slash command 砍 / F GitHub Issue webhook 砍 / G CeoAgentService.ProcessAsync + v4 helper 砍 / H v5.5 path production 0 regression（Aria gate2）/ I Bot startup 0 exception。**Aria 預警 W1-W6**：ButtonCallbackRouter v4 vs v5.5 routing 邊界 grep verify / OpsAgentService HealthCheckJob 不受影響 / IAgentExecutor interface 砍前 AgentQueueProcessor:190 active 風險 + fallback / CeoAgentService ctor 4 dep grep verify / cascading helper 砍順序 / 子項依賴鏈兩條獨立。**校準錨預估**：對齊大規模架構級重構新區間 ×1.57-4.07 下界 / raw 80-130K × ratio ×1.5-2.5 = 真實 ~150-280K / Opus 1M + Extra high safety 15-28% / cost $3-5。**Phase 4 路徑**：78a ✅ → **78b**（本 / 純 refactor 6 條）→ 78c（v4 Pipeline 整套砍 / L）→ 79（HITL / M）→ 80（動態 replan / L）→ WebUI Stage → v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1+Tier 2 #3 build + Aria gate2 production 0 regression 驗 → 通過後 Stage 78c 開（v4 Pipeline 整套砍）。 |
