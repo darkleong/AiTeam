@@ -2,8 +2,10 @@
 
 > 對應系統版本：v3.70.0
 > 規模：L+（一次過整套砍 / 路線 A 拍板）
-> 狀態：規劃中
-> 性質：大規模 refactor + Migration drop table 不可逆 / 0 業務變化（v4 path 0 production fire 連續 17 次 Trial 累積）
+> 狀態：✅ 已完成（2026-05-19）
+> 文件版本：v2.0
+> 實作 commit：[`e17e83b`](https://github.com/darkleong/AiTeam/commit/e17e83b)
+> 性質：大規模 refactor / **0 Migration changes**（議題 9 揭真實 agent_queues 表不存在 / Plan v1 §G.4 Migration drop + R9 紀律廢除）/ 0 業務變化（v4 path 0 production fire 連續 17 次 Trial 累積）
 > Model + Effort 建議：**Opus 1M + Extra high**（對齊 Stage 78a 488K / Stage 78b 394K baseline + 大規模架構級重構新區間 ×1.57-4.93 7 資料點累積）
 > cost 預估：$5-8 per cycle
 
@@ -320,8 +322,162 @@ Stage 78b 留的 W3 fallback 預備條件 — Stage 78c 鏈 A+B+C 砍後預期 0
 
 ---
 
+## 實作紀錄（v2.0 / 2026-05-19）
+
+> Forge 結案第一段。對應 commit [`e17e83b`](https://github.com/darkleong/AiTeam/commit/e17e83b) — `feat(stage78c): v4 Pipeline framework 整套砍除 v3.70.0 — 路線 A 一次過 + 6 議題拍板採納`。
+
+### 統計
+
+- **108 files changed / 220 insertions / 22910 deletions = net -22690 行**
+- ~60+ files 整檔砍 + ~10 files 內部段砍 + 1 file 重命名（IAgentExecutor.cs → AgentDescriptor.cs）
+- 0 Migration（議題 9 揭真實 / 0 不可逆風險 / git revert 完全可還原）
+- 本機驗證：**0 error / 0 C# compile warning**（Stage 78b 59 → 78c **0** 全乾淨突破）/ Bot.Tests 100 + Generated 127 全綠
+- Production deploy verify：Bot startup 0 exception / Quartz Scheduler initialized / PetraInboxProcessor polling 正常 / `/webhook/github` HTTP 404 / `/internal/mock/scenario` HTTP 404
+
+### 實作完成項目（6 鏈 + 議題 7+8+9 incorporated）
+
+**鏈 A — v4 Pipeline 核心砍（17 files 整檔）**
+- `Orchestration/WorkflowEngine.cs`
+- `Workflows/Pipeline/` 整 folder（5 base + 11 executors = 16 files）
+- `Orchestration/Routing/PipelineRoutingService.cs`
+
+**鏈 B — v4 Meeting+Appeal+HITL+Boss+InteractionProcessor+Proposal+Pm+MockScenarioService 砍**
+- `Workflows/Kickoff/` 整 folder（11 files）
+- `Workflows/Design/` 整 folder（15 files）
+- `Workflows/Appeal/` 整 folder（10 files）
+- `Workflows/Common/FrameworkCheckpointStoreBase.cs`
+- `Orchestration/Meeting/` 整 folder（9 files）
+- `Orchestration/Appeal/` 整 folder（2 files）
+- `Orchestration/Hitl/` 整 folder（2 files）
+- `Orchestration/Epic/EpicChainService.cs`
+- `Orchestration/Qa/QaCoordinationService.cs`
+- `Orchestration/Boss/` 整 folder（2 files）
+- `Orchestration/InteractionProcessor.cs`（議題 5）
+- `Orchestration/Proposal/ProposalConfirmationService.cs`
+- `Agents/Pm/` 整 folder 5 files（議題 8 / Forge 自決）
+- `Services/MockScenarioService.cs`（議題 7 / Forge spike R8 揭真實）
+
+**鏈 C — v4 Queue+Group+Migration drop（議題 9 揭真實）**
+- `Orchestration/TaskGroupService.cs`（813 行）
+- `Orchestration/AgentQueueService.cs`（205 行）
+- `Orchestration/AgentQueueProcessor.cs`（510 行）
+- `Services/AgentQueueControlService.cs`（議題 7 配套）
+- **0 Migration**（議題 9：agent_queues 表真實不存在 / Stage 27a 加的是 TaskItem.QueueStatus + QueuedAt nullable fields 對齊議題 1 路線 2 留 entity 邊界）
+
+**鏈 D — IAgentExecutor interface + type 系統部分砍**
+- `Agents/IAgentExecutor.cs` → `Agents/AgentDescriptor.cs` 重命名 + 縮為 ~10 行
+- 砍 `IAgentExecutor` interface + `AgentExecutionResult` record + `AgentResultType` enum
+- **留** `AgentDescriptor` record（v5.5 active / R1 校正 / CeoAgentService + CommandHandler + CeoCommandController 用）
+
+**鏈 E — Discord routing 重整**
+- `Discord/Routing/ButtonCallbackRouter.cs` 713 → **120 行**（-83%）/ 留 RouteAsync 簡化 + HandleConfirmYesAsync Stage 68 短路 + BuildCeoDecisionEmbed + BuildConfirmButtons + Truncate
+- `Discord/CommandHandler.cs` 614 → **315 行**（-49%）/ 留 v5.5 main flow + DetectImageMediaType 從 SlashCommandRouter 移入 + slashRouter/appSettings ctor dep 砍
+- `Discord/Routing/SlashCommandRouter.cs` 整檔砍（議題 4）
+- `Discord/Routing/PendingConfirmationStore.cs` v4 confirmation 整套砍（縮為純 v5.5 generic confirmation）
+- `Discord/Routing/RoutingTypes.cs` `PendingConfirmation` record 縮為 3 base field
+
+**鏈 F — WebhookController + Program.cs + Configuration + Constants 配套砍**
+- `GitHub/WebhookController.cs` 整檔砍（議題 2 / `/webhook/github` route 廢除）
+- `Program.cs` v4 DI 註冊段砍（~30+ 行）+ 註解 update Stage 78a/78b/78c 進度
+- InternalController 砍 7 v4 endpoints（mock/scenario / queue/{agent}/pause+resume / queue/stop-all+resume-all / tasks/{taskId}/requeue / admin/replay-completion / taskgroup pause+resume+pause-epic+resume-epic / kickoff/trigger-mid-interrupt）/ 留 reload-cache + restart + deployment + tokens
+- DashboardBotService 砍 9 v4 methods（議題 7+5+配套）/ 留 ReloadCacheAsync + RestartBotAsync
+- DashboardCeoCommandService 砍 TriggerKickoffMidInterruptAsync（議題 5 配套）
+- Dashboard 4 pages stub v4 action methods（AgentStatusCard pause/resume / TaskCenter requeue / PipelineView pause/resume/epic/mid-interrupt）→ snackbar 「v4 已砍 / WebUI Stage 重設計」（議題 1 路線 2 邊界守）
+- Home.razor 砍 `<MockScenarioCard />` + `<GlobalQueueControlCard />` reference
+- Dashboard `MockScenarioCard.razor` + `.razor.cs` 整檔砍（議題 7 配套）
+- Dashboard `GlobalQueueControlCard.razor` + `.razor.cs` 整檔砍（議題 7 配套）
+- `Bot.Tests/DesignPromptsTests.cs` 整檔砍（Workflows/Design folder 砍配套）
+
+**鏈 G — Version bump**
+- `src/Directory.Build.props` v3.69.0 → **v3.70.0**
+
+### 關鍵設計決策
+
+**1. 路線 A 一次過拍板 + 6 議題拍板採納（Christ 2026-05-19）**
+4 議題（v4 entity Dashboard 連動範圍 / WebhookController / `/mock` SlashCommand / 其他 SlashCommand）全採納 Forge 推薦 + Aria 5 條補強紀律 incorporated。Forge 實作期再 spike 揭 3 新議題（議題 7 MockScenarioService / 議題 8 Pm/ folder / 議題 9 agent_queues 表真實不存在）全 Christ 拍板採納。
+
+**2. 議題 9：agent_queues 表真實不存在（Forge spike 揭真實）**
+Stage 27a Migration `Stage27aQueueFields.cs` 真實加的是 `TaskItem.QueueStatus` + `QueuedAt` nullable fields，**不是** agent_queues 獨立表。Plan v1 §G.4 Migration drop agent_queues + R9 Down() 對齊 Stage 27a baseline 紀律 + pg_dump 備份候選紀律全廢除。**0 Migration changes 本 Stage / 0 不可逆風險 / git revert 完全可還原 / scope 從 L+ 含 Migration → 純 code refactor L+**。對齊議題 1 路線 2「留 TaskItem entity + DB tables」邊界精神。
+
+**3. R1：Roadmap §C 場景 C AgentDescriptor 校正（Forge spike 揭真實）**
+Roadmap 寫 `AgentDescriptor 期望 0 hit` 實質 v5.5 active type（CommandHandler:420 + CeoCommandController:120 + CeoAgentService:31 用）。Plan v1 校正：砍 `IAgentExecutor` interface + `AgentExecutionResult` record + `AgentResultType` enum / **留** `AgentDescriptor` record / 檔案重命名 `IAgentExecutor.cs` → `AgentDescriptor.cs`。Verification 場景 C 對應調整：grep `AgentDescriptor` 期望 4 hit（定義 + 3 caller）。
+
+**4. 議題 1 路線 2 邊界守：留 v4 entity + DB tables + Dashboard UI**
+砍 v4 Pipeline **service** 整套（~25-30 class）/ **留** `TaskGroup` + `TaskItem` + `TaskLog` + `BossInteraction` entity + DB tables + 4 Dashboard Pages（PipelineView / PipelineList / TaskCenter / AgentStatusCard）+ DashboardTaskService + BossInteraction Repository + Stage 57 partial unique index / Dashboard pages stub v4 action methods 顯示 snackbar「Stage 78c 已砍 / 留待 WebUI Stage 重設計」/ **WebUI Stage 預備統一重設計範圍**（對齊 Phase 4 路徑 Stage 79 image flow → 80 HITL → 81 replan → WebUI Stage 統一處理）。
+
+**5. 議題 3+7 配套：Mock 框架分層處理**
+Aria 議題 3 wording 漏分層「留 Mock 框架其餘整套」實質正確路徑是「LLM 層 Mock 留 / Orchestration 層 Mock 砍」。Forge spike R8 揭真實後 Christ 拍板：
+- **砍**：Orchestration 層 Mock（MockScenarioService + InternalController `/internal/mock/scenario` endpoint + Dashboard MockScenarioCard + DashboardBotService TriggerMockScenarioAsync）— 全 v4 Pipeline scenario 觸發器
+- **留**：LLM 層 Mock（MockClaudeCodeService + MockLlmProvider）— 對 v5.5 path Cody/Vera/Quinn/Sage Mock 仍有效 / forge-self-verify skill 真實依賴
+
+**6. ButtonCallbackRouter 縮為 v5.5 active routing only（713 → 120 行 -83%）**
+砍 routing prefix：kickoff_ / design_ / framework_kickoff_mid_interrupt_ / propose_yes / propose_no / propose_adjust / cancel_yes / cancel_no 整套。留 confirm_yes / confirm_no 通用 confirmation routing（v5.5 PetraInbox flag forward only 後 confirm_yes Stage 68 短路 ack）+ BuildCeoDecisionEmbed / BuildConfirmButtons / Truncate static helper（CommandHandler caller）。ctor 5 dep 砍（client / settings / gitHubSettings / serviceProvider / taskGroupService）→ 留 3 dep（interactionService / store / logger）。
+
+**7. CommandHandler 縮為 v5.5 path only（614 → 315 行 -49%）**
+砍：HandleDirectAgentChannelMessageAsync + BuildChannelAgentMap + TruncateTitle + 4 Register* helper + SlashCommand 註冊 + 5 v4 path 段（Cancel selection / Kickoff modify / HITL mid interrupt / Design modify / 提案調整輸入） + Action="propose"/"cancel" 分支 + SkipCeoConfirm path。留：v5.5 main flow（ProcessWithClaudeCodeAsync → BuildCeoDecisionEmbed + ceo_confirm BossInteraction → confirm_yes Stage 68 短路）+ Action="reply" defensive branch + DetectImageMediaType 從 SlashCommandRouter 移入（line 405 唯一 caller）。ctor 2 dep 砍（slashRouter / appSettings）。
+
+**8. WorkflowSettings + WorkflowSettingsResolver 保留 conservative 留紀律**
+v4 framework flag（UseFrameworkPipeline 等 5 flag）+ v4 max rounds（ReviewAppealMaxRounds 等 5 setting）conservative 留（Dashboard SystemSettings.razor.cs UI 顯示 / 0 production caller after Wave 1 / 不擾 Dashboard UI）。WorkflowSettingsResolver getters 0 caller 但不砍（避免 propagate 到 Dashboard 視覺異常）。對齊 Aria 補強紀律 #4「conservative 留 default branch」。
+
+### 驗收後修正（Wave 2 build verify 自診修）
+
+Wave 2 build verify 揭 12 compile errors 跨 4 files — 全 Forge 自抓自修：
+- `Bot.Tests/DesignPromptsTests.cs` 整檔砍（reference `AiTeam.Bot.Workflows.Design` namespace 已砍）
+- `Dashboard/Pages/Home/AgentStatusCard.razor.cs` 砍 PauseAgentAsync/ResumeAgentAsync caller / stub snackbar 「v4 已砍」
+- `Dashboard/Pages/Tasks/TaskCenter.razor.cs` 砍 RequeueTaskAsync caller / stub snackbar
+- `Dashboard/Pages/Tasks/PipelineView.razor.cs` 砍 6 v4 action methods caller（HandlePauseClick / HandleResumeClick / HandlePauseEpicClick / HandleResumeEpicClick / HandleMidInterruptClick + HandleRequeueAsync） / stub snackbar + CanShowMidInterruptButton 永遠 false
+
+修正後 final build：**0 error / 0 C# compile warning**（Stage 78b 59 → 78c 0 全乾淨突破）。
+
+### Mock 覆蓋情況
+
+**N/A 純 refactor / 0 業務邏輯改變**：
+- 議題 7 拍板砍 MockScenarioService（v4 framework scenarios 整套 / 0 v5.5 對應）/ 0 Mock scenario 重寫 v5.5
+- MockClaudeCodeService + MockLlmProvider 留（LLM 層 Mock / 對 v5.5 path Cody/Vera/Quinn/Sage Mock 仍有效）
+- xUnit baseline 涵蓋 v5.5 path 邏輯（Bot.Tests 100 + Generated 127 全綠）
+- 真實業務驗（場景 D + H + I）留 Aria gate2 範圍 / Christ 視覺驗收
+
+### 踩坑紀錄（Forge spike 揭真實 + 自診修）
+
+**1. 議題 7 揭真實（Plan v1 階段 / Forge spike R8 紀律）**
+Plan v1 §B 鏈漏列 MockScenarioService — Aria 議題 3 拍板 wording「留 Mock 框架其餘整套」與 v4 Pipeline 砍 contradiction（MockScenarioService 整套依賴 TaskGroupService + KickoffMidInterruptTriggerStore / 100% v4 framework scenario 觸發器）。Forge plan 階段 escalate Christ + Aria 拍板路線 A 砍 Orchestration 層 + 留 LLM 層 — Mock 框架分層處理紀律立。
+
+**2. 議題 8 揭真實**
+Plan v1 §B 鏈漏列 `Agents/Pm/` folder 5 files — 100% v4 path（Appeal Executors + QaCoordinationService + FrameworkAppealRouter 用）/ Aria + Christ 拍板 Forge 自決納入鏈 B 砍。
+
+**3. 議題 9 揭真實**
+Plan v1 §G.4 + Roadmap §鏈 C 寫「Migration drop agent_queues」實質**表真實不存在**（Stage 27a Migration 加 TaskItem.QueueStatus + QueuedAt nullable fields 而非獨立表 / Aria Roadmap 認知錯誤）。grep verify Migrations folder 0 `agent_queues` hit confirmed → Plan v1 §G.4 Migration + pg_dump 備份 + R9 Down() 紀律全廢除 / **scope 從含 Migration 不可逆 → 純 code refactor / 0 不可逆風險**。
+
+**4. Wave 2 build verify 12 errors 自診修**
+大批 v4 service 砍後 Dashboard 4 pages（AgentStatusCard / TaskCenter / PipelineView）+ Bot.Tests/DesignPromptsTests 殘留 v4 method caller / namespace reference / Forge 自抓自修 12 errors（議題 1 路線 2 邊界守 stub action methods + DesignPromptsTests 整檔砍）→ final build 0 error 0 warning。對齊 Stage 54 自驗能力突破「驗收 follow-up bug 自抓自修」紀律。
+
+**5. AgentDescriptor R1 校正（Forge plan 階段 grep verify 揭）**
+Roadmap §C 場景 C 寫 `AgentDescriptor 期望 0 hit` 實質 v5.5 active type — Plan v1 校正為留 AgentDescriptor record + IAgentExecutor.cs → AgentDescriptor.cs 重命名。對齊「Forge plan 階段 spike 必走 grep verify 真實狀態 / 不憑 Roadmap 假設」紀律延續。
+
+### 校準錨真實落點（自省點 #37 第 8 次累積實證候選）
+
+- raw 預估：250-400K（Roadmap + Plan v1 baseline）
+- 真實 context 落點：~預估 600-800K（Aria prep-session ultrathink）— Plan / 實作 / Wave 2 修正 / 自驗 / 結案 6 階段累積
+- ratio 估算：×1.5-2.5 → 對齊大規模架構級重構新區間 ×1.57-4.93 中段
+- Opus 1M + Extra high safety：60-80%（< 75% 警戒）
+- 0 Migration 不可逆風險解除 → scope 性質從 L+（含 Migration）降到 L+（純 code refactor）
+
+### Phase 4 v5.5 路徑下一步
+
+```
+Stage 78a ✅ → 78b ✅ → 78c ✅（本 Stage 完）→ 79（v5.5 image flow / M）→ 80（A HITL plan confirmation / M）
+            → 81（B 動態 re-planning / L）→ WebUI Stage（K WebUI Talent CRUD + Effort 擴展 + E Token monitoring 視覺化
+                                                  + v4 entity drop + Dashboard 重設計為 PetraSession-based）
+            → v5.5 完整收口
+```
+
+下一步：等 Aria gate1 commit 檢查 + gate2 production 0 regression 驗（場景 D + H + I Christ 視覺驗收）通過後 → Stage 79 開（v5.5 image flow 補完）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v2.0 | 2026-05-19 | **Forge 結案第一段** — 實作完成（commit `e17e83b` / 108 files / 220 insertions / 22910 deletions / net -22690 行）+ 自驗 PASS（8/8 self-verifiable 場景全綠 / 3 場景 D/H/I Aria gate2 範圍）+ 本機驗證 0 error / 0 C# compile warning（Stage 78b 59 → 78c 0 全乾淨突破）+ Bot.Tests 100 + Generated 127 全綠。**6 鏈完成 + 6 議題 incorporated**（議題 1-4 Plan 階段 + 議題 5-9 Forge spike 實作期揭真實）。**3 新議題 Forge spike 揭真實**：① 議題 7 MockScenarioService 整套依賴 v4 / Aria 議題 3 wording 漏分層 → Christ 拍板路線 A 砍 Orchestration 層 + 留 LLM 層 ② 議題 8 Pm/ folder 5 files 整套 v4 → Forge 自決納入鏈 B 砍 ③ 議題 9 agent_queues 表真實不存在（Stage 27a 加的是 TaskItem.QueueStatus/QueuedAt nullable fields）→ Plan v1 §G.4 Migration drop + R9 Down() 紀律全廢除 / **0 Migration changes / 0 不可逆風險**。**R1 AgentDescriptor 校正**：Roadmap 寫期望 0 hit 實質 v5.5 active → Plan v1 留 AgentDescriptor + 砍 IAgentExecutor/AgentExecutionResult/AgentResultType + 檔案重命名。**議題 1 路線 2 邊界守**：留 TaskGroup+TaskItem+TaskLog+BossInteraction entity + DB tables + 4 Dashboard Pages + DashboardTaskService + BossInteraction Repository + Stage 57 partial unique index / Dashboard 4 pages stub v4 action methods 顯示 snackbar「v4 已砍 / WebUI Stage 重設計」/ WebUI Stage 預備統一重設計範圍。**ButtonCallbackRouter 713 → 120 行 -83% + CommandHandler 614 → 315 行 -49%**（v5.5 active routing only）。**校準錨**：真實落點預估 ~600-800K / 對齊大規模架構級重構新區間 ×1.57-4.93 中段 / Opus 1M + Extra high safety 60-80% / 自省點 #37 第 8 次累積實證候選。**Wave 2 自診修**：build verify 揭 12 errors 4 files / Forge 自抓自修（Dashboard 3 pages stub + Bot.Tests DesignPromptsTests 砍）→ final build 0 error 0 warning。**Phase 4 路徑**：78a ✅ → 78b ✅ → **78c ✅**（本完）→ 79（image flow M）→ 80（HITL M）→ 81（replan L）→ WebUI Stage（entity drop + Dashboard 重設計） → v5.5 完整收口。**下一步**：Aria gate1 commit 檢查 + gate2 production 0 regression 驗（場景 D+H+I Christ 視覺驗收）通過 → Stage 79 開。 |
 | v1.0 | 2026-05-19 | 規劃書建立 — v3.70.0 / L+ 規模 / v5.5 Phase 4 候選 C 最終收口（Stage 78a v4 dead code 整套砍完 → 78b v4 dead caller 整套砍完 → 78c v4 Pipeline framework 整套砍 ~25-30 class）。**戰略脈絡**：Christ 2026-05-19 拍板路線 A 一次過整套砍（vs 路線 B 拆三輪 78c-1/78c-2/78c-3 / 路線 C 拆兩輪 — 接受 Migration drop table 不可逆 + 規模 L+ 真實 ~500-700K Opus 1M 50-70% safety）。**6 鏈子項 ~29 條**：鏈 A v4 Pipeline 核心（WorkflowEngine + PipelineState + 7 Stage Executors + PipelineRoutingService）/ 鏈 B v4 Meeting + Appeal + HITL（MeetingOrchestrationService + Framework routers + AppealOrchestrationService + FrameworkHitlBridge + EpicChainService + QaCoordinationService + BossResponseHandlerService + BossNotificationService + InteractionProcessor 評估）/ 鏈 C v4 Queue + Group（TaskGroupService + ProposalConfirmationService + AgentQueueService + AgentQueueProcessor + Migration drop agent_queues + v4 entity 評估 + IAgentExecutor 整套砍）/ 鏈 D 連動 routing（ButtonCallbackRouter v4 Pipeline routing + CommandHandler v4 path + WebhookController PR handler 評估 + 其他 SlashCommand 評估）/ 鏈 E DB schema + Migration（drop agent_queues + v4 entity drop 評估 + Entities.cs + AppDbContext DbSet 砍）/ 鏈 F 連動配套（WorkflowSettings + CeoResponseActions + RoutingTypes + archive prompt + xUnit test + Directory.Build.props v3.69.0 → v3.70.0）。**設計決策核心**：路線 A 一次過 + Migration drop 不可逆接受（agent_queues 0 active row + pg_dump 備份候選紀律）+ backwards-compatible 守護 v5.5 path 0 行為改變 + ctor unused dep cleanup 紀律延續 + Forge spike 揭真實 propagation 紀律。**驗收 10 場景**：A xUnit baseline / B Migration drop 真實 executed / C v4 Pipeline 整套 0 caller grep verify / D v5.5 path production 0 regression / E Bot startup 0 exception / F HealthCheckJob production active 不受影響 / G ButtonCallbackRouter v4 routing 砍 + v5.5 0 行為改變 / H CeoAgentService ProcessWithClaudeCodeAsync 0 行為改變 / I 其他 SlashCommand 砍評估 / J WebhookController PR handler 評估。**Aria 預警 W1-W9**：mixed-use class 砍評估 / Migration drop 不可逆 pg_dump 候選 / v4 entity schema dependency / `/mock` 風險 / WebhookController PR handler / ButtonCallbackRouter routing 完整砍 / IAgentExecutor 整套砍前 0 caller verify / CommandHandler v4 path 砍 / Forge spike 揭真實 escalate 紀律。**校準錨預估**：對齊大規模架構級重構新區間 ×1.57-4.93 中段 / raw 250-400K × ratio ×1.5-2.5 = 真實 ~500-700K / Opus 1M + Extra high safety 50-70% / cost $5-8。**Phase 4 路徑**：78a ✅ → 78b ✅ → **78c**（本 / v4 Pipeline 整套砍 / L+）→ 79（image flow / M）→ 80（HITL / M）→ 81（動態 replan / L）→ WebUI Stage → v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1+Tier 2 #3 build + Aria gate2 production 0 regression 驗 → 通過後 Stage 79 開（v5.5 image flow 補完）。 |
