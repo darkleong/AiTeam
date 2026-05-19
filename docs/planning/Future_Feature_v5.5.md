@@ -438,7 +438,52 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Stage 78b 預留範圍**：ButtonCallbackRouter v4 routing 砍 + IAgentExecutor + AgentQueueProcessor + OpsAgent + CeoAgentService.ProcessAsync 評估
 
-**Phase 4 後續路徑**：Stage 79（A HITL plan confirmation 閘門）→ Stage 80（B 動態 re-planning）→ Stage 78b（剩餘 v4 path 收口）→ WebUI Stage（K + E Token monitoring）→ v5.5 完整收口
+### Phase 4 候選 C 後續 — Stage 78b ✅（2026-05-19） v3.69.0
+
+**v3.69.0 / Stage 78b Forge 結案** — commit `a7c763a` 單 commit + 結案第一段 `7600551` / 8 檔變動 / net -787 行 / build warning 102 → 59 (-42%) / xUnit 104+127 全綠 / Forge 自驗 9 grep verify 全 PASS / Aria gate1 Tier 0+1 通過 / **連續 13 Stage 0 follow-up bug fix + clean delivery 連續第五次** ⭐⭐⭐⭐⭐（Stage 75+76+77+78a+78b）
+
+**6 子項精準範圍**（v2.0 final / 路線 C 折衷）：
+- ① ButtonCallbackRouter v4 routing 砍 — 5 case (exec_yes / escalate_skip / escalate_abort / escalate_devplan_skip / escalate_devplan_abort) + 5 method (HandleExecYesAsync / ExecuteAgentTaskAsync / ResolveWorkflowType / SupersedePriorFailedTasks / GetAgentChannelName) + **路線 C 升級**：HandleConfirmYesAsync v4 body line 393-454 cascade 砍（縮為 ~15 行 / 保 Stage 68 短路 + defensive log+ack fallback）+ BuildEscalateButtons 0 caller cleanup + BuildAgentPlanEmbed 留（ShowDirectAgentConfirmAsync 仍 caller）— 變動 -362 行
+- ② OpsAgentService IAgentExecutor 實作砍 — ExecuteTaskAsync 砍 + class declaration `: IAgentExecutor` 移除 + Program.cs:68 AddKeyedSingleton 砍 / **保留 production active**：MonitorDeploymentAsync + MonitorCiCdAsync + RunHealthCheckAsync + AlertAsync + HealthCheckJob Quartz job
+- ③ IAgentExecutor.cs 整檔 0 動 — **W3 fallback 紀律守**：AgentQueueProcessor.cs:190 still active + AgentExecutionResult/AgentResultType/AgentDescriptor 12+ file 廣用（PipelineState/Executors/FrameworkAppealRouter/AppealOrchestrationService/QaCoordinationService/MeetingOrchestrationService/FrameworkPipelineRouter/TaskGroupService）→ Stage 78c 預備砍
+- ④ SlashCommandRouter `/task` slash command + HandleTaskCommandAsync 整段砍 + ctor 11→6 dep（砍 5 dep：buttonRouter / store / interactionService / appSettings / gitHubSettings）+ 2 unused using 砍 / 保留 9 個其他 slash command
+- ⑤ WebhookController HandleIssueOpenedAsync 整段砍 + DispatchEventAsync case issues 砍 + ctor rulesService 砍 / 保留 3 個其他 event handler（PR open / PR sync / push）
+- ⑥ CeoAgentService.ProcessAsync + 4 v4 helper（BuildSystemPrompt / BuildUserMessageAsync / BuildGitHubContextAsync / TryParseResponse）+ ctor 8→3 dep 砍（providerFactory / taskRepository / gitHubService / gitHubSettings）+ \_github field + JsonOptions static field + 7 unused using → 縮為純 v5.5 path ~50 行
+- ⑦ Directory.Build.props v3.68.0 → v3.69.0
+
+**ctor unused dep cleanup 紀律延伸**（對齊「對冗餘不容忍」+ CS9113 warning cleanup）：CeoAgentService 8→3 dep / SlashCommandRouter 11→6 dep / WebhookController + ButtonCallbackRouter 各砍 rulesService。Build warning 102 → 59 (-43 / -42%)。
+
+**校準錨真實落點**：raw 80-130K × ratio **×3.03-4.93** = 真實 **394K** — 突破 Stage 78a baseline ×2.71-4.07 上界。大規模架構級重構新區間 **×1.57-4.93 新上界 7 資料點累積**。對齊自省點 #37 第 7 次累積實證（連續 Stage 73/74/75/76/77/78a/78b Aria raw 偏低紀律延伸）。
+
+**Aria 自我反思候選**：Plan v2 §Verification 第 1 條 grep verify 規格過嚴沒對齊路線 C 拍板 — Aria gate1 二檢紀律延伸候選（路線 C 留 ShowDirectAgentConfirmAsync → BuildConfirmButtons("exec_yes", "exec_no") 字串仍 fire / Plan v2 規格寫「期望 0 hit」應改「ButtonCallbackRouter v4 routing case 0 hit / 不限 BuildConfirmButtons 字串」）。
+
+### Phase 4 候選 — Stage 78c v4 Pipeline framework 整套砍（規模 L / 預留）
+
+**範圍**：v4 Pipeline framework 整套砍 — TaskGroupService + ProposalConfirmationService + DevStageExecutor 等 Stage Executors + AgentQueueService + AgentQueueProcessor + agent_queues 表 + **Migration drop table**（不可逆 / 對齊 ef-core.md 紀律）+ 連動 ButtonCallbackRouter v5.5 active routing 評估（propose_yes / cancel_yes / kickoff_* / design_* / framework_* / ShowDirectAgentConfirmAsync + HandleDirectAgentChannelMessageAsync — Stage 78b 留的）+ WebhookController PR 事件 handler 評估（PR open / PR sync / push — grep verify v5.5 path 真實依賴後決定砍 vs 留）+ 其他 SlashCommand 評估（reload-rules / status / pause / resume / queue / new-session / mock — `/mock` Forge 自驗可能用 / 其他 0 使用直接砍）+ **IAgentExecutor interface + AgentExecutionResult / AgentResultType / AgentDescriptor 整套砍**（Stage 78b W3 fallback 預備條件達成）。
+
+**規模預估**：raw ~150-250K × ratio ×1.5-2.5 = 真實 ~250-500K / Opus 1M + Extra high / cost $5-8。
+
+### Phase 4 候選 — Stage 79 v5.5 image flow 補完（規模 M / 新加 2026-05-19）
+
+**戰略脈絡**：Christ 2026-05-19 戰略 question 揭 v5.5 path **Dashboard 附圖 Petra 看不到 gap** — Stage 75 切 PetraInbox 設計時遺漏 image flow（PetraInbox.Enqueue 簽名只接 userInput / images 在 ProcessWithClaudeCodeAsync 簽名有但 method body 0 用 / Petra LLM call 0 image / Worker dispatch 0 image）。Trial_v6-v22 連續 17 次純文字 prompt 沒踩到 / 但 Stage 80 HITL plan confirmation 需要視覺 context（UI bug 截圖 / mockup）— image flow 是 HITL 業務功能前置依賴。
+
+**WebSearch 業界紀律拍板**：[Latenode LangGraph 2026 + Google Agent Bake-Off] 主流觀點「**only give each agent the tools it actually needs / pass images only to the worker agents that need them**」— 不無腦 propagate / 由 supervisor（Petra）依 task 性質條件性決定 + multimodality 是 native feature（非「先 LLM 轉文字描述再傳」反 pattern）。
+
+**設計拍板**：Petra SubtaskPlan 加 `needsImageContext: bool` per subtask flag — Petra 拆 task 時依視覺 context 需求決定每個 worker 是否需要 image / Worker dispatch chain（ClaudeCodeChatClientAdapter）依 flag 條件性傳遞。
+
+**8 子項**：
+1. PetraInbox schema 擴 Images 欄位（JSON 序列化 List<ImageAttachment> / 或 separate petra_inbox_images 表）+ Migration
+2. PetraInboxRepository.Enqueue 簽名加 images 參數
+3. PetraInboxProcessor pickup row 時 deserialize images + 傳給 PetraDispatchWorker
+4. PetraOrchestratorService.StartAsync chain 加 images 參數傳遞
+5. Petra LLM call（PetraOrchestratorService.cs 3 call sites 用 LlmProviderFactory.Create("PM").CompleteAsync）含 images
+6. **SubtaskPlan schema 擴 `needsImageContext` flag** + Petra prompt 教學如何判斷 + Parser 解析
+7. **Worker dispatch ClaudeCodeChatClientAdapter 條件性傳 image + Claude Code CLI 圖片支援 spike**（規劃前 Aria WebSearch + Forge plan 階段驗證 — `--image` flag / workspace 檔案 reference / base64 inline 哪種？）
+8. xUnit test 補（needsImageContext 條件性 dispatch 驗證）
+
+**規模預估**：raw ~130-180K（從 M 升 M+ — 加條件性 worker propagation + Claude Code CLI 圖片支援 spike）× ratio ×1.5-2.5 = 真實 ~200-450K / Opus 1M + Extra high safety 25-45% / cost $3-5。
+
+**Phase 4 後續路徑（Christ 2026-05-19 拍板修正）**：Stage 78a ✅ → 78b ✅ → 78c 預留（v4 Pipeline 整套砍 / L）→ **79 預留（v5.5 image flow 補完 / M）** → 80 預留（A HITL plan confirmation / M）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（K + E Token monitoring）→ v5.5 完整收口
 
 ### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
 
