@@ -1,9 +1,9 @@
-# Stage 79 — v5.5 image flow 補完（PetraInbox schema 擴 + 條件性 worker propagation）
+# Stage 79 — v5.5 image flow 補完（PetraInbox schema 擴 + 條件性 worker propagation + 半抽象 future-friendly 設計）
 
 > 對應系統版本：v3.71.0
 > 規模：M+
-> 狀態：規劃中
-> 性質：新業務功能（schema + 資料流補完 + Petra 拆 plan 邏輯升級 + Claude Code CLI 圖片支援 spike）/ Migration 加 column nullable / 涉及 LLM call 真實業務影響
+> 狀態：規劃中 / Roadmap v1.1
+> 性質：新業務功能（schema + 資料流補完 + Petra 拆 plan 邏輯升級 + Claude Code CLI 圖片支援 spike + 限制紀律 + 半抽象命名 future-friendly）/ Migration 加 column nullable / 涉及 LLM call 真實業務影響
 > Model + Effort 建議：**Opus 1M + Extra high**（連續 8 Stage 自選紀律延續 + 涉及 Petra prompt + ClaudeCodeChatClientAdapter 圖片 spike 風險中位）
 > cost 預估：$3-5 per cycle
 
@@ -19,7 +19,9 @@ Trial_v6-v22 連續 17 次純文字 prompt 沒踩到 / Stage 78a/78b/78c 砍 v4 
 
 WebSearch 業界紀律（[Latenode LangGraph 2026 + Google Agent Bake-Off](https://developers.googleblog.com/build-better-ai-agents-5-developer-tips-from-the-agent-bake-off/)）：「**only give each agent the tools it actually needs / pass images only to the worker agents that need them**」— 不無腦 propagate / 由 supervisor（Petra）依 task 性質條件性決定。
 
-**Stage 79 範圍**：補完 v5.5 image flow + Petra SubtaskPlan 條件性 worker propagation + Claude Code CLI 真實圖片支援機制對齊。
+**Stage 79 範圍**：補完 v5.5 image flow + Petra SubtaskPlan 條件性 worker propagation + Claude Code CLI 真實圖片支援機制對齊 + 限制紀律（per task max 5 attachment / per file max 5 MB / AppSetting 可調）+ **半抽象 future-friendly schema 命名**（schema 用 `Attachments` jsonb + `AttachmentType` discriminator 預留 PDF/document 等未來擴展 / Stage 79 只實作 type="image"）。
+
+**檔案類型範圍拍板**（Christ 2026-05-19 拍板路線 A）：Stage 79 **只做 Image**（AiTeam 真實 90%+ scenario UI 截圖 / Christ 親口 gap）— 其他檔案類型（PDF / document / audio / video）留 Future Feature「v5.5 multi-attachment flow 補完」候選 / 真實需求觸發才做。但 schema 命名半抽象（`Attachments` + `AttachmentType`）對齊「未來擴展 0 schema migration」紀律 / scope 不擴 Stage 79 規模。
 
 ### Phase 4 路徑（Christ 2026-05-19 拍板）
 
@@ -80,19 +82,24 @@ Stage 78a ✅ → 78b ✅ → 78c ✅ → 79（本 Stage / v5.5 image flow 補�
 
 ## 子項清單
 
-### 1. PetraInbox schema 擴 Images + Migration
+### 1. PetraInbox schema 擴 Attachments + Migration（半抽象 future-friendly 命名）
 
-**範圍**：`src/AiTeam.Data/Entities.cs` PetraInbox class 加 Images column（nullable / 對齊 backwards-compatible 既有 row 0 image）
+**範圍**：`src/AiTeam.Data/Entities.cs` PetraInbox class 加 **`Attachments` jsonb column**（nullable / 對齊 backwards-compatible 既有 row 0 attachment）
+
+**Schema 設計（半抽象）**：
+- column 名 `Attachments`（不 `Images`）— 預留未來擴展 PDF / document / 等不需 schema migration
+- JSON 內每個 attachment 含 `Type` discriminator field（"image" / 未來 "pdf" / "document"）+ `Base64Data` + `MediaType`
+- Stage 79 只實作 `Type="image"` 真實寫入 / 其他 type 預留枠
 
 **兩路線**（Forge Plan Mode 拍板）：
-- **🥇 路線 A**（推薦）：JSON 序列化 `List<ImageAttachment>` 進 PetraInbox 同表 `Images` column（jsonb / Postgres）
-  - 優：1 Migration / 0 連動表 / Repository 簡單
-  - 缺：DB row 可能 5-15 MB（最壞 case 100 image / AiTeam 真實 1-3 image 典型）
-- **🥈 路線 B**：Separate `petra_inbox_images` 表（id / petra_inbox_id FK / base64_data / media_type / order_index）
-  - 優：schema 乾淨 / DB row 不重 / 對齊業界 multi-image best practice
+- **🥇 路線 A**（推薦）：JSON 序列化 `List<Attachment>` 進 PetraInbox 同表 `Attachments` jsonb column
+  - 優：1 Migration / 0 連動表 / Repository 簡單 / Stage 79 範圍精準
+  - 缺：DB row 可能 5-25 MB（max 5 attachment × 5 MB / 對齊限制紀律子項 12）
+- **🥈 路線 B**：Separate `petra_inbox_attachments` 表（id / petra_inbox_id FK / type / base64_data / media_type / order_index）
+  - 優：schema 乾淨 / DB row 不重
   - 缺：2 Migration / FK 連動寫入 / Repository 複雜
 
-對齊 AiTeam 真實場景（Christ 附 1-3 截圖典型）— 路線 A baseline / Forge 拍板。
+對齊 AiTeam 真實場景（Christ 附 1-3 截圖典型）+ 限制紀律 5 張上限 → 路線 A baseline / Forge 拍板。
 
 Migration：對齊 ef-core.md 紀律 / `--project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext` / nullable column ADD 0 不可逆風險。
 
@@ -102,7 +109,9 @@ Migration：對齊 ef-core.md 紀律 / `--project src/AiTeam.Data --startup-proj
 
 - 簽名擴：`PetraInbox Enqueue(string userInput, string source, IReadOnlyList<ImageAttachment>? images = null)`
 - 對齊 backwards-compatible（既有 caller 不傳 images / default null）
-- 路線 A：images != null → JSON 序列化寫 Images column / images == null → Images=null
+- 路線 A：images != null → JSON 序列化（含 Type="image" discriminator）寫 Attachments column / images == null → Attachments=null
+
+**命名半抽象紀律**：Repository 簽名仍用 `ImageAttachment`（既有 record / Stage 79 範圍精準 image）/ schema column 用 `Attachments`（future-friendly）/ Repository 內部把 ImageAttachment 轉成含 Type="image" 的 JSON 結構寫入。未來擴展 PDF / document 時新加 `EnqueueWithPdf` 等 overload 或統一抽象（看真實需求）。
 
 ### 3. CeoAgentService.ProcessWithClaudeCodeAsync 接通 images（Stage 75 漏接修根因）
 
@@ -167,13 +176,44 @@ Migration：對齊 ef-core.md 紀律 / `--project src/AiTeam.Data --startup-proj
 
 ### 10. xUnit test 補
 
-- PetraInbox.Enqueue images null vs 有 images path（序列化 verify）
-- PetraInboxRepository serialize/deserialize Images column 對齊
+- PetraInbox.Enqueue images null vs 有 images path（序列化 verify / Type="image" discriminator）
+- PetraInboxRepository serialize/deserialize Attachments column 對齊
 - SubtaskPlan.Subtask NeedsImageContext flag 預設 false + Parser 解析
 - ClaudeCodeChatClientAdapter 條件性 image dispatch（Subtask.NeedsImageContext=true vs false 各驗）
 - Petra prompt 對應 prompt segment 真實 fire（Stage 73 prompt versioning verify）
+- **限制違規處理**：MaxAttachmentsPerTask + MaxAttachmentSizeMB AppSetting 真實生效 / Enqueue 超限丟前 N 個 + log warning（子項 11）
 
-### 11. Directory.Build.props v3.70.0 → v3.71.0
+### 11. Attachment 限制紀律 + AppSetting 可調
+
+**設計拍板**（Aria 建議 / Forge 拍板確認）：
+
+| 限制項 | 預設值 | AppSetting key |
+|---|---|---|
+| per attachment max size | **5 MB** | `Workflow:MaxAttachmentSizeMB` |
+| per task max attachment count | **5 張** | `Workflow:MaxAttachmentsPerTask` |
+| 推估 per task max total | 25 MB | 5 × 5 MB |
+
+**理由**：
+- 對齊 Claude Code CLI（5 MB per image）+ Claude API（5 MB per image）共同上限
+- AiTeam 真實場景 1-3 截圖典型 / 5 張充裕緩衝
+- 防止 PetraInbox row 過大（25 MB jsonb 是 Postgres 健康上限）+ Petra LLM call cost 可控
+
+**檢查層**：
+- **Dashboard 端**：MudFileUpload `MaxFiles={MaxAttachmentsPerTask}` + file size hint + 顯示「最多 5 張 / 每張 5 MB」提示
+- **API 端**：CeoCommandController 收 > 5 張 / 單張 > 5 MB → 回 **400 Bad Request** 含明確錯誤訊息
+- **後備層**：PetraInboxRepository.Enqueue 收 > 5 張 → log warning + 截前 5 張寫入（防 API 端漏 verify / 對齊「邊界守 + 後備保險」紀律）
+
+**Migration**：AppSettings table 既有 InsertData seed 加 2 條（對齊 Stage 75 `Workflow:UsePetraOrchestratorV5` + Stage 77 `Workflow:MaxConcurrentPetra` 既有 pattern）。
+
+### 12. Dashboard MudFileUpload + API verify 違規處理
+
+**範圍**：
+- `src/AiTeam.Dashboard/Components/Pages/Home/...` MudFileUpload 設定 `MaxFiles={MaxAttachmentsPerTask}` + `MaximumFileCount` 對齊
+- `src/AiTeam.Bot/Api/CeoCommandController.cs` 收 request 後 verify `Images?.Count <= MaxAttachmentsPerTask` + 各張 `Base64Data.Length <= MaxAttachmentSizeMB × 1024 × 1024` → 超限回 400 + 訊息
+
+對齊 Dashboard 主要 entry（Christ 真實使用通道）+ API 後備邊界守。
+
+### 13. Directory.Build.props v3.70.0 → v3.71.0
 
 ---
 
@@ -217,6 +257,22 @@ Christ 真實使用模式：1-3 截圖典型 / 不會 100 image / row 5-15 MB �
 ### 6. ImageAttachment record namespace 評估
 
 ImageAttachment 既有 `src/AiTeam.Bot/Agents/ILlmProvider.cs:27` Bot project 內 / Stage 79 Repository 用需要 reference Bot project type — 評估升 Shared project 對齊「跨 project type 紀律」（Forge plan 階段拍板）。
+
+### 7. 半抽象 future-friendly 設計（Christ 2026-05-19 拍板）
+
+**Christ 拍板「Attachments 命名」+ 路線 A 只做 Image**：採半抽象設計：
+- **schema 抽象**：column 名 `Attachments` jsonb + JSON 內含 `Type` discriminator field — 預留未來擴展 PDF / document 等 type 不需 schema migration
+- **code 暫不抽象**：ImageAttachment record + SubtaskPlan.NeedsImageContext flag 留 image-specific 命名（Stage 79 唯一 type / 對齊 Petra prompt 教學精準度）
+- **未來擴展 path**：
+  - 加 PdfAttachment record（type="pdf"）/ DocumentAttachment record（type="document"）/ 各自獨立 record
+  - SubtaskPlan 加 NeedsPdfContext / NeedsDocumentContext 新 flag（或統一 NeedsAttachmentContext: AttachmentTypes flag enum）— 看真實需求觸發時拍板
+  - schema Attachments jsonb 0 migration 直接擴
+
+**vs 拒絕全抽象**（record FileAttachment 統一 + SubtaskPlan.NeedsAttachmentContext 統一）：
+- 全抽象 scope 擴 +20%（既有 ImageAttachment caller 全 update）
+- Stage 79 範圍精準（image only / scope M+ 維持）/ 全抽象擴複雜度違反「最小可行紀律」
+
+**對齊「最小抽象 future-friendly」紀律** — schema 預留擴展但 code 暫不重構 / 真實需求觸發再拍板抽象度。
 
 ---
 
@@ -289,6 +345,19 @@ ImageAttachment 既有 `src/AiTeam.Bot/Agents/ILlmProvider.cs:27` Bot project �
 - 附圖 prompt：Petra 真實看圖 + 拆 plan 含 needsImageContext + Cody dispatch 真實看圖修 UI bug + PR 真開
 - 對齊連續 15 Trial 業務級成功紀律延續
 
+### 場景 J：Attachment 限制違規處理（Dashboard + API + Repository 三層守）
+
+**觸發**：
+- Dashboard 端：嘗試上傳 6 張圖（超 MaxAttachmentsPerTask=5）
+- API 端：直接 POST `/internal/ceo/command` 含 6 張 Images / 單張 10 MB（超 MaxAttachmentSizeMB=5）
+- 後備層：xUnit test PetraInboxRepository.Enqueue 強制傳 7 張
+
+**驗證**：
+- Dashboard MudFileUpload `MaxFiles=5` 真實生效（用戶 UI 端阻止超第 6 張）
+- API `/internal/ceo/command` 收 6 張 → 回 400 Bad Request 含「最多 5 張 attachment」訊息 / 收單張 10 MB → 回 400「單張最多 5 MB」
+- xUnit verify PetraInboxRepository.Enqueue 收 7 張 → log warning「超 MaxAttachmentsPerTask=5 / 截前 5 張」+ PetraInbox row Attachments=5 張（真實寫入前 5 / 後 2 丟棄）
+- AppSetting `Workflow:MaxAttachmentsPerTask` SQL UPDATE 為 3 → reload-cache → 新 task 強制限 3 張（AppSetting 真實動態生效）
+
 ### 場景 I：Bot startup 0 exception（DI / Migration apply）
 
 **觸發**：Bot 啟動 + Application.RunAsync 完整跑通
@@ -360,6 +429,26 @@ Petra 用 LlmProviderFactory.Create("PM")（Gemini default 真實使用 / Trial_
 - Gemini API 真實支援 multimodal（image input）/ Forge plan 階段 grep verify GeminiProvider 真實實作（`src/AiTeam.Bot/Agents/GeminiProvider.cs` `CompleteAsync` 簽名 + image 處理 path）
 - 若 Gemini Provider 真實未實作 multimodal → escalate Christ 拍板（兩路線：補 GeminiProvider multimodal 支援 / 切 Anthropic Provider）
 
+### W9：半抽象 future-friendly 命名邊界 — schema vs record vs SubtaskPlan flag
+
+對齊 Christ 拍板「Attachments 命名」+ 路線 A 只做 Image：
+
+| 層 | 抽象度 | 理由 |
+|---|---|---|
+| **PetraInbox schema column** | **抽象** `Attachments` jsonb + `Type` discriminator | 未來擴展 0 schema migration |
+| **ImageAttachment record** | **不抽象** image-specific | 既有 record + Stage 79 範圍精準 + 全抽象 scope 擴 +20% |
+| **SubtaskPlan.NeedsImageContext flag** | **不抽象** image-specific | Petra prompt 教學精準對齊 image scenario / 未來擴展再加 NeedsPdfContext 等 |
+| **Repository.Enqueue 簽名** | **不抽象** `IReadOnlyList<ImageAttachment>?` | 既有 caller 不擾 + Stage 79 image-only |
+
+**Forge Plan Mode 確認**：若實作期揭真實全抽象 ROI 升高 / 半抽象設計擾範圍 → escalate Christ 拍板（不擾既有設計拍板 / 對齊「最小抽象紀律」精神）。
+
+### W10：Attachment 限制紀律 AppSetting + Migration InsertData
+
+對齊 Stage 75/77 既有 AppSettings InsertData seed pattern：
+- Migration 加 2 條 InsertData：`Workflow:MaxAttachmentsPerTask=5` + `Workflow:MaxAttachmentSizeMB=5`
+- WorkflowSettingsResolver 加對應 getter method（對齊 Stage 77 `MaxConcurrentPetra` resolver pattern）
+- AppSettingsService cache TTL 對齊（5 min 既有 baseline）
+
 ### W8：SubtaskPlan record 加 field 對齊 backwards-compatible
 
 - `Subtask` record 加 `NeedsImageContext` field 對齊 backwards-compatible（default false）
@@ -400,4 +489,5 @@ cost 預估：$3-5 per cycle
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.1 | 2026-05-19 | **Christ 拍板路線 A + Aria 補強升級** — ① 半抽象 future-friendly 命名（PetraInbox schema column `Attachments` jsonb + JSON 內 `Type` discriminator field 預留未來擴展 PDF/document 等 0 schema migration / ImageAttachment record + SubtaskPlan.NeedsImageContext flag 留 image-specific 對齊 Stage 79 範圍精準 / 拒絕全抽象 scope 擴 +20%）② 加新子項 11 **Attachment 限制紀律 + AppSetting 可調**（per attachment max 5 MB / per task max 5 張 / 對應 AppSetting `Workflow:MaxAttachmentsPerTask` + `Workflow:MaxAttachmentSizeMB` + Migration InsertData seed 對齊 Stage 75/77 既有 pattern）③ 加新子項 12 **Dashboard MudFileUpload MaxFiles + API verify 違規處理**（三層守：Dashboard MaxFiles UI 阻止 + API 400 Bad Request + Repository 後備截前 N 個 log warning）④ 設計決策段 7 加「半抽象 future-friendly 設計」段 ⑤ 驗收場景 J 加「Attachment 限制違規處理三層守」⑥ Aria 預警 W9 「半抽象命名邊界」+ W10「AppSetting + Migration InsertData seed」⑦ header + 戰略脈絡 + 子項 1+2 命名更新對齊半抽象 ⑧ 子項編號 11→13（version bump 移至最後）。**檔案類型範圍拍板**：Stage 79 只做 Image（AiTeam 真實 90%+ scenario）/ PDF / document 等留 Future Feature「v5.5 multi-attachment flow 補完」候選真實需求觸發才做 / 半抽象 schema 預留擴展 0 schema migration。 |
 | v1.0 | 2026-05-19 | 規劃書建立 — v3.71.0 / M+ 規模 / v5.5 Phase 4 image flow 補完（Stage 75 切 PetraInbox 設計遺漏修根因 + 條件性 worker propagation）。**戰略脈絡**：Christ 2026-05-19 戰略 question 揭 Dashboard 附圖 Petra 看不到 gap + WebSearch 業界紀律拍板「pass images only to worker agents that need them」+ Claude Code CLI 真實圖片支援機制 WebSearch 確認（workspace 檔案 reference / 0 base64 / 0 `--image` flag）。**11 子項**：① PetraInbox schema 擴 Images jsonb column + Migration ② PetraInboxRepository.Enqueue 簽名擴 ③ CeoAgentService.ProcessWithClaudeCodeAsync 接通 images 修 Stage 75 漏接根因 ④ PetraInboxProcessor → PetraDispatchWorker → PetraOrchestratorService.StartAsync chain 加 images ⑤ Petra LLM call 3 call sites 含 images（DecideTalents/Skill/SubtaskPlan）⑥ SubtaskPlan.Subtask record 擴 NeedsImageContext flag ⑦ Petra prompt（TalentPrompt PM）教學如何判斷 NeedsImageContext（UI 修改 → true / 純後端 / docs → false）⑧ ClaudeCodeChatClientAdapter 條件性 image dispatch（workspace 寫圖檔 + subprocess prompt path reference）⑨ workspace 圖檔清理 + 多 image 處理 ⑩ xUnit test 補 ⑪ Directory.Build.props v3.70.0 → v3.71.0。**計劃前 WebSearch 結論 3 段完整 incorporated**：① Claude Code CLI 圖片支援機制（無 `--image` flag / 真實機制 prompt 內 file path reference）② IChatClient multimodal 支援（ChatMessage 含 image AIContent）③ Multi-agent image propagation 業界 best practice（only give what agent needs / supervisor 條件性決定 / multimodality native feature）。**設計決策核心**：路線 A image schema baseline（PetraInbox jsonb column 同表 / AiTeam 真實場景 1-3 image 典型 / row 5-15 MB 可接受）+ NeedsImageContext per subtask Petra decide 紀律 + Claude Code CLI workspace 檔案 reference 機制 + backwards-compatible 守護紀律延續 + Migration ADD column nullable 0 不可逆風險。**驗收 9 場景**：A xUnit baseline + 新 test / B Migration ADD column / C Dashboard 附圖 → PetraInbox 寫入 Images / D Petra LLM call 真實含 image / E SubtaskPlan NeedsImageContext flag / F Worker dispatch 條件性 image fire / G v5.5 path 0 regression 純文字 baseline / H Trial_v23 真實業務驗 4 Stage 一次 / I Bot startup 0 exception。**Aria 預警 W1-W8**：image schema 路線拍板 / Petra prompt 教學精準度 / workspace 圖檔 path 設計 / Claude Code CLI subprocess image dispatch spike / ImageAttachment namespace 升 Shared 評估 / backwards-compatible 既有 row 0 images / GeminiProvider multimodal 支援 verify（必前置 spike）/ SubtaskPlan record 加 field 對齊。**校準錨預估**：對齊大規模架構級重構新區間 ×1.30-4.93 中段下緣 / raw 130-180K × ratio ×1.5-2.5 = 真實 ~200-450K / Opus 1M + Extra high safety 20-45% / cost $3-5。**Phase 4 路徑**：78a ✅ → 78b ✅ → 78c ✅ → **79**（本 / v5.5 image flow / M+）→ Trial_v23（驗 4 Stage）→ 80（HITL / M）→ Trial_v24（驗 HITL 業務體驗）→ 81（動態 replan / L）→ WebUI Stage → v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Aria gate2 production 0 regression 驗 → 通過後 Trial_v23 開（4 Stage 一次 cover）。 |
