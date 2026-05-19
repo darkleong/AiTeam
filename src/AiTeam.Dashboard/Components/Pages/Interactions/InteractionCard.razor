@@ -29,16 +29,23 @@
 
     @if (!string.IsNullOrWhiteSpace(Interaction.Description))
     {
-        <MudCardContent>
-            <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
-                @Interaction.Description
-            </MudText>
+        var (mainText, sysNote) = ParseDescription(Interaction.Description);
+        <MudCardContent Class="px-4 py-3">
+            <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">@mainText</MudText>
+            @if (!string.IsNullOrWhiteSpace(sysNote))
+            {
+                <MudPaper Elevation="0" Class="mt-3 pa-2 rounded d-flex align-start gap-2"
+                          Style="background-color: rgba(0,0,0,.04); border-left: 3px solid rgba(0,0,0,.15);">
+                    <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default" Class="flex-shrink-0" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="word-break: break-word;">@sysNote</MudText>
+                </MudPaper>
+            }
         </MudCardContent>
     }
 
     @if (Interaction.Status == "responded")
     {
-        <MudCardActions Class="flex-column align-start">
+        <MudCardActions Class="flex-column align-start px-4 pb-3">
             <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
                 已由 @Interaction.ResponseSource 回覆：@Interaction.ResponseAction
             </MudChip>
@@ -52,7 +59,7 @@
     }
     else if (Interaction.AvailableActions.Count > 0)
     {
-        <MudCardActions>
+        <MudCardActions Class="px-4 pt-2 pb-3">
             @foreach (var action in Interaction.AvailableActions)
             {
                 var actionCopy = action;
@@ -127,6 +134,26 @@
 
             _isResponding = false;
         }
+    }
+
+    /// Splits description into (main Victoria prompt, system notification).
+    /// Lines starting with "[vX.Y]" are Petra workflow status messages, rendered separately.
+    private static (string Main, string SysNote) ParseDescription(string description)
+    {
+        var lines = description.Split('\n');
+        var mainLines  = new System.Collections.Generic.List<string>();
+        var sysLines   = new System.Collections.Generic.List<string>();
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("[v", StringComparison.Ordinal) && trimmed.IndexOf(']') > 2)
+                sysLines.Add(trimmed);
+            else
+                mainLines.Add(line);
+        }
+
+        return (string.Join('\n', mainLines).Trim(), string.Join('\n', sysLines).Trim());
     }
 
     private static Color MapButtonColor(string color) => color switch
