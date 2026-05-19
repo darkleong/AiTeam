@@ -1,4 +1,3 @@
-using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Services;
@@ -16,6 +15,7 @@ namespace AiTeam.Bot.Ops;
 
 /// <summary>
 /// Ops Agent：監控部署結果、健康檢查、處理回滾邏輯。
+/// Stage 78b：v4 IAgentExecutor 實作砍 — ExecuteTaskAsync method + class 對 IAgentExecutor 的 implement 砍（v4 path dead caller 整套砍 / production active 4 method MonitorDeploymentAsync / MonitorCiCdAsync / RunHealthCheckAsync / AlertAsync 留 / HealthCheckJob Quartz scheduled 0 影響）。
 /// </summary>
 public class OpsAgentService(
     IOptions<DiscordSettings> discordSettings,
@@ -25,7 +25,7 @@ public class OpsAgentService(
     IServiceProvider serviceProvider,
     DashboardPushService dashboardPush,
     GitHubService gitHubService,
-    ILogger<OpsAgentService> logger) : IAgentExecutor
+    ILogger<OpsAgentService> logger)
 {
     private readonly DiscordSettings _discord = discordSettings.Value;
     private readonly GitHubSettings _github = gitHubSettings.Value;
@@ -33,18 +33,6 @@ public class OpsAgentService(
 
     // 避免重複通知同一筆失敗（記住上次已處理的 run ID）
     private long _lastHandledRunId;
-
-    /// <inheritdoc />
-    public async Task<AgentExecutionResult> ExecuteTaskAsync(
-        TaskItem task,
-        string owner,
-        string repo,
-        IReadOnlyList<string> rules,
-        CancellationToken cancellationToken = default)
-    {
-        await AlertAsync($"📋 Ops 任務待執行：{task.Title}（專案：{repo}）");
-        return new AgentExecutionResult(true, "Ops 警報已發送至 #警報 頻道");
-    }
 
     /// <summary>
     /// 監控 GitHub Actions 部署結果，成功通知，失敗自動回滾。

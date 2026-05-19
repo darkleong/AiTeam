@@ -1,5 +1,3 @@
-using System.Text.Json;
-using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
@@ -16,8 +14,9 @@ namespace AiTeam.Bot.Discord.Routing;
 /// <summary>
 /// Stage 36：Discord slash command Router（從 CommandHandler 拆解而來）。
 ///
-/// 承載 10 個 slash command 的定義與處理：
-///   /task /reload-rules /status /new-session /mock
+/// Stage 78b：/task slash command + HandleTaskCommandAsync 整套砍（v4 path dead caller / CeoAgentService.ProcessAsync v4 唯一 Discord caller 砍後 0 caller）。
+/// 承載 9 個 slash command 的定義與處理：
+///   /reload-rules /status /new-session /mock
 ///   /pause /resume /stop-all /resume-all /queue
 ///
 /// 注入 ButtonCallbackRouter 以共用 ShowProposalAsync / ShowDirectAgentConfirmAsync
@@ -25,34 +24,23 @@ namespace AiTeam.Bot.Discord.Routing;
 /// </summary>
 public class SlashCommandRouter(
     IOptions<DiscordSettings> settings,
-    IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
     RulesService rulesService,
-    AppSettingsService appSettings,
     ConversationContextStore contextStore,
     AgentQueueControlService agentQueueControl,
-    InteractionService interactionService,
-    PendingConfirmationStore store,
-    ButtonCallbackRouter buttonRouter,
     ILogger<SlashCommandRouter> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
-    private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
+    // Stage 78b：/task 砍後 ctor 大幅瘦身 — buttonRouter / store / interactionService / appSettings / gitHubSettings 全 0 caller 砍。
 
     // ========== Command 定義 ==========
 
     public static ApplicationCommandProperties[] BuildCommandDefinitions()
     {
+        // Stage 78b：/task slash command 砍 — v4 path dead caller（CeoAgentService.ProcessAsync 走 v4 直接 LLM mode / production 0 fire）。
+        // v5.5 path 入口：Dashboard CEO chat（Victoria → PetraInbox flag forward only）+ Discord @mention chat（CommandHandler）。
         return new ApplicationCommandProperties[]
         {
-            new SlashCommandBuilder()
-                .WithName("task")
-                .WithDescription("指派任務給 AI 團隊")
-                .AddOption("project", ApplicationCommandOptionType.String, "專案名稱", isRequired: true)
-                .AddOption("description", ApplicationCommandOptionType.String, "任務描述", isRequired: true)
-                .AddOption("image", ApplicationCommandOptionType.Attachment, "（選用）附圖截圖", isRequired: false)
-                .Build(),
-
             new SlashCommandBuilder()
                 .WithName("reload-rules")
                 .WithDescription("強制重新載入 Notion 規則（清除 Cache）")
@@ -148,7 +136,6 @@ public class SlashCommandRouter(
         {
             await (command.CommandName switch
             {
-                "task"         => HandleTaskCommandAsync(command),
                 "reload-rules" => HandleReloadRulesAsync(command),
                 "status"       => HandleStatusAsync(command),
                 "new-session"  => HandleNewSessionAsync(command),
@@ -168,111 +155,8 @@ public class SlashCommandRouter(
         }
     }
 
-    // ========== /task ==========
-
-    private async Task HandleTaskCommandAsync(SocketSlashCommand command)
-    {
-        var project     = command.Data.Options.First(o => o.Name == "project").Value.ToString()!;
-        var description = command.Data.Options.First(o => o.Name == "description").Value.ToString()!;
-
-        var images = new List<ImageAttachment>();
-        var attachmentOption = command.Data.Options.FirstOrDefault(o => o.Name == "image");
-        if (attachmentOption?.Value is IAttachment attachment &&
-            attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            try
-            {
-                using var http = new HttpClient();
-                var bytes     = await http.GetByteArrayAsync(attachment.Url);
-                var base64    = Convert.ToBase64String(bytes);
-                var mediaType = DetectImageMediaType(bytes) ?? attachment.ContentType ?? "image/png";
-                images.Add(new ImageAttachment(base64, mediaType));
-                logger.LogInformation("附圖已下載並轉為 Base64（{ContentType}，{Bytes} bytes）",
-                    mediaType, bytes.Length);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "附圖下載失敗，將忽略圖片繼續處理");
-            }
-        }
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-        var agentRepo  = scope.ServiceProvider.GetRequiredService<AgentRepository>();
-
-        var rules        = await rulesService.GetRulesAsync();
-        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
-        var agentList    = activeAgents
-            .Select(a => new AgentDescriptor(a.Name, a.Description))
-            .ToList();
-
-        var ceoResponse = await ceoService.ProcessAsync(
-            description, project, agentList, rules,
-            images: images.Count > 0 ? images : null);
-
-        if (!string.IsNullOrWhiteSpace(ceoResponse.TargetAgent) && ceoResponse.Action == "reply")
-        {
-            logger.LogWarning(
-                "CEO 回傳 action=reply 但 target_agent={Agent}，強制修正為 delegate",
-                ceoResponse.TargetAgent);
-            ceoResponse.Action = "delegate";
-        }
-
-        if (ceoResponse.Action == "propose")
-        {
-            await command.FollowupAsync(ceoResponse.Reply);
-            await buttonRouter.ShowProposalAsync(
-                async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
-                ceoResponse, project, description,
-                images: images.Count > 0 ? images : null,
-                channelId: command.Channel.Id);
-        }
-        else if (ceoResponse.Action != "reply")
-        {
-            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
-            {
-                await buttonRouter.ShowDirectAgentConfirmAsync(
-                    async (embed, comps) => await command.FollowupAsync(embed: embed, components: comps),
-                    ceoResponse, project, description,
-                    channelId: command.Channel.Id);
-            }
-            else
-            {
-                var confirmMessage = await command.FollowupAsync(
-                    embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(ceoResponse, project),
-                    components: ButtonCallbackRouter.BuildConfirmButtons());
-
-                store.RegisterConfirmation(confirmMessage.Id,
-                    new PendingConfirmation(ceoResponse, project, description));
-
-                // Stage 39 搭車修：補上 Task.Description（與 CommandHandler 兩處對稱）
-                var interactionDescription = string.IsNullOrWhiteSpace(ceoResponse.Task?.Description)
-                    ? (ceoResponse.Reply ?? description)
-                    : $"{ceoResponse.Reply}\n\n---\n\n{ceoResponse.Task.Description}";
-
-                // Stage 55B 範圍邊界：ceo_confirm 仍 fire-and-forget — Discord 命令層 /ceo slash 命令處理路徑（同 CommandHandler）
-                _ = interactionService.CreateInteractionAsync(
-                    "ceo_confirm",
-                    title:                ceoResponse.Task?.Title ?? description,
-                    description:          interactionDescription,
-                    project:              project,
-                    agentName:            ceoResponse.TargetAgent,
-                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
-                    contextJson:          JsonSerializer.Serialize(new
-                    {
-                        channelId       = command.Channel.Id.ToString(),
-                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
-                        project,
-                        description
-                    }),
-                    discordMessageId: (decimal)confirmMessage.Id);
-            }
-        }
-        else
-        {
-            await command.FollowupAsync(ceoResponse.Reply);
-        }
-    }
+    // Stage 78b：/task slash command + HandleTaskCommandAsync 整套砍 — v4 path dead caller
+    //（呼叫 CeoAgentService.ProcessAsync v4 LLM mode / production 0 fire / v5.5 path 走 Dashboard chat + Discord @mention chat 入口）。
 
     // ========== /new-session ==========
 

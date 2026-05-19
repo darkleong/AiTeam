@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
@@ -25,7 +24,6 @@ public class WebhookController(
     IOptions<GitHubSettings> gitHubSettings,
     IOptions<DiscordSettings> discordSettings,
     DiscordSocketClient discordClient,
-    RulesService rulesService,
     TaskGroupService taskGroupService,
     IServiceProvider serviceProvider,
     ILogger<WebhookController> logger) : ControllerBase
@@ -76,9 +74,7 @@ public class WebhookController(
 
         switch (eventType)
         {
-            case "issues" when root.GetProperty("action").GetString() == "opened":
-                await HandleIssueOpenedAsync(root, cancellationToken);
-                break;
+            // Stage 78b：case "issues" 砍 — HandleIssueOpenedAsync 是 CeoAgentService.ProcessAsync v4 path 唯一 webhook caller / 整套 dead caller 砍。
 
             case "pull_request" when root.GetProperty("action").GetString() == "opened":
                 await HandlePrOpenedAsync(root, cancellationToken);
@@ -99,52 +95,8 @@ public class WebhookController(
         }
     }
 
-    /// <summary>
-    /// Issue 建立 → 自動觸發 CEO Agent 分析，走雙層確認流程。
-    /// </summary>
-    private async Task HandleIssueOpenedAsync(JsonElement root, CancellationToken cancellationToken)
-    {
-        var issueTitle = root.GetProperty("issue").GetProperty("title").GetString() ?? "";
-        var issueBody = root.GetProperty("issue").GetProperty("body").GetString() ?? "";
-        var repoName = root.GetProperty("repository").GetProperty("name").GetString() ?? "";
-        var issueUrl = root.GetProperty("issue").GetProperty("html_url").GetString() ?? "";
-
-        logger.LogInformation("Issue 建立：{Title}（{Repo}）", issueTitle, repoName);
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-
-        var agentRepo    = scope.ServiceProvider.GetRequiredService<AgentRepository>();
-        var rules        = await rulesService.GetRulesAsync(AgentNames.Ceo, cancellationToken);
-        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync(cancellationToken);
-        var agentList    = activeAgents
-            .Select(a => new AgentDescriptor(a.Name, a.Description))
-            .ToList();
-
-        var userInput = $"GitHub Issue 建立：{issueTitle}\n\n{issueBody}\n\nIssue URL：{issueUrl}";
-        var ceoResponse = await ceoService.ProcessAsync(
-            userInput, repoName, agentList, rules, cancellationToken);
-
-        // 發送到 Discord #任務動態 頻道
-        var channel = await FindChannelAsync(_discord.Channels.TaskUpdates);
-        if (channel is null)
-        {
-            logger.LogWarning("找不到 Discord 頻道：{Channel}", _discord.Channels.TaskUpdates);
-            return;
-        }
-
-        var embed = new DiscordNet.EmbedBuilder()
-            .WithTitle("🐛 GitHub Issue 觸發 — CEO 決策")
-            .WithColor(DiscordNet.Color.Purple)
-            .AddField("Issue", $"[{issueTitle}]({issueUrl})")
-            .AddField("Repo", repoName, inline: true)
-            .AddField("CEO 回應", ceoResponse.Reply)
-            .WithFooter("請至 #victoria-ceo 頻道確認")
-            .Build();
-
-        await channel.SendMessageAsync(embed: embed);
-    }
+    // Stage 78b：HandleIssueOpenedAsync 砍 — v4 path dead caller / CeoAgentService.ProcessAsync v4 唯一 webhook 入口
+    //（v5.5 path 走 Dashboard CEO chat / Discord @mention chat / v4 Issue webhook auto-trigger 0 production fire）。
 
     /// <summary>
     /// PR 開啟 → 通知老闆審查。

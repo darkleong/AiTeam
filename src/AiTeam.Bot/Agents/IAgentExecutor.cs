@@ -5,6 +5,14 @@ namespace AiTeam.Bot.Agents;
 /// <summary>
 /// 所有可被 CEO 分派的執行 Agent 必須實作此介面。
 /// CommandHandler 僅依賴此介面，不知道具體 Agent 類型，達成動態分派。
+///
+/// Stage 78b：v4 path dead caller 整套砍後 keyed registration 全砍（OpsAgent IAgentExecutor 實作砍 = Program.cs 0 個 AddKeyedScoped/Singleton&lt;IAgentExecutor&gt;）。
+/// 但 interface 整檔仍保留 — fallback 紀律守：
+///   1) AgentQueueProcessor:190 `GetKeyedService&lt;IAgentExecutor&gt;(executorKey)` 仍 active（v4 Pipeline framework 範圍）
+///   2) `AgentExecutionResult` / `AgentResultType` / `AgentDescriptor` record/enum 廣泛使用於 PipelineState / Executors / FrameworkAppealRouter /
+///      AppealOrchestrationService / QaCoordinationService / MeetingOrchestrationService / FrameworkPipelineRouter / TaskGroupService 12+ file。
+/// Stage 78c 預備砍範圍 — v4 Pipeline framework 整套砍時（TaskGroupService + ProposalConfirmationService + Stage Executors + AgentQueueService + AgentQueueProcessor + agent_queues 表）對應
+/// IAgentExecutor interface + AgentExecutionResult / AgentResultType / AgentDescriptor 整套砍。
 /// </summary>
 public interface IAgentExecutor
 {

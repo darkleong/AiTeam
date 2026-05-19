@@ -32,13 +32,13 @@ public class ButtonCallbackRouter(
     IOptions<DiscordSettings> settings,
     IOptions<GitHubSettings> gitHubSettings,
     IServiceProvider serviceProvider,
-    RulesService rulesService,
     TaskGroupService taskGroupService,
     InteractionService interactionService,
     PendingConfirmationStore store,
     ILogger<ButtonCallbackRouter> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
+    // Stage 78b：rulesService 砍 — v4 ExecuteAgentTaskAsync 唯一 caller 砍後 0 caller。
     private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
 
     // ========== Public entry ==========
@@ -264,10 +264,6 @@ public class ButtonCallbackRouter(
                 catch (Exception ex) { logger.LogError(ex, "提案核准後執行失敗（TaskId={TaskId}）", pending.TaskId); }
             }, CancellationToken.None);
         }
-        else if (id == "exec_yes")
-        {
-            await HandleExecYesAsync(interaction, pending);
-        }
         else if (id == "cancel_yes")
         {
             await interaction.DeferAsync();
@@ -290,66 +286,9 @@ public class ButtonCallbackRouter(
             logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
             _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "propose_adjust");
         }
-        else if (id == "escalate_skip")
-        {
-            await interaction.RespondAsync("⚠️ 此操作在目前版本已不適用（提案階段已簡化）。", ephemeral: true);
-        }
-        else if (id == "escalate_abort")
-        {
-            await interaction.RespondAsync("❌ 已放棄此提案。若需重新規劃，請重新下指令。");
-            logger.LogInformation("老闆放棄 Petra escalate 提案：TaskId={Id}", pending.TaskId);
-        }
-        else if (id == "escalate_devplan_skip")
-        {
-            await interaction.DeferAsync();
-            await interaction.FollowupAsync("⏭️ 已跳過 Dev_plan 審核，Cody 將直接開始 coding...");
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var scope = serviceProvider.CreateAsyncScope();
-                    var groupRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-                    var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
-                    if (group is null) return;
-
-                    // FF 三十七：清 status / interventionReason，避免 Dashboard UI 顯示「需介入」誤導
-                    groupRepo.UpdateGroupStatus(group, "running");
-                    group.InterventionReason = null;
-                    // Stage 61-FF 四十五：Christ 「跳過審核」action 標前置 failed task cancelled，
-                    // 避免後續 MarkGroupDoneOrIntervention 跨 Agent 看到舊 failed task 誤判 needs_intervention（Trial_v6 議題 #9）
-                    SupersedePriorFailedTasks(group, "Christ 跳過 Dev_plan 審核");
-                    await groupRepo.SaveAsync();
-
-                    await taskGroupService.FireStepsAsync(
-                        group, [new WorkflowStep("Dev")], CancellationToken.None);
-                }
-                catch (Exception ex) { logger.LogError(ex, "escalate_devplan_skip 失敗"); }
-            }, CancellationToken.None);
-        }
-        else if (id == "escalate_devplan_abort")
-        {
-            await interaction.DeferAsync();
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var scope = serviceProvider.CreateAsyncScope();
-                    var groupRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-                    var group = await groupRepo.GetGroupByIdAsync(pending.GroupId);
-                    if (group is not null)
-                    {
-                        // Stage 61-FF 四十五：abort 也標前置 failed task cancelled（避免 Dashboard / 後續邏輯誤判）
-                        SupersedePriorFailedTasks(group, "Christ 放棄 Dev_plan 流程");
-                        groupRepo.UpdateGroupStatus(group, "failed");
-                        await groupRepo.SaveAsync();
-                    }
-                }
-                catch (Exception ex) { logger.LogError(ex, "escalate_devplan_abort 失敗"); }
-            }, CancellationToken.None);
-            await interaction.FollowupAsync("❌ 已放棄此任務的開發流程。");
-            logger.LogInformation("老闆放棄 Dev_plan escalation：GroupId={Id}", pending.GroupId);
-        }
-        else // confirm_no、exec_no、propose_no
+        // Stage 78b：v4 routing 砍 — escalate_skip / escalate_abort / escalate_devplan_skip / escalate_devplan_abort 整套砍
+        //（4 case 全 v4 path / production 0 fire / 對應 helper SupersedePriorFailedTasks 也已 0 caller 砍）。
+        else // confirm_no、propose_no
         {
             await interaction.RespondAsync("❌ 已取消。");
 
@@ -390,123 +329,18 @@ public class ButtonCallbackRouter(
             return;
         }
 
-        try
-        {
-            await using var scope = serviceProvider.CreateAsyncScope();
-            var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-
-            var projectId = string.IsNullOrWhiteSpace(pending.Project)
-                ? (Guid?)null
-                : await taskRepo.GetProjectIdByNameAsync(pending.Project);
-
-            var task = new TaskItem
-            {
-                Title         = pending.CeoResponse.Task?.Title ?? pending.Description,
-                Description   = pending.CeoResponse.Task?.Description,
-                TriggeredBy   = "Discord",
-                AssignedAgent = pending.CeoResponse.TargetAgent ?? "CEO",
-                Status        = "pending",
-                ProjectId     = projectId,
-            };
-            taskRepo.Add(task);
-            await taskRepo.SaveAsync();
-
-            var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = task.Id,
-                Title     = task.Title,
-                AgentName = task.AssignedAgent,
-                Status    = task.Status
-            });
-
-            var agentPlanEmbed  = BuildAgentPlanEmbed(pending.CeoResponse, task.Id);
-            var agentConfirmMsg = await interaction.FollowupAsync(
-                embed: agentPlanEmbed,
-                components: BuildConfirmButtons("exec_yes", "exec_no"));
-
-            store.RegisterConfirmation(agentConfirmMsg.Id, pending with { TaskId = task.Id });
-
-            // Stage 55B 範圍邊界：exec_confirm 仍 fire-and-forget — Discord button callback 流程（CEO confirm 後執行確認），
-            // 不在 framework Pipeline Workflow 內等回應（ProposalConfirmationService.ProcessExecConfirm 接力 enqueue agent）
-            _ = interactionService.CreateInteractionAsync(
-                "exec_confirm",
-                title:                pending.CeoResponse.Task?.Title ?? pending.Description,
-                description:          $"即將由 {pending.CeoResponse.TargetAgent} 執行",
-                project:              pending.Project,
-                agentName:            pending.CeoResponse.TargetAgent,
-                availableActionsJson: InteractionService.ExecConfirmActionsJson,
-                contextJson:          JsonSerializer.Serialize(new
-                {
-                    channelId       = interaction.Channel.Id.ToString(),
-                    ceoResponseJson = JsonSerializer.Serialize(pending.CeoResponse),
-                    project         = pending.Project,
-                    description     = pending.Description,
-                    taskId          = task.Id.ToString()
-                }),
-                discordMessageId: (decimal)agentConfirmMsg.Id,
-                taskItemId:       task.Id);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "confirm_yes 處理失敗");
-            await interaction.FollowupAsync("❌ 建立任務時發生錯誤，請查看 log。");
-        }
+        // Stage 78b（路線 C 折衷）：v4 body 砍 — 原 TaskItem 創建 + BuildConfirmButtons("exec_yes", "exec_no") + exec_confirm BossInteraction fire-and-forget 整段砍。
+        // v4 path 0 production fire（Stage 78a 後 CeoAgentService.ProcessWithClaudeCodeAsync 強制返回 PetraV5Dispatched）。
+        // 殘留 reachable path（HandleDirectAgentChannelMessageAsync agent 頻道直接訊息 / SkipCeoConfirm=true setting）留 Stage 78c 砍 — defensive log + ack。
+        logger.LogWarning(
+            "confirm_yes：非 v5.5 path Action={Action}（v4 dead caller path / Stage 78c 預備砍）— TargetAgent={Agent} Project={Project}",
+            pending.CeoResponse.Action, pending.CeoResponse.TargetAgent, pending.Project);
+        await interaction.FollowupAsync("⚠️ v4 path 已砍（Stage 78b）— 此操作目前不支援，請改走 Dashboard v5.5 path 重新派任務。");
     }
 
-    private async Task HandleExecYesAsync(SocketMessageComponent interaction, PendingConfirmation pending)
-    {
-        await interaction.DeferAsync();
-
-        // Stage 78a：v4 Requirements 第三層確認 path 砍（RequirementsAgentService 整套砍 / type reference 連帶清理）
-        var wfType = ResolveWorkflowType(pending.CeoResponse);
-        TaskGroup? createdGroup = null;
-        if (wfType.HasValue && pending.GroupId == Guid.Empty)
-        {
-            createdGroup = await taskGroupService.CreateGroupAsync(
-                pending.CeoResponse.Task?.Title ?? pending.Description,
-                pending.Project,
-                wfType.Value);
-            pending = pending with { GroupId = createdGroup.Id };
-        }
-
-        if (wfType == WorkflowType.TechImprovement && createdGroup is not null)
-        {
-            await interaction.FollowupAsync(
-                "⏳ CEO Orchestrator 啟動：Cody 開始制定實作計畫書，Petra 審核後自動進入 coding...");
-            var groupForPipeline = createdGroup;
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await taskGroupService.FireStepsAsync(groupForPipeline,
-                        [new WorkflowStep("Dev_plan")]);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "TechImprovement Dev_plan 觸發失敗（Group={Id}）", groupForPipeline.Id);
-                }
-            }, CancellationToken.None);
-        }
-        else
-        {
-            await interaction.FollowupAsync(
-                $"⏳ {pending.CeoResponse.TargetAgent} Agent 開始執行，完成後通知 #{_settings.Channels.TaskUpdates}。");
-
-            _ = Task.Run(async () =>
-            {
-                try { await ExecuteAgentTaskAsync(pending); }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "背景 Agent 執行失敗（TaskId={TaskId}）", pending.TaskId);
-                }
-            }, CancellationToken.None);
-        }
-    }
-
-    // Stage 78a：v4 Requirements 第三層確認 path 砍（RequirementsAgentService class 整套砍 / type reference 連帶清理）—
-    // 既有 ShowRequirementsPreviewAsync / ExecuteRequirementsFromPreviewAsync / BuildRequirementsPreviewEmbed 全砍。
-    // v5.5 path Petra orchestrator 走 PetraInbox + dynamic dispatch / 0 經過此 v4 Requirements branch。
+    // Stage 78b：HandleExecYesAsync 砍 — v4 exec_yes button routing 唯一 caller 砍後 0 caller
+    //（v4 path 創建 TaskGroup + FireStepsAsync(Dev_plan) + ExecuteAgentTaskAsync 整套砍 / v5.5 path Petra orchestrator 0 經過此 branch）。
+    // Stage 78a 同步砍 v4 Requirements 第三層確認 path（ShowRequirementsPreviewAsync / ExecuteRequirementsFromPreviewAsync / BuildRequirementsPreviewEmbed 整套）。
 
     // ========== 提案流程（共用 UI Flow — 暴露 internal 供 CommandHandler / SlashCommandRouter） ==========
 
@@ -704,157 +538,8 @@ public class ButtonCallbackRouter(
             taskItemId:       task.Id);
     }
 
-    private async Task ExecuteAgentTaskAsync(PendingConfirmation pending)
-    {
-        var owner = _gitHubSettings.Owner;
-        var repo  = string.IsNullOrWhiteSpace(pending.Project)
-            ? _gitHubSettings.DefaultRepo
-            : pending.Project;
-
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-
-        var task = await taskRepo.GetByIdAsync(pending.TaskId);
-        if (task is null)
-        {
-            logger.LogError("找不到 TaskItem（Id={Id}）", pending.TaskId);
-            return;
-        }
-
-        taskRepo.UpdateStatus(task, "running");
-        await taskRepo.SaveAsync();
-
-        var pushService   = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
-        var alertChannel  = FindChannel(_settings.Channels.Alerts);
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = task.Id,
-            Title     = task.Title,
-            AgentName = task.AssignedAgent,
-            Status    = "running"
-        });
-
-        var executor = scope.ServiceProvider.GetKeyedService<IAgentExecutor>(
-            pending.CeoResponse.TargetAgent);
-
-        if (executor is null)
-        {
-            logger.LogError("找不到 Agent 實作：{Agent}", pending.CeoResponse.TargetAgent);
-            taskRepo.UpdateStatus(task, "failed");
-            await taskRepo.SaveAsync();
-            if (alertChannel is not null)
-                await alertChannel.SendMessageAsync(
-                    $"🚨 找不到 Agent 實作：**{pending.CeoResponse.TargetAgent}**\n任務：{task.Title}");
-            return;
-        }
-
-        try
-        {
-            var rules  = await rulesService.GetRulesAsync(pending.CeoResponse.TargetAgent);
-            var result = await executor.ExecuteTaskAsync(task, owner, repo, rules);
-
-            var finalStatus = result.Success ? "done" : "failed";
-            taskRepo.UpdateStatus(task, finalStatus);
-            await taskRepo.SaveAsync();
-
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = task.Id,
-                Title     = task.Title,
-                AgentName = task.AssignedAgent,
-                Status    = finalStatus
-            });
-
-            var embedColor = result.Success ? Color.Green : Color.Red;
-            var embedTitle = result.Success
-                ? $"✅ {pending.CeoResponse.TargetAgent} Agent 執行完成"
-                : $"❌ {pending.CeoResponse.TargetAgent} Agent 執行失敗";
-
-            var embed = new EmbedBuilder()
-                .WithTitle(embedTitle)
-                .WithColor(embedColor)
-                .AddField("任務", task.Title)
-                .AddField("摘要", result.Summary)
-                .WithTimestamp(DateTimeOffset.UtcNow);
-
-            if (!string.IsNullOrEmpty(result.OutputUrl))
-                embed.AddField("連結", result.OutputUrl);
-
-            var builtEmbed = embed.Build();
-
-            if (notifyChannel is not null)
-                await notifyChannel.SendMessageAsync(embed: builtEmbed);
-
-            var agentChannelName = GetAgentChannelName(task.AssignedAgent);
-            var agentChannel     = FindChannel(agentChannelName);
-            if (agentChannel is not null && agentChannel.Id != notifyChannel?.Id)
-                await agentChannel.SendMessageAsync(embed: builtEmbed);
-
-            if (task.AssignedAgent == AgentNames.Designer && result.Success)
-            {
-                var specLog = task.Logs.FirstOrDefault(l => l.Step == "ui-spec-output");
-                if (specLog?.Payload is not null)
-                {
-                    try
-                    {
-                        var payload  = JsonSerializer.Deserialize<JsonElement>(specLog.Payload);
-                        var markdown = payload.GetProperty("markdown").GetString();
-                        if (!string.IsNullOrWhiteSpace(markdown))
-                        {
-                            var fileName = $"ui-spec-{DateTime.UtcNow:yyyyMMdd-HHmm}.md";
-                            var stream   = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(markdown));
-                            var targetChannel = agentChannel ?? notifyChannel;
-                            if (targetChannel is not null)
-                                await targetChannel.SendFileAsync(stream, fileName, "📄 UI 規格文件");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "傳送 UI 規格文件附件失敗");
-                    }
-                }
-            }
-
-            if (pending.GroupId != Guid.Empty && result.Success)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await taskGroupService.HandleAgentCompletedAsync(
-                            pending.GroupId,
-                            task.AssignedAgent,
-                            result,
-                            result.OutputUrl ?? "");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Orchestrator HandleAgentCompleted 失敗（Group={Id}）", pending.GroupId);
-                    }
-                }, CancellationToken.None);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Agent 執行失敗：{Title}", task.Title);
-            taskRepo.UpdateStatus(task, "failed");
-            await taskRepo.SaveAsync();
-
-            await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-            {
-                TaskId    = task.Id,
-                Title     = task.Title,
-                AgentName = task.AssignedAgent,
-                Status    = "failed"
-            });
-
-            if (alertChannel is not null)
-                await alertChannel.SendMessageAsync(
-                    $"🚨 **{pending.CeoResponse.TargetAgent} Agent 失敗**\n任務：{task.Title}\n錯誤：{ex.Message}");
-        }
-    }
+    // Stage 78b：ExecuteAgentTaskAsync 砍 — v4 HandleExecYesAsync 唯一 caller 砍後 0 caller
+    //（v4 keyed IAgentExecutor 動態分派 path 整套砍 / v5.5 path Petra orchestrator 走 ClaudeCodeChatClientAdapter / AgentQueueProcessor:190 Stage 78c 預備砍）。
 
     // ========== Cancel 流程（Stage 14） ==========
 
@@ -927,19 +612,8 @@ public class ButtonCallbackRouter(
             GroupId: selected.Id));
     }
 
-    // ========== 工具：WorkflowType 解析 ==========
-
-    private static WorkflowType? ResolveWorkflowType(CeoResponse ceoResponse)
-    {
-        if (ceoResponse.TargetAgent is AgentNames.Release or AgentNames.Ops or AgentNames.Doc)
-            return null;
-
-        return ceoResponse.WorkflowType switch
-        {
-            "tech_improvement" => WorkflowType.TechImprovement,
-            _                  => WorkflowType.BugFix
-        };
-    }
+    // Stage 78b：ResolveWorkflowType 砍 — v4 HandleExecYesAsync 唯一 caller 砍後 0 caller
+    //（ProposalConfirmationService.ResolveWorkflowTypeInternal line 320 是另一個 method 不同檔 / v5.5 path 留 / Stage 78c 評估時對齊）。
 
     // ========== Embed 與按鈕建構（共用 UI Flow） ==========
 
@@ -980,31 +654,8 @@ public class ButtonCallbackRouter(
             .WithFooter("確認後開始執行，取消則中止。")
             .Build();
 
-    /// <summary>
-    /// Stage 61-FF 四十五：Christ「跳過審核」/「放棄」action 標前置 failed task 為 cancelled。
-    /// 修根因 Trial_v6 議題 #9 — MarkGroupDoneOrIntervention 跨 Agent 看到舊 failed task（如 [Petra→Dev_plan] failed）
-    /// 誤判 needs_intervention + 建 generic intervention BossInteraction 訊息誤導實際根因。
-    /// 標 cancelled 後 MarkGroupDoneOrIntervention line 489-494 既有 supersede 邏輯仍會 cover（cancelled 不是 failed/needs_intervention 不踩過濾）。
-    /// </summary>
-    private void SupersedePriorFailedTasks(TaskGroup group, string reason)
-    {
-        if (group.Tasks is null) return;
-        var supersededCount = 0;
-        foreach (var t in group.Tasks)
-        {
-            if (t.Status is "failed" or "needs_intervention")
-            {
-                t.Status = "cancelled";
-                supersededCount++;
-            }
-        }
-        if (supersededCount > 0)
-        {
-            logger.LogInformation(
-                "[Stage61-FF45] SupersedePriorFailedTasks：group {Id} 標 {Count} 個前置 failed/needs_intervention task → cancelled（reason={Reason}）",
-                group.Id, supersededCount, reason);
-        }
-    }
+    // Stage 78b：SupersedePriorFailedTasks 砍 — v4 escalate_devplan_skip / escalate_devplan_abort 唯二 caller 砍後 0 caller
+    //（Stage 61-FF 四十五原修根因 Trial_v6 議題 #9 邏輯隨 v4 escalate routing 砍進 Stage 78c 預備範圍）。
 
     internal static Embed BuildProposalEmbed(string title, string? description)
     {
@@ -1028,11 +679,8 @@ public class ButtonCallbackRouter(
             .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
             .Build();
 
-    internal static MessageComponent BuildEscalateButtons()
-        => new ComponentBuilder()
-            .WithButton("⏭️ 跳過此審核",  "escalate_skip",  ButtonStyle.Secondary)
-            .WithButton("❌ 放棄此提案",   "escalate_abort", ButtonStyle.Danger)
-            .Build();
+    // Stage 78b：BuildEscalateButtons 砍 — escalate_skip / escalate_abort routing 砍後 0 caller
+    //（原 Petra escalate 提案流程的 button creator / 早已標「不適用」/ 路線 C grep verify 0 production caller 後乾淨砍）。
 
     internal static MessageComponent BuildProposalConfirmButtons()
         => new ComponentBuilder()
@@ -1053,18 +701,8 @@ public class ButtonCallbackRouter(
 
     // ========== Discord helpers ==========
 
-    internal string GetAgentChannelName(string agentName) => agentName switch
-    {
-        AgentNames.Dev          => _settings.Channels.DevChannel,
-        AgentNames.Ops          => _settings.Channels.OpsChannel,
-        AgentNames.Qa           => _settings.Channels.QaChannel,
-        AgentNames.Doc          => _settings.Channels.DocChannel,
-        AgentNames.Requirements => _settings.Channels.RequirementsChannel,
-        AgentNames.Reviewer     => _settings.Channels.ReviewerChannel,
-        AgentNames.Release      => _settings.Channels.ReleaseChannel,
-        AgentNames.Designer     => _settings.Channels.DesignerChannel,
-        _                       => _settings.Channels.TaskUpdates
-    };
+    // Stage 78b：GetAgentChannelName 砍 — v4 ExecuteAgentTaskAsync 唯一 caller 砍後 0 caller
+    //（AgentQueueProcessor 內有自己的 private GetAgentChannelName / Stage 78c 評估）。
 
     internal IMessageChannel? FindChannel(string channelName)
     {

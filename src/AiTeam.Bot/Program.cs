@@ -59,13 +59,13 @@ builder.Services.AddSingleton<AgentConfigCache>();
 
 // Agents（v5.5 production active 6 Talent baseline）
 // Stage 78a：v4 path 整套砍 — 3 純 v4 class（Rosa/Demi/Release）砍 + 4 雙路徑 class（Doc/Dev/Reviewer/Qa）砍 v4 IAgentExecutor 實作留 v5.5 IAgentTool
-// IAgentExecutor keyed registration 剩 OpsAgent（Stage 78b 評估含 AgentQueueProcessor + ButtonCallbackRouter v4 routing 整套砍）
+// Stage 78b：v4 path dead caller 整套砍 — ButtonCallbackRouter v4 routing + OpsAgent IAgentExecutor 實作 + /task slash command + GitHub Issue webhook + CeoAgentService.ProcessAsync
+// IAgentExecutor interface 留 Stage 78c 評估（AgentQueueProcessor:190 still active + AgentExecutionResult/AgentResultType 12+ file 廣用）
 builder.Services.AddScoped<CeoAgentService>();
 
 builder.Services.AddScoped<DevAgentService>();
 
-builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依
-builder.Services.AddKeyedSingleton<IAgentExecutor, OpsAgentService>(AgentNames.Ops);
+builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依（Stage 78b：IAgentExecutor 實作砍 / class 仍 Singleton 供 Quartz scheduled job 用）
 
 builder.Services.AddScoped<QaAgentService>();
 
