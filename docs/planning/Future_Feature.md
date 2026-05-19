@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v9.8
+> 版本：v9.9
 > 建立日期：2026-04-01
-> 最後更新：2026-05-19（**Stage 78b ✅ v5.5 Phase 4 候選 C 後續 — v4 path dead caller 整套砍除** v3.69.0 / 純 refactor 6 子項 / Christ 拍板路線 C 折衷 / 8 檔變動 net -787 行 / build warning 102→59 (-42%) / xUnit 104+127 全綠 / Forge 1 輪 spike + Plan v2 升級 + 實作 0 follow-up + 自驗 0 issue / Aria gate1 Tier 0+1 通過 / 連續 13 Stage 0 follow-up + clean delivery 連續第五次 ⭐⭐⭐⭐⭐ / 校準錨真實 394K → ratio ×3.03-4.93 突破 Stage 78a 上界 / 大規模架構級重構新區間 ×1.57-4.93 新上界 7 資料點累積 + 自省點 #37 第 7 次累積實證 / Stage 78c 預留 v4 Pipeline 整套砍 + **Stage 79 v5.5 image flow 補完新揭 gap** — Christ 2026-05-19 戰略 question 揭 Dashboard 附圖 Petra 看不到 + WebSearch 業界紀律拍板 Petra SubtaskPlan needsImageContext flag 條件性 worker propagation）
+> 最後更新：2026-05-19（**Stage 78c ✅ v5.5 Phase 4 候選 C 最終收口 — v4 Pipeline framework 整套砍除** v3.70.0 / **MAJOR refactor 路線 A 一次過 + 6 議題拍板採納** / 6 鏈 ~37+ 子項 / 108 檔變動 net -22690 行 / 0 Migration（議題 9 揭 agent_queues 表真實不存在 / 廢除 / 0 不可逆風險）/ build：0 error / **0 C# compile warning**（Stage 78b 59 → 78c 0 突破歷史最低 ⭐⭐⭐）/ xUnit 100+127 全綠 / Forge 自驗 9 grep verify 全 PASS / Wave 2 build verify 12 errors Forge 自抓自修 / 0 follow-up bug / Aria gate1 Tier 0+1 通過 / **連續 14 Stage 0 follow-up + clean delivery 連續第六次** ⭐⭐⭐⭐⭐⭐ / 校準錨真實 521K → ratio ×1.30-2.08 mid ×1.69（vs Aria ultrathink 預估 600-800K 偏低 -13% / 大規模架構級重構新區間 ×1.57-4.93 中段下緣 8 資料點累積）+ 自省點 #37 第 8 次累積實證 + 揭「ultrathink 預估上界偏高」反向校準 / 戰略意義：**v5.5 path single source of truth 完整收口** ⭐⭐⭐⭐⭐⭐ / Phase 4 後續：Stage 79 image flow → 80 HITL → 81 動態 replan → WebUI Stage（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口）
 > 說明：本文件收錄尚未排入正式 Stage、值得未來評估的功能方向與研究項目。
 
 ---
