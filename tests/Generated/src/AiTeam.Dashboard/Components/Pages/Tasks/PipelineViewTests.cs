@@ -5,6 +5,8 @@ using AiTeam.Dashboard.Helpers;
 using AiTeam.Dashboard.Services;
 using AiTeam.Shared.Dtos;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using MudBlazor;
 using NSubstitute;
 using Xunit;
@@ -403,6 +405,229 @@ public class PipelineViewTests
 
         vm.Logs.Should().NotBeNull();
         vm.Logs.Should().BeEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // 輔助：建立可觸發 ok=false 路徑的服務實例
+    // httpClientFactory=null 時，服務方法內部 try-catch 捕獲 NullReferenceException 並回傳 false
+    // -----------------------------------------------------------------------
+
+    private static DashboardBotService CreateFaultyBotService()
+    {
+        var mockConfig = Substitute.For<IConfiguration>();
+        return new DashboardBotService(null!, mockConfig, Substitute.For<ILogger<DashboardBotService>>());
+    }
+
+    private static DashboardCeoCommandService CreateFaultyCeoService()
+    {
+        var mockConfig = Substitute.For<IConfiguration>();
+        return new DashboardCeoCommandService(null!, mockConfig, Substitute.For<ILogger<DashboardCeoCommandService>>());
+    }
+
+    private static PipelineView CreateViewWithBotService(TaskGroupDto? group, DashboardBotService botService)
+    {
+        var instance = new PipelineView();
+        instance.Group = group;
+        typeof(PipelineView)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineView)
+            .GetProperty("BotService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, botService);
+        return instance;
+    }
+
+    private static PipelineView CreateViewWithCeoService(TaskGroupDto? group, DashboardCeoCommandService ceoService)
+    {
+        var instance = new PipelineView();
+        instance.Group = group;
+        typeof(PipelineView)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, Substitute.For<ISnackbar>());
+        typeof(PipelineView)
+            .GetProperty("CeoCommandService", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, ceoService);
+        return instance;
+    }
+
+    private static string? GetActionError(PipelineView instance)
+        => (string?)typeof(PipelineView)
+            .GetField("_actionError", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(instance);
+
+    private static bool GetPauseBusy(PipelineView instance)
+        => (bool)typeof(PipelineView)
+            .GetField("_pauseBusy", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(instance)!;
+
+    private static bool GetMidInterruptBusy(PipelineView instance)
+        => (bool)typeof(PipelineView)
+            .GetField("_midInterruptBusy", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(instance)!;
+
+    private static async Task InvokePrivateAsync(PipelineView instance, string methodName)
+    {
+        var method = typeof(PipelineView).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await (Task)method.Invoke(instance, null)!;
+    }
+
+    // -----------------------------------------------------------------------
+    // HandlePauseClickAsync — 暫停 TaskGroup（Stage 45 雙路錯誤通知新增路徑）
+    // 測試標的：AiTeam.Dashboard.Components.Pages.Tasks.PipelineView
+    // 驗證：grep -rn 'HandlePauseClickAsync' src/AiTeam.Dashboard/ → 命中 PipelineView.razor.cs:219
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandlePauseClickAsync_Group為Null_應立即返回不改變狀態()
+    {
+        var instance = new PipelineView();
+        // Group 預設為 null，早期返回守衛生效
+
+        await InvokePrivateAsync(instance, "HandlePauseClickAsync");
+
+        GetPauseBusy(instance).Should().BeFalse("Guard: Group==null 時不應進入 busy 狀態");
+        GetActionError(instance).Should().BeNull("Guard: Group==null 時不應設定錯誤訊息");
+    }
+
+    [Fact]
+    public async Task HandlePauseClickAsync_PauseBusy已為True_應立即返回不再次觸發服務()
+    {
+        var instance = CreateViewWithBotService(new TaskGroupDto { Id = Guid.NewGuid() }, CreateFaultyBotService());
+        typeof(PipelineView)
+            .GetField("_pauseBusy", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, true);
+
+        await InvokePrivateAsync(instance, "HandlePauseClickAsync");
+
+        GetPauseBusy(instance).Should().BeTrue("Guard: 已 busy 時不應再次修改狀態");
+    }
+
+    [Fact]
+    public async Task HandlePauseClickAsync_BotService返回False_actionError應被設定且pauseBusy應重設為False()
+    {
+        // 測試標的：HandlePauseClickAsync else 分支（_actionError + Snackbar 雙路通知，PR 新增）
+        var instance = CreateViewWithBotService(
+            new TaskGroupDto { Id = Guid.NewGuid() },
+            CreateFaultyBotService());
+
+        await InvokePrivateAsync(instance, "HandlePauseClickAsync");
+
+        GetActionError(instance).Should().Be("暫停指令送出失敗", "BotService 返回 false 時應設定 _actionError");
+        GetPauseBusy(instance).Should().BeFalse("finally 區塊應重設 _pauseBusy 為 false");
+    }
+
+    // -----------------------------------------------------------------------
+    // HandleResumeClickAsync — 恢復 TaskGroup（Stage 45 雙路錯誤通知新增路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleResumeClickAsync_Group為Null_應立即返回不改變狀態()
+    {
+        var instance = new PipelineView();
+
+        await InvokePrivateAsync(instance, "HandleResumeClickAsync");
+
+        GetPauseBusy(instance).Should().BeFalse();
+        GetActionError(instance).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleResumeClickAsync_BotService返回False_actionError應被設定且pauseBusy應重設為False()
+    {
+        var instance = CreateViewWithBotService(
+            new TaskGroupDto { Id = Guid.NewGuid() },
+            CreateFaultyBotService());
+
+        await InvokePrivateAsync(instance, "HandleResumeClickAsync");
+
+        GetActionError(instance).Should().Be("恢復指令送出失敗", "BotService 返回 false 時應設定 _actionError");
+        GetPauseBusy(instance).Should().BeFalse("finally 區塊應重設 _pauseBusy 為 false");
+    }
+
+    // -----------------------------------------------------------------------
+    // HandlePauseEpicClickAsync — 暫停 Epic（Stage 61-FF 四十 雙路錯誤通知新增路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandlePauseEpicClickAsync_Group為Null_應立即返回不改變狀態()
+    {
+        var instance = new PipelineView();
+
+        await InvokePrivateAsync(instance, "HandlePauseEpicClickAsync");
+
+        GetPauseBusy(instance).Should().BeFalse();
+        GetActionError(instance).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandlePauseEpicClickAsync_BotService返回False_actionError應被設定且pauseBusy應重設為False()
+    {
+        var instance = CreateViewWithBotService(
+            new TaskGroupDto { Id = Guid.NewGuid() },
+            CreateFaultyBotService());
+
+        await InvokePrivateAsync(instance, "HandlePauseEpicClickAsync");
+
+        GetActionError(instance).Should().Be("暫停 Epic 失敗", "BotService 返回 false 時應設定 _actionError");
+        GetPauseBusy(instance).Should().BeFalse("finally 區塊應重設 _pauseBusy 為 false");
+    }
+
+    // -----------------------------------------------------------------------
+    // HandleResumeEpicClickAsync — 恢復 Epic（Stage 61-FF 四十 雙路錯誤通知新增路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleResumeEpicClickAsync_Group為Null_應立即返回不改變狀態()
+    {
+        var instance = new PipelineView();
+
+        await InvokePrivateAsync(instance, "HandleResumeEpicClickAsync");
+
+        GetPauseBusy(instance).Should().BeFalse();
+        GetActionError(instance).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleResumeEpicClickAsync_BotService返回False_actionError應被設定且pauseBusy應重設為False()
+    {
+        var instance = CreateViewWithBotService(
+            new TaskGroupDto { Id = Guid.NewGuid() },
+            CreateFaultyBotService());
+
+        await InvokePrivateAsync(instance, "HandleResumeEpicClickAsync");
+
+        GetActionError(instance).Should().Be("恢復 Epic 失敗", "BotService 返回 false 時應設定 _actionError");
+        GetPauseBusy(instance).Should().BeFalse("finally 區塊應重設 _pauseBusy 為 false");
+    }
+
+    // -----------------------------------------------------------------------
+    // HandleMidInterruptClickAsync — 中途介入（Stage 51 雙路錯誤通知新增路徑）
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleMidInterruptClickAsync_Group為Null_應立即返回不改變狀態()
+    {
+        var instance = new PipelineView();
+
+        await InvokePrivateAsync(instance, "HandleMidInterruptClickAsync");
+
+        GetMidInterruptBusy(instance).Should().BeFalse();
+        GetActionError(instance).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleMidInterruptClickAsync_CeoService返回Failure_actionError應包含錯誤訊息且midInterruptBusy應重設為False()
+    {
+        // CeoCommandService 有自己的 try-catch，null httpClientFactory 捕獲後回傳 (false, "連線失敗...")
+        var instance = CreateViewWithCeoService(
+            new TaskGroupDto { Id = Guid.NewGuid() },
+            CreateFaultyCeoService());
+
+        await InvokePrivateAsync(instance, "HandleMidInterruptClickAsync");
+
+        GetActionError(instance).Should().StartWith("中途介入觸發失敗：",
+            "CeoService 回傳 failure 時應設定包含錯誤描述的 _actionError");
+        GetMidInterruptBusy(instance).Should().BeFalse("finally 區塊應重設 _midInterruptBusy 為 false");
     }
 
     // -----------------------------------------------------------------------
