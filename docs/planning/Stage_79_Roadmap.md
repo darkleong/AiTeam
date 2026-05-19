@@ -2,10 +2,10 @@
 
 > 對應系統版本：v3.71.0
 > 規模：M+
-> 狀態：規劃中 / Roadmap v1.1
+> 狀態：規劃中 / Roadmap v1.2
 > 性質：新業務功能（schema + 資料流補完 + Petra 拆 plan 邏輯升級 + Claude Code CLI 圖片支援 spike + 限制紀律 + 半抽象命名 future-friendly）/ Migration 加 column nullable / 涉及 LLM call 真實業務影響
-> Model + Effort 建議：**Opus 1M + Extra high**（連續 8 Stage 自選紀律延續 + 涉及 Petra prompt + ClaudeCodeChatClientAdapter 圖片 spike 風險中位）
-> cost 預估：$3-5 per cycle
+> Model + Effort 建議：**Opus 1M + high**（範圍 M+ / 真實 context 預估 ~200-450K Opus 1M safety 20-45% / Christ 自決升 Extra high 兜底）
+> Stage 期間餘額影響：**0 燒 AiTeam 餘額**（Aria + Forge session 走 Claude Code subscription / Stage 79 預期 0 API call spike — W4 Claude Code CLI subprocess + W7 GeminiProvider multimodal 都 grep verify level / 0 真實 LLM call）。Trial_v23 才燒 AiTeam Petra/Cody/Vera 等真實 LLM call 餘額（對齊既有 Trial baseline / 預估留 Trial_v23 計劃書）
 
 ---
 
@@ -462,14 +462,14 @@ Petra 用 LlmProviderFactory.Create("PM")（Gemini default 真實使用 / Trial_
 - raw 預估：130-180K（M+ 規模 / 對齊 Stage 78b 純 refactor 80-130K 上調 +50K 含 Petra prompt 教學 + ClaudeCodeChatClientAdapter image dispatch spike + Migration ADD column + xUnit test 補）
 - ratio 預估：×1.5-2.5（範圍清楚 + Stage 78a/b/c 累積經驗成熟 + 1 輪 spike 預期）
 - 真實 context 預估：~200-450K（中位 ~300K / Stage 78b 394K + Stage 78c 521K baseline）
-- Opus 1M + Extra high safety 20-45%（充裕）
+- Opus 1M + high safety 20-45%（充裕 / Christ 自決升 Extra high 兜底）
 
 **新校準錨紀律延伸**（Stage 78c 揭發現）：
 - 「M+ 規模 + 新業務功能 + 1 輪 spike」場景 → ratio ×1.5-2.5 中段
 - vs Stage 78a/78b/78c 「v4 砍 + 多輪 spike + healthy 偏離 propagation 多」場景 → ratio ×2.5-4.93 中上段
 - Stage 79 性質偏向前者 / 落點預估 ~300-400K 真實
 
-cost 預估：$3-5 per cycle
+**Stage 期間 AiTeam 餘額影響：0**（對齊「Stage 期間 subscription / 0 API call spike」紀律 / Trial_v23 才燒 AiTeam Petra/Cody 真實 LLM call 餘額 / Trial cost 預估留 Trial_v23 計劃書）
 
 ### Forge Plan Mode 起手紀律
 
@@ -489,5 +489,6 @@ cost 預估：$3-5 per cycle
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.2 | 2026-05-19 | **Christ 戰略 question 揭真實 cost 結構 + Effort 反向校準修正**（Aria 慣性 propagate 自省點 #38 + Christ 連續紀律推 Extra high 兩條盲點）：① 砍 Roadmap header `cost 預估：$X-Y per cycle` 欄位 — Stage 期間 Aria + Forge session 走 Claude Code subscription / 0 燒 AiTeam 餘額（除非 Forge 自驗實際 API call spike 才燒 / Stage 79 預期 0 API call spike）/ Trial cost 預估留 Trial_v23 計劃書（對齊 Roadmap 是 Stage scope 文件不是 cost reference 紀律）② Model + Effort 推薦 Extra high → **high**（範圍 M+ / Opus 1M safety 20-45% / Christ 自決升 Extra high 兜底是 Christ 動作不是 Aria 義務 / 對齊 Stage 78c 揭「ultrathink 預估上界偏高」反向校準紀律延伸）③ header `Stage 期間餘額影響：0` 段新加（明寫真實 cost 結構分層）④ 校準錨段 cost 預估改「Stage 期間 AiTeam 餘額影響：0」。**Aria 自省點 #39 立檔候選**（結案第二段 / /aria-end 統一升級進 memory）：① Roadmap header 不該慣性 propagate cost 欄位（對齊「對冗餘不容忍」+ Christ 真實行動價值評估紀律）② Effort 推薦反向校準（基於 Stage 性質+規模 / 不對齊 Christ 連續紀律推高 / Christ 自決升一級兜底是 Christ 動作不是 Aria 義務）③ workflow_aria.md 第三節 A / workflow_aria_model_effort.md 對應紀律 update。**對齊「對等和互相」紀律延伸**（自省點 #36）— Christ 戰略 question 點破真實揭 Aria 預估精度倒退 / 健康反思。 |
 | v1.1 | 2026-05-19 | **Christ 拍板路線 A + Aria 補強升級** — ① 半抽象 future-friendly 命名（PetraInbox schema column `Attachments` jsonb + JSON 內 `Type` discriminator field 預留未來擴展 PDF/document 等 0 schema migration / ImageAttachment record + SubtaskPlan.NeedsImageContext flag 留 image-specific 對齊 Stage 79 範圍精準 / 拒絕全抽象 scope 擴 +20%）② 加新子項 11 **Attachment 限制紀律 + AppSetting 可調**（per attachment max 5 MB / per task max 5 張 / 對應 AppSetting `Workflow:MaxAttachmentsPerTask` + `Workflow:MaxAttachmentSizeMB` + Migration InsertData seed 對齊 Stage 75/77 既有 pattern）③ 加新子項 12 **Dashboard MudFileUpload MaxFiles + API verify 違規處理**（三層守：Dashboard MaxFiles UI 阻止 + API 400 Bad Request + Repository 後備截前 N 個 log warning）④ 設計決策段 7 加「半抽象 future-friendly 設計」段 ⑤ 驗收場景 J 加「Attachment 限制違規處理三層守」⑥ Aria 預警 W9 「半抽象命名邊界」+ W10「AppSetting + Migration InsertData seed」⑦ header + 戰略脈絡 + 子項 1+2 命名更新對齊半抽象 ⑧ 子項編號 11→13（version bump 移至最後）。**檔案類型範圍拍板**：Stage 79 只做 Image（AiTeam 真實 90%+ scenario）/ PDF / document 等留 Future Feature「v5.5 multi-attachment flow 補完」候選真實需求觸發才做 / 半抽象 schema 預留擴展 0 schema migration。 |
 | v1.0 | 2026-05-19 | 規劃書建立 — v3.71.0 / M+ 規模 / v5.5 Phase 4 image flow 補完（Stage 75 切 PetraInbox 設計遺漏修根因 + 條件性 worker propagation）。**戰略脈絡**：Christ 2026-05-19 戰略 question 揭 Dashboard 附圖 Petra 看不到 gap + WebSearch 業界紀律拍板「pass images only to worker agents that need them」+ Claude Code CLI 真實圖片支援機制 WebSearch 確認（workspace 檔案 reference / 0 base64 / 0 `--image` flag）。**11 子項**：① PetraInbox schema 擴 Images jsonb column + Migration ② PetraInboxRepository.Enqueue 簽名擴 ③ CeoAgentService.ProcessWithClaudeCodeAsync 接通 images 修 Stage 75 漏接根因 ④ PetraInboxProcessor → PetraDispatchWorker → PetraOrchestratorService.StartAsync chain 加 images ⑤ Petra LLM call 3 call sites 含 images（DecideTalents/Skill/SubtaskPlan）⑥ SubtaskPlan.Subtask record 擴 NeedsImageContext flag ⑦ Petra prompt（TalentPrompt PM）教學如何判斷 NeedsImageContext（UI 修改 → true / 純後端 / docs → false）⑧ ClaudeCodeChatClientAdapter 條件性 image dispatch（workspace 寫圖檔 + subprocess prompt path reference）⑨ workspace 圖檔清理 + 多 image 處理 ⑩ xUnit test 補 ⑪ Directory.Build.props v3.70.0 → v3.71.0。**計劃前 WebSearch 結論 3 段完整 incorporated**：① Claude Code CLI 圖片支援機制（無 `--image` flag / 真實機制 prompt 內 file path reference）② IChatClient multimodal 支援（ChatMessage 含 image AIContent）③ Multi-agent image propagation 業界 best practice（only give what agent needs / supervisor 條件性決定 / multimodality native feature）。**設計決策核心**：路線 A image schema baseline（PetraInbox jsonb column 同表 / AiTeam 真實場景 1-3 image 典型 / row 5-15 MB 可接受）+ NeedsImageContext per subtask Petra decide 紀律 + Claude Code CLI workspace 檔案 reference 機制 + backwards-compatible 守護紀律延續 + Migration ADD column nullable 0 不可逆風險。**驗收 9 場景**：A xUnit baseline + 新 test / B Migration ADD column / C Dashboard 附圖 → PetraInbox 寫入 Images / D Petra LLM call 真實含 image / E SubtaskPlan NeedsImageContext flag / F Worker dispatch 條件性 image fire / G v5.5 path 0 regression 純文字 baseline / H Trial_v23 真實業務驗 4 Stage 一次 / I Bot startup 0 exception。**Aria 預警 W1-W8**：image schema 路線拍板 / Petra prompt 教學精準度 / workspace 圖檔 path 設計 / Claude Code CLI subprocess image dispatch spike / ImageAttachment namespace 升 Shared 評估 / backwards-compatible 既有 row 0 images / GeminiProvider multimodal 支援 verify（必前置 spike）/ SubtaskPlan record 加 field 對齊。**校準錨預估**：對齊大規模架構級重構新區間 ×1.30-4.93 中段下緣 / raw 130-180K × ratio ×1.5-2.5 = 真實 ~200-450K / Opus 1M + Extra high safety 20-45% / cost $3-5。**Phase 4 路徑**：78a ✅ → 78b ✅ → 78c ✅ → **79**（本 / v5.5 image flow / M+）→ Trial_v23（驗 4 Stage）→ 80（HITL / M）→ Trial_v24（驗 HITL 業務體驗）→ 81（動態 replan / L）→ WebUI Stage → v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Aria gate2 production 0 regression 驗 → 通過後 Trial_v23 開（4 Stage 一次 cover）。 |
