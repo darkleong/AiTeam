@@ -58,28 +58,16 @@ public partial class AgentStatusCard
         }
     }
 
-    private async Task PauseAsync()
+    // Stage 78c：v4 AgentQueueControlService 整套砍 — pause/resume agent 佇列控制 0 backend 支援
+    // Dashboard UI 留 button display 但 click 顯示「功能已砍」snackbar / WebUI Stage 預備重設計
+    private void PauseAsync()
     {
-        _loading = true;
-        var ok = await BotService.PauseAgentAsync(Agent.AgentName);
-        _loading = false;
-
-        if (ok)
-            Snackbar.Add($"⏸️ {Agent.AgentName} 已暫停佇列消費", Severity.Info);
-        else
-            Snackbar.Add($"送出暫停指令失敗（{Agent.AgentName}），請確認 Bot 服務正常", Severity.Error);
+        Snackbar.Add("⚠️ Stage 78c：v4 佇列控制已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    private async Task ResumeAsync()
+    private void ResumeAsync()
     {
-        _loading = true;
-        var ok = await BotService.ResumeAgentAsync(Agent.AgentName);
-        _loading = false;
-
-        if (ok)
-            Snackbar.Add($"▶️ {Agent.AgentName} 已恢復佇列消費", Severity.Success);
-        else
-            Snackbar.Add($"送出恢復指令失敗（{Agent.AgentName}），請確認 Bot 服務正常", Severity.Error);
+        Snackbar.Add("⚠️ Stage 78c：v4 佇列控制已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
     private void NavigateToGroup(Guid? groupId)

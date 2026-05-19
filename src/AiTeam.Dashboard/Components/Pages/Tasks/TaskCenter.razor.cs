@@ -108,12 +108,11 @@ public partial class TaskCenter : IAsyncDisposable
     private async Task OnStatusFilterChangedAsync()
         => await (_tableRef?.ReloadServerData() ?? Task.CompletedTask);
 
-    private async Task HandleRequeueAsync(Guid taskId)
+    // Stage 78c：v4 AgentQueueService 整套砍 — RequeueTaskAsync 0 backend 支援
+    // Dashboard UI 留 button display 但 click 顯示「功能已砍」snackbar / WebUI Stage 預備重設計
+    private void HandleRequeueAsync(Guid taskId)
     {
-        var success = await BotService.RequeueTaskAsync(taskId);
-        Snackbar.Add(
-            success ? "任務已重新入佇列" : "重新入佇列失敗，請稍後再試",
-            success ? Severity.Success : Severity.Error);
+        Snackbar.Add("⚠️ Stage 78c：v4 任務重試已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
     private static Color TriggeredByColor(string? triggeredBy) => triggeredBy switch

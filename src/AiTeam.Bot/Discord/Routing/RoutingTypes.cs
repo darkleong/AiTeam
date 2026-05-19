@@ -4,17 +4,14 @@ namespace AiTeam.Bot.Discord.Routing;
 
 /// <summary>
 /// Stage 36：等待確認的暫存資料（原 CommandHandler 內部 internal record）。
-/// IsProposal = true 時代表 CEO 提案書，確認後才建立 Issues。
-/// 升級為 public 以便 Routing/PendingConfirmationStore 與 Orchestration/ProposalConfirmationService 共用。
+///
+/// Stage 78c：v4 Pipeline framework 整套砍後 record 縮為純 v5.5 generic confirmation：
+///   3 個 base field（CeoResponse / Project / Description）— ceo_confirm BossInteraction Discord button → confirm_yes Stage 68 短路 ack。
+///
+/// 砍 v4 fields：TaskId / GroupId / UiSpecMarkdown / UiSpecPath / IsProposal / Images / EscalateStage
+///（0 v5.5 caller after Stage 78c 鏈 A+B+C+E 砍）。
 /// </summary>
 public record PendingConfirmation(
     CeoResponse CeoResponse,
     string Project,
-    string Description,
-    Guid TaskId = default,
-    Guid GroupId = default,
-    string? UiSpecMarkdown = null,
-    string? UiSpecPath = null,
-    bool IsProposal = false,
-    IReadOnlyList<ImageAttachment>? Images = null,
-    string EscalateStage = "");  // Stage 78a：Rosa/Demi class 砍後 EscalateStage 由 SlashCommandRouter / Petra orchestrator 設定 escalate path 用
+    string Description);

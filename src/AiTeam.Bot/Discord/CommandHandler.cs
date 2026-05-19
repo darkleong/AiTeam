@@ -5,6 +5,7 @@ using AiTeam.Bot.Discord.Routing;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
+using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,29 +14,32 @@ using Microsoft.Extensions.Options;
 namespace AiTeam.Bot.Discord;
 
 /// <summary>
-/// Stage 36：Discord 互動主協調器（瘦身版，從 2172 行拆至 ~500 行）。
+/// Discord 互動主協調器（v5.5 active path only）。
 ///
-/// 職責：
-///   - Discord 事件訂閱（SlashCommandExecuted / ButtonExecuted / MessageReceived）
-///   - 自然語言訊息路由（CEO 頻道 / Agent 頻道）
-///   - Dashboard 路徑入口（HandleCeoResponseFromDashboardAsync，Stage 29-5）
-///   - Register* 薄 wrapper → 委派到 PendingConfirmationStore
+/// Stage 36 拆出 / Stage 78c：v4 Pipeline framework 整套砍後 CommandHandler 縮為純 v5.5 path 入口：
+///   - Discord 事件訂閱（ButtonExecuted / MessageReceived — SlashCommandExecuted 砍 / Discord slash command 全清空 議題 4 拍板）
+///   - CEO 頻道自然語言訊息路由（Discord @mention chat → CeoAgentService.ProcessWithClaudeCodeAsync v5.5 path）
+///   - Dashboard 路徑入口（HandleCeoResponseFromDashboardAsync / Stage 29-5）
 ///
-/// 拆出的職責：
-///   - Slash command  → <see cref="SlashCommandRouter"/>
-///   - Button callback → <see cref="ButtonCallbackRouter"/>（含 ShowProposalAsync / ShowDirectAgentConfirmAsync 等共用 UI flow）
-///   - 6 個 confirmation Dictionary → <see cref="PendingConfirmationStore"/>
+/// 砍範圍（Stage 78b + 78c 累積）：
+///   - SlashCommand 註冊段（Discord slash command list 整套清空 / Stage 78c 議題 4 拍板）
+///   - Agent 頻道直接訊息 path（HandleDirectAgentChannelMessageAsync + BuildChannelAgentMap + TruncateTitle / W8 議題拍板）
+///   - SkipCeoConfirm path（v4 Discord ShowDirectAgentConfirmAsync 唯一 caller 砍後）
+///   - Cancel selection / Kickoff modify / HITL mid interrupt / Design modify / 提案調整輸入 path（v4 only）
+///   - Register* helper：RegisterDevPlanEscalation / RegisterKickoffConfirmation / RegisterDesignConfirmation / RegisterProposalConfirmation
+///     （0 v5.5 caller / TaskGroupService + MockScenarioService 砍後 0 caller）
+///   - ctor dep：slashRouter / appSettings 2 dep 砍
+///
+/// DetectImageMediaType 從 SlashCommandRouter 移入（SlashCommandRouter 整檔砍 / line 405 唯一 caller）。
 /// </summary>
 public class CommandHandler(
     DiscordSocketClient client,
     IOptions<DiscordSettings> settings,
     IServiceProvider serviceProvider,
     RulesService rulesService,
-    AppSettingsService appSettings,
     ConversationContextStore contextStore,
     InteractionService interactionService,
     PendingConfirmationStore store,
-    SlashCommandRouter slashRouter,
     ButtonCallbackRouter buttonRouter,
     ILogger<CommandHandler> logger)
 {
@@ -49,7 +53,7 @@ public class CommandHandler(
     //  Discord 事件註冊
     // ===================================================================
 
-    /// <summary>向 Guild 註冊所有斜線指令，並訂閱互動事件。</summary>
+    /// <summary>向 Guild 清空 slash command list（Stage 78c 議題 4 拍板）並訂閱互動事件。</summary>
     public async Task RegisterCommandsAsync()
     {
         if (!ulong.TryParse(_settings.GuildId, out var guildId))
@@ -65,50 +69,12 @@ public class CommandHandler(
             return;
         }
 
-        var commands = SlashCommandRouter.BuildCommandDefinitions();
-        await guild.BulkOverwriteApplicationCommandAsync(commands);
-        logger.LogInformation("斜線指令已向 Guild {GuildId} 註冊完成", guildId);
+        // Stage 78c 議題 4：SlashCommandRouter 整檔砍 — Discord slash command 全清空（0 production 使用 / Internal API forge-self-verify 取代）
+        await guild.BulkOverwriteApplicationCommandAsync(Array.Empty<ApplicationCommandProperties>());
+        logger.LogInformation("Stage 78c：Discord slash command list 清空完成（Guild={GuildId}）", guildId);
 
-        client.SlashCommandExecuted += slashRouter.RouteAsync;
-        client.ButtonExecuted        += buttonRouter.RouteAsync;
-        client.MessageReceived       += OnMessageReceivedAsync;
-    }
-
-    // ===================================================================
-    //  Stage 36：Register* 薄 wrapper（委派到 PendingConfirmationStore）
-    //  保留 public 簽名以相容外部 caller（TaskGroupService / MockScenarioService）
-    // ===================================================================
-
-    public void RegisterDevPlanEscalation(ulong messageId, Guid groupId)
-    {
-        store.RegisterConfirmation(messageId, new PendingConfirmation(
-            CeoResponse: new CeoResponse { Action = "devplan_escalate" },
-            Project: "",
-            Description: "",
-            GroupId: groupId,
-            EscalateStage: "devplan"));
-    }
-
-    public void RegisterKickoffConfirmation(ulong messageId, Guid groupId, string taskPlanSummary)
-    {
-        store.RegisterKickoffConfirmation(messageId, groupId);
-        logger.LogInformation("CommandHandler：Kick-off 確認已登記（messageId={MsgId}，groupId={GroupId}）",
-            messageId, groupId);
-    }
-
-    public void RegisterDesignConfirmation(ulong messageId, Guid groupId, string petraSessionId, string? escalateReason)
-    {
-        store.RegisterDesignConfirmation(messageId, groupId, petraSessionId);
-        logger.LogInformation("CommandHandler：Design 確認已登記（messageId={MsgId}，groupId={GroupId}）",
-            messageId, groupId);
-    }
-
-    public void RegisterProposalConfirmation(ulong messageId, Guid taskId, string project, string description)
-    {
-        store.RegisterConfirmation(messageId, new PendingConfirmation(
-            new CeoResponse(), project, description, TaskId: taskId, IsProposal: true));
-        logger.LogInformation("CommandHandler：Proposal 確認已登記（messageId={MsgId}，taskId={TaskId}）",
-            messageId, taskId);
+        client.ButtonExecuted  += buttonRouter.RouteAsync;
+        client.MessageReceived += OnMessageReceivedAsync;
     }
 
     // ===================================================================
@@ -136,18 +102,17 @@ public class CommandHandler(
         }
 
         var finalProject = ceoResponse.Task?.Project ?? "";
-
         var imagesNote = images is { Count: > 0 }
             ? $"📎 _（附 {images.Count} 張圖片）_\n\n"
             : "";
 
         if (ceoResponse.Action == "reply")
         {
+            // defensive 留：v5.5 path 0 fire（Victoria 寫 PetraInbox 後返回 PetraV5Dispatched），保 default branch 防呆
             await ceoChannel.SendMessageAsync(imagesNote + ceoResponse.Reply);
             var replyTitle = ceoResponse.Reply?.Length > 50
                 ? ceoResponse.Reply[..50] + "…"
                 : ceoResponse.Reply ?? userInput;
-            // Stage 55B 範圍邊界：ceo_reply 仍 fire-and-forget — 純通知 ack，不在 framework Workflow 內等回應（Discord 命令層）
             _ = interactionService.CreateInteractionAsync(
                 "ceo_reply",
                 title:                $"Victoria 回覆：{replyTitle}",
@@ -156,64 +121,37 @@ public class CommandHandler(
                 agentName:            "Victoria",
                 availableActionsJson: InteractionService.NotifyActionsJson,
                 contextJson:          JsonSerializer.Serialize(new { channelId = ceoChannelId.ToString() }));
+            return;
         }
-        else if (ceoResponse.Action == "propose")
-        {
-            await ceoChannel.SendMessageAsync(imagesNote + ceoResponse.Reply);
-            await buttonRouter.ShowProposalAsync(
-                async (embed, comps) => await ceoChannel.SendMessageAsync(embed: embed, components: comps),
-                ceoResponse, finalProject, userInput,
-                images: images,
-                channelId: ceoChannelId,
-                triggeredBy: "Dashboard");
-        }
-        else if (ceoResponse.Action == "cancel")
-        {
-            await ceoChannel.SendMessageAsync($"✋ {ceoResponse.Reply ?? "取消指令已收到，但目前無進行中的任務可取消。"}");
-        }
-        else
-        {
-            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
-            {
-                await buttonRouter.ShowDirectAgentConfirmAsync(
-                    async (embed, comps) => await ceoChannel.SendMessageAsync(embed: embed, components: comps),
-                    ceoResponse, finalProject, userInput,
-                    channelId: ceoChannelId,
-                    triggeredBy: "Dashboard");
-            }
-            else
-            {
-                var confirmMsg = await ceoChannel.SendMessageAsync(
-                    embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(ceoResponse, finalProject),
-                    components: ButtonCallbackRouter.BuildConfirmButtons());
 
-                store.RegisterConfirmation(confirmMsg.Id,
-                    new PendingConfirmation(ceoResponse, finalProject, userInput));
+        // v5.5 main flow（PetraV5Dispatched / 其他 defensive action）：BuildCeoDecisionEmbed + BuildConfirmButtons + ceo_confirm BossInteraction
+        // confirm_yes 點擊後 ButtonCallbackRouter.HandleConfirmYesAsync Stage 68 短路 ack（Petra 已完成派工）
+        var confirmMsg = await ceoChannel.SendMessageAsync(
+            embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(ceoResponse, finalProject),
+            components: ButtonCallbackRouter.BuildConfirmButtons());
 
-                // Stage 55B 範圍邊界：ceo_confirm 仍 fire-and-forget — Discord 命令層 CEO 收到命令後請 Christ 確認派工，
-                // 不在 framework Pipeline Workflow 內等回應（ProposalConfirmationService 流程，後續 exec_confirm 接力）
-                _ = interactionService.CreateInteractionAsync(
-                    "ceo_confirm",
-                    title:                ceoResponse.Task?.Title ?? userInput,
-                    // Stage 39 搭車修：補上 Task.Description（CEO 解析出的具體任務內容），讓 Dashboard 操作中心顯示完整資訊
-                    description:          BuildCeoConfirmDescription(ceoResponse, userInput),
-                    project:              finalProject,
-                    agentName:            ceoResponse.TargetAgent,
-                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
-                    contextJson:          JsonSerializer.Serialize(new
-                    {
-                        channelId       = ceoChannelId.ToString(),
-                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
-                        project         = finalProject,
-                        description     = userInput
-                    }),
-                    discordMessageId: (decimal)confirmMsg.Id);
-            }
-        }
+        store.RegisterConfirmation(confirmMsg.Id,
+            new PendingConfirmation(ceoResponse, finalProject, userInput));
+
+        _ = interactionService.CreateInteractionAsync(
+            "ceo_confirm",
+            title:                ceoResponse.Task?.Title ?? userInput,
+            description:          BuildCeoConfirmDescription(ceoResponse, userInput),
+            project:              finalProject,
+            agentName:            ceoResponse.TargetAgent,
+            availableActionsJson: InteractionService.CeoConfirmActionsJson,
+            contextJson:          JsonSerializer.Serialize(new
+            {
+                channelId       = ceoChannelId.ToString(),
+                ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                project         = finalProject,
+                description     = userInput
+            }),
+            discordMessageId: (decimal)confirmMsg.Id);
     }
 
     // ===================================================================
-    //  自然語言訊息路由（Stage 7）
+    //  自然語言訊息路由（Stage 7 / Stage 78c 簡化 — 只 CEO 頻道）
     // ===================================================================
 
     private async Task OnMessageReceivedAsync(SocketMessage rawMessage)
@@ -225,10 +163,8 @@ public class CommandHandler(
         var channelName = (msg.Channel as SocketTextChannel)?.Name ?? "";
         var isCeoChannel = channelName.Equals(_settings.Channels.CeoChannel, StringComparison.OrdinalIgnoreCase);
 
-        var channelAgentMap = BuildChannelAgentMap();
-        var isAgentChannel  = channelAgentMap.TryGetValue(channelName, out var targetAgent);
-
-        if (!isCeoChannel && !isAgentChannel) return;
+        // Stage 78c：agent 頻道直接訊息 path 砍（W8 議題拍板） — 只處理 CEO 頻道
+        if (!isCeoChannel) return;
 
         // Stage 12：去重快取
         var now = DateTime.UtcNow;
@@ -244,13 +180,9 @@ public class CommandHandler(
         }
 
         using var typing = msg.Channel.EnterTypingState();
-
         try
         {
-            if (isCeoChannel)
-                await HandleCeoChannelMessageAsync(msg);
-            else
-                await HandleDirectAgentChannelMessageAsync(msg, targetAgent!);
+            await HandleCeoChannelMessageAsync(msg);
         }
         catch (Exception ex)
         {
@@ -261,135 +193,11 @@ public class CommandHandler(
     }
 
     /// <summary>
-    /// CEO 頻道（#victoria-ceo）的自然語言處理。
-    /// 保留對話歷史供多輪對話使用，支援 CEO 反問機制。
+    /// CEO 頻道（#victoria-ceo）的自然語言處理（v5.5 path）。
+    /// CeoAgentService.ProcessWithClaudeCodeAsync 寫 PetraInbox row + return PetraV5Dispatched action → confirm_yes Stage 68 短路 ack。
     /// </summary>
     private async Task HandleCeoChannelMessageAsync(SocketUserMessage msg)
     {
-        // Stage 14：若使用者正在選擇取消哪個任務，攔截為取消選擇
-        if (store.TryGetCancelSelection(msg.Author.Id, out var cancelGroups))
-        {
-            store.RemoveCancelSelection(msg.Author.Id);
-            await buttonRouter.HandleCancelSelectionAsync(msg, cancelGroups);
-            return;
-        }
-
-        // Stage 25a：Kickoff 修改意見
-        if (store.TryGetKickoffModify(msg.Author.Id, out var kickoffGroupId))
-        {
-            store.RemoveKickoffModify(msg.Author.Id);
-            var modifyText = msg.CleanContent;
-            logger.LogInformation("收到 Kick-off 修改意見（UserId={UserId}，GroupId={GroupId}）", msg.Author.Id, kickoffGroupId);
-
-            await msg.Channel.SendMessageAsync(
-                "✏️ 收到修改意見，Petra 正在評估影響並調整計劃書，請稍候...");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var innerScope = serviceProvider.CreateAsyncScope();
-                    var tgs = innerScope.ServiceProvider.GetRequiredService<Orchestration.TaskGroupService>();
-                    await tgs.HandleKickoffConfirmedAsync(
-                        kickoffGroupId, "modify", modifyText, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Kick-off 修改計劃書失敗（GroupId={Id}）", kickoffGroupId);
-                    await msg.Channel.SendMessageAsync("❌ 修改計劃書時發生錯誤，請查看 log。");
-                }
-            }, CancellationToken.None);
-            return;
-        }
-
-        // Stage 51：HITL 中途介入 Apply 修改指引文字
-        if (store.TryGetKickoffMidInterruptApply(msg.Author.Id, out var midInterruptGroupId))
-        {
-            store.RemoveKickoffMidInterruptApply(msg.Author.Id);
-            var hintText = msg.CleanContent;
-            logger.LogInformation(
-                "[Stage51] 收到中途介入指引（UserId={UserId}，GroupId={GroupId}）",
-                msg.Author.Id, midInterruptGroupId);
-
-            await msg.Channel.SendMessageAsync(
-                "✏️ 收到中途介入指引，會議將從 checkpoint 繼續，下一輪 4 Agent + Petra 會優先考量你的指引...");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var innerScope = serviceProvider.CreateAsyncScope();
-                    var taskRepo = innerScope.ServiceProvider.GetRequiredService<Data.Repositories.TaskRepository>();
-                    var group    = await taskRepo.GetGroupByIdAsync(midInterruptGroupId, CancellationToken.None);
-                    if (group is null)
-                    {
-                        await msg.Channel.SendMessageAsync("❌ 找不到對應的 TaskGroup，無法套用中途介入。");
-                        return;
-                    }
-                    var bridge = innerScope.ServiceProvider
-                        .GetRequiredService<Orchestration.Hitl.FrameworkHitlBridge>();
-                    await bridge.HandleMidInterruptResponseAsync(
-                        group, "midinterrupt_apply", hintText, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex,
-                        "[Stage51] 套用中途介入失敗（GroupId={Id}）", midInterruptGroupId);
-                    await msg.Channel.SendMessageAsync("❌ 套用中途介入時發生錯誤，請查看 log。");
-                }
-            }, CancellationToken.None);
-            return;
-        }
-
-        // Stage 25b：Design 修改意見
-        if (store.TryGetDesignModify(msg.Author.Id, out var designModifyInfo))
-        {
-            store.RemoveDesignModify(msg.Author.Id);
-            var designModifyText = msg.CleanContent;
-            logger.LogInformation("收到 Design 修改意見（UserId={UserId}，GroupId={GroupId}）", msg.Author.Id, designModifyInfo.GroupId);
-
-            await msg.Channel.SendMessageAsync(
-                "✏️ 收到設計修改指引，Petra 正在調整設計規劃書，請稍候...");
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var innerScope = serviceProvider.CreateAsyncScope();
-                    var tgs = innerScope.ServiceProvider.GetRequiredService<Orchestration.TaskGroupService>();
-                    await tgs.HandleDesignConfirmedAsync(
-                        designModifyInfo.GroupId, "modify", designModifyInfo.PetraSessionId, designModifyText, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Design 修改設計規劃書失敗（GroupId={Id}）", designModifyInfo.GroupId);
-                    await msg.Channel.SendMessageAsync("❌ 修改設計規劃書時發生錯誤，請查看 log。");
-                }
-            }, CancellationToken.None);
-            return;
-        }
-
-        // Stage 10：提案調整輸入
-        if (store.TryGetAdjustment(msg.Author.Id, out var adjustPending))
-        {
-            store.RemoveAdjustment(msg.Author.Id);
-            var adjustmentText = msg.CleanContent;
-            logger.LogInformation("收到提案調整指示（UserId={UserId}）：{Text}", msg.Author.Id, adjustmentText);
-
-            await msg.Channel.SendMessageAsync(
-                "✏️ 收到調整意見，CEO 正在重新產出提案書，請稍候...");
-
-            var augmentedDescription = $"{adjustPending.Description}\n\n【老闆調整意見】{adjustmentText}";
-            await buttonRouter.ShowProposalAsync(
-                async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
-                adjustPending.CeoResponse,
-                adjustPending.Project,
-                augmentedDescription,
-                images: adjustPending.Images,
-                channelId: msg.Channel.Id);
-            return;
-        }
-
         var history = contextStore.GetHistory(msg.Channel.Id);
 
         // 下載圖片附件
@@ -402,7 +210,7 @@ public class CommandHandler(
             {
                 using var http = new HttpClient();
                 var bytes      = await http.GetByteArrayAsync(attachment.Url);
-                var mediaType  = SlashCommandRouter.DetectImageMediaType(bytes) ?? attachment.ContentType ?? "image/png";
+                var mediaType  = DetectImageMediaType(bytes) ?? attachment.ContentType ?? "image/png";
                 images.Add(new ImageAttachment(Convert.ToBase64String(bytes), mediaType));
             }
             catch (Exception ex)
@@ -412,15 +220,15 @@ public class CommandHandler(
         }
 
         await using var scope = serviceProvider.CreateAsyncScope();
-        var ceoService  = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-        var agentRepo   = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+        var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
+        var agentRepo  = scope.ServiceProvider.GetRequiredService<AgentRepository>();
 
         var rules        = await rulesService.GetRulesAsync(AgentNames.Ceo);
         var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
         var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
 
-        var projectName      = ExtractProjectFromHistory(history, msg.CleanContent);
-        var taskRepo         = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+        var projectName       = ExtractProjectFromHistory(history, msg.CleanContent);
+        var taskRepo          = scope.ServiceProvider.GetRequiredService<TaskRepository>();
         var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
 
         var ceoResponse = await ceoService.ProcessWithClaudeCodeAsync(
@@ -438,120 +246,34 @@ public class CommandHandler(
 
         if (ceoResponse.Action == "reply")
         {
+            // defensive 留：v5.5 path 0 fire，保 default branch 防呆
             await msg.Channel.SendMessageAsync(ceoResponse.Reply);
-        }
-        else if (ceoResponse.Action == "propose")
-        {
-            contextStore.Clear(msg.Channel.Id);
-            var finalProject = ceoResponse.Task?.Project ?? projectName;
-            await msg.Channel.SendMessageAsync(ceoResponse.Reply);
-            await buttonRouter.ShowProposalAsync(
-                async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
-                ceoResponse, finalProject, msg.CleanContent,
-                images: images.Count > 0 ? images : null,
-                channelId: msg.Channel.Id);
-        }
-        else if (ceoResponse.Action == "cancel")
-        {
-            contextStore.Clear(msg.Channel.Id);
-            await buttonRouter.HandleCancelRequestAsync(msg);
-        }
-        else
-        {
-            contextStore.Clear(msg.Channel.Id);
-
-            var finalProject = ceoResponse.Task?.Project ?? projectName;
-
-            if (await appSettings.GetBoolAsync("SkipCeoConfirm"))
-            {
-                await buttonRouter.ShowDirectAgentConfirmAsync(
-                    async (embed, comps) => await msg.Channel.SendMessageAsync(embed: embed, components: comps),
-                    ceoResponse, finalProject, msg.CleanContent,
-                    channelId: msg.Channel.Id);
-            }
-            else
-            {
-                var confirmMessage = await msg.Channel.SendMessageAsync(
-                    embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(ceoResponse, finalProject),
-                    components: ButtonCallbackRouter.BuildConfirmButtons());
-
-                store.RegisterConfirmation(confirmMessage.Id,
-                    new PendingConfirmation(ceoResponse, finalProject, msg.CleanContent));
-
-                _ = interactionService.CreateInteractionAsync(
-                    "ceo_confirm",
-                    title:                ceoResponse.Task?.Title ?? msg.CleanContent,
-                    // Stage 39 搭車修：補上 Task.Description（與 Dashboard 路徑對稱）
-                    description:          BuildCeoConfirmDescription(ceoResponse, msg.CleanContent),
-                    project:              finalProject,
-                    agentName:            ceoResponse.TargetAgent,
-                    availableActionsJson: InteractionService.CeoConfirmActionsJson,
-                    contextJson:          JsonSerializer.Serialize(new
-                    {
-                        channelId       = msg.Channel.Id.ToString(),
-                        ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
-                        project         = finalProject,
-                        description     = msg.CleanContent
-                    }),
-                    discordMessageId: (decimal)confirmMessage.Id);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 各 Agent 專屬頻道的直接對話處理。
-    /// 自動 CC CEO 頻道，並直接路由到對應 Agent 走確認流程。
-    /// </summary>
-    private async Task HandleDirectAgentChannelMessageAsync(SocketUserMessage msg, string agentName)
-    {
-        var ceoChannel = buttonRouter.FindChannel(_settings.Channels.CeoChannel);
-        if (ceoChannel is not null)
-        {
-            var ccEmbed = new EmbedBuilder()
-                .WithTitle($"📋 老闆直接指派給 {agentName} Agent")
-                .WithColor(Color.LightGrey)
-                .AddField("來源頻道", $"#{msg.Channel.Name}", inline: true)
-                .AddField("指派內容", ButtonCallbackRouter.Truncate(msg.CleanContent, 512))
-                .WithTimestamp(DateTimeOffset.UtcNow)
-                .Build();
-            await ceoChannel.SendMessageAsync(embed: ccEmbed);
+            return;
         }
 
-        var projectRaw = "";
-        var project    = string.IsNullOrEmpty(projectRaw) ? "" : projectRaw;
-        var fakeResponse = new CeoResponse
-        {
-            Action      = "delegate",
-            TargetAgent = agentName,
-            Reply       = $"老闆直接指示，由 {agentName} Agent 處理。",
-            Task        = new CeoTaskPayload
-            {
-                Title       = TruncateTitle(msg.CleanContent),
-                Description = msg.CleanContent,
-                Project     = project,
-                Priority    = "normal"
-            }
-        };
+        // v5.5 main flow（PetraV5Dispatched / 其他 defensive action）：BuildCeoDecisionEmbed + BuildConfirmButtons + ceo_confirm BossInteraction
+        contextStore.Clear(msg.Channel.Id);
+        var finalProject = ceoResponse.Task?.Project ?? projectName;
 
         var confirmMessage = await msg.Channel.SendMessageAsync(
-            embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(fakeResponse, project),
+            embed: ButtonCallbackRouter.BuildCeoDecisionEmbed(ceoResponse, finalProject),
             components: ButtonCallbackRouter.BuildConfirmButtons());
 
         store.RegisterConfirmation(confirmMessage.Id,
-            new PendingConfirmation(fakeResponse, project, msg.CleanContent));
+            new PendingConfirmation(ceoResponse, finalProject, msg.CleanContent));
 
         _ = interactionService.CreateInteractionAsync(
             "ceo_confirm",
-            title:                fakeResponse.Task?.Title ?? msg.CleanContent,
-            description:          fakeResponse.Reply,
-            project:              project,
-            agentName:            agentName,
+            title:                ceoResponse.Task?.Title ?? msg.CleanContent,
+            description:          BuildCeoConfirmDescription(ceoResponse, msg.CleanContent),
+            project:              finalProject,
+            agentName:            ceoResponse.TargetAgent,
             availableActionsJson: InteractionService.CeoConfirmActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId       = msg.Channel.Id.ToString(),
-                ceoResponseJson = JsonSerializer.Serialize(fakeResponse),
-                project,
+                ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
+                project         = finalProject,
                 description     = msg.CleanContent
             }),
             discordMessageId: (decimal)confirmMessage.Id);
@@ -560,20 +282,6 @@ public class CommandHandler(
     // ===================================================================
     //  內部工具
     // ===================================================================
-
-    /// <summary>頻道名稱 → Agent 名稱的對應表。</summary>
-    private Dictionary<string, string> BuildChannelAgentMap()
-        => new(StringComparer.OrdinalIgnoreCase)
-        {
-            [_settings.Channels.DevChannel]          = AgentNames.Dev,
-            [_settings.Channels.OpsChannel]          = AgentNames.Ops,
-            [_settings.Channels.QaChannel]           = AgentNames.Qa,
-            [_settings.Channels.DocChannel]          = AgentNames.Doc,
-            [_settings.Channels.RequirementsChannel] = AgentNames.Requirements,
-            [_settings.Channels.ReviewerChannel]     = AgentNames.Reviewer,
-            [_settings.Channels.ReleaseChannel]      = AgentNames.Release,
-            [_settings.Channels.DesignerChannel]     = AgentNames.Designer,
-        };
 
     /// <summary>
     /// 從對話歷史中嘗試找出專案名稱（取最後一次明確提到的專案）。
@@ -590,18 +298,9 @@ public class CommandHandler(
         return "";
     }
 
-    /// <summary>截斷任務標題為不超過 100 字元的短標題。</summary>
-    private static string TruncateTitle(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return "直接指派任務";
-        var firstLine = input.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? input;
-        return firstLine.Length <= 100 ? firstLine : firstLine[..97] + "…";
-    }
-
     /// <summary>
     /// Stage 39 搭車修：組裝 ceo_confirm BossInteraction 的 description，含 Reply + Task.Description。
-    /// 原本只放 ceoResponse.Reply，Dashboard 操作中心看不到 CEO 解析出的具體任務內容；
-    /// 改為兩段式：上半 Reply（短摘要 + 路由說明）、下半 Task.Description（具體任務描述）。
+    /// 兩段式：上半 Reply（短摘要 + 路由說明）、下半 Task.Description（具體任務描述）。
     /// </summary>
     private static string BuildCeoConfirmDescription(CeoResponse ceoResponse, string fallback)
     {
@@ -610,5 +309,30 @@ public class CommandHandler(
         return string.IsNullOrWhiteSpace(taskDescription)
             ? reply
             : $"{reply}\n\n---\n\n{taskDescription}";
+    }
+
+    /// <summary>
+    /// Stage 78c：從 SlashCommandRouter 移入（SlashCommandRouter 整檔砍 議題 4 / 唯一 caller HandleCeoChannelMessageAsync 圖片下載段）。
+    /// 偵測 byte[] 內容對應的 MIME type（PNG/JPEG/GIF/WEBP）。
+    /// </summary>
+    private static string? DetectImageMediaType(byte[] bytes)
+    {
+        if (bytes.Length < 4) return null;
+
+        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            return "image/png";
+
+        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return "image/jpeg";
+
+        if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38)
+            return "image/gif";
+
+        if (bytes.Length >= 12 &&
+            bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+            bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+            return "image/webp";
+
+        return null;
     }
 }

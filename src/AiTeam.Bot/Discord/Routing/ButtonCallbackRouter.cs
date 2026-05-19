@@ -1,46 +1,33 @@
-using System.Text.Json;
 using AiTeam.Bot.Agents;
-using AiTeam.Bot.Configuration;
-using AiTeam.Bot.GitHub;
-using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
-using AiTeam.Data;
-using AiTeam.Data.Repositories;
 using AiTeam.Shared.Constants;
-using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace AiTeam.Bot.Discord.Routing;
 
 /// <summary>
-/// Stage 36：Discord 按鈕回調 Router（從 CommandHandler 拆解而來）。
+/// Discord 按鈕回調 Router（v5.5 active routing only）。
 ///
-/// 本類承載三大類 button handler：
-/// 1. Kickoff 按鈕（Stage 25a：kickoff_continue/stop/modify/restart）
-/// 2. Design 按鈕（Stage 25b：design_continue/stop/modify）
-/// 3. 通用 CEO/Agent/Proposal 按鈕（confirm_/exec_/propose_/req_/cancel_/escalate_*）
+/// Stage 36 拆出 / Stage 78b 路線 C 折衷 v4 routing 砍 75% / Stage 78c 路線 A 一次過 v4 Pipeline framework 整套砍後 ButtonCallbackRouter 縮為純 v5.5 routing：
+///   - confirm_yes / confirm_no 通用 confirmation routing（v5.5 PetraInbox flag forward only 後 confirm_yes Stage 68 短路 ack）
+///   - BuildCeoDecisionEmbed / BuildConfirmButtons 共用 UI Flow（CommandHandler caller）
 ///
-/// 同時暴露共用 UI Flow methods（internal）供 SlashCommandRouter 與 CommandHandler 的自然語言路徑共用：
-///   ShowProposalAsync / ShowDirectAgentConfirmAsync / HandleCancelRequestAsync /
-///   BuildCeoDecisionEmbed / BuildConfirmButtons / BuildProposalConfirmButtons / 等
+/// 砍範圍（Stage 78b + 78c 累積）：
+///   - v4 routing prefix：kickoff_ / design_ / framework_kickoff_mid_interrupt_
+///   - v4 routing case：propose_yes / propose_no / propose_adjust / cancel_yes
+///   - v4 method：HandleKickoffButtonAsync / HandleDesignButtonAsync / HandleFrameworkKickoffMidInterruptAsync /
+///                ExecuteProposalApprovedAsync / ShowProposalAsync / ShowDirectAgentConfirmAsync /
+///                HandleCancelRequestAsync / HandleCancelSelectionAsync / ExecuteAgentTaskAsync / HandleExecYesAsync
+///   - v4 helper：BuildProposalEmbed / BuildProposalConfirmButtons / BuildAgentPlanEmbed / BuildCancelConfirmEmbed /
+///                BuildEscalateButtons / ResolveWorkflowType / SupersedePriorFailedTasks / GetAgentChannelName / FindChannel
+///   - ctor 大幅瘦身：client / settings / gitHubSettings / serviceProvider / taskGroupService 5 dep 砍
 /// </summary>
 public class ButtonCallbackRouter(
-    DiscordSocketClient client,
-    IOptions<DiscordSettings> settings,
-    IOptions<GitHubSettings> gitHubSettings,
-    IServiceProvider serviceProvider,
-    TaskGroupService taskGroupService,
     InteractionService interactionService,
     PendingConfirmationStore store,
     ILogger<ButtonCallbackRouter> logger)
 {
-    private readonly DiscordSettings _settings = settings.Value;
-    // Stage 78b：rulesService 砍 — v4 ExecuteAgentTaskAsync 唯一 caller 砍後 0 caller。
-    private readonly GitHubSettings _gitHubSettings = gitHubSettings.Value;
-
     // ========== Public entry ==========
 
     public async Task RouteAsync(SocketMessageComponent interaction)
@@ -54,23 +41,6 @@ public class ButtonCallbackRouter(
             return;
         }
 
-        if (interaction.Data.CustomId.StartsWith("design_", StringComparison.Ordinal))
-        {
-            await HandleDesignButtonAsync(interaction);
-            return;
-        }
-        // Stage 51：framework HITL 中途介入 — 必須在 kickoff_ 之前 check（customId 起頭 framework_kickoff_mid_interrupt_）
-        if (interaction.Data.CustomId.StartsWith("framework_kickoff_mid_interrupt_", StringComparison.Ordinal))
-        {
-            await HandleFrameworkKickoffMidInterruptAsync(interaction);
-            return;
-        }
-        if (interaction.Data.CustomId.StartsWith("kickoff_", StringComparison.Ordinal))
-        {
-            await HandleKickoffButtonAsync(interaction);
-            return;
-        }
-
         if (!store.TryGetConfirmation(interaction.Message.Id, out var pending))
         {
             await interaction.RespondAsync("此確認已過期或不存在。", ephemeral: true);
@@ -81,170 +51,7 @@ public class ButtonCallbackRouter(
         await HandleGenericButtonAsync(interaction, pending);
     }
 
-    // ========== Kickoff / Design 按鈕 ==========
-
-    private async Task HandleKickoffButtonAsync(SocketMessageComponent interaction)
-    {
-        var parts = interaction.Data.CustomId.Split('_', 3);
-        if (parts.Length < 3 || !Guid.TryParse(parts[2], out var groupId))
-        {
-            await interaction.RespondAsync("⚠️ 無法解析 Kick-off 確認按鈕資訊。", ephemeral: true);
-            return;
-        }
-
-        var action = parts[1]; // continue / stop / modify / restart
-        store.RemoveKickoffConfirmation(interaction.Message.Id);
-
-        if (action == "modify")
-        {
-            store.RegisterKickoffModify(interaction.User.Id, groupId);
-            await interaction.RespondAsync(
-                "✏️ 請直接輸入你的修改意見，Petra 將基於完整的會議 context 評估並調整計劃書。",
-                ephemeral: true);
-            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "kickoff_modify");
-            return;
-        }
-
-        await interaction.DeferAsync();
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await taskGroupService.HandleKickoffConfirmedAsync(groupId, action, ct: CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "HandleKickoffButtonAsync：{Action} 失敗（groupId={Id}）", action, groupId);
-                try { await interaction.FollowupAsync($"❌ 執行 Kickoff {action} 時發生錯誤，請查看 log。"); } catch { /* ignore */ }
-            }
-        }, CancellationToken.None);
-
-        var actionText = action switch
-        {
-            "continue" => "▶️ 繼續開發，即將進入設計規劃階段...",
-            "stop"     => "⏹️ 任務已停止。",
-            "restart"  => "🔄 重新召開 Kick-off 會議...",
-            _          => $"✅ 已執行 {action}。"
-        };
-        await interaction.FollowupAsync(actionText);
-    }
-
-    /// <summary>
-    /// Stage 51：framework HITL 中途介入按鈕處理（v4 漸進遷移第三步試點）。
-    /// customId 格式：framework_kickoff_mid_interrupt_{action}_{groupId}（action = apply / cancel）。
-    ///
-    /// apply：複用 kickoff_modify pattern — 註冊 PendingKickoffMidInterruptApply，
-    ///        Christ 在頻道輸入指引文字後由 CommandHandler.HandleCeoChannelMessageAsync 接續觸發
-    ///        Bridge.HandleMidInterruptResponseAsync(group, "midinterrupt_apply", text)
-    /// cancel：複用 kickoff_continue/stop pattern — DeferAsync + Task.Run 直接呼叫
-    ///        Bridge.HandleMidInterruptResponseAsync(group, "midinterrupt_cancel", null)
-    /// </summary>
-    private async Task HandleFrameworkKickoffMidInterruptAsync(SocketMessageComponent interaction)
-    {
-        // customId = framework_kickoff_mid_interrupt_{action}_{groupId}
-        const string prefix = "framework_kickoff_mid_interrupt_";
-        var rest = interaction.Data.CustomId[prefix.Length..];
-        var sepIdx = rest.IndexOf('_');
-        if (sepIdx < 0
-            || !Guid.TryParse(rest[(sepIdx + 1)..], out var groupId))
-        {
-            await interaction.RespondAsync("⚠️ 無法解析中途介入按鈕資訊。", ephemeral: true);
-            return;
-        }
-        var action = rest[..sepIdx]; // apply / cancel
-
-        if (action == "apply")
-        {
-            store.RegisterKickoffMidInterruptApply(interaction.User.Id, groupId);
-            await interaction.RespondAsync(
-                "✏️ 請直接輸入你的中途介入指引（一則訊息），4 Agent + Petra 下一輪會議將優先考量你的指引。",
-                ephemeral: true);
-            logger.LogInformation(
-                "[Stage51] Mid-Interrupt Apply 待命：UserId={UserId}，GroupId={GroupId}",
-                interaction.User.Id, groupId);
-            return;
-        }
-
-        if (action == "cancel")
-        {
-            await interaction.DeferAsync();
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var scope = serviceProvider.CreateAsyncScope();
-                    var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-                    var group    = await taskRepo.GetGroupByIdAsync(groupId, CancellationToken.None);
-                    if (group is null) return;
-                    var bridge = scope.ServiceProvider
-                        .GetRequiredService<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
-                    await bridge.HandleMidInterruptResponseAsync(
-                        group, "midinterrupt_cancel", content: null, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex,
-                        "[Stage51] Mid-Interrupt Cancel 觸發失敗（GroupId={Id}）", groupId);
-                    try { await interaction.FollowupAsync("❌ 取消中途介入時發生錯誤，請查看 log。"); } catch { /* ignore */ }
-                }
-            }, CancellationToken.None);
-            await interaction.FollowupAsync("✅ 已取消中途介入，會議繼續進行下一輪。");
-            return;
-        }
-
-        await interaction.RespondAsync($"⚠️ 未知的中途介入 action：{action}", ephemeral: true);
-    }
-
-    private async Task HandleDesignButtonAsync(SocketMessageComponent interaction)
-    {
-        var parts = interaction.Data.CustomId.Split('_', 3);
-        if (parts.Length < 3 || !Guid.TryParse(parts[2], out var groupId))
-        {
-            await interaction.RespondAsync("⚠️ 無法解析 Design 確認按鈕資訊。", ephemeral: true);
-            return;
-        }
-
-        var action = parts[1]; // continue / stop / modify
-        store.TryGetDesignConfirmation(interaction.Message.Id, out var designInfo);
-        store.RemoveDesignConfirmation(interaction.Message.Id);
-        var petraSessionId = designInfo.PetraSessionId ?? "";
-
-        if (action == "modify")
-        {
-            store.RegisterDesignModify(interaction.User.Id, groupId, petraSessionId);
-            await interaction.RespondAsync(
-                "✏️ 請直接輸入你的設計指引，Petra 將基於完整設計會議 context 調整設計規劃書。",
-                ephemeral: true);
-            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "design_modify");
-            return;
-        }
-
-        await interaction.DeferAsync();
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await taskGroupService.HandleDesignConfirmedAsync(groupId, action, petraSessionId, ct: CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "HandleDesignButtonAsync：{Action} 失敗（groupId={Id}）", action, groupId);
-                try { await interaction.FollowupAsync($"❌ 執行 Design {action} 時發生錯誤，請查看 log。"); } catch { /* ignore */ }
-            }
-        }, CancellationToken.None);
-
-        var actionText = action switch
-        {
-            "continue" => "▶️ 繼續開發，Cody 即將開始規劃實作計畫書...",
-            "stop"     => "⏹️ 任務已停止。",
-            _          => $"✅ 已執行 {action}。"
-        };
-        await interaction.FollowupAsync(actionText);
-    }
-
-    // ========== 通用按鈕（confirm/exec/propose/req/cancel/escalate） ==========
+    // ========== 通用按鈕（v5.5 active：confirm_yes / confirm_no） ==========
 
     private async Task HandleGenericButtonAsync(SocketMessageComponent interaction, PendingConfirmation pending)
     {
@@ -254,65 +61,9 @@ public class ButtonCallbackRouter(
         {
             await HandleConfirmYesAsync(interaction, pending);
         }
-        else if (id == "propose_yes")
-        {
-            await interaction.DeferAsync();
-            await interaction.FollowupAsync("✅ 提案已核准！即將召開 Kick-off 會議，請稍候...");
-            _ = Task.Run(async () =>
-            {
-                try { await ExecuteProposalApprovedAsync(pending); }
-                catch (Exception ex) { logger.LogError(ex, "提案核准後執行失敗（TaskId={TaskId}）", pending.TaskId); }
-            }, CancellationToken.None);
-        }
-        else if (id == "cancel_yes")
-        {
-            await interaction.DeferAsync();
-            if (pending.GroupId != Guid.Empty)
-            {
-                await taskGroupService.CancelAsync(pending.GroupId);
-                await interaction.FollowupAsync($"✅ 已取消任務：**{pending.Description}**");
-            }
-            else
-            {
-                await interaction.FollowupAsync("❌ 找不到要取消的任務。");
-            }
-        }
-        else if (id == "propose_adjust")
-        {
-            await interaction.RespondAsync(
-                "✏️ 請在此頻道說明您希望如何調整提案方向（一則訊息即可）：\n" +
-                "例如：「UI 規格的表格欄位要加日期範圍篩選，其他沒問題」", ephemeral: true);
-            store.RegisterAdjustment(interaction.User.Id, pending);
-            logger.LogInformation("提案調整待命：UserId={UserId}，TaskId={TaskId}", interaction.User.Id, pending.TaskId);
-            _ = interactionService.SyncDiscordResponseAsync((decimal)interaction.Message.Id, "propose_adjust");
-        }
-        // Stage 78b：v4 routing 砍 — escalate_skip / escalate_abort / escalate_devplan_skip / escalate_devplan_abort 整套砍
-        //（4 case 全 v4 path / production 0 fire / 對應 helper SupersedePriorFailedTasks 也已 0 caller 砍）。
-        else // confirm_no、propose_no
+        else // confirm_no
         {
             await interaction.RespondAsync("❌ 已取消。");
-
-            if (id == "propose_no" && !string.IsNullOrWhiteSpace(pending.UiSpecPath))
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await using var scope = serviceProvider.CreateAsyncScope();
-                        var gh = scope.ServiceProvider.GetRequiredService<GitHubService>();
-                        await gh.DeleteFileAsync(
-                            _gitHubSettings.Owner,
-                            _gitHubSettings.DefaultRepo,
-                            pending.UiSpecPath,
-                            $"docs: remove cancelled proposal spec - {pending.CeoResponse.Task?.Title}");
-                        logger.LogInformation("已清理取消提案的 UI 規格文件：{Path}", pending.UiSpecPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "清理 UI 規格文件失敗：{Path}", pending.UiSpecPath);
-                    }
-                });
-            }
         }
     }
 
@@ -320,302 +71,24 @@ public class ButtonCallbackRouter(
     {
         await interaction.DeferAsync();
 
-        // Stage 68：v5/v5.5 path 收尾（Trial_v12 揭 stale exec_confirm 卡議題）— Petra 已動態調度完成，
-        // 不需建立 TaskItem（無下個 worker）也不 fire exec_confirm 卡。守 Discord button 路徑與 Dashboard 路徑對等。
+        // Stage 68：v5/v5.5 path 收尾 — Petra 已動態調度完成 / 不需建立 TaskItem 或 fire exec_confirm 卡
         if (pending.CeoResponse.Action == CeoResponseActions.PetraV5Dispatched)
         {
-            logger.LogInformation("confirm_yes：v5 path Petra 已完成（Action={Action}），跳過 TaskItem + exec_confirm fire", pending.CeoResponse.Action);
+            logger.LogInformation(
+                "confirm_yes：v5.5 path Petra 已完成（Action={Action}），跳過 TaskItem + exec_confirm fire",
+                pending.CeoResponse.Action);
             await interaction.FollowupAsync($"✅ Petra 已動態調度完成 — {pending.Description}");
             return;
         }
 
-        // Stage 78b（路線 C 折衷）：v4 body 砍 — 原 TaskItem 創建 + BuildConfirmButtons("exec_yes", "exec_no") + exec_confirm BossInteraction fire-and-forget 整段砍。
-        // v4 path 0 production fire（Stage 78a 後 CeoAgentService.ProcessWithClaudeCodeAsync 強制返回 PetraV5Dispatched）。
-        // 殘留 reachable path（HandleDirectAgentChannelMessageAsync agent 頻道直接訊息 / SkipCeoConfirm=true setting）留 Stage 78c 砍 — defensive log + ack。
+        // Stage 78c：v4 path body 整套砍後 defensive log + ack（v4 dead caller / production 0 fire）
         logger.LogWarning(
-            "confirm_yes：非 v5.5 path Action={Action}（v4 dead caller path / Stage 78c 預備砍）— TargetAgent={Agent} Project={Project}",
+            "confirm_yes：非 v5.5 path Action={Action}（v4 dead caller path / v4 Pipeline framework Stage 78c 整套砍）— TargetAgent={Agent} Project={Project}",
             pending.CeoResponse.Action, pending.CeoResponse.TargetAgent, pending.Project);
-        await interaction.FollowupAsync("⚠️ v4 path 已砍（Stage 78b）— 此操作目前不支援，請改走 Dashboard v5.5 path 重新派任務。");
+        await interaction.FollowupAsync("⚠️ v4 path 已砍（Stage 78c）— 此操作目前不支援，請改走 Dashboard v5.5 path 重新派任務。");
     }
 
-    // Stage 78b：HandleExecYesAsync 砍 — v4 exec_yes button routing 唯一 caller 砍後 0 caller
-    //（v4 path 創建 TaskGroup + FireStepsAsync(Dev_plan) + ExecuteAgentTaskAsync 整套砍 / v5.5 path Petra orchestrator 0 經過此 branch）。
-    // Stage 78a 同步砍 v4 Requirements 第三層確認 path（ShowRequirementsPreviewAsync / ExecuteRequirementsFromPreviewAsync / BuildRequirementsPreviewEmbed 整套）。
-
-    // ========== 提案流程（共用 UI Flow — 暴露 internal 供 CommandHandler / SlashCommandRouter） ==========
-
-    /// <summary>Stage 25b：Victoria 提案流程（供 /task 指令、CEO 頻道自然語言、Dashboard 路徑共用）。</summary>
-    internal async Task ShowProposalAsync(
-        Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
-        CeoResponse ceoResponse,
-        string project,
-        string description,
-        IReadOnlyList<ImageAttachment>? images = null,
-        ulong channelId = 0,
-        string triggeredBy = "Discord")
-    {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-
-        var projectId = string.IsNullOrWhiteSpace(project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(project);
-
-        var task = new TaskItem
-        {
-            Title         = ceoResponse.Task?.Title ?? description,
-            Description   = ceoResponse.Task?.Description ?? description,
-            TriggeredBy   = triggeredBy,
-            AssignedAgent = "CEO",
-            Status        = "pending",
-            ProjectId     = projectId,
-        };
-        taskRepo.Add(task);
-        await taskRepo.SaveAsync();
-
-        try
-        {
-            var proposalEmbed = BuildProposalEmbed(task.Title, task.Description ?? description);
-            var confirmMsg    = await sendAsync(proposalEmbed, BuildProposalConfirmButtons());
-
-            store.RegisterConfirmation(confirmMsg.Id, new PendingConfirmation(
-                ceoResponse, project, description,
-                TaskId: task.Id,
-                IsProposal: true,
-                Images: images));
-
-            _ = interactionService.CreateInteractionAsync(
-                "proposal",
-                title:                task.Title,
-                description:          task.Description ?? description,
-                project:              project,
-                agentName:            null,
-                availableActionsJson: InteractionService.ProposalActionsJson,
-                contextJson:          JsonSerializer.Serialize(new
-                {
-                    channelId   = channelId.ToString(),
-                    taskId      = task.Id.ToString(),
-                    project,
-                    description
-                }),
-                discordMessageId: (decimal)confirmMsg.Id,
-                taskItemId:       task.Id);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "CEO 提案模式失敗");
-            var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-            if (ceoChannel is not null)
-                await ceoChannel.SendMessageAsync("❌ 提案書產出失敗，請查看 log 或重新下指令。");
-        }
-    }
-
-    private async Task ExecuteProposalApprovedAsync(PendingConfirmation pending)
-    {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-
-        var task = await taskRepo.GetByIdAsync(pending.TaskId);
-        if (task is null)
-        {
-            logger.LogError("提案核准：找不到 TaskItem（Id={Id}）", pending.TaskId);
-            return;
-        }
-
-        taskRepo.UpdateStatus(task, "done");
-        await taskRepo.SaveAsync();
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = task.Id,
-            Title     = task.Title,
-            AgentName = task.AssignedAgent,
-            Status    = "done"
-        });
-
-        var notifyChannel = FindChannel(_settings.Channels.TaskUpdates);
-        var embed = new EmbedBuilder()
-            .WithTitle("✅ 提案已核准 — 即將召開 Kick-off 會議")
-            .WithColor(Color.Green)
-            .AddField("任務", task.Title)
-            .WithTimestamp(DateTimeOffset.UtcNow);
-
-        if (notifyChannel is not null)
-            await notifyChannel.SendMessageAsync(embed: embed.Build());
-
-        try
-        {
-            TaskGroup group;
-            if (task.GroupId.HasValue && task.GroupId != Guid.Empty)
-            {
-                var existingGroup = await taskRepo.GetGroupByIdAsync(task.GroupId.Value);
-                if (existingGroup is null)
-                    throw new InvalidOperationException($"找不到 TaskGroup（Id={task.GroupId}）");
-                group = existingGroup;
-            }
-            else
-            {
-                group = await taskGroupService.CreateGroupAsync(
-                    task.Title,
-                    pending.Project,
-                    WorkflowType.NewFeature);
-            }
-
-            await taskGroupService.FireStepsAsync(group,
-                [new WorkflowStep(AgentNames.Kickoff)]);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "提案核准後觸發 Kick-off 失敗（TaskId={Id}）", task.Id);
-            var ceoChannel = FindChannel(_settings.Channels.CeoChannel);
-            if (ceoChannel is not null)
-                await ceoChannel.SendMessageAsync("⚠️ 提案已核准，但 Kick-off 會議觸發失敗，請手動下指令。");
-        }
-    }
-
-    // ========== Agent 執行 & 直派 ==========
-
-    /// <summary>跳過 CEO 確認，直接建立任務並顯示 Agent 執行確認（共用 UI Flow）。</summary>
-    internal async Task ShowDirectAgentConfirmAsync(
-        Func<Embed, MessageComponent, Task<IUserMessage>> sendAsync,
-        CeoResponse ceoResponse,
-        string project,
-        string description,
-        ulong channelId = 0,
-        string triggeredBy = "Discord")
-    {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-        var pushService = scope.ServiceProvider.GetRequiredService<DashboardPushService>();
-
-        var projectId = string.IsNullOrWhiteSpace(project)
-            ? (Guid?)null
-            : await taskRepo.GetProjectIdByNameAsync(project);
-
-        var task = new TaskItem
-        {
-            Title         = ceoResponse.Task?.Title ?? description,
-            Description   = ceoResponse.Task?.Description,
-            TriggeredBy   = triggeredBy,
-            AssignedAgent = ceoResponse.TargetAgent ?? "CEO",
-            Status        = "pending",
-            ProjectId     = projectId,
-        };
-        taskRepo.Add(task);
-        await taskRepo.SaveAsync();
-
-        await pushService.PushTaskUpdateAsync(new TaskUpdateViewModel
-        {
-            TaskId    = task.Id,
-            Title     = task.Title,
-            AgentName = task.AssignedAgent,
-            Status    = task.Status
-        });
-
-        var agentPlanEmbed  = BuildAgentPlanEmbed(ceoResponse, task.Id);
-        var agentConfirmMsg = await sendAsync(agentPlanEmbed, BuildConfirmButtons("exec_yes", "exec_no"));
-
-        store.RegisterConfirmation(agentConfirmMsg.Id,
-            new PendingConfirmation(ceoResponse, project, description) with { TaskId = task.Id });
-
-        _ = interactionService.CreateInteractionAsync(
-            "exec_confirm",
-            title:                ceoResponse.Task?.Title ?? description,
-            description:          $"即將由 {ceoResponse.TargetAgent} 執行",
-            project:              project,
-            agentName:            ceoResponse.TargetAgent,
-            availableActionsJson: InteractionService.ExecConfirmActionsJson,
-            contextJson:          JsonSerializer.Serialize(new
-            {
-                channelId       = channelId.ToString(),
-                ceoResponseJson = JsonSerializer.Serialize(ceoResponse),
-                project,
-                description,
-                taskId          = task.Id.ToString()
-            }),
-            discordMessageId: (decimal)agentConfirmMsg.Id,
-            taskItemId:       task.Id);
-    }
-
-    // Stage 78b：ExecuteAgentTaskAsync 砍 — v4 HandleExecYesAsync 唯一 caller 砍後 0 caller
-    //（v4 keyed IAgentExecutor 動態分派 path 整套砍 / v5.5 path Petra orchestrator 走 ClaudeCodeChatClientAdapter / AgentQueueProcessor:190 Stage 78c 預備砍）。
-
-    // ========== Cancel 流程（Stage 14） ==========
-
-    /// <summary>共用 UI Flow：CEO 判定為「取消任務」時呼叫。</summary>
-    internal async Task HandleCancelRequestAsync(SocketUserMessage msg)
-    {
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var taskRepo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
-
-        var runningGroups = await taskRepo.GetRunningGroupsAsync();
-
-        if (runningGroups.Count == 0)
-        {
-            await msg.Channel.SendMessageAsync("目前沒有進行中的任務。");
-            return;
-        }
-
-        if (runningGroups.Count == 1)
-        {
-            var group = runningGroups[0];
-            var confirmMsg = await msg.Channel.SendMessageAsync(
-                embed: BuildCancelConfirmEmbed(group),
-                components: BuildConfirmButtons("cancel_yes", "cancel_no"));
-            store.RegisterConfirmation(confirmMsg.Id, new PendingConfirmation(
-                CeoResponse: new CeoResponse { Action = "cancel" },
-                Project: group.Project,
-                Description: group.Title,
-                GroupId: group.Id));
-        }
-        else
-        {
-            var lines = runningGroups
-                .Select((g, i) => $"{i + 1}. **{g.Title}**（{g.Project}，{g.CreatedAt:MM/dd HH:mm}）")
-                .ToList();
-            await msg.Channel.SendMessageAsync(
-                $"目前有 {runningGroups.Count} 個進行中的任務，請回覆序號選擇要取消哪一個：\n" +
-                string.Join("\n", lines));
-            store.RegisterCancelSelection(msg.Author.Id, runningGroups);
-        }
-    }
-
-    /// <summary>供 CommandHandler 訊息處理器呼叫：老闆選擇要取消哪個任務。</summary>
-    internal async Task HandleCancelSelectionAsync(SocketUserMessage msg, List<TaskGroup> runningGroups)
-    {
-        var input = msg.CleanContent.Trim();
-
-        TaskGroup? selected = null;
-
-        if (int.TryParse(input, out var index) && index >= 1 && index <= runningGroups.Count)
-            selected = runningGroups[index - 1];
-
-        selected ??= runningGroups.FirstOrDefault(g =>
-                g.Title.Contains(input, StringComparison.OrdinalIgnoreCase));
-
-        if (selected is null)
-        {
-            await msg.Channel.SendMessageAsync(
-                $"❌ 找不到符合「{Truncate(input, 100)}」的任務，請重新輸入序號或任務名稱。");
-            store.RegisterCancelSelection(msg.Author.Id, runningGroups);
-            return;
-        }
-
-        var confirmMsg = await msg.Channel.SendMessageAsync(
-            embed: BuildCancelConfirmEmbed(selected),
-            components: BuildConfirmButtons("cancel_yes", "cancel_no"));
-        store.RegisterConfirmation(confirmMsg.Id, new PendingConfirmation(
-            CeoResponse: new CeoResponse { Action = "cancel" },
-            Project: selected.Project,
-            Description: selected.Title,
-            GroupId: selected.Id));
-    }
-
-    // Stage 78b：ResolveWorkflowType 砍 — v4 HandleExecYesAsync 唯一 caller 砍後 0 caller
-    //（ProposalConfirmationService.ResolveWorkflowTypeInternal line 320 是另一個 method 不同檔 / v5.5 path 留 / Stage 78c 評估時對齊）。
-
-    // ========== Embed 與按鈕建構（共用 UI Flow） ==========
+    // ========== Embed 與按鈕建構（共用 UI Flow / CommandHandler caller） ==========
 
     internal static string Truncate(string? value, int max = 1024)
     {
@@ -644,70 +117,9 @@ public class ButtonCallbackRouter(
         return builder.Build();
     }
 
-    internal static Embed BuildAgentPlanEmbed(CeoResponse response, Guid taskId)
-        => new EmbedBuilder()
-            .WithTitle($"🤖 {response.TargetAgent} Agent — 即將執行")
-            .WithColor(Color.Orange)
-            .AddField("任務", Truncate(response.Task?.Title))
-            .AddField("描述", Truncate(response.Task?.Description))
-            .AddField("任務 ID", taskId.ToString())
-            .WithFooter("確認後開始執行，取消則中止。")
-            .Build();
-
-    // Stage 78b：SupersedePriorFailedTasks 砍 — v4 escalate_devplan_skip / escalate_devplan_abort 唯二 caller 砍後 0 caller
-    //（Stage 61-FF 四十五原修根因 Trial_v6 議題 #9 邏輯隨 v4 escalate routing 砍進 Stage 78c 預備範圍）。
-
-    internal static Embed BuildProposalEmbed(string title, string? description)
-    {
-        var descPreview = string.IsNullOrWhiteSpace(description)
-            ? "（無描述）"
-            : description.Length > 800 ? description[..800] + "\n…（已截斷）" : description;
-
-        return new EmbedBuilder()
-            .WithTitle("📋 CEO 提案書 — 請確認")
-            .WithColor(Color.Purple)
-            .AddField("功能名稱", title)
-            .AddField("需求說明", descPreview)
-            .WithFooter("✅ 核准開始開發 ｜ ✏️ 需調整 ｜ ❌ 取消")
-            .WithTimestamp(DateTimeOffset.UtcNow)
-            .Build();
-    }
-
     internal static MessageComponent BuildConfirmButtons(string yesId = "confirm_yes", string noId = "confirm_no")
         => new ComponentBuilder()
             .WithButton("✅ 確認", yesId, ButtonStyle.Success)
             .WithButton("❌ 取消", noId,  ButtonStyle.Danger)
             .Build();
-
-    // Stage 78b：BuildEscalateButtons 砍 — escalate_skip / escalate_abort routing 砍後 0 caller
-    //（原 Petra escalate 提案流程的 button creator / 早已標「不適用」/ 路線 C grep verify 0 production caller 後乾淨砍）。
-
-    internal static MessageComponent BuildProposalConfirmButtons()
-        => new ComponentBuilder()
-            .WithButton("✅ 核准，開始開發", "propose_yes",    ButtonStyle.Success)
-            .WithButton("✏️ 需要調整",       "propose_adjust", ButtonStyle.Primary)
-            .WithButton("❌ 取消",           "propose_no",     ButtonStyle.Danger)
-            .Build();
-
-    private static Embed BuildCancelConfirmEmbed(TaskGroup group)
-        => new EmbedBuilder()
-            .WithTitle("⚠️ 確認取消任務")
-            .WithColor(Color.Orange)
-            .AddField("任務", group.Title)
-            .AddField("專案", string.IsNullOrWhiteSpace(group.Project) ? "—" : group.Project, inline: true)
-            .AddField("建立時間", group.CreatedAt.ToString("MM/dd HH:mm"), inline: true)
-            .WithFooter("確認後立即停止執行中的 Agent，已 push 的 commit 不會回滾。")
-            .Build();
-
-    // ========== Discord helpers ==========
-
-    // Stage 78b：GetAgentChannelName 砍 — v4 ExecuteAgentTaskAsync 唯一 caller 砍後 0 caller
-    //（AgentQueueProcessor 內有自己的 private GetAgentChannelName / Stage 78c 評估）。
-
-    internal IMessageChannel? FindChannel(string channelName)
-    {
-        if (!ulong.TryParse(_settings.GuildId, out var guildId)) return null;
-        return client.GetGuild(guildId)
-            ?.TextChannels.FirstOrDefault(c => c.Name == channelName);
-    }
 }

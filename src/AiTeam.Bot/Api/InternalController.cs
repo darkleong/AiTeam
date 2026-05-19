@@ -1,6 +1,4 @@
-using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
-using AiTeam.Bot.Orchestration;
 using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
@@ -14,6 +12,20 @@ namespace AiTeam.Bot.Api;
 /// <summary>
 /// 僅供內部呼叫的管理 API（Dashboard 重啟 Bot、GitHub Actions 寫入部署記錄）。
 /// 透過 X-Api-Key header 進行驗證。
+///
+/// Stage 78c：v4 Pipeline framework 整套砍後 InternalController 縮為 v5.5 essential endpoints：
+///   - reload-cache（Bot 端 Cache 重新載入 / Dashboard 改完設定 / forge-self-verify skill 必用）
+///   - restart（Bot 容器重啟 / Dashboard 用）
+///   - deployment（GitHub Actions self-hosted runner 寫入部署記錄）
+///   - tokens（Token 用量彙總 / Dashboard Token 監控頁）
+///
+/// 砍範圍（Stage 78c）：
+///   - queue/{agent}/pause + resume + stop-all + resume-all（v4 AgentQueueControlService 砍）
+///   - tasks/{taskId}/requeue（v4 AgentQueueService 砍）
+///   - admin/replay-completion/{taskId}（v4 TaskGroupService + AgentExecutionResult 砍）
+///   - taskgroup/{groupId}/pause + resume + pause-epic + resume-epic（v4 TaskGroupService 砍）
+///   - kickoff/trigger-mid-interrupt（v4 FrameworkHitlBridge 砍 / Stage 51 HITL）
+///   - mock/scenario（v4 MockScenarioService 砍 / 議題 7 拍板）
 /// </summary>
 [ApiController]
 [Route("internal")]
@@ -23,7 +35,6 @@ public class InternalController(
     IHostApplicationLifetime appLifetime,
     AppSettingsService appSettings,
     RulesService rulesService,
-    AgentQueueService queueService,
     AgentConfigCache agentConfigCache,
     PromptResolver promptResolver,
     TalentSkillModelResolver talentSkillModelResolver,    // Stage 74
@@ -196,293 +207,6 @@ public class InternalController(
         });
     }
 
-    /// <summary>
-    /// 將 failed / cancelled TaskItem 重新推入佇列（供 Dashboard 重試按鈕呼叫）。
-    /// </summary>
-    [HttpPost("tasks/{taskId}/requeue")]
-    public async Task<IActionResult> RequeueTask(Guid taskId, CancellationToken cancellationToken)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        var (success, reason) = await queueService.RequeueTaskAsync(taskId, cancellationToken);
-        if (!success) return BadRequest(new { message = reason });
-
-        logger.LogInformation("TaskItem {Id} 重新入佇列（透過 Dashboard）", taskId);
-        return Ok(new { message = "已重新入佇列" });
-    }
-
-    /// <summary>
-    /// Stage 37 admin：手動重新觸發已完成 TaskItem 的 dispatcher（呼叫 HandleAgentCompletedAsync）。
-    /// 用途：當 RequeueTaskAsync 在修 group.Status 同步前發生過、導致 dispatcher 因 group.Status='failed'
-    /// 略過後續流程（[TaskGroupService.cs:122]），用此 endpoint 重建 result 並重新呼叫 dispatcher。
-    /// 重建的 result 為 minimal（Success=true、Summary=replay 標記、OutputUrl=group.DevPrUrl），
-    /// 對 Dev/Reviewer/QA 完成階段足以讓 WorkflowEngine.GetDecision 走後續分支。
-    /// </summary>
-    [HttpPost("admin/replay-completion/{taskId}")]
-    public async Task<IActionResult> ReplayCompletion(Guid taskId, CancellationToken cancellationToken)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var taskGroupService = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-
-        var task = await db.Set<TaskItem>().FindAsync([taskId], cancellationToken);
-        if (task is null) return BadRequest(new { message = "任務不存在" });
-        if (task.Status != "done") return BadRequest(new { message = $"任務狀態 {task.Status} 不允許 replay（僅接受 done）" });
-        if (task.GroupId is not { } groupId) return BadRequest(new { message = "任務無 GroupId（非 group 任務不適用）" });
-
-        var group = await db.Set<TaskGroup>().FindAsync([groupId], cancellationToken);
-        if (group is null) return BadRequest(new { message = "TaskGroup 不存在" });
-
-        var result = new AgentExecutionResult(
-            Success: true,
-            Summary: $"[Manual replay] {task.AssignedAgent} 完成",
-            OutputUrl: group.DevPrUrl
-        );
-
-        logger.LogWarning("Admin replay-completion：TaskId={TaskId}, Agent={Agent}, GroupId={GroupId}",
-            taskId, task.AssignedAgent, groupId);
-
-        await taskGroupService.HandleAgentCompletedAsync(
-            groupId, task.AssignedAgent, result, group.DevPrUrl ?? "", cancellationToken);
-
-        return Ok(new { message = "已重新觸發 dispatcher", taskId, agent = task.AssignedAgent, groupId });
-    }
-
-    /// <summary>
-    /// Stage 33：暫停指定 Agent 的佇列消費（Dashboard 用）。fire-and-forget。
-    /// </summary>
-    [HttpPost("queue/{agent}/pause")]
-    public IActionResult PauseAgent(string agent)
-        => FireAndForgetQueueControl($"pause {agent}", scope =>
-        {
-            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
-            return svc.PauseAgentAsync(agent);
-        });
-
-    /// <summary>Stage 33：恢復指定 Agent 的佇列消費（Dashboard 用）。fire-and-forget。</summary>
-    [HttpPost("queue/{agent}/resume")]
-    public IActionResult ResumeAgent(string agent)
-        => FireAndForgetQueueControl($"resume {agent}", scope =>
-        {
-            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
-            return svc.ResumeAgentAsync(agent);
-        });
-
-    /// <summary>Stage 33：緊急停止所有 Agent（Dashboard 用）。fire-and-forget。</summary>
-    [HttpPost("queue/stop-all")]
-    public IActionResult StopAll()
-        => FireAndForgetQueueControl("stop-all", scope =>
-        {
-            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
-            return svc.StopAllAsync();
-        });
-
-    /// <summary>Stage 33：恢復所有 Agent 的佇列消費（Dashboard 用）。fire-and-forget。</summary>
-    [HttpPost("queue/resume-all")]
-    public IActionResult ResumeAll()
-        => FireAndForgetQueueControl("resume-all", scope =>
-        {
-            var svc = scope.ServiceProvider.GetRequiredService<AgentQueueControlService>();
-            return svc.ResumeAllAsync();
-        });
-
-    private IActionResult FireAndForgetQueueControl(string action, Func<AsyncServiceScope, Task<(bool ok, string message)>> work)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        logger.LogInformation("/internal/queue/{Action} 觸發", action);
-
-        Task.Run(async () =>
-        {
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var (ok, message) = await work(scope);
-                logger.LogInformation("/internal/queue/{Action} 背景完成：ok={Ok}，message={Message}", action, ok, message);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "/internal/queue/{Action} 背景執行失敗", action);
-            }
-        });
-
-        return Accepted(new { message = "已送出指令" });
-    }
-
-    // ============================================================
-    //  Stage 45：TaskGroup 流程暫停 / 恢復（FF 三十四）
-    // ============================================================
-
-    /// <summary>Stage 45：暫停指定 TaskGroup 的下階段啟動（Dashboard 用）。同步寫 DB。</summary>
-    [HttpPost("taskgroup/{groupId:guid}/pause")]
-    public async Task<IActionResult> PauseTaskGroup(Guid groupId, [FromBody] PauseTaskGroupRequest? req, CancellationToken ct)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-        await tgs.PauseTaskGroupAsync(groupId, req?.By ?? "Dashboard", ct);
-        return Ok(new { message = "已暫停" });
-    }
-
-    /// <summary>
-    /// Stage 45：恢復暫停的 TaskGroup（Dashboard 用）。fire-and-forget（內部會跑 FireStepsAsync 觸發長時程 subprocess）。
-    /// </summary>
-    [HttpPost("taskgroup/{groupId:guid}/resume")]
-    public IActionResult ResumeTaskGroup(Guid groupId)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        Task.Run(async () =>
-        {
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-                await tgs.ResumeTaskGroupAsync(groupId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[Stage45-Resume] /internal/taskgroup/{Id}/resume 背景執行失敗", groupId);
-            }
-        });
-        return Accepted(new { message = "恢復指令已送出" });
-    }
-
-    // ============================================================
-    //  Stage 46-FF 三十五：epic 暫停 / 恢復（議題 5：只 epic 級）
-    // ============================================================
-
-    /// <summary>Stage 46：暫停 epic — 不影響當前正在跑的 sub-task，跑完不轉下個 Phase。同步寫 DB。</summary>
-    [HttpPost("taskgroup/{groupId:guid}/pause-epic")]
-    public async Task<IActionResult> PauseEpic(Guid groupId, CancellationToken ct)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var parent = await db.TaskGroups.FirstOrDefaultAsync(g => g.Id == groupId, ct);
-        if (parent is null) return NotFound(new { message = "TaskGroup 不存在" });
-
-        parent.EpicPaused = true;
-        await db.SaveChangesAsync(ct);
-        logger.LogInformation("[Stage46-PauseEpic] Epic {Id} EpicPaused=true", groupId);
-        return Ok(new { message = "已暫停 epic" });
-    }
-
-    /// <summary>
-    /// Stage 46：恢復 epic — 設 EpicPaused=false + 觸發下個 pending sub-task fire Dev_plan。
-    /// fire-and-forget（FireStepsAsync 觸發長時程 subprocess）。
-    /// </summary>
-    [HttpPost("taskgroup/{groupId:guid}/resume-epic")]
-    public IActionResult ResumeEpic(Guid groupId)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-
-        Task.Run(async () =>
-        {
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var db  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var tgs = scope.ServiceProvider.GetRequiredService<TaskGroupService>();
-
-                var parent = await db.TaskGroups.FirstOrDefaultAsync(g => g.Id == groupId);
-                if (parent is null) return;
-
-                parent.EpicPaused = false;
-                await db.SaveChangesAsync();
-
-                // 找下個 pending sub-task：① 最大 PhaseNumber 已 done 的下一個、或 ② 第一個 pending（無 done 時）
-                var lastDone = await db.TaskGroups
-                    .Where(g => g.ParentGroupId == groupId && g.Status == "done")
-                    .OrderByDescending(g => g.PhaseNumber)
-                    .FirstOrDefaultAsync();
-
-                var nextPhase = lastDone is null
-                    ? await db.TaskGroups
-                        .Where(g => g.ParentGroupId == groupId && g.Status == "pending")
-                        .OrderBy(g => g.PhaseNumber)
-                        .FirstOrDefaultAsync()
-                    : await db.TaskGroups
-                        .FirstOrDefaultAsync(g => g.ParentGroupId == groupId
-                            && g.PhaseNumber == (lastDone.PhaseNumber ?? 0) + 1);
-
-                if (nextPhase is not null && nextPhase.Status == "pending")
-                {
-                    await tgs.FireStepsAsync(nextPhase, [new WorkflowStep("Dev_plan")]);
-                    logger.LogInformation("[Stage46-ResumeEpic] Epic {Id} 觸發 Phase {Phase} 啟動",
-                        groupId, nextPhase.PhaseNumber);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[Stage46-ResumeEpic] /internal/taskgroup/{Id}/resume-epic 背景執行失敗", groupId);
-            }
-        });
-        return Accepted(new { message = "恢復 epic 指令已送出" });
-    }
-
-    // ============================================================
-    //  Stage 51：framework HITL 中途介入觸發（v4 漸進遷移第三步試點）
-    // ============================================================
-
-    /// <summary>
-    /// Stage 51：Dashboard「✏️ 中途介入」按鈕觸發 — 寫 in-memory KickoffMidInterruptTriggerStore，
-    /// 下個 Petra Round 邊界 MidInterruptCheckExecutor 會 emit RequestInfoEvent 開 BossInteraction。
-    /// </summary>
-    [HttpPost("kickoff/trigger-mid-interrupt")]
-    public async Task<IActionResult> TriggerKickoffMidInterrupt(
-        [FromBody] TriggerMidInterruptRequest req, CancellationToken ct)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-        if (!Guid.TryParse(req.GroupId, out var groupId))
-            return BadRequest(new { message = "groupId 格式錯誤" });
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var bridge = scope.ServiceProvider
-            .GetRequiredService<AiTeam.Bot.Orchestration.Hitl.FrameworkHitlBridge>();
-        var ok = await bridge.TriggerMidInterruptFlagAsync(groupId, ct);
-        return ok
-            ? Ok(new { message = "中途介入旗標已設置，下個 Petra Round 邊界生效" })
-            : BadRequest(new { message = "Group 無 framework Kickoff state 或不在 framework path" });
-    }
-
-    /// <summary>
-    /// Stage 32：觸發 /mock 情境（Dashboard 用）。fire-and-forget，立即回 202，
-    /// 後續進度透過 SignalR push 給 Dashboard 任務中心。
-    /// </summary>
-    [HttpPost("mock/scenario")]
-    public IActionResult TriggerMockScenario([FromBody] MockScenarioRequest request)
-    {
-        if (!IsAuthorized()) return Unauthorized();
-        if (string.IsNullOrWhiteSpace(request.Scenario))
-            return BadRequest(new { message = "scenario 欄位必填" });
-
-        logger.LogInformation("/internal/mock/scenario 觸發：scenario={Scenario}", request.Scenario);
-
-        // Fire-and-forget：另開 scope 執行，避免阻塞 HTTP 回應
-        Task.Run(async () =>
-        {
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var mockService = scope.ServiceProvider.GetRequiredService<MockScenarioService>();
-                var (ok, message) = await mockService.RunScenarioAsync(
-                    request.Scenario, request.Title, request.Project);
-                logger.LogInformation("/internal/mock/scenario 背景完成：ok={Ok}，message={Message}", ok, message);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "/internal/mock/scenario 背景執行失敗（scenario={Scenario}）", request.Scenario);
-            }
-        });
-
-        return Accepted(new { message = "Mock 情境已觸發，請至任務中心觀察進度" });
-    }
-
     private bool IsAuthorized()
     {
         if (string.IsNullOrEmpty(_apiKey)) return false;
@@ -497,11 +221,3 @@ public record DeploymentRecordRequest(
     string? Sha,
     string? Status,
     string? TriggeredBy);
-
-public record MockScenarioRequest(string Scenario, string? Title, string? Project);
-
-/// <summary>Stage 45：TaskGroup 暫停請求（By = "Dashboard" / 未來 "Discord"）。</summary>
-public record PauseTaskGroupRequest(string? By);
-
-/// <summary>Stage 51：Dashboard 中途介入觸發請求（v4 漸進遷移第三步試點）。</summary>
-public record TriggerMidInterruptRequest(string GroupId);

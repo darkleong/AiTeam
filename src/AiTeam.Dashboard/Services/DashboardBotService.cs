@@ -1,9 +1,19 @@
-using System.Net.Http.Json;
-
 namespace AiTeam.Dashboard.Services;
 
 /// <summary>
-/// 呼叫 Bot 內部 API（重啟等管理操作）。
+/// 呼叫 Bot 內部 API（重啟、Cache 清除等管理操作）。
+///
+/// Stage 78c：v4 Pipeline framework 整套砍後 DashboardBotService 縮為 v5.5 essential methods：
+///   - ReloadCacheAsync（Bot Cache 重新載入 / Dashboard 改完設定）
+///   - RestartBotAsync（Bot 重啟 / Dashboard 用）
+///
+/// 砍範圍（Stage 78c）：
+///   - RequeueTaskAsync（v4 AgentQueueService 砍）
+///   - TriggerMockScenarioAsync（v4 MockScenarioService 砍 / 議題 7）
+///   - PauseAgentAsync / ResumeAgentAsync / StopAllAsync / ResumeAllAsync（v4 AgentQueueControlService 砍）
+///   - PostQueueControlAsync（私 helper / 0 caller after）
+///   - PauseTaskGroupAsync / ResumeTaskGroupAsync（v4 TaskGroupService 砍）
+///   - PauseEpicAsync / ResumeEpicAsync（v4 TaskGroupService.EpicChainService 砍）
 /// </summary>
 public class DashboardBotService(
     IHttpClientFactory httpClientFactory,
@@ -30,178 +40,6 @@ public class DashboardBotService(
         catch (Exception ex)
         {
             logger.LogError(ex, "送出 Bot 快取套用指令失敗");
-            return false;
-        }
-    }
-
-    /// <summary>呼叫 /internal/tasks/{taskId}/requeue，將失敗 / 取消的任務重新入佇列。</summary>
-    public async Task<bool> RequeueTaskAsync(Guid taskId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/tasks/{taskId}/requeue");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("TaskItem {Id} 重新入佇列指令已送出", taskId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出重新入佇列指令失敗（TaskId={Id}）", taskId);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Stage 32：呼叫 /internal/mock/scenario，觸發 Mock 情境（fire-and-forget）。
-    /// scenario 對應 Discord /mock workflow 選項（new_feature / bug_fix / tech_improvement /
-    /// new_feature_with_proposal / fail_review / fail_qa / fail_dev_plan / review_skipped /
-    /// dev_plan_fail_retry / dev_plan_fail_escalate / dev_failed_intervention /
-    /// qa_failed_fix_then_intervention）— Stage 39 / 43 擴充。
-    /// 字串純透傳到 Bot /internal/mock/scenario，由 MockScenarioService 處理；新增場景無需改動此 Service。
-    /// </summary>
-    public async Task<bool> TriggerMockScenarioAsync(
-        string scenario, string? title, string? project, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/mock/scenario");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            request.Content = JsonContent.Create(new { scenario, title, project });
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("Mock 情境觸發指令已送出（scenario={Scenario}）", scenario);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出 Mock 情境觸發指令失敗（scenario={Scenario}）", scenario);
-            return false;
-        }
-    }
-
-    /// <summary>Stage 33：暫停指定 Agent 佇列消費（Dashboard 用）。</summary>
-    public Task<bool> PauseAgentAsync(string agent, CancellationToken cancellationToken = default)
-        => PostQueueControlAsync($"queue/{agent}/pause", $"pause {agent}", cancellationToken);
-
-    /// <summary>Stage 33：恢復指定 Agent 佇列消費（Dashboard 用）。</summary>
-    public Task<bool> ResumeAgentAsync(string agent, CancellationToken cancellationToken = default)
-        => PostQueueControlAsync($"queue/{agent}/resume", $"resume {agent}", cancellationToken);
-
-    /// <summary>Stage 33：緊急停止所有 Agent（Dashboard 用）。</summary>
-    public Task<bool> StopAllAsync(CancellationToken cancellationToken = default)
-        => PostQueueControlAsync("queue/stop-all", "stop-all", cancellationToken);
-
-    /// <summary>Stage 33：恢復所有 Agent 佇列消費（Dashboard 用）。</summary>
-    public Task<bool> ResumeAllAsync(CancellationToken cancellationToken = default)
-        => PostQueueControlAsync("queue/resume-all", "resume-all", cancellationToken);
-
-    private async Task<bool> PostQueueControlAsync(string path, string actionForLog, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/{path}");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("佇列控制指令已送出（{Action}）", actionForLog);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出佇列控制指令失敗（{Action}）", actionForLog);
-            return false;
-        }
-    }
-
-    /// <summary>Stage 45：暫停指定 TaskGroup 的下階段啟動（Dashboard 用）。</summary>
-    public async Task<bool> PauseTaskGroupAsync(Guid groupId, string by = "Dashboard", CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/pause");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            request.Content = JsonContent.Create(new { by });
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("TaskGroup {Id} 暫停指令已送出（by={By}）", groupId, by);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出 TaskGroup 暫停指令失敗（GroupId={Id}）", groupId);
-            return false;
-        }
-    }
-
-    /// <summary>Stage 45：恢復暫停的 TaskGroup（Dashboard 用）。fire-and-forget。</summary>
-    public async Task<bool> ResumeTaskGroupAsync(Guid groupId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/resume");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("TaskGroup {Id} 恢復指令已送出", groupId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出 TaskGroup 恢復指令失敗（GroupId={Id}）", groupId);
-            return false;
-        }
-    }
-
-    /// <summary>Stage 46-FF 三十五：暫停 epic（不影響當前 sub-task，跑完不轉下個 Phase）。</summary>
-    public async Task<bool> PauseEpicAsync(Guid groupId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/pause-epic");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("Epic {Id} 暫停指令已送出", groupId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出 Epic 暫停指令失敗（GroupId={Id}）", groupId);
-            return false;
-        }
-    }
-
-    /// <summary>Stage 46-FF 三十五：恢復 epic + 觸發下個 pending sub-task fire Dev_plan。fire-and-forget。</summary>
-    public async Task<bool> ResumeEpicAsync(Guid groupId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var client = httpClientFactory.CreateClient();
-            using var request = new HttpRequestMessage(HttpMethod.Post,
-                $"{_botInternalUrl.TrimEnd('/')}/internal/taskgroup/{groupId}/resume-epic");
-            request.Headers.Add("X-Api-Key", _botInternalKey);
-            var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            logger.LogInformation("Epic {Id} 恢復指令已送出", groupId);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "送出 Epic 恢復指令失敗（GroupId={Id}）", groupId);
             return false;
         }
     }

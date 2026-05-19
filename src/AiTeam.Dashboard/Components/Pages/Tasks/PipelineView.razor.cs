@@ -200,106 +200,39 @@ public partial class PipelineView : IAsyncDisposable
         Group.PausedBy           = freshGroup.PausedBy;
     }
 
-    /// <summary>Stage 45：暫停 TaskGroup（Dashboard 操作）。</summary>
-    private async Task HandlePauseClickAsync()
+    // Stage 78c：v4 TaskGroupService + FrameworkHitlBridge + AgentQueueService 整套砍 — Pause/Resume/Epic/MidInterrupt/Requeue 0 backend 支援
+    // Dashboard UI 留 button display 但 click 顯示「功能已砍」snackbar / WebUI Stage 預備重設計（議題 1 路線 2 邊界對齊）
+    private void HandlePauseClickAsync()
     {
-        if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
-        try
-        {
-            var ok = await BotService.PauseTaskGroupAsync(Group.Id);
-            Snackbar.Add(ok ? "已暫停下階段啟動，當前階段跑完不會轉下階段" : "暫停指令送出失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok)
-            {
-                // 樂觀更新（fresh read 由 SignalR / 重新載入觸發）
-                Group.IsPaused = true;
-                Group.PausedAt = DateTime.UtcNow;
-                Group.PausedBy = "Dashboard";
-            }
-        }
-        finally { _pauseBusy = false; }
+        Snackbar.Add("⚠️ Stage 78c：v4 TaskGroup 暫停已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    /// <summary>Stage 45：恢復暫停的 TaskGroup（Dashboard 操作）。</summary>
-    private async Task HandleResumeClickAsync()
+    private void HandleResumeClickAsync()
     {
-        if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
-        try
-        {
-            var ok = await BotService.ResumeTaskGroupAsync(Group.Id);
-            Snackbar.Add(ok ? "已送出恢復指令，下階段即將啟動" : "恢復指令送出失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok)
-            {
-                Group.IsPaused = false;
-                Group.PausedAt = null;
-                Group.PausedBy = null;
-            }
-        }
-        finally { _pauseBusy = false; }
+        Snackbar.Add("⚠️ Stage 78c：v4 TaskGroup 恢復已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    /// <summary>Stage 61-FF 四十：暫停整個 epic（Dashboard 操作）— sub-task 不再啟動下個 Phase。</summary>
-    private async Task HandlePauseEpicClickAsync()
+    private void HandlePauseEpicClickAsync()
     {
-        if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
-        try
-        {
-            var ok = await BotService.PauseEpicAsync(Group.Id);
-            Snackbar.Add(ok ? "Epic 已暫停 — sub-task 不再啟動下個 Phase" : "暫停 Epic 失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok) Group.EpicPaused = true;
-        }
-        finally { _pauseBusy = false; }
+        Snackbar.Add("⚠️ Stage 78c：v4 Epic 暫停已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    /// <summary>Stage 61-FF 四十：恢復 epic（Dashboard 操作）— 觸發下個 pending sub-task fire Dev_plan。</summary>
-    private async Task HandleResumeEpicClickAsync()
+    private void HandleResumeEpicClickAsync()
     {
-        if (Group is null || _pauseBusy) return;
-        _pauseBusy = true;
-        try
-        {
-            var ok = await BotService.ResumeEpicAsync(Group.Id);
-            Snackbar.Add(ok ? "Epic 已恢復 — 觸發下個 pending sub-task" : "恢復 Epic 失敗",
-                ok ? Severity.Success : Severity.Error);
-            if (ok) Group.EpicPaused = false;
-        }
-        finally { _pauseBusy = false; }
+        Snackbar.Add("⚠️ Stage 78c：v4 Epic 恢復已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    /// <summary>Stage 51：framework HITL 中途介入按鈕（v4 漸進遷移第三步試點）— Christ 觸發 trigger flag，
-    /// 下個 Petra Round 邊界 MidInterruptCheckExecutor emit RequestInfoEvent 開 BossInteraction。</summary>
-    private async Task HandleMidInterruptClickAsync()
+    private void HandleMidInterruptClickAsync()
     {
-        if (Group is null || _midInterruptBusy) return;
-        _midInterruptBusy = true;
-        try
-        {
-            var (ok, err) = await CeoCommandService.TriggerKickoffMidInterruptAsync(Group.Id);
-            Snackbar.Add(
-                ok
-                    ? "✏️ 中途介入旗標已送，下個 Petra Round 邊界會收到 Discord/Dashboard 介入卡"
-                    : $"中途介入觸發失敗：{err ?? "未知錯誤"}",
-                ok ? Severity.Success : Severity.Error);
-        }
-        finally { _midInterruptBusy = false; }
+        Snackbar.Add("⚠️ Stage 78c：v4 HITL 中途介入已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
-    /// <summary>Stage 51：是否可顯示「中途介入」按鈕（feature flag 開 + Kickoff 步驟 running）。</summary>
-    private bool CanShowMidInterruptButton =>
-        _useFrameworkKickoffMidInterrupt
-        && _steps.Any(s => s.Task.AssignedAgent == AgentNames.Kickoff && s.Task.Status == "running");
+    /// <summary>Stage 78c：framework HITL 整套砍 — 中途介入按鈕永遠不顯示</summary>
+    private bool CanShowMidInterruptButton => false;
 
-    private async Task HandleRequeueAsync(Guid taskId)
+    private void HandleRequeueAsync(Guid taskId)
     {
-        var success = await BotService.RequeueTaskAsync(taskId);
-        Snackbar.Add(
-            success ? "任務已重新入佇列" : "重新入佇列失敗，請稍後再試",
-            success ? Severity.Success : Severity.Error);
+        Snackbar.Add("⚠️ Stage 78c：v4 任務重試已砍 / 留待 WebUI Stage 重設計", Severity.Info);
     }
 
     private async Task LoadLogsAsync(PipelineStepViewModel step)
