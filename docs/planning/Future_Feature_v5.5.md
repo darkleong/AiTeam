@@ -528,6 +528,36 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Phase 4 後續路徑（Christ 2026-05-19 拍板修正）**：Stage 78a ✅ → 78b ✅ → 78c 預留（v4 Pipeline 整套砍 / L）→ **79 預留（v5.5 image flow 補完 / M）** → 80 預留（A HITL plan confirmation / M）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（K + E Token monitoring）→ v5.5 完整收口
 
+### Phase 4 候選 — Stage 79 ✅ v5.5 image flow 補完（2026-05-19） v3.71.0 ⭐⭐⭐⭐⭐
+
+**v3.71.0 / Stage 79 Forge 結案** — commit `0f9176e` 單 commit + 結案第一段 `a61652b` / 20 檔變動 net +1722 行 / 0 follow-up bug（Wave 2 build verify 3 errors Forge 自抓自修）/ Aria gate1 Tier 0+1+Tier 2 #3 build 通過 / **連續 15 Stage 0 follow-up + clean delivery 連續第七次** ⭐⭐⭐⭐⭐⭐⭐（Stage 75-78c-79）
+
+**戰略意義**：**v5.5 image flow business-ready** — Stage 75 切 PetraInbox 設計遺漏 image flow 修根因 + Petra 真實看圖 + 條件性 worker propagation（NeedsImageContext flag）+ Dashboard 限制三層守 + GeminiProvider multimodal native 支援 + Trial_v23 啟動條件達成。
+
+**11 鏈 13 子項 + 7 議題拍板（4 既定 + 3 Plan 階段 Forge spike 揭）**：
+- 4 既定議題（Roadmap v1.1+v1.2）：路線 A 只做 Image / 半抽象 Attachments jsonb + Type discriminator / 限制紀律 per task 5 張 per file 5 MB / Dashboard MudFileUpload + API verify + Repository 三層守
+- 3 Forge spike 揭（Plan v1 階段 escalate）：P1 補 GeminiProvider multimodal（對齊 AnthropicProvider pattern + Christ 偏好 Gemini 低 cost）/ P2 純字串簽名 Repository 收 attachmentsJson（0 cross-project type 依賴 / 對齊半抽象 + 最小抽象紀律）/ P3 Dashboard 4 層 validate 100% 既有 hardcoded → AppSetting 動態 + API/Repository 後備層補強
+
+**WebSearch 3 議題業界紀律 incorporated**：
+- Claude Code CLI 圖片支援機制（無 `--image` flag / 真實機制 prompt 內 file path reference / workspace 檔案 reference / 0 base64 inline）
+- IChatClient multimodal 支援（ChatMessage 含 image AIContent）
+- Multi-agent image propagation 業界 best practice「pass images only to worker agents that need them」（Latenode LangGraph 2026 + Google Agent Bake-Off）
+
+**校準錨真實落點（自省點 #37 第 9 次累積實證）**：
+- raw 130-180K × ratio **×2.49-3.45 mid ×2.97** = 真實 **449K**
+- Aria 預估範圍上界精準對齊（200-450K 預估 / 真實踩上界 / 精準 baseline）
+- 對齊大規模架構級重構新區間 **×1.30-4.93 中段下緣 9 資料點累積**
+- 揭新場景變因：「**M+ 新業務功能 + 1 輪 spike + 半抽象設計 + 議題 P1 補 GeminiProvider scope 略擴 +30%**」ratio 中段
+
+**Forge healthy 偏離 plan 紀律延續第 N+2 次累積**（對齊 Stage 58 結論延續）：
+- PetraOrchestratorService.cs:344 v5 path 簡化紀律（v5 path 0 SubtaskPlan / 第一個 worker 一律附 image / 後續純 text）
+- ClaudeCodeChatClientAdapter.WriteImageContentsToWorkspaceAsync try-catch defensive 比 Plan v1 嚴謹
+- dc.MediaType nullable check 用 pattern match `is { } mediaType` vs Plan v1 `?.StartsWith` 嚴謹
+
+**Aria 自我反思候選 1 條**（留 /aria-end 統一升級）：議題 P3 揭規劃前對 Dashboard 既有 validate 邏輯認知不全（從 0 建 vs 既有 hardcoded → AppSetting 對齊）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+1
+
+**Phase 4 後續路徑**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23**（Aria gate2 / 驗 78a/b/c 砍 + image flow 4 Stage 一次 / Christ 觸發） → 80 預留（HITL plan confirmation / M） → Trial_v24（驗 HITL 業務體驗） → 81 預留（動態 re-planning / L） → WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
 ### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
 
 | Stage | 規模 | Forge session | Trial AiTeam | per cycle |
