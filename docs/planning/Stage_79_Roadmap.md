@@ -2,7 +2,9 @@
 
 > 對應系統版本：v3.71.0
 > 規模：M+
-> 狀態：規劃中 / Roadmap v1.2
+> 狀態：✅ 已完成（2026-05-19）
+> 文件版本：v2.0
+> commit：[`0f9176e`](https://github.com/darkleong/AiTeam/commit/0f9176e) — Forge 結案第一段 + 自驗 PASS（7 場景 Aria gate1 範圍 / Aria gate2 場景 C-H 留 Trial_v23 + Christ 視覺驗收）
 > 性質：新業務功能（schema + 資料流補完 + Petra 拆 plan 邏輯升級 + Claude Code CLI 圖片支援 spike + 限制紀律 + 半抽象命名 future-friendly）/ Migration 加 column nullable / 涉及 LLM call 真實業務影響
 > Model + Effort 建議：**Opus 1M + high**（範圍 M+ / 真實 context 預估 ~200-450K Opus 1M safety 20-45% / Christ 自決升 Extra high 兜底）
 > Stage 期間餘額影響：**0 燒 AiTeam 餘額**（Aria + Forge session 走 Claude Code subscription / Stage 79 預期 0 API call spike — W4 Claude Code CLI subprocess + W7 GeminiProvider multimodal 都 grep verify level / 0 真實 LLM call）。Trial_v23 才燒 AiTeam Petra/Cody/Vera 等真實 LLM call 餘額（對齊既有 Trial baseline / 預估留 Trial_v23 計劃書）
@@ -485,10 +487,177 @@ Petra 用 LlmProviderFactory.Create("PM")（Gemini default 真實使用 / Trial_
 
 ---
 
+## 實作紀錄（v2.0 / Forge 結案第一段 / 2026-05-19）
+
+### 統計（commit [`0f9176e`](https://github.com/darkleong/AiTeam/commit/0f9176e)）
+
+- **20 files changed** / **+1775 insertions / -53 deletions** / **net +1722 行**（Migration + Designer + Snapshot 含 ~600 行 EF auto-generated）
+- 本機驗證：`dotnet build AiTeam.slnx` → **0 error / 54 warning**（baseline ~59 對齊 / -5 warning 健康下降）+ `dotnet test` → **Bot.Tests 102/102 + Generated 127/127 全綠**
+- 新加 xUnit test 2 個（Test31 SubtaskPlanParser NeedsImageContext / Test32 SubtaskPlan.Linear Empty default false）
+- 既有 xUnit Mock fixture 3 處 reflection invoke 簽名擴（DispatchWorkersAsync + 2× DispatchTalentsAsync + Stage77MultiConsumer StubPetraOrchestrator override）
+- Forge 自驗 PASS 7 場景（Aria gate1 範圍）：場景 B Migration apply + 場景 B-seed InsertData + 場景 I Bot startup 0 exception + 場景 I-schema petra_inbox 含 Attachments jsonb + 場景 J-count API 400 超 5 張 + 場景 J-size API 400 單張超 5 MB + R5 既有 row backwards-compatible
+
+### 完成項目（11 鏈 / 13 子項對齊 Roadmap v1.2 + Plan v1）
+
+**鏈 A — PetraInbox schema 擴 + Migration**：
+- [`src/AiTeam.Data/Entities.cs:493-497`](src/AiTeam.Data/Entities.cs) PetraInbox 加 `Attachments` nullable string column（半抽象 future-friendly schema / JSON 含 Type discriminator）
+- [`src/AiTeam.Data/AppDbContext.cs:319`](src/AiTeam.Data/AppDbContext.cs) `e.Property(x => x.Attachments).HasColumnType("jsonb")` 配置
+- [`Migrations/20260519150448_Stage79PetraInboxAttachments.cs`](src/AiTeam.Data/Migrations/20260519150448_Stage79PetraInboxAttachments.cs) Up()：AddColumn jsonb nullable + InsertData 2 AppSetting seed（對齊 Stage 77 既有 pattern）/ Down() 對稱（DropColumn + DeleteData）
+
+**鏈 B — PetraInboxRepository.Enqueue 簽名擴**：
+- [`PetraInboxRepository.Enqueue`](src/AiTeam.Data/Repositories/PetraInboxRepository.cs) 加 `string? attachmentsJson = null` param — Data layer 0 ImageAttachment type 依賴 / 對齊議題 P2 路線 A
+
+**鏈 C — CeoAgentService 接通 images + 限制紀律守 + workflowResolver ctor dep**：
+- [`CeoAgentService.cs`](src/AiTeam.Bot/Agents/CeoAgentService.cs) method body 修：① 限制紀律守（三層守第三層 / 截 maxCount + skip > maxSizeBytes）② JSON 序列化含 Type discriminator（camelCase 對齊 CeoCommandController.ImagesJsonOptions）③ Repository.Enqueue 接通 attachmentsJson — Stage 75 line 39 漏接根因修
+- ctor 加 `WorkflowSettingsResolver workflowResolver`
+
+**鏈 D — PetraInboxProcessor → PetraDispatchWorker → PetraOrchestratorService.StartAsync chain 加 images**：
+- [`PetraDispatchWorker.cs:108-156`](src/AiTeam.Bot/Orchestration/Petra/PetraDispatchWorker.cs) DispatchOneAsync load row 段加 `row.Attachments` 反序列化 + StartAsync 傳 images
+- 新加 `DeserializeImageAttachments` private static helper（容錯：JSON parse 失敗 log warning + return null / 未知 type 略過半抽象 future-friendly）
+- [`PetraOrchestratorService.StartAsync`](src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs) 簽名擴 `IReadOnlyList<ImageAttachment>? images = null`（virtual 保 Stage77 Mock fixture override path）
+
+**鏈 E — Petra LLM call 3 call sites 含 images**：
+- DecideAsync line 230：`provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images)`
+- DecideTalentsAsync line 411 對齊
+- DecideTalentsWithPlanAsync line 478 對齊
+- 3 helper 簽名擴 `IReadOnlyList<ImageAttachment>? images = null` param
+
+**鏈 F — SubtaskPlan.Subtask 擴 NeedsImageContext + Parser + Petra prompt 教學 + 條件性 dispatch**：
+- [`SubtaskPlan.cs:31`](src/AiTeam.Bot/Orchestration/Petra/SubtaskPlan.cs) Subtask record 加 `bool NeedsImageContext = false` field（C# record positional default false / backwards-compatible）
+- SubtaskPlanParser SubtaskDto 加 NeedsImageContext field + TryParse 對齊
+- BuildPetraSystemPrompt useSubtaskPlanning=true path 加段「判斷每個 subtask 是否需要附圖 context」+ 3 balanced few-shot 範例（UI bug case true / 後端 case false / docs case false）+ output section 加 needsImageContext 正例
+- BuildInputMessagesForSubtaskAsync 簽名擴 `Subtask currentSubtask` + `IReadOnlyList<ImageAttachment>? images` — 內部條件性 ChatMessage Contents 構造（NeedsImageContext=true AND images != null → first user message 替換為 multi-modal Contents 含 DataContent）
+- DispatchTalentsAsync + DispatchWorkersAsync 簽名擴 images param + 2 caller（並行段 + sequential 段）propagate plan.Subtasks[i] + images
+- 新加 BuildFirstWorkerInput helper（v5 path / IAgentTool / 0 SubtaskPlan 場景簡化：images != null AND 第一個 worker → 附 image / 後續純 text）
+
+**鏈 G — ClaudeCodeChatClientAdapter workspace 圖檔 + subprocess prompt path reference**：
+- [`ClaudeCodeChatClientAdapter.GetResponseAsync`](src/AiTeam.Bot/Orchestration/Petra/ClaudeCodeChatClientAdapter.cs) 加 WriteImageContentsToWorkspaceAsync call → 從 ChatMessage Contents 取 DataContent → 寫 `.tmp/images/{guid8}_{index:D3}.{ext}` → prompt 加段「【附圖檔路徑】第 N 張圖：...」
+- finally block 清理 workspace 圖檔（worker 跑完 subtask 清 / 0 擾 git workspace + Cody commit 紀律）
+- 對齊 Claude Code CLI 真實機制（prompt 內 reference 檔案路徑 / 0 base64 inline / 0 `--image` flag — amanhimself blog/felloai guide）
+
+**鏈 H — CeoCommandController API verify 後備層 + WorkflowSettingsResolver + Dashboard hardcoded → AppSetting**：
+- [`WorkflowSettings.cs:118-122`](src/AiTeam.Bot/Configuration/WorkflowSettings.cs) 加 2 default（MaxAttachmentsPerTask=5 / MaxAttachmentSizeMB=5）
+- [`WorkflowSettingsResolver.cs:107-112`](src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs) 加 2 method `GetMaxAttachmentsPerTaskAsync` + `GetMaxAttachmentSizeMBAsync`（範圍守 [1, 20] / 對齊 Stage 77 GetIntInRangeAsync pattern）
+- [`CeoCommandController.cs:63-79`](src/AiTeam.Bot/Api/CeoCommandController.cs) API verify 後備層（超 maxCount → 400 / 單張 > maxSizeBytes → 400 含明確訊息）
+- [`QuickCommandCard.razor.cs:32-50`](src/AiTeam.Dashboard/Components/Pages/Home/QuickCommandCard.razor.cs) hardcoded const `MaxFiles` / `MaxFileSize` 改為 field + OnInitializedAsync 從 DashboardAppSettingsService 動態載入（範圍守 [1, 20]）
+- [`QuickCommandCard.razor:51`](src/AiTeam.Dashboard/Components/Pages/Home/QuickCommandCard.razor) UI 提示「最多 @_maxFiles 張，每張 ≤ @(_maxFileSize / 1024 / 1024)MB」對齊動態
+- OnFilesValidated error message line 83 也改動態 `{_maxFileSize / 1024 / 1024}MB`
+
+**鏈 I — GeminiProvider multimodal 補（議題 P1 路線 A）**：
+- [`GeminiProvider.cs:35-50`](src/AiTeam.Bot/Agents/GeminiProvider.cs) 移除既有 line 33-34「忽略 images + log warning」段 → 改為 userParts 構造 `GeminiPart.InlineData = new GeminiInlineData { MimeType, Data }` 多 modal request
+- 加 DTO `GeminiInlineData`（mimeType / data 對齊 [Gemini API multimodal doc](https://ai.google.dev/gemini-api/docs/vision)）
+- GeminiPart.Text 改 nullable `string?`（image part 不傳 text）
+
+**鏈 J — xUnit test 補**：
+- 既有 4 Mock fixture 簽名擴（PetraOrchestratorServiceTests 3 處 reflection invoke + Stage77MultiConsumer StubPetraOrchestrator override）
+- 新加 Test31 SubtaskPlanParser NeedsImageContext 4 case（missing field default false / 顯式 true / 顯式 false / mixed）
+- 新加 Test32 SubtaskPlan.Linear / Empty NeedsImageContext default false 守護
+
+**鏈 K — version bump**：
+- [`Directory.Build.props`](src/Directory.Build.props) v3.70.0 → **v3.71.0**（3 處同步：Version / AssemblyVersion / FileVersion）
+
+### 關鍵設計決策
+
+**1. 議題 P1 路線 A — 補 GeminiProvider multimodal**（Christ 全採納 Forge 推薦）
+Forge plan 階段 grep verify 揭真實 [`GeminiProvider.cs:33-34`](src/AiTeam.Bot/Agents/GeminiProvider.cs)「忽略 images + log warning」— Roadmap §W7 escalate trigger 成立。3 路線拍板路線 A：對齊 Stage 79 image flow 核心精神「Petra 必須看圖」+ Christ 偏好 Gemini 低 cost + AnthropicProvider 既有 pattern reference + scope 擴 1 file ~50 行 + 2 DTO new。拒絕路線 C（違反核心 + Trial_v23 業務驗收會踩）+ 路線 B（短期治標 cost up）。
+
+**2. 議題 P2 路線 A — Repository 純字串簽名**（Aria 推 B → Forge spike 揭 A 更精準）
+Forge grep verify ImageAttachment 22 caller / 0 in AiTeam.Data project — Aria Roadmap §W5 推升 Shared 前提是 Repository 簽名收 typed param，但實質可純字串。**選 A**：Bot project caller（CeoAgentService）負責 JSON 序列化 + Type discriminator / Data layer 0 type 依賴 / 0 namespace 升 14+ file using 改 / scope 最小 — 對齊 Christ「對冗餘不容忍」+「最小抽象紀律」。Aria 修正接受 Forge 推 A（自省點 #39 候選 — Aria 規劃 over-engineering 偏好往複雜走慣性）。
+
+**3. 議題 P3 範圍精準 — Dashboard 既有 hardcoded → AppSetting 動態 + 後備層補強**
+Forge grep verify 揭 Dashboard 端 [`QuickCommandCard.razor.cs:38-76`](src/AiTeam.Dashboard/Components/Pages/Home/QuickCommandCard.razor.cs) **已有完整 4 層 validate**（非圖片 + 過大 + 超量 + 友善訊息）但是 hardcoded const。子項 11 真實範圍縮為「source of truth 改 AppSetting」+ 後備層補強，不是「從 0 開始建限制」。
+
+**4. 半抽象 future-friendly 設計**（Christ 2026-05-19 拍板紀律）
+schema 抽象（column `Attachments` jsonb + JSON 內 `Type` discriminator）/ code 不抽象（ImageAttachment record + NeedsImageContext flag 留 image-specific）。未來擴展 PDF/document：加 PdfAttachment record + 對應 NeedsPdfContext flag + schema 0 migration（DeserializeImageAttachments 未知 type 已 skip 不擋既有 image dispatch path）。
+
+**5. Petra prompt 教學硬編進 method body**（Plan v1 拍板）
+NeedsImageContext few-shot 範例硬編進 [`BuildPetraSystemPrompt useSubtaskPlanning=true`](src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs) outputSection。對齊 Stage 70 既定 path / 0 額外動 Stage 73 DB-as-Prompt 範圍。Trial_v23 + Christ 拍板切 DB-as-Prompt default 後（後續 Stage）統一搬遷 prompt 教學進 DB / 對齊「最小可行」紀律。
+
+**6. ChatMessage Contents multi-modal 構造對齊 Microsoft.Extensions.AI**
+真實 API：`new ChatMessage(ChatRole.User, IList<AIContent>)` + `new TextContent(string)` + `new DataContent(byte[] data, string mediaType)`。在 BuildInputMessagesForSubtaskAsync + BuildFirstWorkerInput + ClaudeCodeChatClientAdapter.WriteImageContentsToWorkspaceAsync 三處對齊。`DataContent.Data` 是 `ReadOnlyMemory<byte>` / 用 `.ToArray()` 寫檔。
+
+**7. ClaudeCodeChatClientAdapter 條件性 dispatch — 自動由 messages 內 DataContent 觸發**
+Adapter 不需額外 flag — caller PetraOrchestratorService 只在 NeedsImageContext=true 時 propagate image AIContent → adapter 內自動「messages 有 DataContent → 寫圖 + prompt path / 0 DataContent → 純 text」運作 / 0 額外控制 flag 紀律。
+
+**8. v5 path（DispatchWorkersAsync）簡化紀律**
+v5 path 0 SubtaskPlan / 0 NeedsImageContext flag — 簡化「images != null AND 第一個 worker → 附 image / 後續純 text」對齊 v5 baseline。實際 v5 path Stage 67 後 0 production caller（flag 切 true 全走 v5.5）但 fallback path 留著守 0 regression。
+
+### 驗收後修正（Wave 2 build/test 修根因 / Forge 自抓自修）
+
+**修正 1**：build error CS0115 — `Stage77MultiConsumerTests.StubPetraOrchestratorService.StartAsync` override 簽名沒對齊新 StartAsync（images param 加後）→ 修簽名 + 對齊 [`Stage77MultiConsumerTests.cs:65-69`](src/AiTeam.Bot.Tests/Orchestration/Stage77MultiConsumerTests.cs)
+
+**修正 2**：3 處 reflection invoke fail — `PetraOrchestratorServiceTests.Test12/29/30` reflection invoke DispatchWorkersAsync + 2× DispatchTalentsAsync args array 數量沒對齊新簽名 → 加 `null` images param 對齊。對齊 Stage 78a-c **source of truth 紀律第 16 次累積**（每個 simple 簽名擴改後 grep verify caller propagation 完整 + Mock fixture 同步擴）。
+
+**修正 3**：Dashboard razor markup 同步動態化 — line 51 提示「最多 5 張，每張 ≤ 5MB」+ OnFilesValidated line 83 error message 既寫死 → 改 `@_maxFiles` / `@(_maxFileSize / 1024 / 1024)MB` 動態 reference。對齊 Stage 75/77 既有 pattern + Christ「對冗餘不容忍」紀律。
+
+### Mock 覆蓋情況
+
+**新業務功能 + 純 refactor 混合**：
+- Bot.Tests baseline 100 → 102（加 Test31/32 / 既有 100 全綠）
+- Generated 127 全綠 baseline 對齊 / Stage 79 0 影響 Playwright UI test
+- xUnit 4 Mock fixture 簽名擴 — 對齊新 StartAsync + DispatchTalentsAsync / DispatchWorkersAsync 簽名（reflection invoke args propagate）
+- backwards-compatible 守護：既有 7 PetraInbox row Attachments=NULL / 0 image / 整 chain 0 行為改變 Trial_v22 baseline 對齊
+
+**Aria gate2 範圍**（Trial_v23 + Christ 視覺驗收 / Forge 不主動觸發燒餘額）：
+- 場景 C: Dashboard 附圖 → PetraInbox.Attachments JSON 真實寫入
+- 場景 D: Petra LLM call 真實含 image / token_logs InputTokens 偏高
+- 場景 F: Worker dispatch 條件性 image fire（NeedsImageContext=true vs false 對照）
+- 場景 G: v5.5 path 0 regression 純文字 baseline 對齊 Trial_v22
+- 場景 H: Trial_v23 真實業務驗 4 Stage 一次
+
+### 踩坑紀錄
+
+**坑 1 — W7 GeminiProvider 0 multimodal 真實揭**（Forge plan 階段 grep verify）
+Roadmap §W7 預警「若 Gemini Provider 真實未實作 multimodal → escalate Christ」— grep verify [`GeminiProvider.cs:33-34`](src/AiTeam.Bot/Agents/GeminiProvider.cs) 真實明文「忽略 images」trigger 成立。**教訓**：Roadmap WebSearch 結論揭業界 framework 真實支援不等於 AiTeam 既有實作真實支援 / 必 grep verify code-level — 對齊 Stage 67 「framework 結論必驗 AiTeam 真實場景 fit」紀律延續。
+
+**坑 2 — Mock fixture reflection invoke args propagation**（Wave 2 build/test 修根因）
+PetraOrchestratorServiceTests 3 處 reflection invoke private DispatchXxxAsync 用 args array 數量 = 既有簽名 param 數 — Stage 79 加 images param 後既有 3 invoke 全 fail。**教訓**：每個 private method 簽名擴必對應 grep verify reflection invoke caller（不只 public method caller / 對齊 Stage 78a-c source of truth 紀律第 16 次累積）。
+
+**坑 3 — Dashboard hardcoded const 不容易 spike 揭**（Plan 階段 §H.3 範圍精準化）
+Plan v1 §H.3 起初規劃「子項 11 加限制紀律 + AppSetting 可調」— Forge spike 揭真實 Dashboard 端 4 層 validate 100% 既有 hardcoded → 子項 11 真實是「source of truth 改 AppSetting」+ API/Repository 後備層補強，不是「從 0 開始建」。**教訓**：Plan 階段對既有 UI / 既有 validate logic spike 揭真實 vs 從 zero 建 — 對齊「最小可行 + 對冗餘不容忍」紀律。
+
+**坑 4 — camelCase JSON 序列化 inconsistency 風險**（Plan v1 §R9 預警 / 實作對齊）
+CeoCommandController.ImagesJsonOptions 既有 camelCase pattern — Stage 79 Repository 寫 JSON / PetraDispatchWorker 反序列化必對齊（type/base64Data/mediaType 全 camelCase）。實作期 CeoAgentService 加 `AttachmentsJsonOptions` static `JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }` 對齊 CeoCommandController 既有 pattern。**教訓**：跨 layer JSON 序列化必對齊既有 naming policy（PascalCase vs camelCase 一致性 / 對齊既有 caller propagate）。
+
+**坑 5 — Microsoft.Extensions.AI DataContent API 真實 spike**（Plan v1 §R6 預警 / 實作對齊）
+真實 API：`new DataContent(byte[] data, string mediaType)` ctor + `DataContent.Data` 是 `ReadOnlyMemory<byte>` / 用 `.ToArray()` 寫檔 + `DataContent.MediaType` 是 `string?` nullable / 用 `dc.MediaType is { } mediaType` pattern match 守 null。對齊 [IChatClient doc 2026-03 update](https://learn.microsoft.com/en-us/dotnet/ai/ichatclient)。**教訓**：framework API spike 必對齊真實 ctor + property nullable + ReadOnlyMemory vs byte[] 差異（Plan 階段 WebSearch reference 不等於實作期 code-level fit / 對齊 Stage 67 結論延續）。
+
+### 校準錨真實落點
+
+對齊 Roadmap §校準錨預估 + 自省點 #37 第 9 次累積實證候選：
+
+- **Plan v1 預估**：raw 130-180K × ratio ×1.5-2.5 = 真實 ~300-450K（中位 ~375K）
+- **真實落點**：Plan 階段 + 實作 + Wave 2 修正 + 自驗 + 結案 — 預估在預估區間中段下緣（~280-350K Opus 1M safety 30-50%）— 對齊 Stage 78c 揭「ultrathink 預估上界偏高 / 真實落點往中段下緣」反向校準延伸 + Aria 預估 600-800K 偏高
+- **Model**：Opus 1M + high 推薦對齊（Christ 自決升 Extra high 未觸發 / safety 充裕）
+- **Stage 期間 AiTeam 餘額影響**：**0**（純 Forge subscription / 0 真實 API call spike — 對齊 R11 紀律）
+
+**新校準錨類型實證**（Stage 79 新業務功能 + 條件性 propagation + 半抽象 future-friendly）：
+- vs Stage 78a-c 大規模架構級重構 ×1.57-4.93 中段（500-700K）
+- vs Stage 60-62 production-ready 補強 ×0.78-0.99 區間
+- Stage 79 性質：M+ 新業務功能 + 1 輪 spike + 半抽象設計 → 真實落點預估中段下緣 / 較 production-ready 補強上限偏高 / 較大規模架構重構下限偏低
+
+### Phase 4 路徑下一步
+
+對齊 Roadmap §Phase 4 路徑：
+```
+Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅（本 Stage / v5.5 image flow / M+）
+            → Trial_v23（Aria gate2 / 驗 78a/b/c 砍 + image flow 4 Stage 一次 / Christ 觸發）
+            → 80（A HITL plan confirmation 閘門 / M）
+            → ...
+```
+
+**等 Aria gate2 + Christ 觸發 Trial_v23 真實業務驗** — Trial_v23 預期 cover：
+- 純文字 prompt baseline 對齊 Trial_v22 0 行為改變（場景 G）
+- 附圖 prompt UI bug case → Petra 真實看圖 + 拆 plan needsImageContext=true → Cody dispatch 真實看圖修 UI bug + PR 真開（場景 C+D+F+H）
+- 對齊連續 16 Trial 業務級成功紀律延續（Trial_v10-v22 連續 13 Trial 業務級成功）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v2.0 | 2026-05-19 | **Forge 結案第一段 ✅** — commit [`0f9176e`](https://github.com/darkleong/AiTeam/commit/0f9176e) + 本機驗證 + 自驗 PASS。**實作完成 11 鏈 / 13 子項**：① §A PetraInbox.Attachments jsonb nullable + AppDbContext 配置 + Migration AddColumn + InsertData 2 AppSetting seed ② §B Repository.Enqueue 純字串簽名（議題 P2 路線 A）③ §C CeoAgentService 接通 images + 限制紀律守 + workflowResolver ctor dep + camelCase JSON ④ §D PetraDispatchWorker 反序列化 + StartAsync 簽名擴 images ⑤ §E Petra 3 LLM call sites 含 images ⑥ §F SubtaskPlan.NeedsImageContext + Parser + Petra prompt few-shot + 條件性 dispatch ⑦ §G ClaudeCodeChatClientAdapter `.tmp/images/` 寫圖 + prompt path + finally 清理 ⑧ §H Resolver 加 2 method + CeoCommandController API verify 後備 + Dashboard hardcoded → AppSetting ⑨ §I GeminiProvider multimodal（議題 P1 路線 A）⑩ §J Mock fixture 4 處簽名擴 + Test31/32 ⑪ §K v3.71.0。**3 議題 Christ 全採納 Forge 推薦**：P1 路線 A 補 GeminiProvider multimodal / P2 路線 A 純字串簽名（Aria 推 B → Forge 推 A 更精準）/ P3 範圍精準（既有 hardcoded → AppSetting 動態 + 後備層補強）。**驗收後修正**：Wave 2 build/test 修根因 3 處 Mock fixture reflection invoke 簽名擴（Stage 78a-c source of truth 紀律第 16 次累積）+ Dashboard razor markup 動態化（line 51 提示 + line 83 error message）。**5 踩坑紀錄**：① W7 GeminiProvider 真實未實作 trigger 成立（Forge plan 階段 grep verify 揭）② Mock fixture reflection invoke args propagation（Wave 2 修根因）③ Dashboard hardcoded 範圍精準（從 zero 建 → source of truth 改 + 後備層補強）④ camelCase JSON 序列化 inconsistency 守 ⑤ Microsoft.Extensions.AI DataContent ctor + ReadOnlyMemory + nullable MediaType API spike。**Forge 自驗 PASS 7 場景**（Aria gate1 範圍）：場景 B Migration apply + B-seed InsertData + I Bot startup 0 exception + I-schema petra_inbox Attachments jsonb + J-count API 400 超 5 張 + J-size API 400 單張超 5 MB + R5 既有 row backwards-compatible。**Aria gate2 範圍**（Trial_v23 + Christ 視覺驗收 / Forge 不主動觸發燒餘額）：場景 C/D/F/G/H 留 Trial_v23 真實業務驗 4 Stage 一次。**校準錨**：Plan v1 raw 130-180K × ratio ×1.5-2.5 = 真實 ~300-450K（中位 ~375K）/ Opus 1M + high safety 30-50% 對齊預估 / Stage 期間 0 燒 AiTeam 餘額 / 自省點 #37 第 9 次累積實證候選新業務功能 + 半抽象 future-friendly 設計類型校準錨。 |
 | v1.2 | 2026-05-19 | **Christ 戰略 question 揭真實 cost 結構 + Effort 反向校準修正**（Aria 慣性 propagate 自省點 #38 + Christ 連續紀律推 Extra high 兩條盲點）：① 砍 Roadmap header `cost 預估：$X-Y per cycle` 欄位 — Stage 期間 Aria + Forge session 走 Claude Code subscription / 0 燒 AiTeam 餘額（除非 Forge 自驗實際 API call spike 才燒 / Stage 79 預期 0 API call spike）/ Trial cost 預估留 Trial_v23 計劃書（對齊 Roadmap 是 Stage scope 文件不是 cost reference 紀律）② Model + Effort 推薦 Extra high → **high**（範圍 M+ / Opus 1M safety 20-45% / Christ 自決升 Extra high 兜底是 Christ 動作不是 Aria 義務 / 對齊 Stage 78c 揭「ultrathink 預估上界偏高」反向校準紀律延伸）③ header `Stage 期間餘額影響：0` 段新加（明寫真實 cost 結構分層）④ 校準錨段 cost 預估改「Stage 期間 AiTeam 餘額影響：0」。**Aria 自省點 #39 立檔候選**（結案第二段 / /aria-end 統一升級進 memory）：① Roadmap header 不該慣性 propagate cost 欄位（對齊「對冗餘不容忍」+ Christ 真實行動價值評估紀律）② Effort 推薦反向校準（基於 Stage 性質+規模 / 不對齊 Christ 連續紀律推高 / Christ 自決升一級兜底是 Christ 動作不是 Aria 義務）③ workflow_aria.md 第三節 A / workflow_aria_model_effort.md 對應紀律 update。**對齊「對等和互相」紀律延伸**（自省點 #36）— Christ 戰略 question 點破真實揭 Aria 預估精度倒退 / 健康反思。 |
 | v1.1 | 2026-05-19 | **Christ 拍板路線 A + Aria 補強升級** — ① 半抽象 future-friendly 命名（PetraInbox schema column `Attachments` jsonb + JSON 內 `Type` discriminator field 預留未來擴展 PDF/document 等 0 schema migration / ImageAttachment record + SubtaskPlan.NeedsImageContext flag 留 image-specific 對齊 Stage 79 範圍精準 / 拒絕全抽象 scope 擴 +20%）② 加新子項 11 **Attachment 限制紀律 + AppSetting 可調**（per attachment max 5 MB / per task max 5 張 / 對應 AppSetting `Workflow:MaxAttachmentsPerTask` + `Workflow:MaxAttachmentSizeMB` + Migration InsertData seed 對齊 Stage 75/77 既有 pattern）③ 加新子項 12 **Dashboard MudFileUpload MaxFiles + API verify 違規處理**（三層守：Dashboard MaxFiles UI 阻止 + API 400 Bad Request + Repository 後備截前 N 個 log warning）④ 設計決策段 7 加「半抽象 future-friendly 設計」段 ⑤ 驗收場景 J 加「Attachment 限制違規處理三層守」⑥ Aria 預警 W9 「半抽象命名邊界」+ W10「AppSetting + Migration InsertData seed」⑦ header + 戰略脈絡 + 子項 1+2 命名更新對齊半抽象 ⑧ 子項編號 11→13（version bump 移至最後）。**檔案類型範圍拍板**：Stage 79 只做 Image（AiTeam 真實 90%+ scenario）/ PDF / document 等留 Future Feature「v5.5 multi-attachment flow 補完」候選真實需求觸發才做 / 半抽象 schema 預留擴展 0 schema migration。 |
 | v1.0 | 2026-05-19 | 規劃書建立 — v3.71.0 / M+ 規模 / v5.5 Phase 4 image flow 補完（Stage 75 切 PetraInbox 設計遺漏修根因 + 條件性 worker propagation）。**戰略脈絡**：Christ 2026-05-19 戰略 question 揭 Dashboard 附圖 Petra 看不到 gap + WebSearch 業界紀律拍板「pass images only to worker agents that need them」+ Claude Code CLI 真實圖片支援機制 WebSearch 確認（workspace 檔案 reference / 0 base64 / 0 `--image` flag）。**11 子項**：① PetraInbox schema 擴 Images jsonb column + Migration ② PetraInboxRepository.Enqueue 簽名擴 ③ CeoAgentService.ProcessWithClaudeCodeAsync 接通 images 修 Stage 75 漏接根因 ④ PetraInboxProcessor → PetraDispatchWorker → PetraOrchestratorService.StartAsync chain 加 images ⑤ Petra LLM call 3 call sites 含 images（DecideTalents/Skill/SubtaskPlan）⑥ SubtaskPlan.Subtask record 擴 NeedsImageContext flag ⑦ Petra prompt（TalentPrompt PM）教學如何判斷 NeedsImageContext（UI 修改 → true / 純後端 / docs → false）⑧ ClaudeCodeChatClientAdapter 條件性 image dispatch（workspace 寫圖檔 + subprocess prompt path reference）⑨ workspace 圖檔清理 + 多 image 處理 ⑩ xUnit test 補 ⑪ Directory.Build.props v3.70.0 → v3.71.0。**計劃前 WebSearch 結論 3 段完整 incorporated**：① Claude Code CLI 圖片支援機制（無 `--image` flag / 真實機制 prompt 內 file path reference）② IChatClient multimodal 支援（ChatMessage 含 image AIContent）③ Multi-agent image propagation 業界 best practice（only give what agent needs / supervisor 條件性決定 / multimodality native feature）。**設計決策核心**：路線 A image schema baseline（PetraInbox jsonb column 同表 / AiTeam 真實場景 1-3 image 典型 / row 5-15 MB 可接受）+ NeedsImageContext per subtask Petra decide 紀律 + Claude Code CLI workspace 檔案 reference 機制 + backwards-compatible 守護紀律延續 + Migration ADD column nullable 0 不可逆風險。**驗收 9 場景**：A xUnit baseline + 新 test / B Migration ADD column / C Dashboard 附圖 → PetraInbox 寫入 Images / D Petra LLM call 真實含 image / E SubtaskPlan NeedsImageContext flag / F Worker dispatch 條件性 image fire / G v5.5 path 0 regression 純文字 baseline / H Trial_v23 真實業務驗 4 Stage 一次 / I Bot startup 0 exception。**Aria 預警 W1-W8**：image schema 路線拍板 / Petra prompt 教學精準度 / workspace 圖檔 path 設計 / Claude Code CLI subprocess image dispatch spike / ImageAttachment namespace 升 Shared 評估 / backwards-compatible 既有 row 0 images / GeminiProvider multimodal 支援 verify（必前置 spike）/ SubtaskPlan record 加 field 對齊。**校準錨預估**：對齊大規模架構級重構新區間 ×1.30-4.93 中段下緣 / raw 130-180K × ratio ×1.5-2.5 = 真實 ~200-450K / Opus 1M + Extra high safety 20-45% / cost $3-5。**Phase 4 路徑**：78a ✅ → 78b ✅ → 78c ✅ → **79**（本 / v5.5 image flow / M+）→ Trial_v23（驗 4 Stage）→ 80（HITL / M）→ Trial_v24（驗 HITL 業務體驗）→ 81（動態 replan / L）→ WebUI Stage → v5.5 完整收口。**下一步**：Forge 實作 + Aria gate1 Tier 0+1 + Aria gate2 production 0 regression 驗 → 通過後 Trial_v23 開（4 Stage 一次 cover）。 |
