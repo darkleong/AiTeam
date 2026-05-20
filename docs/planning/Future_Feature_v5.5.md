@@ -579,7 +579,42 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v23 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → Trial_v24（驗 HITL 業務體驗）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Trial_v24 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → 81 預留（B 動態 re-planning + Trial_v24 議題收口 / L）→ Trial_v25（驗動態 replan）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Trial_v24 ✅ Stage 80 HITL plan_confirm 業務體驗 + 🔴 #1 hotfix verify（2026-05-20） 🟢 全綠 ⭐⭐⭐⭐⭐
+
+**真實結果** — Trial_v24 v1.0 結案（[Trial_v24_Plan.md](../experiments/Trial_v24_Plan.md)）：
+- **🟢 全綠** — Stage 80 HITL 業務體驗 + 🔴 #1 hotfix 業務級成功
+- **連續 15 Trial 業務級成功延續**（v10-v24 / infinite loop pattern 打破連續第 15 次）⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+
+**7 場景驗收**（場景 C plan_approve 跳過 / 對齊「Forge self-verify 已驗 + 場景 A baseline 對齊 + 節省 ~$2-3」拍板）：
+
+| 場景 | 結果 | 重點 |
+|---|---|---|
+| G 🔴 #1 hotfix verify | ✅⭐⭐ | Dashboard 5+ navigation 切換 / 0 Circuit terminated / 0 second operation / Console pattern 0 hit / 對比 Trial_v23 中段 Christ 截圖 Circuit 完整修根因 |
+| A flag=false baseline | ✅ | 0 plan_confirm fire / chain Cody→Vera→Quinn / PR #388 / Quinn outputLen=0 🟡 議題 |
+| B flag=true 開卡 | ✅ | log marker + SystemNotes + ContextJson + session=paused |
+| H UI render | ✅ | SystemNotes 區塊 + 4 button + SubtaskPlan + 主題變數深色友善（Christ 視覺感受拍板）|
+| D plan_edit redecide | ✅ | contentLen=28 / redecide subtasks=2 |
+| F plan_respond redecide | ✅⭐⭐⭐ | **Petra 真實理解「mobile responsive」加 ui_design + qa_testing 響應式驗 / subtasks=2 → 4 / 業界 LangGraph interrupt 真實效果驗證** |
+| E plan_reject | ✅ | task_memory.decision/plan-rejected + session=cancelled / UX 二次確認 modal 守紀律 |
+
+**Cost $2.52 對齊預估 $1-3 ✓ / 餘額 $9.96 → $7.44**
+
+**揭 3 🟡 議題**：
+- 🟡 #1 **Quinn outputLen=0 baseline 漂移** — 場景 A Quinn chain dispatch 100% 通過 + token_logs 12553 tokens 真實輸出 + cost $0.66 / 但 ClaudeCodeChatClientAdapter 端 outputLen=0 / PR body Quinn 段 0 內容 — Stage 81+ follow-up 評估候選
+- 🟡 #2 **Petra `NeedsImageContext` 對純文字 prompt 誤判 true** — 場景 B/D/F plan_confirm 卡 SubtaskPlan render「附圖」chip 但 attachments=0 imageCount=0 — Stage 79+80 邊界議題 / Stage 81+ follow-up Petra prompt few-shot 補強候選
+- 🟡 #3 minor **`PetraOrchestratorResult.DispatchedWorkerCount` reject path 命名語意不對齊** — reject 真實 0 chain dispatch 但 log dispatched=4（雜用 plan.Subtasks.Count）— Stage 81+ follow-up minor cleanup
+
+**戰略意義**：
+- **Stage 80 HITL plan_confirm 業務體驗實證** ⭐⭐⭐⭐⭐ — 4 decision pattern 全部真實 fire（approve Forge self-verify 已驗 + edit/respond/reject Aria 真實業務驗）/ 業界 LangGraph interrupt 紀律真實內化 AiTeam
+- **🔴 #1 DbContext concurrency hotfix production 真實生效** ✅ — Dashboard 首頁 + 多 navigation 0 Circuit（Trial_v23 直接踩 production bug 修根因實證 ⭐⭐）
+- **HITL 4 decision pattern 真實影響 Petra decision 業務級實證** ⭐⭐⭐ — 場景 F「mobile responsive」→ Petra subtasks=2 → 4 加響應式設計（業界 LangGraph interrupt 真實效果驗證）
+- **Aria Chrome MCP 自跑突破** — 「Christ 只動嘴」精神更進一步突破 / Trial_v24 Christ 真實操作量 0（除拍板開跑 + 看 screenshot 拍視覺 + 拍 PR 業務）/ 對齊 aria-trial-run skill 第 7 次實踐成熟 + Chrome MCP 業界擴展
+
+**Aria 自我反思候選 2 條**（留 /aria-end 統一升級）：
+- workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+1 — 規劃 Trial 場景時必評估「Chrome MCP / computer-use 工具能力可否替代 Christ 操作」/ 對齊自省點 #20「工具使用慣性」延伸（避免 Trial 規劃漏掃工具能力）
+- 自省點 #36「對等和互相」紀律第 N 次真實實踐 — Christ 戰略 question「妳有 Claude for Chrome 能力」點破 Aria 工具盲點 / Aria 承認漏掉 + 真實再評估給雙面定見
 
 ### Phase 4 候選 — Stage 80 ✅ A HITL plan confirmation 閘門 + Trial_v23 4 議題收口（2026-05-20） v3.72.0 ⭐⭐⭐⭐⭐
 
