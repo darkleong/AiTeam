@@ -579,7 +579,25 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Stage 81 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → Trial_v25（驗動態 replan + 4 decision routing + 3 議題 production）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Trial_v25 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **Stage 82**（Quinn outputLen 修根因 + Stage 81 子項 8 砍 + 順手議題）→ Trial_v26（補驗 Stage 81 動態 replan + Stage 82 雙驗證）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Trial_v25 🟡 Stage 81 動態 replan production 真實驗（部分完成）（2026-05-20）
+
+**Trial_v25 結果 🟡 部分完成** — Case A baseline ✅（PR #389 v1 Haiku fallback / PR #390 v2 Sonnet 5-subtask 完整 review-fix cycle chain 都 close）/ Case B/C/D 戰略性 abort（餘額不夠 + 🔴 finding 戰略價值已值回）/ **真實 cost $4.52 超預估 81%**（Provider 切換改變 chain 結構）/ Christ 中途儲值 $7.48 → $12.93 為 Stage 82 + Trial_v26 buffer。
+
+**🔴 戰略級 finding — Quinn outputLen=0 修根因錯方向揭**：
+- Stage 81 子項 8 假設「Quinn CLI session 結束無 final text turn → result JSON 空 → outputLen=0」 → prepend QA 報告紀律提示
+- Trial_v25 真實揭：Quinn 燒 **27K output tokens + $1.04 cost**（有大量輸出 / 不是「無 final text turn」）
+- 真實根因方向：adapter 從 Claude Code CLI 收 result 邏輯漏 Quinn 真實 output / 可能 Quinn 把 QA 報告寫在 tool calls 中間 turn / adapter 只看 final result 欄位
+- **Stage 82 修法規模估**：S Stage / 1-3 子項 / Forge spike adapter stream collect 真實行為 + 修對地方 + 砍 Stage 81 子項 8 prepend 錯方向
+
+**🟡 Anthropic Haiku conversational preamble**：Haiku 回應前綴對話文 → SubtaskPlanParser 第一 byte parse fail → fallback Linear[code_implementation] → chain 變 Cody only（無 Vera + 無 Quinn）。**Petra Sonnet 4.6 純 JSON ✅** + 拆 5 subtask review-fix cycle plan vs Gemini Flash 3-subtask baseline +67%（規劃力差異展現 / cost ~1.5-2x）→ Petra Provider 切 Sonnet 4.6 為 production active default（Stage 38 Dashboard Provider/Model DB SoT）。
+
+**🟡 Petra Anthropic provider token_logs 漏寫**：Petra 5 個 worker call 都進 token_logs 但 Petra 自己的 LLM call 沒記錄 — agent_configs.Provider=Anthropic 對應 token logging path 待 Stage 82 順手查。
+
+**戰略意義**：「修根因 > 補丁」紀律深度實證 — Stage 81 假設根因錯方向（「無 final text turn」）vs Trial_v25 真實揭根因（「27K output 但 adapter 漏收」）= 截然不同方向 / Stage 82 該砍 Stage 81 子項 8 prepend + 修真實根因。Trial 真實業務驗價值高於 Mock 全綠（自省點 #25 第 N 次驗證）。
+
+詳見 [Trial_v25_Plan.md](../experiments/Trial_v25_Plan.md) v2.0。
 
 ### Phase 4 候選 — Stage 81 ✅ B 動態 re-planning + HITL retry gate 配套 + Trial_v24 3 議題收口（2026-05-20） v3.73.0 ⭐⭐⭐⭐⭐⭐
 
