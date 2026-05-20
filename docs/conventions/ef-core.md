@@ -228,6 +228,17 @@ EF Core tools `dotnet ef migrations add` 預設**先 build 才執行**（用最�
 
 **Stage 80 真實案例**：[`20260520023659_Stage80BossInteractionSystemNotes.cs`](../../src/AiTeam.Data/Migrations/20260520023659_Stage80BossInteractionSystemNotes.cs) 第一次跑用 `--no-build` 產空 Migration / 用 stale snapshot 覆蓋 → git checkout 還原 + 手動寫 Migration + Python 腳本產 Designer.cs 救回。
 
+### ⚠️ Migration body 空驗證紀律（Stage 81 揭 — Stage 80 同類根因第 2 次延伸）
+
+即使不用 `--no-build`，**model snapshot 可能已被早期不完整 build cache 覆蓋** → `dotnet ef migrations add` 成功但 **Migration `.cs` body 空**（Up()/Down() 0 action）+ Designer.cs 反而有正確 snapshot。
+
+**紀律**：每次 `dotnet ef migrations add` 後**必驗 Migration `.cs` body 非空**：
+1. 開生成的 Migration `.cs` 看 Up() / Down() 內含 AddColumn / DropColumn / CreateIndex 等 action
+2. 若 body 空 → **直接手寫 Migration .cs 對齊 model 真實 diff**（vs 反覆 retry `dotnet ef migrations add` / `git checkout` 救 snapshot — 高失敗率）
+3. 手寫紀律：AddColumn 含 `defaultValue` 對齊 entity initializer + Down() 對稱（DropColumn / DropIndex / DeleteData）
+
+**Stage 81 真實案例**：[`20260520095830_Stage81PetraSessionReplanFields.cs`](../../src/AiTeam.Data/Migrations/20260520095830_Stage81PetraSessionReplanFields.cs) `dotnet ef migrations add` 成功但 Migration body 空（model snapshot 已被早期 build 覆蓋）→ Designer.cs 有正確 ReplanIteration/SessionCostUsd snapshot 但 Up()/Down() 空 → 手寫 AddColumn x3 + CreateIndex + InsertData x3 + 對應 Down()。
+
 ## Repository 模式
 
 ```csharp

@@ -265,6 +265,22 @@ Stage 55A 已刪除原 `WorkflowEngine` class + `GetDecision` method + `NextActi
 
 **規則**：未來重構若想動 `WorkflowType` / `WorkflowStep`，先 grep 全 reference 評估影響面再下手；不可單純看「WorkflowEngine.cs 內部 logic 已搬走」就誤判為殘留。
 
+## Raw string interpolation 含 JSON template 用 `$$"""`（Stage 81 揭）
+
+C# raw string `$"""..."""` 含 JSON template + 插值時容易踩 brace escape 雷：
+- `{{` 視為 escape 為 literal `{` 但跟插值 syntax `{var}` 衝突 → 編譯錯誤 / 或 runtime 出非預期字串
+- 例：`$"""{"shouldReplan":true,"subtaskId":{currentSubtask.Id}}"""` ← 編譯器混淆 `{` 為插值起點
+
+**修法**：改用 `$$"""..."""`（雙 `$`）— literal brace 直接寫 `{` / 插值改用雙花括號 `{{var}}`：
+
+```csharp
+var userPrompt = $$"""
+    {"shouldReplan":true,"reason":"...","targetSubtaskId":{{currentSubtask.Id}}}
+    """;
+```
+
+**Stage 81 真實案例**：[`PetraOrchestratorService.cs:1844`](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1844) `InvokePetraReplanAsync` 寫 Petra LLM JSON template prompt 含 currentSubtask.Id 插值 → 第一次用 `$"""..."""` 編譯錯誤 → 改 `$$"""..."""` 救回。
+
 ## Windows dev 機 Process.Start + .cmd PATHEXT 解法（Stage 56）
 
 Production Linux Docker 容器內 `claude` 是 node-installed 無副檔名 binary 不踩此問題；**Windows dev 機本機跑 framework workflow** 時 .NET `Process.Start` 配 `UseShellExecute=false` 不 honor PATHEXT 找不到 `claude.cmd`，需採以下其中一條解法：

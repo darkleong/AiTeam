@@ -579,7 +579,44 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v24 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → 81 預留（B 動態 re-planning + Trial_v24 議題收口 / L）→ Trial_v25（驗動態 replan）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Stage 81 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → Trial_v25（驗動態 replan + 4 decision routing + 3 議題 production）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Stage 81 ✅ B 動態 re-planning + HITL retry gate 配套 + Trial_v24 3 議題收口（2026-05-20） v3.73.0 ⭐⭐⭐⭐⭐⭐
+
+**v3.73.0 / Stage 81 Forge 結案** — commit `92eadb9` 單 commit + 結案第一段 `c48f0f0` / 20 檔變動 net +2607 -37 行 / 0 follow-up bug / Aria gate1 Tier 0+1+2+Tier 3 #11 通過（規模 L+ 升 tier）/ **連續 17 Stage 0 follow-up + clean delivery 連續第九次** ⭐⭐⭐⭐⭐⭐⭐⭐⭐（Stage 75-78c-79-80-81）
+
+**戰略意義**：**Stage 81 達成 Christ 親口要的動態 re-planning 業務功能** — Petra 看 subtask result 邊判斷邊決定下一步 / 對齊業界 LangGraph cycles + max iterations + cost cap + checkpoint replay 業界紀律完整內化 + HITL retry gate 重用 Stage 80 plan_confirm infra + Trial_v24 3 議題全收口 + Trial_v25 啟動條件達成 + Phase 4 接近完整收口前最後動態功能 Stage。
+
+**動態 replan core（5 子項 / LangGraph cycles 業界紀律對齊）**：
+- §1 `DetectReplanTrigger` 純規則 Regex（Vera `"critical":[{...}]` + Quinn `"status":"failed"` 對齊 CLAUDE_Vera.md L113 + CLAUDE_Quinn.md L75）
+- §2 `InvokePetraReplanAsync` W8 紀律 — Petra LLM 只回 retry instruction（不回新 plan 結構）+ 3 正例 + 1 反例 few-shot + `TryParseReplanDecision` markdown fence 容錯
+- §3 `PetraOrchestratorResult.Replanning` + `Cancelled` 工廠（議題 #3 命名語意收口）
+- §4 `ResumeFromReplanConfirmationAsync` 4 decision routing + 3 子 method（approve = 同 subtask 重 dispatch with retry instruction prepend ⭐⭐⭐ / edit/respond = redecide 開新卡 loop / reject = 接受原 output 繼續下個 subtask 不 cancel session）+ `ContinueChainFromSubtaskAsync` 取 plan_confirm ContextJson SoT + `DispatchRemainingSubtasksAsync` simplified sequential + `BuildSummariesFromSessionMessagesAsync`
+- §5 `PetraSession.ReplanIteration` + `SessionCostUsd` column + Repository 3 helper + `CheckReplanTriggerAfterDispatchAsync` 6 step + `HandleCapReachedAsync` 開既有 intervention 卡 + 寫 task_memory `decision/replan-cap-reached` + `sessionRepo.CancelAsync`（場景 G/H）
+
+**HITL gate 配套（2 子項 / 純複用 Stage 80 infra）**：
+- §6 `PlanConfirmationProcessor` filter `IN ('plan_confirm', 'replan_confirm')` + dispatch 分支 + `MapActionToDecision` 8 action mapping
+- §7 `InteractionService.ReplanConfirmActionsJson` 4 button + MockMode auto-approve + `InteractionCard.razor` replan_confirm UI（觸發原因 MudAlert + 進度 + retry instruction MudPaper + 原 output 預覽 MudExpansionPanel）+ `InteractionCenter.razor.cs` 4 mapping（Icon=Refresh + Color=Warning + replan_reject=warning vs plan_reject=error）
+
+**Trial_v24 議題收口（3 子項）**：
+- 🟡 #1 ✅ Quinn outputLen=0 修根因 — `ClaudeCodeChatClientAdapter` qa_testing capability prepend `BuildQaSummaryEnforceSection`（純 adapter 層 / 不污染 CLAUDE_Quinn.md）
+- 🟡 #2 ✅ Petra NeedsImageContext few-shot 補 2 反例
+- 🟡 #3+#8 ✅ `Cancelled` 工廠 + Stage 80 既有 `ResumeRejectAsync` 改用 Cancelled + log dispatched=0 自動對齊
+
+**Aria 二檢補強**：
+- 補強 #A `GetUseDynamicReplanningAsync` 雙 flag 綁定 + warning log（plan_confirm ContextJson SoT 紀律）
+- 補強 #B `IX_token_logs_PetraSessionId` non-unique non-partial index（高頻 SumAsync 性能保險）
+
+**Aria 自審紀律生效驗證** ⭐：Roadmap v1.0 → v1.1 自審揭 2 🔴 + 6 🟡 全收口（過去 Stage 79/80 自審 0-1 議題 / Stage 81 自審 8 議題 = aria-review-plan skill 自我自審紀律首次大規模實踐生效）
+
+**4 踩坑紀錄 / 3 know-how 升級**：
+① EF stale snapshot 第 2 次（Stage 80 同類延伸）→ ef-core.md 加「Migration body 空驗證紀律」
+② C# raw string `{{...}}` brace escape 雷 → csharp.md 加「Raw string interpolation 用 `$$"""`」
+③ DispatchTalentsAsync 簽名擴 ctx → Test29/30 reflection fixture 修正（既有 Stage 67/75 紀律）
+④ Edit tool 絕對路徑走 main repo 而非 worktree → forge-self-verify skill 加「worktree workflow Edit tool 絕對路徑紀律」
+
+**Aria 自我反思候選**（留 /aria-end 統一升級）：
+- 「Aria 寫完 Stage Roadmap 後系統性 6 維度 ultrathink 自審紀律」— 對齊自省點 #16 二次檢查紀律延伸到 Aria 自己寫的 Roadmap / Stage 81 首次大規模實踐生效
 
 ### Phase 4 候選 — Trial_v24 ✅ Stage 80 HITL plan_confirm 業務體驗 + 🔴 #1 hotfix verify（2026-05-20） 🟢 全綠 ⭐⭐⭐⭐⭐
 
