@@ -205,7 +205,7 @@ Case A 先跑（baseline 確認 0 regression）→ Case B 跑（image flow 業�
 |---|---|---|
 | Aria + Forge session（Claude Code subscription）| **0 燒 AiTeam 餘額** | 對齊 Stage 79 v1.2 紀律 ✓ |
 | Trial AiTeam LLM cost | **$2.86** | Plan $2-3 ✓ |
-| 餘額：$12.81 → ~$8.21（-$2.86 對齊 Trial_v22 baseline $2.5）| | |
+| 餘額：$12.81 → **$9.96 真實**（-$2.85 對齊 Trial_v22 baseline $2.5 / 預估精準度 1 cent rounding 對齊）| | |
 
 ---
 
