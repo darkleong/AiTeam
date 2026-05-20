@@ -1,9 +1,9 @@
 # Trial_v23 — Stage 78a+78b+78c+79 連 4 Stage 整套真實業務驗（v5.5 image flow business-ready 閘門 + v4 path 全砍 0 regression 驗）
 
-> 日期：2026-05-19（Plan v1.0 預估版 / Trial 真實跑後 Forge/Aria 結案改 v2.0 in-place）
+> 日期：2026-05-19 派出 / 2026-05-20 結案
 > 對應系統版本：**v3.71.0**（Stage 79 結案後）
-> 試驗版本：**v1.0**（Plan 預估 / Aria 撰寫 / 對齊 Stage 79 結案後即進 Trial baseline / 預防 Compact 後新 Aria 認知 gap）
-> 預估結果：🎯 **全綠 baseline 目標**（純文字 baseline 對齊 Trial_v22 0 regression + 附圖 UI bug case 驗 image flow business-ready）
+> 試驗版本：**v2.0**（Plan v1.0 → 真實跑完 + Aria 結案 in-place 升級）
+> **真實結果**：🟡 **部分過 — v5.5 image flow business-ready 閘門通過 + 揭 1 🔴 + 3 🟡 議題**（連續 14 Trial 業務級成功延續）
 
 ---
 
@@ -163,18 +163,91 @@ Case A 先跑（baseline 確認 0 regression）→ Case B 跑（image flow 業�
 
 ---
 
-## 議題分類（Trial 跑完後填）
+## 真實跑結果（v2.0 in-place 升級 / 2026-05-20 結案）
 
-待 Trial_v23 真實跑完 / Forge/Aria 結案改 v2.0 in-place 填：
+### Case A — 純文字 baseline ✅ 5/5
 
-| # | 嚴重 | 議題 | 對應修法 |
-|---|---|---|---|
-| TBD | TBD | TBD | TBD |
+| 項 | 真實 |
+|---|---|
+| PR | [#386](https://github.com/darkleong/AiTeam/pull/386) / 38 檔 / +2281 -154 / **12 min 03s** |
+| Petra picks | Cody → Vera → Quinn（3 talent / 對齊 Trial_v22 baseline）|
+| 業務 cover | **17/17 Dashboard 頁面/元件雙路錯誤通知**（Inline MudAlert + ISnackbar）⭐ |
+| build | 0 errors / 25 warnings 全既有 |
+| Vera review | 🔴 1 critical（PipelineView 5 handler 缺 catch / Circuit 斷線風險）+ 🟡 1 warning（_actionError 殘留）|
+| Quinn QA | 12 新測試 / 0 build errors |
+| Cost | **$1.74**（Quinn $0.73 / Vera $0.55 / Cody $0.45 / PM $0.01）|
 
-預期類別：
-- 🟢 image flow 真實 fire 整 chain（Stage 79 設計 production-active）
-- 🟡 minor image 處理 edge case（如多 image / image too small / Petra prompt few-shot 教學需擴）
-- 🔴 戰略級議題（如 GeminiProvider multimodal native 真實 fire 後 token cost 爆 / 或 Worker 看圖品質不對齊預期）— 預期 0
+### Case B — 附圖 image flow business-ready ✅⭐⭐⭐ 5/5
+
+| 項 | 真實 |
+|---|---|
+| PR | [#387](https://github.com/darkleong/AiTeam/pull/387) / 1 真實檔 InteractionCard.razor 修 / **7 min 29s** |
+| Petra picks | **Cody → Vera 2 talent**（對 UI 修判 Quinn QA 不必要 — 真實合理）|
+| Layer 1 | `petra_inbox.Attachments` jsonb 真實寫入 373347 bytes ✓ |
+| Layer 2 | **`GeminiProvider Stage 79 multimodal dispatch images=1`** ⭐ CP5 ✓ |
+| Layer 3 | **`Stage 79 Petra dispatch image AIContent → Worker talent=Cody+Vera imageCount=1`** ⭐⭐ |
+| Workspace 圖檔 | `.tmp/images/6b1e8de2_001.png` 279962 bytes owner=appuser ✓（對齊 Stage 65 entrypoint chown / 0 root-owned 雷）|
+| **Cody 真實看圖修 UI bug** | ⭐⭐⭐⭐ 3/3 Issue 全 cover（MudCardContent padding / ParseDescription helper / MudCardActions 間距）|
+| **Vera 真實看圖 review** | ⭐⭐⭐ 揭 2 🟡 warning（深色主題硬寫 rgba 視覺失效 + ParseDescription string pattern 耦合）|
+| build | 0 errors / 87 warnings 全既有 |
+| PM Gemini multimodal | **InputTokens +235 vs Case A 對齊 Gemini image tile token model 預期**（1068x934 ≈ ~258 tokens 真實量化）|
+| Cost | **$1.12**（Cody $0.94 / Vera $0.18 / PM $0.01）|
+
+### CP6 v4 path 0 regression ✅⭐
+
+- SQL `tasks` table **0 new row** since 16:00 ✓
+- Bot log 30 min **0 v4 class fire**（TaskGroupService / AgentQueueProcessor / Pipeline Executor / ButtonCallbackRouter v4 routing / MockScenario 全 0）
+- Stage 78a/b/c 砍 v4 後 production 0 regression 完整驗
+
+### 總 cost vs Plan
+
+| 階段 | cost | 對照 |
+|---|---|---|
+| Aria + Forge session（Claude Code subscription）| **0 燒 AiTeam 餘額** | 對齊 Stage 79 v1.2 紀律 ✓ |
+| Trial AiTeam LLM cost | **$2.86** | Plan $2-3 ✓ |
+| 餘額：$12.81 → ~$8.21（-$2.86 對齊 Trial_v22 baseline $2.5）| | |
+
+---
+
+## 議題分類
+
+| # | 嚴重 | 議題 | 揭露來源 | 對應修法 |
+|---|---|---|---|---|
+| 1 | 🔴 | **Stage 79 QuickCommandCard EF Core DbContext concurrency bug** — `QuickCommandCard.OnInitializedAsync():line 42` 跟 `Home.OnInitializedAsync():line 48-50` 並行用同 Scoped DbContext → `A second operation was started` → 首頁 Circuit terminated 無法顯示 / 阻 Christ 走 Dashboard upload Case B real path | Trial 中段 Christ 截 Console 揭 | Stage 80 補強候選（合進 HITL Stage / 或先 Stage 79.1 hotfix 改 DashboardAppSettingsService 用 `IDbContextFactory.CreateDbContext()` pattern）|
+| 2 | 🟡 | **v5.5 path 仍開「確認派工/取消」按鈕但 Bot 已自動 dispatch** — Stage 78c v4 Pipeline 砍除後 BossInteraction confirm UI 邏輯遺留 / 按鈕無實質功能 | Trial 開跑後 Christ Dashboard 截圖揭 | Stage 80 收口候選 |
+| 3 | 🟡 | **Case A Vera 揭 PipelineView 5 handler 缺 catch（Circuit 斷線風險）** — 同類根因對齊 #1（Blazor exception path 防呆紀律不全） | Case A Vera review | Stage 80 候選（合進 #1）|
+| 4 | 🟡 | **Case B Vera 揭 InteractionCard 2 設計 issue** — W1 硬寫 rgba 深色主題視覺失效（改 MudBlazor 主題變數）+ W2 ParseDescription string pattern 耦合（改 `BossInteractionDto.SystemNotes` 後端寫入）| Case B Vera review | follow-up 候選 / Christ Dashboard 目視確認後評估 |
+
+---
+
+## Aria 規劃漏接根因（自我反思 — 留 /aria-end 統一升級）
+
+**Aria gate1 + Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律**：
+- Stage 79 §H 把 Dashboard hardcoded const 改 AppSetting 動態 OnInitializedAsync DB query，**漏掃**「Blazor InteractiveServer 多元件並行 init 同 Scoped DbContext 撞」業界紀律
+- workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #12（規劃含 Blazor OnInitializedAsync 改動 DB query 時必 grep verify `IDbContextFactory.CreateDbContext()` pattern 對齊）
+- 對齊既有 #11 延伸（Stage 79 Dashboard UI validate hardcoded const → AppSetting）— 同 Stage 不同盲點兩條根因累積
+
+---
+
+## 戰略意義
+
+- **v5.5 image flow business-ready 閘門通過** ✅ — Petra 真實看圖 + 條件性 worker propagation（NeedsImageContext fire）+ GeminiProvider multimodal native + Workspace 真實寫圖檔 + Cody/Vera 真實看圖 review
+- **v4 path 全砍 production 0 regression 完整驗** ✅ — Stage 78a/b/c 三輪累積 net -27434 行（commit `c6f81d6` -3957 + `a7c763a` -787 + `e17e83b` -22690）
+- **連續 14 Trial 業務級成功延續** ✅（v10-v23）— infinite loop pattern 打破連續第 14 次
+- **Aria 自跑 9-step 模板第 12 次實踐 + curl path 替代 Dashboard UI broken 路徑** — Trial 中段揭 production bug 時靈活適應（路線 A vs 路線 B 給 Christ 拍板 / 不阻擋戰略主目標）
+- **路線 D 戰略確認** — v5.5 path single source of truth 完整收口 + image flow business-ready 即代表 AiTeam 真實到達「v5 動態架構 + v5.5 baseline 全量上線」里程碑
+
+---
+
+## Top 5 重排
+
+| # | 項目 | 規模 / 優先度 |
+|---|---|---|
+| **1** | **Stage 80（A HITL plan confirmation 閘門 + 🔴 #1 hotfix 合進）** | M / Opus 1M + high baseline / Christ 親口要的業務功能 |
+| 2 | Trial_v24 驗 HITL 業務體驗 | 5-15 min / cost $1-3 / Stage 80 結案後 |
+| 3 | Stage 81（B 動態 re-planning）| L / Stage 80 + Trial_v24 後評估 |
+| 4 | WebUI Stage（v4 entity drop + Dashboard 重設計）| L+ / Stage 81 後 |
+| 5 | v5.5 完整收口 | Top 1-4 全跑完 |
 
 ---
 
@@ -256,4 +329,5 @@ Trial_v23 觀察期 Forge 若 spike 揭真實偏離（如 Cody 看圖修 UI 真�
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
-| v1.0 | 2026-05-19 | 規劃書建立（Plan 預估版 / Aria 撰寫 / 對齊 Stage 79 結案後即進 Trial baseline / 預防 Compact 後新 Aria 認知 gap）。**核心結構**：兩 case 對照組（Case A 純文字 baseline 對齊 Trial_v22 0 regression + Case B 附圖 UI bug case 驗 image flow business-ready）+ 6 CP 觀察點（CP1 deploy + flag / CP2 Case A 純文字 / CP3 Case B 附圖 ⭐ / CP4 限制三層守可選 / CP5 GeminiProvider multimodal native ⭐ / CP6 v4 path 0 regression）+ 5 維度業務評分目標（連續 14 Trial 業務級成功延續）+ v5.5 image flow business-ready 閘門評估 + 5 維 Aria 預警（workspace cleanup / Case B 截圖準備 / GeminiProvider token cost / Forge healthy 偏離 / 9-step 模板紀律）。**戰略意義**：v5.5 image flow business-ready 閘門 + v4 path 全砍 0 regression 驗 + Stage 80 HITL 啟動條件達成。**預估 cost**：$2-3 對齊 Trial_v22 baseline + image token 略增。**Trial 真實跑完後 Forge/Aria 結案改 v2.0 in-place**（議題分類 + 業務評分 + cost 真實 vs 預估雙因子 + 紀律累積實證 + Top 5 重排）。 |
+| v1.0 | 2026-05-19 | 規劃書建立（Plan 預估版 / Aria 撰寫 / 對齊 Stage 79 結案後即進 Trial baseline / 預防 Compact 後新 Aria 認知 gap）。**核心結構**：兩 case 對照組（Case A 純文字 baseline 對齊 Trial_v22 0 regression + Case B 附圖 UI bug case 驗 image flow business-ready）+ 6 CP 觀察點 + 5 維度業務評分目標 + v5.5 image flow business-ready 閘門評估 + 5 維 Aria 預警。**預估 cost**：$2-3 對齊 Trial_v22 baseline + image token 略增。 |
+| **v2.0** | **2026-05-20** | **Trial 真實跑完 + Aria 結案 in-place 升級**。Case A PR #386 / 12 min 03s / cost $1.74 / 17/17 cover ⭐。Case B PR #387 / 7 min 29s / cost $1.12 / Cody+Vera 真實看圖 + GeminiProvider multimodal native fire + workspace `.tmp/images/6b1e8de2_001.png` 真實寫 ⭐⭐⭐。CP6 v4 path 0 regression 完整驗（SQL tasks 0 new row + log 0 v4 fire）⭐。**總 cost $2.86 對齊 Plan**。**🟡 部分過** — 揭 🔴 #1 Stage 79 QuickCommandCard EF Core DbContext concurrency bug（Dashboard 首頁 Circuit terminated）+ 🟡 #2-#4 議題清單。**戰略意義**：v5.5 image flow business-ready 閘門通過 + v4 path 全砍 production 0 regression + 連續 14 Trial 業務級成功延續第 14 次 + Aria curl path 替代 broken Dashboard UI 路徑靈活適應。**Top 5 重排**：Stage 80（含 🔴 #1 hotfix 合進）升 #1。 |

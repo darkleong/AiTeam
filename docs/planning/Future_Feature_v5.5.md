@@ -556,7 +556,30 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 1 條**（留 /aria-end 統一升級）：議題 P3 揭規劃前對 Dashboard 既有 validate 邏輯認知不全（從 0 建 vs 既有 hardcoded → AppSetting 對齊）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+1
 
-**Phase 4 後續路徑**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23**（Aria gate2 / 驗 78a/b/c 砍 + image flow 4 Stage 一次 / Christ 觸發） → 80 預留（HITL plan confirmation / M） → Trial_v24（驗 HITL 業務體驗） → 81 預留（動態 re-planning / L） → WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+### Phase 4 候選 — Trial_v23 ✅ Stage 78a+78b+78c+79 連 4 Stage 真實業務驗（2026-05-20） 🟡 部分過
+
+**真實結果** — Trial_v23 v2.0 結案（[Trial_v23_Plan.md](../experiments/Trial_v23_Plan.md)）：
+- **Case A 純文字 baseline ✅ 5/5** — PR #386 / 38 檔 / 12 min 03s / cost $1.74 / 17/17 Dashboard 雙路錯誤通知 cover ⭐
+- **Case B 附圖 image flow business-ready ✅⭐⭐⭐ 5/5** — PR #387 / 7 min 29s / cost $1.12 / Cody+Vera 真實看圖 + GeminiProvider Stage 79 multimodal dispatch images=1 fire + workspace `.tmp/images/6b1e8de2_001.png` 真實寫 owner=appuser + 3 UI Issue 全 cover（MudCardContent padding / ParseDescription helper / MudCardActions 間距）
+- **CP6 v4 path 0 regression ✅⭐** — SQL tasks 0 new row + log 0 v4 class fire（TaskGroupService / AgentQueueProcessor / Pipeline Executor / ButtonCallbackRouter v4 routing / MockScenario 全 0）
+- **總 cost $2.86 對齊 Plan $2-3 ✓**
+- **連續 14 Trial 業務級成功延續**（v10-v23）
+
+**揭 1 🔴 + 3 🟡 議題**：
+- 🔴 **#1 Stage 79 QuickCommandCard EF Core DbContext concurrency bug** — `QuickCommandCard.OnInitializedAsync():line 42` 跟 `Home.OnInitializedAsync():line 48-50` 並行用同 Scoped DbContext → 首頁 Circuit terminated / 阻 Christ 走 Dashboard upload Case B real path（Aria curl path 替代）→ Stage 80 補強候選（合進 HITL / 或 Stage 79.1 hotfix 改 DashboardAppSettingsService 用 `IDbContextFactory.CreateDbContext()` pattern）
+- 🟡 **#2 v5.5 path 仍開「確認派工/取消」按鈕但 Bot 已自動 dispatch** — Stage 78c v4 Pipeline 砍除後 BossInteraction confirm UI 邏輯遺留 / 按鈕無實質功能 → Stage 80 收口候選
+- 🟡 **#3 Case A Vera 揭 PipelineView 5 handler 缺 catch** — 同類根因對齊 #1（Blazor exception path 防呆紀律不全）→ Stage 80 候選（合進 #1）
+- 🟡 **#4 Case B Vera 揭 InteractionCard 2 設計 issue** — 硬寫 rgba 深色主題視覺失效 + ParseDescription string pattern 耦合 → follow-up 候選
+
+**戰略意義**：
+- **v5.5 image flow business-ready 閘門通過** ✅ — Stage 79 設計完整真實 fire（Petra 看圖 + 條件性 worker propagation + GeminiProvider multimodal + workspace 寫圖）
+- **v4 path 全砍 production 0 regression 完整驗** ✅ — Stage 78a/b/c 三輪累積 net -27434 行對 production 0 影響
+- **路線 D 戰略確認** — v5.5 path single source of truth 完整收口 + image flow business-ready = v5 動態架構 + v5.5 baseline 全量上線里程碑
+- **Aria 自跑 9-step 模板第 12 次實踐 + curl path 替代 broken Dashboard UI 路徑靈活適應**
+
+**Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
+
+**Phase 4 後續路徑（Trial_v23 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 預留（A HITL plan confirmation + 🔴 #1 hotfix 合進 / M）** → Trial_v24（驗 HITL 業務體驗）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
 
 ### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
 
