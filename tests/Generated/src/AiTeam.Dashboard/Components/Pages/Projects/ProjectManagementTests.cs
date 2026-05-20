@@ -87,4 +87,21 @@ public class ProjectManagementTests
 
         await act.Should().NotThrowAsync();
     }
+
+    [Fact]
+    public async Task ToggleIsActiveAsync_服務拋出例外_應呼叫ErrorSnackbar()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = new ProjectManagement();
+        SetProperty(instance, "Snackbar", snackbar);
+        SetProperty(instance, "ProjectService", new DashboardProjectService(null!));
+
+        var project = new ProjectDto { Id = Guid.NewGuid(), IsActive = true };
+
+        var method = typeof(ProjectManagement)
+            .GetMethod("ToggleIsActiveAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await (Task)method.Invoke(instance, new object[] { project, false })!;
+
+        snackbar.Received(1).Add(Arg.Any<string>(), Severity.Error, Arg.Any<Action<SnackbarOptions>?>());
+    }
 }
