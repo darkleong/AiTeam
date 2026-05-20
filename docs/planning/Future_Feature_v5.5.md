@@ -599,7 +599,7 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 | F plan_respond redecide | ✅⭐⭐⭐ | **Petra 真實理解「mobile responsive」加 ui_design + qa_testing 響應式驗 / subtasks=2 → 4 / 業界 LangGraph interrupt 真實效果驗證** |
 | E plan_reject | ✅ | task_memory.decision/plan-rejected + session=cancelled / UX 二次確認 modal 守紀律 |
 
-**Cost $2.52 對齊預估 $1-3 ✓ / 餘額 $9.96 → $7.44**
+**Cost $2.48 真實對齊預估 $1-3 ✓ / 餘額 $9.96 → $7.48**（token_logs 加總 $2.52 vs Christ 真實 $2.48 / Anthropic billing rounding 差 $0.04）
 
 **揭 3 🟡 議題**：
 - 🟡 #1 **Quinn outputLen=0 baseline 漂移** — 場景 A Quinn chain dispatch 100% 通過 + token_logs 12553 tokens 真實輸出 + cost $0.66 / 但 ClaudeCodeChatClientAdapter 端 outputLen=0 / PR body Quinn 段 0 內容 — Stage 81+ follow-up 評估候選

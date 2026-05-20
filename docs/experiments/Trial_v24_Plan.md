@@ -137,7 +137,7 @@
 |---|---|---|
 | Aria + Forge session（Claude Code subscription）| **0 燒 AiTeam 餘額** | 對齊 Stage 80 v1.2 紀律 ✓ |
 | Trial_v24 AiTeam LLM cost | **$2.52** | 預估 $1-3 ✓（場景 A baseline $2.49 + B/D/F Petra Gemini decide 額外 $0.03）|
-| 餘額：$9.96 → **$7.44** | -$2.52 對齊預估 | |
+| 餘額：$9.96 → **$7.48 真實**（-$2.48 / token_logs 加總 $2.52 偏高 $0.04 / Anthropic billing rounding 差） | -$2.52 對齊預估 | |
 
 對比 Trial_v23 cost $2.86（場景 A $1.74 + Case B 含圖 $1.12）— Trial_v24 略低（純文字 prompt 全程 / Case B/D/F 只 Petra Gemini decide redecide / 0 chain dispatch 重跑）。
 
