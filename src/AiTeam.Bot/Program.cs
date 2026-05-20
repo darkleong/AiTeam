@@ -86,6 +86,9 @@ builder.Services.AddSingleton<PetraInboxChannel>();
 builder.Services.AddHostedService<PetraInboxProcessor>();
 builder.Services.AddHostedService<PetraDispatchWorker>();
 
+// Stage 80：HITL plan_confirm 4 decision dispatch consumer（取代 Stage 78c 砍掉的 InteractionProcessor 在此 Stage 範圍內的 routing 角色）
+builder.Services.AddHostedService<PlanConfirmationProcessor>();
+
 // Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 Repository
 builder.Services.AddScoped<MemoryRepository>();
 

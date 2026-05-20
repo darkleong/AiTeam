@@ -81,6 +81,12 @@ public class InteractionService(
 
     public const string EmptyActionsJson = "[]";
 
+    /// <summary>Stage 80：HITL plan_confirm 閘門 — Petra 拆完 plan 後 Christ 4 decision pattern 拍板（approve / edit / reject / respond）。
+    /// 對齊業界 LangGraph interrupt + 4 decision pattern 業界紀律（Stage 77 既有 WebSearch 結論）。
+    /// edit / respond 需 modal 收文字（修改意見 / 補充指示）；approve / reject 直接觸發。</summary>
+    public const string PlanConfirmActionsJson =
+        """[{"id":"plan_approve","label":"核准 ✅","color":"success","requiresInput":false},{"id":"plan_edit","label":"修改 ✏️","color":"info","requiresInput":true},{"id":"plan_reject","label":"拒絕 ❌","color":"error","requiresInput":false},{"id":"plan_respond","label":"補充 💬","color":"info","requiresInput":true}]""";
+
     /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>
     public const string NotifyActionsJson =
         """[{"id":"ack","label":"我知道了","color":"default","requiresInput":false}]""";
@@ -101,7 +107,8 @@ public class InteractionService(
         string?  contextJson          = null,
         decimal? discordMessageId     = null,
         Guid?    taskGroupId          = null,
-        Guid?    taskItemId           = null)
+        Guid?    taskItemId           = null,
+        string?  systemNotes          = null)
     {
         try
         {
@@ -113,6 +120,7 @@ public class InteractionService(
                 InteractionType      = interactionType,
                 Title                = title.Length > 200 ? title[..200] : title,
                 Description          = description.Length > 2000 ? description[..2000] : description,
+                SystemNotes          = systemNotes,
                 Project              = project,
                 AgentName            = agentName,
                 AvailableActionsJson = availableActionsJson,
@@ -230,7 +238,8 @@ public class InteractionService(
         string   availableActionsJson,
         string?  contextJson      = null,
         decimal? discordMessageId = null,
-        Guid?    taskItemId       = null)
+        Guid?    taskItemId       = null,
+        string?  systemNotes      = null)
     {
         try
         {
@@ -257,7 +266,7 @@ public class InteractionService(
         // 雙保險：上方 fast-path early check 避免 DB exception 開銷；DB constraint 攔 read-then-write TOCTOU window
         return await CreateInteractionAsync(
             interactionType, title, description, project, agentName, availableActionsJson,
-            contextJson, discordMessageId, taskGroupId, taskItemId);
+            contextJson, discordMessageId, taskGroupId, taskItemId, systemNotes);
     }
 
     // ─── Discord 回覆時同步更新 ───────────────────────────────────────────────

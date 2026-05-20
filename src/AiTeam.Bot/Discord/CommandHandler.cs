@@ -133,13 +133,16 @@ public class CommandHandler(
         store.RegisterConfirmation(confirmMsg.Id,
             new PendingConfirmation(ceoResponse, finalProject, userInput));
 
+        // Stage 80 議題 2（🟡 #2）：v5.5 path inbox ack 卡 → 純 ack 卡 / 0 按鈕（對齊 v5.5 auto dispatch 精神）。
+        // Discord embed 按鈕仍保留（ButtonCallbackRouter 短路 ack）/ Dashboard 端純 ack 卡不出現「確認派工/取消」誤導按鈕。
+        // Stage 80 議題 4 W2：description 純 Christ 任務內容 / SystemNotes 寫 Victoria reply 系統提示（後端 SoT / 卡片獨立區塊呈現）。
         _ = interactionService.CreateInteractionAsync(
             "ceo_confirm",
             title:                ceoResponse.Task?.Title ?? userInput,
-            description:          BuildCeoConfirmDescription(ceoResponse, userInput),
+            description:          ceoResponse.Task?.Description ?? userInput,
             project:              finalProject,
             agentName:            ceoResponse.TargetAgent,
-            availableActionsJson: InteractionService.CeoConfirmActionsJson,
+            availableActionsJson: InteractionService.EmptyActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId       = ceoChannelId.ToString(),
@@ -147,7 +150,8 @@ public class CommandHandler(
                 project         = finalProject,
                 description     = userInput
             }),
-            discordMessageId: (decimal)confirmMsg.Id);
+            discordMessageId: (decimal)confirmMsg.Id,
+            systemNotes: ceoResponse.Reply);
     }
 
     // ===================================================================
@@ -262,13 +266,15 @@ public class CommandHandler(
         store.RegisterConfirmation(confirmMessage.Id,
             new PendingConfirmation(ceoResponse, finalProject, msg.CleanContent));
 
+        // Stage 80 議題 2（🟡 #2）：v5.5 path inbox ack 卡 → 純 ack 卡 / 0 按鈕（對齊 v5.5 auto dispatch 精神）。
+        // Stage 80 議題 4 W2：description 純 Christ 任務內容 / SystemNotes 寫 Victoria reply 系統提示。
         _ = interactionService.CreateInteractionAsync(
             "ceo_confirm",
             title:                ceoResponse.Task?.Title ?? msg.CleanContent,
-            description:          BuildCeoConfirmDescription(ceoResponse, msg.CleanContent),
+            description:          ceoResponse.Task?.Description ?? msg.CleanContent,
             project:              finalProject,
             agentName:            ceoResponse.TargetAgent,
-            availableActionsJson: InteractionService.CeoConfirmActionsJson,
+            availableActionsJson: InteractionService.EmptyActionsJson,
             contextJson:          JsonSerializer.Serialize(new
             {
                 channelId       = msg.Channel.Id.ToString(),
@@ -276,7 +282,8 @@ public class CommandHandler(
                 project         = finalProject,
                 description     = msg.CleanContent
             }),
-            discordMessageId: (decimal)confirmMessage.Id);
+            discordMessageId: (decimal)confirmMessage.Id,
+            systemNotes: ceoResponse.Reply);
     }
 
     // ===================================================================
@@ -296,19 +303,6 @@ public class CommandHandler(
                 return "";
         }
         return "";
-    }
-
-    /// <summary>
-    /// Stage 39 搭車修：組裝 ceo_confirm BossInteraction 的 description，含 Reply + Task.Description。
-    /// 兩段式：上半 Reply（短摘要 + 路由說明）、下半 Task.Description（具體任務描述）。
-    /// </summary>
-    private static string BuildCeoConfirmDescription(CeoResponse ceoResponse, string fallback)
-    {
-        var reply = ceoResponse.Reply ?? fallback;
-        var taskDescription = ceoResponse.Task?.Description;
-        return string.IsNullOrWhiteSpace(taskDescription)
-            ? reply
-            : $"{reply}\n\n---\n\n{taskDescription}";
     }
 
     /// <summary>

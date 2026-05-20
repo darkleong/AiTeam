@@ -55,6 +55,7 @@ public class Stage77MultiConsumerTests
                 configuration: null!,
                 promptResolver: null!,
                 talentLockService: null!,
+                interactionService: null!,   // Stage 80：stub StartAsync 不走 base / HITL path 不觸發
                 loggerFactory: NullLoggerFactory.Instance,
                 logger: NullLogger<PetraOrchestratorService>.Instance)
         {

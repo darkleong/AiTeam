@@ -1,3 +1,4 @@
+@using System.Text.Json
 @using AiTeam.Shared.Dtos
 @using MudBlazor
 
@@ -27,12 +28,69 @@
         </CardHeaderContent>
     </MudCardHeader>
 
+    @if (!string.IsNullOrWhiteSpace(Interaction.SystemNotes))
+    {
+        @* Stage 80 議題 4 W1+W2：SystemNotes 後端 SoT 區塊（取代前端 ParseDescription string pattern 耦合）。
+           主題變數對齊（var(--mud-palette-background-grey) / var(--mud-palette-divider)）— 深色主題切換時視覺仍可辨識。 *@
+        <MudCardContent Class="py-2"
+                        Style="background: var(--mud-palette-background-grey); border-left: 3px solid var(--mud-palette-divider);">
+            <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Info" />
+                <MudText Typo="Typo.caption" Style="white-space: pre-wrap; word-break: break-word;">
+                    @Interaction.SystemNotes
+                </MudText>
+            </MudStack>
+        </MudCardContent>
+    }
+
     @if (!string.IsNullOrWhiteSpace(Interaction.Description))
     {
         <MudCardContent>
             <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
                 @Interaction.Description
             </MudText>
+        </MudCardContent>
+    }
+
+    @if (Interaction.InteractionType == "plan_confirm")
+    {
+        @* Stage 80 子項 4：plan_confirm SubtaskPlan render（subtask 列表 + dependency 圖 + talent picks）。
+           ContextJson 解析失敗 fallback render alert — 0 crash 紀律對齊 SubtaskPlanParser。 *@
+        <MudCardContent>
+            @if (_planSubtasks.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mb-2">📋 Petra 拆解計劃（@_planSubtasks.Count subtask）</MudText>
+                <MudList T="string" Dense="true">
+                    @foreach (var st in _planSubtasks)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.AssignmentInd">
+                            <MudText Typo="Typo.body2">
+                                <strong>#@st.Id</strong> · @st.TalentName · <code>@st.Skill</code>
+                                @if (st.NeedsImageContext)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-1">附圖</MudChip>
+                                }
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(st.Description))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@st.Description</MudText>
+                            }
+                        </MudListItem>
+                    }
+                </MudList>
+                @if (_planDependencies.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                        🔗 依賴關係：@string.Join("、", _planDependencies.Select(d => $"#{d.From} → #{d.To}（{d.Type}）"))
+                    </MudText>
+                }
+            }
+            else if (_planParseError is not null)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    無法解析 SubtaskPlan：@_planParseError
+                </MudAlert>
+            }
         </MudCardContent>
     }
 
@@ -83,6 +141,30 @@
 
     private bool _isResponding;
 
+    // Stage 80 子項 4：plan_confirm ContextJson 解析後 cache（避免 render 內反覆 parse）。
+    private List<PlanConfirmSubtaskView> _planSubtasks = new();
+    private List<PlanConfirmDependencyView> _planDependencies = new();
+    private string? _planParseError;
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Interaction.InteractionType == "plan_confirm" && !string.IsNullOrWhiteSpace(Interaction.ContextJson))
+        {
+            (_planSubtasks, _planDependencies, _planParseError) = ParsePlanContext(Interaction.ContextJson);
+        }
+        else
+        {
+            _planSubtasks = new();
+            _planDependencies = new();
+            _planParseError = null;
+        }
+    }
+
     private async Task ConfirmAndRespondAsync(InteractionActionDto action)
     {
         var confirmed = await DialogService.ShowMessageBox(
@@ -102,12 +184,15 @@
 
     private async Task TextInputAndRespondAsync(InteractionActionDto action)
     {
+        // Stage 80：plan_edit / plan_respond 文字輸入 prompt 對齊 4 decision pattern 語意
         var (title, prompt) = action.Id switch
         {
-            "propose_adjust" => ("提案調整",     "請輸入您希望如何調整提案方向"),
+            "propose_adjust" => ("提案調整",         "請輸入您希望如何調整提案方向"),
             "kickoff_modify" => ("Kickoff 計劃修改", "請輸入您對任務計劃書的修改意見"),
-            "design_modify"  => ("設計規劃修改", "請輸入您對設計規劃書的修改指引"),
-            _                => (action.Label,   "請輸入修改意見")
+            "design_modify"  => ("設計規劃修改",     "請輸入您對設計規劃書的修改指引"),
+            "plan_edit"      => ("修改計劃",         "請輸入您對 Petra 拆解計劃的修改意見（例：Cody 只做 backend、UI 留 Vera 處理）"),
+            "plan_respond"   => ("補充指示",         "請輸入額外指示或考量（例：另外考慮 mobile responsive）"),
+            _                => (action.Label,       "請輸入修改意見")
         };
 
         var parameters = new DialogParameters<TextInputDialog>
@@ -146,4 +231,48 @@
         if (diff.TotalHours   < 24) return $"{(int)diff.TotalHours} 小時前";
         return $"{(int)diff.TotalDays} 天前";
     }
+
+    // Stage 80 子項 4：plan_confirm ContextJson 解析（對齊 PetraOrchestratorService.PlanConfirmContext schema）。
+    // JsonDocument 淺解避免雙端 PlanConfirmContext type linking — Dashboard 0 反向依賴 Bot 內部 record。
+    private static (List<PlanConfirmSubtaskView> Subtasks, List<PlanConfirmDependencyView> Deps, string? Error) ParsePlanContext(string contextJson)
+    {
+        var subtasks = new List<PlanConfirmSubtaskView>();
+        var deps = new List<PlanConfirmDependencyView>();
+        try
+        {
+            using var doc = JsonDocument.Parse(contextJson);
+            if (doc.RootElement.TryGetProperty("subtasks", out var subsProp) && subsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var s in subsProp.EnumerateArray())
+                {
+                    var id = s.TryGetProperty("id", out var idP) ? idP.GetInt32() : 0;
+                    var skill = s.TryGetProperty("skill", out var skP) ? skP.GetString() ?? "" : "";
+                    var desc = s.TryGetProperty("description", out var dP) ? dP.GetString() ?? "" : "";
+                    var talent = s.TryGetProperty("talentName", out var tnP) ? tnP.GetString() ?? "" : "";
+                    var needsImg = s.TryGetProperty("needsImageContext", out var niP)
+                                   && niP.ValueKind == JsonValueKind.True;
+                    subtasks.Add(new PlanConfirmSubtaskView(id, skill, desc, talent, needsImg));
+                }
+            }
+            if (doc.RootElement.TryGetProperty("dependencies", out var depsProp) && depsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var d in depsProp.EnumerateArray())
+                {
+                    var from = d.TryGetProperty("from", out var fP) ? fP.GetInt32() : 0;
+                    var to = d.TryGetProperty("to", out var toP) ? toP.GetInt32() : 0;
+                    var type = d.TryGetProperty("type", out var tyP) ? tyP.GetString() ?? "sequential" : "sequential";
+                    deps.Add(new PlanConfirmDependencyView(from, to, type));
+                }
+            }
+            return (subtasks, deps, null);
+        }
+        catch (JsonException ex)
+        {
+            return (subtasks, deps, ex.Message);
+        }
+    }
+
+    private sealed record PlanConfirmSubtaskView(int Id, string Skill, string Description, string TalentName, bool NeedsImageContext);
+
+    private sealed record PlanConfirmDependencyView(int From, int To, string Type);
 }

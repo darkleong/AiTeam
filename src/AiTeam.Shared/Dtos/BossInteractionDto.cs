@@ -13,6 +13,10 @@ public record BossInteractionDto
     public string    Status              { get; init; } = "";
     public string    Title               { get; init; } = "";
     public string    Description         { get; init; } = "";
+    /// <summary>Stage 80 議題 4 W2：系統提示文字（卡片上獨立區塊呈現）— 後端 SoT 取代前端 ParseDescription string pattern。</summary>
+    public string?   SystemNotes         { get; init; }
+    /// <summary>Stage 80 子項 4：HITL plan_confirm 卡 SubtaskPlan render 用（serialized PlanConfirmContext / 其他 interaction type 留 null）。</summary>
+    public string?   ContextJson         { get; init; }
     public string?   Project             { get; init; }
     public string?   AgentName           { get; init; }
     public List<InteractionActionDto> AvailableActions { get; init; } = [];

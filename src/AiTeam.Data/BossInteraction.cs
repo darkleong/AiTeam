@@ -24,6 +24,11 @@ public class BossInteraction
     /// <summary>Dashboard 展開顯示的詳細說明。</summary>
     public string   Description          { get; set; } = "";
 
+    /// <summary>Stage 80 議題 4 W2：系統提示文字（卡片上獨立區塊呈現）— 後端 SoT 取代前端 ParseDescription string pattern。
+    /// 範例："[v5.5] Task 已接收 (inbox=...) — Petra 將依 FIFO 順序拆解派工"。
+    /// null = 既有 row backwards-compatible（前端純 render Description）。</summary>
+    public string?  SystemNotes          { get; set; }
+
     public string?  Project              { get; set; }
     public string?  AgentName            { get; set; }
 

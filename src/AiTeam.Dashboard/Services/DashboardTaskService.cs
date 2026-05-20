@@ -548,6 +548,8 @@ public class DashboardTaskService(AppDbContext db)
             Status           = x.Status,
             Title            = x.Title,
             Description      = x.Description,
+            SystemNotes      = x.SystemNotes,
+            ContextJson      = x.ContextJson,
             Project          = x.Project,
             AgentName        = x.AgentName,
             AvailableActions = actions,

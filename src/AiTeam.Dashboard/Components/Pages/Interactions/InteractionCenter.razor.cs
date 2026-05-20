@@ -237,6 +237,8 @@ public partial class InteractionCenter : IAsyncDisposable
         // Stage 46-FF 三十五
         "split_task_proposal"     => Icons.Material.Filled.AccountTree,
         "epic_partial_paused"     => Icons.Material.Filled.PauseCircle,
+        // Stage 80：HITL plan confirmation 閘門
+        "plan_confirm"            => Icons.Material.Filled.FactCheck,
         _                         => Icons.Material.Filled.Notifications
     };
 
@@ -256,6 +258,8 @@ public partial class InteractionCenter : IAsyncDisposable
         // Stage 46-FF 三十五
         "split_task_proposal"     => Color.Info,
         "epic_partial_paused"     => Color.Warning,
+        // Stage 80：HITL plan confirmation 閘門（Info — 對齊 kickoff / design 決策確認語意）
+        "plan_confirm"            => Color.Info,
         _                         => Color.Default
     };
 
@@ -277,6 +281,8 @@ public partial class InteractionCenter : IAsyncDisposable
         // Stage 46-FF 三十五
         "split_task_proposal"     => "拆任務提案",
         "epic_partial_paused"     => "Epic 部分暫停",
+        // Stage 80：HITL plan confirmation 閘門
+        "plan_confirm"            => "計劃確認（HITL）",
         _                         => type
     };
 
@@ -288,6 +294,10 @@ public partial class InteractionCenter : IAsyncDisposable
         "devplan_skip"                                                                            => Color.Warning,
         "devplan_abort"                                                                           => Color.Error,
         "propose_adjust" or "kickoff_modify" or "design_modify"                                  => Color.Info,
+        // Stage 80：HITL plan_confirm 4 decision pattern
+        "plan_approve"                                                                           => Color.Success,
+        "plan_edit" or "plan_respond"                                                            => Color.Info,
+        "plan_reject"                                                                            => Color.Error,
         _                                                                                         => Color.Default
     };
 

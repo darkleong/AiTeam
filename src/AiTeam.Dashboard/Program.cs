@@ -15,6 +15,16 @@ builder.AddServiceDefaults();
 // 業務資料庫（AppDbContext + TaskRepository，共用同一個 PostgreSQL）
 builder.AddAiTeamData("AiTeamDb");
 
+// Stage 80 議題 1（🔴 root cause fix）：補 IDbContextFactory<AppDbContext> 並存 DI
+// （Blazor InteractiveServer 多元件並行 init 撞同 Scoped DbContext → "A second operation was started" 根因）。
+// AddDbContextFactory 與既有 AddDbContext（via AddAiTeamData → AddNpgsqlDbContext）並存：
+//   - Scoped AppDbContext 保留供既有 caller（Repositories / Bot-side 等）
+//   - Factory pattern 供 Blazor 元件（DashboardAppSettingsService 等）開 short-lived DbContext 用
+// 連線字串走 Aspire 既有 "AiTeamDb"（對齊 AddAiTeamData connectionName）。
+var aiTeamDbConnStr = builder.Configuration.GetConnectionString("AiTeamDb")
+    ?? throw new InvalidOperationException("ConnectionStrings:AiTeamDb 未設定");
+builder.Services.AddDbContextFactory<AppDbContext>(opts => opts.UseNpgsql(aiTeamDbConnStr));
+
 // Identity 資料庫（DashboardDbContext，同一個 PostgreSQL，使用 "identity" schema）
 builder.AddNpgsqlDbContext<DashboardDbContext>("AiTeamDb");
 

@@ -261,6 +261,7 @@ public class PetraOrchestratorServiceTests
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
             talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
+            interactionService: null!,   // Stage 80：Test 12 reflection invoke DispatchWorkersAsync 不走 HITL path / null! 安全
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -909,6 +910,7 @@ public class PetraOrchestratorServiceTests
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
             talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
+            interactionService: null!,   // Stage 80：reflection invoke 不走 HITL path
             loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
@@ -945,6 +947,7 @@ public class PetraOrchestratorServiceTests
             configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
             promptResolver: null!,
             talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
+            interactionService: null!,   // Stage 80：memory test 不走 HITL path
             loggerFactory: NullLoggerFactory.Instance,
             logger: NullLogger<PetraOrchestratorService>.Instance);
         return (db, resolver, sessionRepo, memoryRepo, orch);

@@ -110,6 +110,12 @@ public class WorkflowSettingsResolver(
     public Task<int> GetMaxAttachmentSizeMBAsync(CancellationToken ct = default)
         => GetIntInRangeAsync("Workflow:MaxAttachmentSizeMB", Defaults.MaxAttachmentSizeMB, 1, 20, ct);
 
+    /// <summary>Stage 80：HITL plan confirmation 閘門 feature flag。預設 false（守 v5.5 baseline auto dispatch / 0 行為改變）。
+    /// 切 true 後 PetraOrchestratorService.StartAsync 在 DecideTalentsWithPlanAsync 完成後開 BossInteraction plan_confirm 卡 / 等 Christ 4 decision pattern 拍板。
+    /// AppSettings 表 key = "Workflow:UseHITLPlanConfirmation"，DB 優先，appsettings.json fallback。</summary>
+    public Task<bool> GetUseHITLPlanConfirmationAsync(CancellationToken ct = default)
+        => GetBoolAsync("Workflow:UseHITLPlanConfirmation", Defaults.UseHITLPlanConfirmation, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);

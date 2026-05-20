@@ -80,4 +80,25 @@ public class PetraSessionRepository(AppDbContext db)
             .Where(x => x.TaskGroupId == taskGroupId && x.Status == "running")
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(ct);
+
+    /// <summary>Stage 80：標記 session 進入 HITL plan_confirm 等待狀態（Status="paused"）。
+    /// 對齊 PetraSessionRecoveryService「重啟重跑」紀律 — Bot 重啟掃 running session resume；paused session 不掃，等 Christ 回覆才被
+    /// PlanConfirmationProcessor 拉起繼續 dispatch（Bot 重啟期 plan_confirm BossInteraction 仍在 DB / 0 漏單）。</summary>
+    public async Task PauseAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        var session = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+        if (session is null) return;
+        session.Status = "paused";
+        session.UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Stage 80：標記 session 被 Christ HITL plan_confirm reject 取消（Status="cancelled"）。
+    /// 對齊 4 decision pattern reject 路徑（task_memory 寫 decision/plan-rejected + chain dispatch 0 啟動）。</summary>
+    public async Task CancelAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        var session = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+        if (session is null) return;
+        session.Status = "cancelled";
+        session.UpdatedAt = DateTime.UtcNow;
+    }
 }

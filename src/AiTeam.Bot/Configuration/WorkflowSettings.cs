@@ -123,4 +123,9 @@ public class WorkflowSettings
     /// 範圍守 [1, 20]（超出 fallback default）。
     /// AppSettings 表 key = "Workflow:MaxAttachmentSizeMB"，DB 優先，appsettings.json fallback。</summary>
     public int MaxAttachmentSizeMB { get; set; } = 5;
+
+    /// <summary>Stage 80：HITL plan confirmation 閘門 — Petra 拆完 plan 開 BossInteraction plan_confirm 卡 + Christ 4 decision pattern 拍板（approve / edit / reject / respond）。
+    /// 預設 false（守 v5.5 baseline auto dispatch / 0 行為改變）— Trial_v24 開時切 true → 結案切回 false（對齊 aria-trial-summary skill flag 切回紀律）。
+    /// AppSettings 表 key = "Workflow:UseHITLPlanConfirmation"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseHITLPlanConfirmation { get; set; } = false;
 }
