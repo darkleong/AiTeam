@@ -2,8 +2,8 @@
 
 > 對應系統版本：v3.72.0 → v3.73.0
 > 規模：L
-> 狀態：規劃中
-> 文件版本：v1.1
+> 狀態：✅ 已完成（2026-05-20）
+> 文件版本：v2.0
 > 性質：新業務功能（動態 re-planning core algorithm — Petra 看 worker output 邊判斷邊決定下一步 + HITL gate 重用 Stage 80 plan_confirm infra + max iterations + cost cap 雙重保險）+ Trial_v24 3 議題收口（🟡 #1 Quinn outputLen=0 baseline 漂移修根因 + 🟡 #2 Petra NeedsImageContext 純文字誤判 + 🟡 #3 DispatchedWorkerCount 命名語意）
 > Model + Effort 建議：**Opus 1M + Extra high**（規模 L / 大規模架構級 state machine + spike 多輪可能 + 業務級風險高 / 對齊自省點 #39 反向校準紀律 — L+ baseline 升 Extra high 而非「不慣性推 Extra high」邊界）
 > Stage 期間餘額影響：**0 燒 AiTeam 餘額**（Aria + Forge session 走 Claude Code subscription）/ Trial_v25 才燒（預估 $2-4）
@@ -295,9 +295,105 @@ Stage 80 既有 `ResumeRejectAsync` 用 `Failure` 工廠（status="failed" 雜�
 
 ---
 
+## 實作紀錄（v2.0 / 2026-05-20）
+
+### 實作完成項目
+
+**動態 replan core（子項 1-5）**：
+1. ✅ **`DetectReplanTrigger` 純規則式偵測** — [PetraOrchestratorService.cs:1681-1693](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1681) static 方法 + 2 compiled Regex（`VeraCriticalPattern` / `QuinnFailedPattern`）schema 對齊 CLAUDE_Vera.md L113 + CLAUDE_Quinn.md L75（議題 #7 grep verify 通過）
+2. ✅ **`InvokePetraReplanAsync` LangGraph cycles 對齊** — [PetraOrchestratorService.cs:1814-1849](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1814) Petra LLM 只回 retry instruction string（不回 plan 結構 / W8 紀律）+ `BuildReplanRetrySystemPrompt` 含 3 few-shot 正例（Vera critical / Quinn failed / Quinn unverifiable）+ 1 反例（shouldReplan=false）+ `TryParseReplanDecision` markdown fence 容錯
+3. ✅ **`PetraOrchestratorResult.Replanning` + `Cancelled` 工廠** — [PetraOrchestratorResult.cs](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorResult.cs) 2 nullable field（`PausedAtSubtaskId` / `RetryInstruction`）+ `Cancelled` DispatchedWorkerCount=0 對齊議題 #3 真實 0 dispatch 語意
+4. ✅ **`ResumeFromReplanConfirmationAsync` 4 decision routing** — [PetraOrchestratorService.cs:1932-1982](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1932) public virtual + 3 子 method（`ResumeReplanApproveAsync` / `ResumeReplanEditOrRespondAsync` / `ResumeReplanRejectAsync`）+ `ContinueChainFromSubtaskAsync` 取 plan_confirm ContextJson SoT 還原 plan + Talents + `DispatchRemainingSubtasksAsync` simplified sequential 從 startFromSubtaskId 繼續 + `BuildSummariesFromSessionMessagesAsync` 從 PetraSessionMessages tool rows 還原 summaries
+5. ✅ **`PetraSession.ReplanIteration` + `SessionCostUsd` column + cap check** — [PetraSession.cs](../../src/AiTeam.Data/PetraSession.cs) 2 column + [PetraSessionRepository.cs](../../src/AiTeam.Data/Repositories/PetraSessionRepository.cs) 3 helper（`IncrementReplanIterationAsync` / `UpdateSessionCostUsdAsync` / `GetReplanStateAsync`）+ [CheckReplanTriggerAfterDispatchAsync](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1731) cost cap 永遠檢查 / iter cap 觸發時檢查 + `HandleCapReachedAsync` 開既有 intervention 卡 + 寫 task_memory + `sessionRepo.CancelAsync` + return Cancelled
+
+**HITL gate 配套（子項 6-7 / 重用 Stage 80 既有 infra）**：
+6. ✅ **`PlanConfirmationProcessor` filter + dispatch 分支 + `MapActionToDecision` 8 action** — [PlanConfirmationProcessor.cs](../../src/AiTeam.Bot/Orchestration/Petra/PlanConfirmationProcessor.cs) `Where(...) IN ('plan_confirm', 'replan_confirm')` + 加 `interactionType` 變數從 pick scope 帶出 run scope + dispatch switch interactionType=plan_confirm 走 Stage 80 既有 / replan_confirm 走新 ResumeFromReplanConfirmationAsync + log dispatched={Count} 取 result.DispatchedWorkerCount Cancelled 工廠自動 0
+7. ✅ **`InteractionCard.razor` replan_confirm UI render + `InteractionService.ReplanConfirmActionsJson` 4 button** — [InteractionCard.razor](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCard.razor) `_replanContext` cached field + `ParseReplanContext` + 觸發原因 MudAlert + 進度顯示 + Petra 建議 retry instruction MudPaper + 原 worker output 預覽 MudExpansionPanel + `replan_reject` 二次確認 modal 文字「接受原結果繼續往下跑」+ [InteractionCenter.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs) 4 mapping（Icon=Refresh / Color=Warning / Label=計劃重審 / replan_reject=warning vs plan_reject=error）
+
+**Trial_v24 議題收口（子項 8-10）**：
+- 🟡 #1 ✅ **Quinn outputLen=0 修根因** — [ClaudeCodeChatClientAdapter.cs:107-114](../../src/AiTeam.Bot/Orchestration/Petra/ClaudeCodeChatClientAdapter.cs#L107) qa_testing capability prepend `BuildQaSummaryEnforceSection`「QA 報告紀律 — 必須在 final turn 輸出 markdown 摘要」段（純 adapter 層 / 不污染 CLAUDE_Quinn.md 跨專案守則）
+- 🟡 #2 ✅ **Petra NeedsImageContext few-shot 補 2 反例** — [PetraOrchestratorService.cs:1448-1455](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1448) decompositionSection few-shot 段 append 純文字 prompt 反例 + 含 image 但純後端反例
+- 🟡 #3 + #8 ✅ **Cancelled 工廠 + reject path 收口** — [PetraOrchestratorService.cs:1259](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L1259) `ResumeRejectAsync` 改用 `Cancelled` 工廠（vs 既有 Done 雜用 caps.Count=4）+ `PlanConfirmationProcessor` log `dispatched={result.DispatchedWorkerCount}` 自動對齊 0（0 code 改動）
+
+**Aria 二檢補強**：
+- 補強 #A ✅ **`GetUseDynamicReplanningAsync` 雙 flag 綁定** — [WorkflowSettingsResolver.cs:119-132](../../src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs#L119) UseDynamicReplanning=true 但 UseHITLPlanConfirmation=false → effective false + warning log（ContinueChainFromSubtaskAsync 取 plan_confirm ContextJson 是 single source of truth 紀律）+ ctor 新加 `ILogger<WorkflowSettingsResolver>` param（Program.cs DI 自動注入）
+- 補強 #B ✅ **`TokenLog.PetraSessionId` non-unique non-partial index** — [AppDbContext.cs:118](../../src/AiTeam.Data/AppDbContext.cs#L118) `HasIndex(x => x.PetraSessionId)` 對齊既有 TaskId FK pattern / Migration auto-gen `IX_token_logs_PetraSessionId`
+
+**Migration**：
+- ✅ `Stage81PetraSessionReplanFields`（AddColumn ReplanIteration int NOT NULL default 0 + SessionCostUsd numeric(18,6) NOT NULL default 0 + TokenLog.PetraSessionId uuid nullable + IX_token_logs_PetraSessionId + 3 AppSetting seed UseDynamicReplanning=false / MaxReplanIterations=3 / ReplanCostCapUsd=5）
+
+**版本 bump**：`src/Directory.Build.props` 3.72.0 → 3.73.0。
+
+### 關鍵設計決策
+
+1. **LangGraph cycles 業界紀律對齊（議題 1 v1.1）** — Petra LLM 不回新 SubtaskPlan 結構 / 只回 `{shouldReplan, reason, retryInstruction, targetSubtaskId}` JSON。`replan_approve` = 同 subtask 重 dispatch with retry instruction（不從頭跑 / 不重 decide plan）— 對齊 LangGraph 業界 cycles 真實語意 / cost 最低 / 0「已完成 subtask 怎麼辦」邏輯。
+
+2. **`replan_reject` 接受原 output 繼續下個 subtask（不 cancel session）** — 區別 Stage 80 `plan_reject`「拒絕 ❌」error 色整個任務取消 — `replan_reject` button label「不採納（保留原結果）↩」warning 色 + 二次確認 modal 文字「接受原結果繼續往下跑」對齊新語意。`ReplanIteration` reject 路徑不增加（只算 approve/edit/respond）。
+
+3. **`ContinueChainFromSubtaskAsync` 取 plan_confirm ContextJson SoT（補強 #A 紀律）** — `replan_confirm` ContextJson 不重複 plan 結構 / 只攜帶 currentSubtask 細節 + retry instruction + 進度顯示。`GetUseDynamicReplanningAsync` 強制 UseHITLPlanConfirmation=true 為前置 — 避免 0 plan_confirm SoT 下 ContinueChain 失敗。
+
+4. **`TokenLog.PetraSessionId` 路線 A（精準）vs time-window query fuzzy** — 議題 #5 拍板加 nullable column + `TokenLogService.LogCliUsageAsync` 簽名擴 `Guid? petraSessionId = null` param（既有 16 caller default null 0 動）+ adapter ctor 擴 + `PetraWorkerHelper` 從 `ctx.SessionId` 取（Guid.Empty 視 null 對齊 spike forward path）。多 consumer 並行 0 交叉誤差。
+
+5. **`Stage 57 既有 IX_boss_interactions_status_pending` partial unique index 已 cover replan_confirm race（議題 #4）** — grep verify [AppDbContext.cs:169-172](../../src/AiTeam.Data/AppDbContext.cs#L169) index 是 `(TaskGroupId, InteractionType)` partial unique → `plan_confirm` vs `replan_confirm` 不同 type 不衝突 / 同 type 雙 fire 仍守。0 新 index 需要。
+
+6. **Cap check 永遠檢查 cost / 觸發時檢查 iter（場景 G + H）** — `CheckReplanTriggerAfterDispatchAsync` 內：cost cap 在 trigger 偵測前永遠檢查（任何 dispatch 後超過上限就 abort）/ iter cap 只在 trigger fire 時檢查（reject 不算輪數 / 接受原 output 繼續不應卡 iter cap）。對齊「max iter = hard cap / cost cap = soft cap」紀律。
+
+7. **`DispatchTalentsAsync` 簽名加 `PetraSessionContext ctx` param** — 內部 cap check + trigger evaluate 需要 ctx 給 `InvokePetraReplanAsync`。Test29 / Test30 既有 reflection invoke fixture 對齊修正（補 `new PetraSessionContext(session.Id, Guid.Empty, 0, "", "", "")` 第 9 param）。
+
+8. **Quinn QA prepend 純 adapter 層 / 不污染 CLAUDE_Quinn.md（議題 #1）** — Stage 81 子項 8 修法走路線 A（adapter 動態 user prompt 層 prepend）對齊 Stage 66 既有 `BuildBroadScopeEnforceSection` Cody-only prepend pattern。spike escalate 路線 B/C 備位 — production verify 揭根因如顯著偏離才動 / Trial_v25 真實驗。
+
+### 驗收結果（Forge self-verify 2026-05-20）
+
+**Phase 1 baseline**：
+- ✅ `dotnet build AiTeam.slnx` — 0 Error / 0 新 Warning
+- ✅ `dotnet test` — 126 passed / 0 failed（含 10 新 Stage 81 test 展開 Theory 24 cases + Test29/Test30 既有 fixture 修正 DispatchTalentsAsync 新 ctx param）
+- ✅ commit `92eadb9` + push to main + CI/CD self-hosted runner 自動部署完成
+- ✅ Bot startup OK + `PlanConfirmationProcessor 啟動 — 3s polling responded plan_confirm / replan_confirm interactions (Stage 81)` log 驗證 filter 涵蓋
+
+**Phase 2 場景驗收**：
+
+| 場景 | 結果 | 重點驗證 |
+|---|---|---|
+| **A** flag=false baseline 0 regression | ✅ | DB 中 0 replan_confirm 卡 / 既有 PetraSessions ReplanIteration=0 + SessionCostUsd=0.000000（backwards-compatible）/ Stage 80 baseline 守住 |
+| **B1** DetectReplanTrigger VeraCritical | ✅ | xUnit 真實 Vera JSON schema `"critical":[{...}]` → shouldTrigger=true / reason="vera_critical" |
+| **B2** DetectReplanTrigger QuinnFailed | ✅ | xUnit 真實 Quinn JSON schema `"status":"failed"` → shouldTrigger=true / reason="quinn_failed" |
+| **B3** Normal output → 不觸發 | ✅ | xUnit Theory 4 cases（critical 空陣列 / Quinn passed / Cody+Sage 不應觸發避免 scope creep） |
+| **I** QA prepend adapter 層 | ✅ | xUnit Theory 4 capability — 只 qa_testing 含「QA 報告紀律」prepend / Cody/Vera/Sage 不含 |
+| **J** NeedsImageContext few-shot 反例 | ✅ | xUnit BuildPetraSystemPrompt 含 2 反例段（純文字 prompt / 含 image 但純後端） |
+| **K** Cancelled 工廠 DispatchedWorkerCount=0 | ✅ | xUnit factory shape — Success=true / DispatchedWorkerCount=0 / caps 保留 4 元素 |
+| **K2** Replanning 工廠攜帶 subtaskId+instruction | ✅ | xUnit factory shape — PausedAtSubtaskId / RetryInstruction 兩 nullable field |
+| **L** MapActionToDecision 8 action | ✅ | xUnit Theory 9 cases（plan_* + replan_* + unknown）— 完整 8 action mapping |
+| **L2** ReplanConfirmActionsJson 4 button warning | ✅ | xUnit JSON content — 4 id + replan_reject warning 色（vs plan_reject error） |
+| **D** WorkflowSettings default false | ✅ | UseDynamicReplanning=false / MaxReplanIterations=3 / ReplanCostCapUsd=5 |
+
+**Christ 視覺驗收項目（無法 Forge 自驗）**：
+- Dashboard 操作中心 replan_confirm 卡 UI render（觸發原因 MudAlert + 進度 + retry instruction MudPaper + 原 output 預覽 MudExpansionPanel + 4 button warning 色 reject）
+- 真實業務 task 觸發 Vera critical / Quinn failed replan 流程端對端流暢度（含 approve 同 subtask 重 dispatch / edit redecide / reject 繼續下個 subtask / respond 補充指示）→ 留 **Trial_v25** 真實業務驗
+
+**場景 C-H Resume routing 深度整合**：unit test 層 cover routing 簽名 + factory shape + cap check 邏輯。深度整合涉及 PetraSession DB state + plan_confirm ContextJson SoT 還原 + chain dispatch wire — 對齊 v1.1 議題 2 Christ 拍板「production 真實業務驗留 Trial_v25 / 0 cost / Forge self-verify Phase 2 為主」。
+
+### Mock 覆蓋情況
+
+**全自驗用 unit test 跑**（v1.1 議題 2 拍板）：xUnit 10 test 展開 Theory 24 cases / 0 LLM call / 0 API cost / 0 burn AiTeam 餘額。對齊 Stage 81 規劃書「0 燒 AiTeam 餘額 / Trial_v25 才燒（預估 $2-4）」紀律。
+
+flag baseline 守住：`Workflow:UseDynamicReplanning=false` + `Workflow:UseHITLPlanConfirmation=false` + 補強 #A 雙 gate 鎖（dynamic replan 真實生效需 HITL on）。Trial_v25 開時 SQL UPDATE 切 true → 結案切回 false（對齊 aria-trial-summary skill flag 切回紀律）。
+
+### 踩坑紀錄
+
+1. **`dotnet ef migrations add` 第二次 stale snapshot 雷（Stage 80 同類根因第 2 次）** — 第一次 EF tools 跑成功但 Migration body 空（model snapshot 已被早期不完整 build cache 覆蓋）→ Designer.cs 有正確 ReplanIteration/SessionCostUsd snapshot 但 Up()/Down() 空。**修法**：手寫 Migration .cs（AddColumn x3 + CreateIndex + InsertData x3 + 對應 Down() 4 action）— Stage 80 同類修根因第 2 次累積。**紀律延伸**：`dotnet ef migrations add` 後必驗 Migration body 非空 → 空 body 直接手寫對齊 model 真實 diff。
+
+2. **`PetraOrchestratorService.cs:1844` raw string interpolation `{{...}}` brace escape 編譯錯誤** — 用 `$"""..."""` 寫 JSON template 含 `{{"shouldReplan":...}}` literal brace + `{currentSubtask.Id}` 插值 → C# 編譯器解析衝突（`{{` 視為 escape `{` literal 但跟插值 syntax 衝突）。**修法**：改 `$$"""..."""`（雙 `$`）— literal brace 寫 `{` / 插值寫 `{{var}}`。**紀律候選**：C# raw string 含 JSON template + 插值時必用 `$$"""`（留 csharp.md 評估補）。
+
+3. **DispatchTalentsAsync 簽名擴 ctx param → Test29/Test30 reflection invoke param count mismatch** — 既有 2 test 用 reflection 傳 8 args，新簽名要 9 args（ct 前插 ctx）。**修法**：兩 test fixture 補 `new PetraSessionContext(session.Id, Guid.Empty, 0, "", "", "")` 第 9 param（位置在 images null 後 / ct 前）。對齊 Stage 67/75 既有「ctor / 簽名擴後 既有 reflection test fixture 必修正」紀律。
+
+4. **`docker exec aiteam-aiteam-bot-1 dotnet ef migrations add` cwd 漂移踩坑** — 第一次跑 `cd "D:/Source Code/AI Team" && dotnet ef migrations add ...` 將 Migration 生在 main repo 而非 worktree（Edit/Write tool 的絕對路徑用 `D:\Source Code\AI Team\src\...` 直接走 main repo working tree）— 整 Stage 81 實作其實全在 main repo working tree 進行（worktree 反而 clean）。**結果**：commit 從 main repo 走（對齊 CLAUDE.md「commit + push main」紀律 / 反而省事）。**紀律候選**：worktree workflow vs Edit tool 絕對路徑 resolution 是否走 worktree 真實狀態（留 forge-self-verify skill 評估）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v2.0 | 2026-05-20 | **Stage 81 結案（Forge 實作 + self-verify 通過）**。實作完成 10 子項：動態 replan core 5（DetectReplanTrigger / InvokePetraReplanAsync LangGraph cycles / Replanning+Cancelled 工廠 / ResumeFromReplanConfirmationAsync 4 routing + ContinueChainFromSubtaskAsync + DispatchRemainingSubtasksAsync + BuildSummariesFromSessionMessagesAsync / PetraSession 2 column + Repository 3 helper + CheckReplanTriggerAfterDispatchAsync cap check + HandleCapReachedAsync）+ HITL gate 配套 2（PlanConfirmationProcessor filter + dispatch 分支 + MapActionToDecision 8 action / InteractionCard.razor replan_confirm UI + InteractionCenter.razor.cs 4 mapping + ReplanConfirmActionsJson）+ Trial_v24 議題收口 3（🟡 #1 Quinn QA prepend adapter 層 / 🟡 #2 NeedsImageContext few-shot 補 2 反例 / 🟡 #3+#8 ResumeRejectAsync 改 Cancelled 工廠）。Aria 二檢補強 #A（GetUseDynamicReplanningAsync 雙 flag 綁定 + warning log）+ #B（IX_token_logs_PetraSessionId non-unique non-partial index）。**Migration**：Stage81PetraSessionReplanFields 手寫 Up/Down（EF auto-gen 空 body / Stage 80 同類 stale snapshot 雷第 2 次累積）— 3 AddColumn（ReplanIteration int default 0 / SessionCostUsd numeric(18,6) default 0 / token_logs.PetraSessionId uuid nullable）+ IX_token_logs_PetraSessionId + 3 AppSetting seed default 守 baseline。**本機驗證**：dotnet build 0 Error / dotnet test 126 pass 0 fail（含 10 新 Stage 81 test 展開 Theory 24 cases + Test29/30 fixture 修正）。**驗收結果**：場景 A baseline (flag=false / 0 replan_confirm cards / 既有 row backwards-compatible) + 場景 B-L unit test layer 全綠（B1-B3 trigger / I QA prepend / J few-shot / K+K2 工廠 shape / L+L2 mapping + ReplanConfirmActionsJson / D defaults）。場景 C-H Resume routing 深度整合留 Trial_v25 真實業務驗（v1.1 議題 2 拍板 / 0 cost / Forge self-verify Phase 2 為主）。**踩坑 4 條**：EF stale snapshot 第 2 次（Stage 80 同類）/ C# raw string `{{}}` brace escape 編譯雷（修用 `$$"""`）/ DispatchTalentsAsync 簽名擴 ctx → Test29/30 reflection invoke 修正 / Edit tool 絕對路徑走 main repo working tree 而非 worktree（反而省事對齊 CLAUDE.md push main 紀律）。**commit**：`92eadb9 feat(stage81): B 動態 re-planning + HITL retry gate + Trial_v24 3 議題收口（v3.73.0）`。 |
 | v1.1 | 2026-05-20 | **Aria 自審 + Christ 拍板 2 🔴 + 6 🟡 全收口 v1.1 升級**。**🔴 議題 1**（Christ 拍板 🥇 retry 同 subtask 業界 LangGraph cycles）：子項 1/2/3/4 整套重寫 — `EvaluateReplanTriggerAsync` 不再回「建議新 plan 結構」/ 改回「retry instruction（給 currentSubtask 該怎麼重做的指示）」+ `PetraOrchestratorResult.Replanning` 工廠 field 改 `retryInstruction string` + `ResumeFromReplanConfirmationAsync` 4 decision routing 對齊 retry 語意（approve = 同 subtask 重 dispatch / edit/respond = 新 retry instruction / reject = 接受原 output 繼續下個 subtask）+ 戰略脈絡段加澄清「動態 re-planning = HITL retry gate（subtask cycles with retry instruction）」+ 加設計決策 9 LangGraph cycles 路線 + 加 W8 業界紀律對齊預警。**🔴 議題 2**（Christ 拍板 🥇 unit test 驗 method 邏輯）：場景 B-K 全 unit test 為主（Forge self-verify Phase 2 跑 xUnit / 0 cost）+ production 真實業務驗留 Trial_v25 / 加設計決策 10 unit test 紀律（對齊 Stage 78c 砍 MockScenarioService 後新 Mock 紀律）。**🟡 議題 #3 收口**：replan_reject button label 改「不採納（保留原結果）↩」warning 色（vs Stage 80 plan_reject「拒絕 ❌」error 色）/ 二次確認 modal 文字對齊新語意「接受原結果繼續往下跑」/ 設計決策 9 補明。**🟡 議題 #4 收口**：W7 加 race condition 預警 — Forge 規劃時必 grep verify Stage 57 既有 `IX_boss_interactions_status_pending` partial unique index cover 範圍對齊 sessionId / 必要時加新 index 守。**🟡 議題 #5 收口**：子項 5 補明 `PetraSessionRepository.UpdateSessionCostUsdAsync(sessionId, deltaUsd, ct)` method 簽名 + update 時機在 `DispatchTalentsAsync` 內每個 worker dispatch 完成後 + token_logs 0 PetraSessionId column 議題揭。**🟡 議題 #6 收口**：加 Critical Files 段（PetraOrchestratorServiceTests.cs + Migration + 既有 7 修改檔案完整列出 + Directory.Build.props version bump）。**🟡 議題 #7 收口**：子項 1/2 補明 Forge 規劃時必 grep Vera output 真實 JSON schema（`"critical":[{file,line,message}]` 三層）+ Quinn output schema 對齊 trigger 判斷邏輯。**🟡 議題 #8 收口**：子項 10 補明 PlanConfirmationProcessor `dispatched={Count}` log 訊息對 cancelled path 顯示 0（不雜用 plan.Subtasks.Count）+ 場景 K 雙層驗（unit test + Trial_v25）+ 加場景 L Stage 80 既有 xUnit fixture 修正驗。**新增 1 場景 L** + 修場景 B-K 11 場景 → 12 場景 unit test + production 雙層驗收。**v1.1 整體影響**：規劃前置 Aria 自審揭 8 議題（vs 過去 Stage 79/80 自審 0-1 議題）— 自省點候選「Aria 寫完 Roadmap 後系統性 6 維度 ultrathink 自審紀律」（留 /aria-end 統一升級）/ aria-review-plan skill 對齊自我自審紀律生效驗證。 |
 | v1.0 | 2026-05-20 | Stage 81 規劃書建立（Aria 撰寫 / Trial_v24 結案後即進）。**核心結構**：動態 replan core（5 子項 — `EvaluateReplanTriggerAsync` Petra LLM evaluator + `PetraOrchestratorResult.Replanning` + `Cancelled` 工廠 + `replan_confirm` InteractionType + Resume routing + `PetraSession.ReplanIteration` + `SessionCostUsd` column + max iterations + cost cap）+ HITL gate 配套（2 子項 — `PlanConfirmationProcessor` 擴 routing `replan_confirm` + InteractionCard.razor `replan_confirm` UI render — 純複用 Stage 80 既有 plan_confirm infra）+ Trial_v24 議題收口（3 子項 — 🟡 #1 Quinn outputLen=0 修根因 + 🟡 #2 Petra NeedsImageContext 純文字誤判 + 🟡 #3 DispatchedWorkerCount 命名語意）+ 8 設計決策拍板 + 11 驗收情境 + 6 Aria 預警。**Effort baseline Opus 1M + Extra high**（規模 L / 大規模架構級 state machine + spike 多輪可能 + 業務級風險高 / 對齊自省點 #39 反向校準紀律 — L+ baseline 升 Extra high 而非「不慣性推 Extra high」邊界）。**0 WebSearch 觸發**（Stage 77 既有結論 reference + 0 third-party framework 真實使用 / 純內部 business logic 設計 + 重用 Stage 80 既有 plan_confirm infra）。**規劃前 grep verify 完整**（PetraOrchestratorResult 4 工廠 / ClaudeCodeChatClientAdapter RunQaAsync line 276 / Petra few-shot prompt builder line 513 / PetraSessionRecoveryService「重啟重跑」紀律 真實狀態 verify）。**Migration**：Stage81PetraSessionReplanFields（AddColumn ReplanIteration + SessionCostUsd default 0 / 2 AppSetting seed Workflow:MaxReplanIterations=3 + Workflow:ReplanCostCapUsd=5）。**AppSetting**：Workflow:UseDynamicReplanning default false。 |
