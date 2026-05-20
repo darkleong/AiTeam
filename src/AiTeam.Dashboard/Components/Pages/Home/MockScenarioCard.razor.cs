@@ -16,11 +16,12 @@ public partial class MockScenarioCard
     [Inject] private DashboardBotService  BotService   { get; set; } = null!;
     [Inject] private ISnackbar            Snackbar     { get; set; } = null!;
 
-    private bool   _mockModeEnabled;
-    private bool   _isSubmitting;
-    private string _scenario = "new_feature";
-    private string _title    = "";
-    private string _project  = "";
+    private bool    _mockModeEnabled;
+    private bool    _isSubmitting;
+    private string  _scenario = "new_feature";
+    private string  _title    = "";
+    private string  _project  = "";
+    private string? _error;
     private List<ProjectDto> _projects = [];
 
     protected override async Task OnInitializedAsync()
@@ -41,6 +42,7 @@ public partial class MockScenarioCard
         if (!_mockModeEnabled || string.IsNullOrWhiteSpace(_scenario)) return;
 
         _isSubmitting = true;
+        _error        = null;
         var title    = string.IsNullOrWhiteSpace(_title)   ? null : _title.Trim();
         var project  = string.IsNullOrWhiteSpace(_project) ? null : _project.Trim();
         var ok       = await BotService.TriggerMockScenarioAsync(_scenario, title, project);
@@ -54,7 +56,8 @@ public partial class MockScenarioCard
         }
         else
         {
-            Snackbar.Add("觸發失敗，請確認 Bot 服務正常並已啟用 Mock Mode", Severity.Error);
+            _error = "觸發失敗，請確認 Bot 服務正常並已啟用 Mock Mode";
+            Snackbar.Add(_error, Severity.Error);
         }
     }
 }

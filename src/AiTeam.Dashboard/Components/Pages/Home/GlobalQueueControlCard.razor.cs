@@ -13,7 +13,8 @@ public partial class GlobalQueueControlCard
     [Inject] private IDialogService      DialogService { get; set; } = null!;
     [Inject] private ISnackbar            Snackbar      { get; set; } = null!;
 
-    private bool _loading;
+    private bool    _loading;
+    private string? _error;
 
     private async Task StopAllAsync()
     {
@@ -28,24 +29,36 @@ public partial class GlobalQueueControlCard
         if (confirmed != true) return;
 
         _loading = true;
+        _error   = null;
         var ok = await BotService.StopAllAsync();
         _loading = false;
 
-        Snackbar.Add(
-            ok ? "🛑 已送出緊急停止指令，所有 Agent 轉為 stopping"
-               : "送出緊急停止指令失敗，請確認 Bot 服務正常",
-            ok ? Severity.Warning : Severity.Error);
+        if (ok)
+        {
+            Snackbar.Add("🛑 已送出緊急停止指令，所有 Agent 轉為 stopping", Severity.Warning);
+        }
+        else
+        {
+            _error = "送出緊急停止指令失敗，請確認 Bot 服務正常";
+            Snackbar.Add(_error, Severity.Error);
+        }
     }
 
     private async Task ResumeAllAsync()
     {
         _loading = true;
+        _error   = null;
         var ok = await BotService.ResumeAllAsync();
         _loading = false;
 
-        Snackbar.Add(
-            ok ? "▶️ 已送出恢復指令，所有 Agent 回到 active"
-               : "送出恢復指令失敗，請確認 Bot 服務正常",
-            ok ? Severity.Success : Severity.Error);
+        if (ok)
+        {
+            Snackbar.Add("▶️ 已送出恢復指令，所有 Agent 回到 active", Severity.Success);
+        }
+        else
+        {
+            _error = "送出恢復指令失敗，請確認 Bot 服務正常";
+            Snackbar.Add(_error, Severity.Error);
+        }
     }
 }

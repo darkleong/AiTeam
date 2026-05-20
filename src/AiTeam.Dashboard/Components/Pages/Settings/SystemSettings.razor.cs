@@ -120,6 +120,8 @@ public partial class SystemSettings
     private async Task OnSkipCeoConfirmChanged(bool newValue)
     {
         _skipCeoConfirm = newValue;
+        _saveMessage    = null;
+        _saveError      = null;
         try
         {
             await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
@@ -128,13 +130,17 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _skipCeoConfirm = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnMockModeChanged(bool newValue)
     {
-        _mockMode = newValue;
+        _mockMode    = newValue;
+        _saveMessage = null;
+        _saveError   = null;
         try
         {
             await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
@@ -142,14 +148,18 @@ public partial class SystemSettings
         }
         catch (Exception ex)
         {
-            _mockMode = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _mockMode    = !newValue;
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnUseFrameworkAppealLoopChanged(bool newValue)
     {
         _useFrameworkAppealLoop = newValue;
+        _saveMessage            = null;
+        _saveError              = null;
         try
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
@@ -158,13 +168,17 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _useFrameworkAppealLoop = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnUseFrameworkKickoffChanged(bool newValue)
     {
         _useFrameworkKickoff = newValue;
+        _saveMessage         = null;
+        _saveError           = null;
         try
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
@@ -173,13 +187,17 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _useFrameworkKickoff = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnUseFrameworkKickoffMidInterruptChanged(bool newValue)
     {
         _useFrameworkKickoffMidInterrupt = newValue;
+        _saveMessage                     = null;
+        _saveError                       = null;
         try
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
@@ -188,13 +206,17 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _useFrameworkKickoffMidInterrupt = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnUseFrameworkDesignChanged(bool newValue)
     {
         _useFrameworkDesign = newValue;
+        _saveMessage        = null;
+        _saveError          = null;
         try
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
@@ -203,13 +225,17 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _useFrameworkDesign = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 
     private async Task OnUseFrameworkPipelineChanged(bool newValue)
     {
         _useFrameworkPipeline = newValue;
+        _saveMessage          = null;
+        _saveError            = null;
         try
         {
             await AppSettingsService.UpsertAsync("Workflow:UseFrameworkPipeline", _useFrameworkPipeline.ToString().ToLower());
@@ -218,7 +244,9 @@ public partial class SystemSettings
         catch (Exception ex)
         {
             _useFrameworkPipeline = !newValue;
-            Snackbar.Add($"設定儲存失敗：{ex.Message}", Severity.Error);
+            _saveError   = $"設定儲存失敗：{ex.Message}";
+            _saveMessage = null;
+            Snackbar.Add(_saveError, Severity.Error);
         }
     }
 

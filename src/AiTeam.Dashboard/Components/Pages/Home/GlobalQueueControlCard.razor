@@ -28,4 +28,9 @@
             </MudButton>
         </MudTooltip>
     </MudStack>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+    }
 </MudPaper>

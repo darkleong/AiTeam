@@ -139,6 +139,11 @@
         </MudItem>
     </MudGrid>
 
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-2">@_error</MudAlert>
+    }
+
     <div class="d-flex justify-end">
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.PlayArrow"
