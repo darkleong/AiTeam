@@ -137,6 +137,8 @@ public partial class RuleManagement
         {
             await RuleService.ToggleRuleActiveAsync(rule.Id, isActive);
             rule.IsActive = isActive;
+            var preview = rule.Content.Length > 20 ? rule.Content[..20] + "…" : rule.Content;
+            Snackbar.Add($"規則「{preview}」已{(isActive ? "啟用" : "停用")}", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -152,6 +154,7 @@ public partial class RuleManagement
         {
             await RuleService.DeleteRuleAsync(id);
             _rules.RemoveAll(r => r.Id == id);
+            Snackbar.Add("規則已刪除", Severity.Success);
         }
         catch (Exception ex)
         {

@@ -128,7 +128,10 @@ public partial class TokenMonitoring : IAsyncDisposable
         });
 
         try { await _hubConnection.StartAsync(); }
-        catch { /* 非關鍵，失敗不影響頁面正常使用 */ }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add("Token 即時更新連線失敗，資料將不自動刷新（可手動切換時段重載）", Severity.Warning);
+        }
     }
 
     private void BuildChart()

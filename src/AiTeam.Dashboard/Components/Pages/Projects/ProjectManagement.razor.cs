@@ -71,6 +71,7 @@ public partial class ProjectManagement
         {
             await ProjectService.ToggleProjectActiveAsync(project.Id, isActive);
             project.IsActive = isActive;
+            Snackbar.Add($"專案「{project.Name}」已{(isActive ? "啟用" : "停用")}", Severity.Success);
         }
         catch (Exception ex)
         {

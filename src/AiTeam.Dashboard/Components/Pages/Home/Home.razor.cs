@@ -120,10 +120,11 @@ public partial class Home : IAsyncDisposable
             _hubConnected = true;
             Logger.LogInformation("SignalR Hub 連線成功：{Url}", Navigation.ToAbsoluteUri("/hubs/agent-status"));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _hubConnected = false;
             Logger.LogError(ex, "SignalR Hub 連線失敗");
+            Snackbar.Add("即時狀態更新連線失敗，頁面資料仍可使用，將持續重連中", Severity.Warning);
         }
     }
 
