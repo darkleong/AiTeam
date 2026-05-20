@@ -128,4 +128,20 @@ public class WorkflowSettings
     /// 預設 false（守 v5.5 baseline auto dispatch / 0 行為改變）— Trial_v24 開時切 true → 結案切回 false（對齊 aria-trial-summary skill flag 切回紀律）。
     /// AppSettings 表 key = "Workflow:UseHITLPlanConfirmation"，DB 優先，appsettings.json fallback。</summary>
     public bool UseHITLPlanConfirmation { get; set; } = false;
+
+    /// <summary>Stage 81：動態 re-planning（LangGraph cycles）+ HITL retry gate 配套 feature flag。
+    /// 預設 false（守 Stage 80 baseline / Trial_v25 開時切 true → 結案切回 false）。
+    /// **真實生效需 UseHITLPlanConfirmation=true 為前置**（補強 #A 紀律 — ContinueChainFromSubtaskAsync 取 plan_confirm ContextJson 是 single source of truth）。
+    /// AppSettings 表 key = "Workflow:UseDynamicReplanning"，DB 優先，appsettings.json fallback。</summary>
+    public bool UseDynamicReplanning { get; set; } = false;
+
+    /// <summary>Stage 81：max replan iterations hard cap（業界 LangGraph best practice）。
+    /// 預設 3（approve / edit / respond 各 +1 / reject 不算）。範圍守 [1, 10]。
+    /// AppSettings 表 key = "Workflow:MaxReplanIterations"。</summary>
+    public int MaxReplanIterations { get; set; } = 3;
+
+    /// <summary>Stage 81：replan session cost soft cap USD（雙重保險）。
+    /// 預設 5 USD（達上限升 intervention 卡讓 Christ 拍板介入）。範圍守 > 0。
+    /// AppSettings 表 key = "Workflow:ReplanCostCapUsd"。</summary>
+    public decimal ReplanCostCapUsd { get; set; } = 5m;
 }

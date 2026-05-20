@@ -101,4 +101,35 @@ public class PetraSessionRepository(AppDbContext db)
         session.Status = "cancelled";
         session.UpdatedAt = DateTime.UtcNow;
     }
+
+    /// <summary>Stage 81：累計 replan iteration 輪數（approve / edit / respond 觸發 +1 / reject 不算）。</summary>
+    public async Task IncrementReplanIterationAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        var session = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+        if (session is null) return;
+        session.ReplanIteration += 1;
+        session.UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Stage 81：從 token_logs WHERE PetraSessionId=... 累計 session 真實 cost 寫回 PetraSession.SessionCostUsd。
+    /// 呼叫時機：DispatchTalentsAsync.ProcessSubtaskResultAsync 內 worker dispatch + token_logs 寫入後（再做 cap check）。</summary>
+    public async Task UpdateSessionCostUsdAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        var session = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+        if (session is null) return;
+        session.SessionCostUsd = await db.TokenLogs
+            .Where(l => l.PetraSessionId == sessionId)
+            .SumAsync(l => l.TotalCostUsd ?? 0m, ct);
+        session.UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Stage 81：取得 session 當前 ReplanIteration + SessionCostUsd（cap check 用 / 0 PetraSession row 回 (0, 0)）。</summary>
+    public async Task<(int Iter, decimal Cost)> GetReplanStateAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        var row = await db.PetraSessions
+            .Where(x => x.Id == sessionId)
+            .Select(x => new { x.ReplanIteration, x.SessionCostUsd })
+            .FirstOrDefaultAsync(ct);
+        return row is null ? (0, 0m) : (row.ReplanIteration, row.SessionCostUsd);
+    }
 }

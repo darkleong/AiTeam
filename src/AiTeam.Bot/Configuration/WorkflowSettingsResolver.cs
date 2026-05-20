@@ -22,7 +22,8 @@ namespace AiTeam.Bot.Configuration;
 /// </summary>
 public class WorkflowSettingsResolver(
     IOptions<WorkflowSettings> options,
-    AppSettingsService appSettings)
+    AppSettingsService appSettings,
+    ILogger<WorkflowSettingsResolver> logger)
 {
     private WorkflowSettings Defaults => options.Value;
 
@@ -116,6 +117,32 @@ public class WorkflowSettingsResolver(
     public Task<bool> GetUseHITLPlanConfirmationAsync(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UseHITLPlanConfirmation", Defaults.UseHITLPlanConfirmation, ct);
 
+    /// <summary>Stage 81：動態 replan + HITL retry gate feature flag。**真實生效需 UseHITLPlanConfirmation=true 為前置**
+    /// （補強 #A 紀律 — ContinueChainFromSubtaskAsync 取 plan_confirm ContextJson 是 single source of truth）。
+    /// 若 UseHITLPlanConfirmation=false → effective false（不論 DB value）+ warning log 提示。</summary>
+    public async Task<bool> GetUseDynamicReplanningAsync(CancellationToken ct = default)
+    {
+        var rawDynamic = await GetBoolAsync("Workflow:UseDynamicReplanning", Defaults.UseDynamicReplanning, ct);
+        if (!rawDynamic) return false;
+
+        var hitlOn = await GetUseHITLPlanConfirmationAsync(ct);
+        if (!hitlOn)
+        {
+            logger.LogWarning(
+                "[Stage81] UseDynamicReplanning=true 但 UseHITLPlanConfirmation=false — dynamic replan 已 disabled 對齊 ContinueChainFromSubtaskAsync 設計依賴（plan_confirm ContextJson 是 single source of truth）");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Stage 81：max replan iterations cap（範圍 [1, 10] / 超出 fallback default）。</summary>
+    public Task<int> GetMaxReplanIterationsAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:MaxReplanIterations", Defaults.MaxReplanIterations, 1, 10, ct);
+
+    /// <summary>Stage 81：replan session cost cap USD（須 > 0 / 超出 fallback default）。</summary>
+    public Task<decimal> GetReplanCostCapUsdAsync(CancellationToken ct = default)
+        => GetDecimalAsync("Workflow:ReplanCostCapUsd", Defaults.ReplanCostCapUsd, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);
@@ -134,5 +161,14 @@ public class WorkflowSettingsResolver(
         var raw = await appSettings.GetAsync(key, ct);
         if (int.TryParse(raw, out var v) && v >= min && v <= max) return v;
         return fallback;
+    }
+
+    /// <summary>Stage 81：decimal 值守 > 0（cost cap USD 用 / 對齊 numeric(18,6) 精度）。</summary>
+    private async Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct)
+    {
+        var raw = await appSettings.GetAsync(key, ct);
+        return decimal.TryParse(raw, System.Globalization.NumberStyles.Number,
+                                System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0m
+            ? v : fallback;
     }
 }

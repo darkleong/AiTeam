@@ -46,7 +46,8 @@ internal sealed class ClaudeCodeChatClientAdapter(
     ILogger<ClaudeCodeChatClientAdapter> logger,
     PromptResolver? promptResolver = null,                  // Stage 72：nullable / null = test path 退既有 Resources/CLAUDE_<X>.md file fallback（Test 7/13 0 改）
     Guid? talentId = null,                                  // Stage 74：dispatch site 傳 talentId（既有 ITalent.Id）/ null = test path 或 v5 既有 path
-    TalentSkillModelResolver? talentSkillModelResolver = null   // Stage 74：null = ctor model 當 final / 非 null = 動態 resolve 三層 fallback chain
+    TalentSkillModelResolver? talentSkillModelResolver = null,  // Stage 74：null = ctor model 當 final / 非 null = 動態 resolve 三層 fallback chain
+    Guid? petraSessionId = null                             // Stage 81 議題 #5：v5 path 透傳 PetraSession.Id 給 token_logs / null = v4 caller 或 spike path
 ) : IChatClient
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
@@ -101,6 +102,16 @@ internal sealed class ClaudeCodeChatClientAdapter(
         {
             var enforceSection = BuildBroadScopeEnforceSection();
             prompt = enforceSection + "\n\n" + prompt;
+        }
+
+        // Stage 81 子項 8：🟡 #1 Quinn outputLen=0 修根因 — qa_testing capability prepend「QA 報告紀律」要求 final turn 必輸出 markdown 摘要。
+        // 對齊 Cody-only prepend pattern（純 adapter 層 / 不污染 CLAUDE_Quinn.md 跨專案守則）。
+        // 假設根因：Quinn 跑完 Write tests + dotnet test 後 CLI session 結束時無 final text turn → `result` JSON 欄位空 → outputLen=0
+        // ⚠️ 若 docker logs 揭真實 root cause ≠ 此假設（如 ParseJsonOutput edge case / maxTurns 不夠）→ escalate Christ 拍板（紀律 1）
+        if (string.Equals(capability, "qa_testing", StringComparison.OrdinalIgnoreCase))
+        {
+            var qaSection = BuildQaSummaryEnforceSection();
+            prompt = qaSection + "\n\n" + prompt;
         }
 
         // Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 動態 resolve（三層 fallback chain：per-Skill > per-Talent > runtime）。
@@ -181,7 +192,8 @@ internal sealed class ClaudeCodeChatClientAdapter(
                 try
                 {
                     var usageForLog = capturedUsage ?? new TokenUsage(0, 0, 0, 0, 0m, false);
-                    await tokenLogService.LogCliUsageAsync(workerName, resolvedModel, "PetraOrchestratorV5", null, null, usageForLog, CancellationToken.None);
+                    // Stage 81 議題 #5：v5 path 透傳 petraSessionId 進 token_logs.PetraSessionId（精準 cost cap 計算 / UpdateSessionCostUsdAsync WHERE PetraSessionId=...）
+                    await tokenLogService.LogCliUsageAsync(workerName, resolvedModel, "PetraOrchestratorV5", null, null, usageForLog, CancellationToken.None, petraSessionId);
                 }
                 catch (Exception ex)
                 {
@@ -277,6 +289,20 @@ internal sealed class ClaudeCodeChatClientAdapter(
         "documentation"       => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
         _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 78a 縮為 v5.5 4 Worker baseline）"),
     };
+
+    /// <summary>
+    /// Stage 81 子項 8：🟡 #1 Quinn outputLen=0 修根因 — qa_testing capability prepend「QA 報告紀律」段。
+    /// 對齊 Cody-only prepend pattern（純 adapter 層 / 不污染 CLAUDE_Quinn.md 跨專案守則）。
+    /// </summary>
+    private static string BuildQaSummaryEnforceSection() => """
+【QA 報告紀律 — 必須在 final turn 輸出】
+
+完成 dotnet test + Write tests 後，**必須在最後一個 turn 輸出 markdown 摘要**：
+
+- 對應 CLAUDE_Quinn.md JSON schema：status / passed_tests / failed_tests / unverifiable_targets / summary
+- 即使所有 test 通過也要 output JSON 摘要供 Petra 收尾判讀
+- 不要省略 final text turn / 不要只跑 tool calls 就結束（CLI session 結束時無 final text → result JSON 欄位空 = outputLen=0 不可接受）
+""";
 
     /// <summary>
     /// Stage 66 子項 3：廣範圍指令處理紀律 enforce 段（generic / 無專案特定 mapping — Christ 2026-05-14 拍板）。

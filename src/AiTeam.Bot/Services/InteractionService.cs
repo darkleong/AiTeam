@@ -87,6 +87,13 @@ public class InteractionService(
     public const string PlanConfirmActionsJson =
         """[{"id":"plan_approve","label":"核准 ✅","color":"success","requiresInput":false},{"id":"plan_edit","label":"修改 ✏️","color":"info","requiresInput":true},{"id":"plan_reject","label":"拒絕 ❌","color":"error","requiresInput":false},{"id":"plan_respond","label":"補充 💬","color":"info","requiresInput":true}]""";
 
+    /// <summary>Stage 81：動態 replan + HITL retry gate — Petra 觸發 replan 後 Christ 4 decision pattern 拍板。
+    /// approve = 同 subtask 重 dispatch with retry instruction（LangGraph cycles）/ edit = 修 retry instruction / reject = 不採納保留原結果繼續 / respond = 補充指示。
+    /// replan_reject button label「不採納（保留原結果）↩」warning 色 — 區別 Stage 80 plan_reject「拒絕 ❌」error 色（plan_reject 整個 cancel / replan_reject 接受原結果繼續）。
+    /// 議題 #3 + W8 對齊修法（v1.1）。</summary>
+    public const string ReplanConfirmActionsJson =
+        """[{"id":"replan_approve","label":"核准 ✅","color":"success","requiresInput":false},{"id":"replan_edit","label":"修改 ✏️","color":"info","requiresInput":true},{"id":"replan_reject","label":"不採納（保留原結果）↩","color":"warning","requiresInput":false},{"id":"replan_respond","label":"補充 💬","color":"info","requiresInput":true}]""";
+
     /// <summary>通知類互動（merge_notify / intervention / ceo_reply）：單一「我知道了」確認按鈕，點擊後標為已處理。</summary>
     public const string NotifyActionsJson =
         """[{"id":"ack","label":"我知道了","color":"default","requiresInput":false}]""";
@@ -180,6 +187,10 @@ public class InteractionService(
                         // Stage 57 自驗揭露 pre-Stage 57 既有 bug：epic_partial_paused 沒有 ack action（buttons: epic_resume / epic_abort）
                         // 預設 epic_resume 觸發 HandleEpicPartialPausedAsync handler idempotent 路徑（驗 FF 五十一第二層防線）
                         "epic_partial_paused"     => "epic_resume",
+                        // Stage 80：HITL plan_confirm 4 decision — default approve（推進 chain dispatch）
+                        "plan_confirm"            => "plan_approve",
+                        // Stage 81：動態 replan HITL retry gate — default approve（推進 retry dispatch / LangGraph cycles）
+                        "replan_confirm"          => "replan_approve",
                         // ack-only 通知類（merge_notify / intervention / ceo_reply 等）
                         _                     => "ack",
                         }

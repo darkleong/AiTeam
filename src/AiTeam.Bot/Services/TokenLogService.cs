@@ -22,6 +22,7 @@ public class TokenLogService(
     /// <summary>
     /// 寫入一筆 CLI token 紀錄。usage 為 null 時 early return（CLI 解析失敗不視為錯）。
     /// 任何異常吞掉並 log warning（硬規則：不阻塞主流程）。
+    /// Stage 81 議題 #5：加 petraSessionId nullable param — v5 path adapter 透傳 PetraSession.Id / 既有 16 caller default null 0 動。
     /// </summary>
     public async Task LogCliUsageAsync(
         string agentName,
@@ -30,7 +31,8 @@ public class TokenLogService(
         int? round,
         Guid? taskId,
         TokenUsage? usage,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Guid? petraSessionId = null)
     {
         if (usage is null) return;
         try
@@ -62,6 +64,7 @@ public class TokenLogService(
                 TotalCostUsd        = cost,
                 IsEstimated         = isEstimated,
                 TaskId              = taskId,
+                PetraSessionId      = petraSessionId,   // Stage 81：v5 path 透傳 / 既有 caller null
                 CreatedAt           = DateTime.UtcNow,
             });
             await db.SaveChangesAsync(ct);

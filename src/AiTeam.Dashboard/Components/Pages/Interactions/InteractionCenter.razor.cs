@@ -239,6 +239,8 @@ public partial class InteractionCenter : IAsyncDisposable
         "epic_partial_paused"     => Icons.Material.Filled.PauseCircle,
         // Stage 80：HITL plan confirmation 閘門
         "plan_confirm"            => Icons.Material.Filled.FactCheck,
+        // Stage 81：動態 replan + HITL retry gate
+        "replan_confirm"          => Icons.Material.Filled.Refresh,
         _                         => Icons.Material.Filled.Notifications
     };
 
@@ -260,6 +262,8 @@ public partial class InteractionCenter : IAsyncDisposable
         "epic_partial_paused"     => Color.Warning,
         // Stage 80：HITL plan confirmation 閘門（Info — 對齊 kickoff / design 決策確認語意）
         "plan_confirm"            => Color.Info,
+        // Stage 81：動態 replan + HITL retry gate（Warning — 區別 plan_confirm Info / 警示性質：something went wrong 需重審）
+        "replan_confirm"          => Color.Warning,
         _                         => Color.Default
     };
 
@@ -283,6 +287,8 @@ public partial class InteractionCenter : IAsyncDisposable
         "epic_partial_paused"     => "Epic 部分暫停",
         // Stage 80：HITL plan confirmation 閘門
         "plan_confirm"            => "計劃確認（HITL）",
+        // Stage 81：動態 replan + HITL retry gate
+        "replan_confirm"          => "計劃重審（動態 Replan HITL）",
         _                         => type
     };
 
@@ -298,6 +304,10 @@ public partial class InteractionCenter : IAsyncDisposable
         "plan_approve"                                                                           => Color.Success,
         "plan_edit" or "plan_respond"                                                            => Color.Info,
         "plan_reject"                                                                            => Color.Error,
+        // Stage 81：動態 replan 4 decision pattern — replan_reject 用 warning（不採納保留原結果 / 區別 plan_reject error 整個 cancel 語意）
+        "replan_approve"                                                                         => Color.Success,
+        "replan_edit" or "replan_respond"                                                        => Color.Info,
+        "replan_reject"                                                                          => Color.Warning,
         _                                                                                         => Color.Default
     };
 

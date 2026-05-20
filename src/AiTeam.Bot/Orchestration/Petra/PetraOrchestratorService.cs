@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.GitHub;
@@ -145,10 +147,16 @@ public class PetraOrchestratorService(
                     .Where(t => names.Contains(t.Name) && t.ProjectId == null)
                     .ToDictionaryAsync(t => t.Name, t => t.Id, ct);
 
-                await DispatchTalentsAsync(
+                var outcome = await DispatchTalentsAsync(
                     session.Id, taskInput, plan, talentPicks, talentAgents,
-                    useV5Memory, talentNameToIdMap, images, ct);
+                    useV5Memory, talentNameToIdMap, images, sessionWithCtx, ct);
                 await db.SaveChangesAsync(ct);
+
+                // Stage 81：replan signal handling（cap_reached → intervention + cancelled / replan_confirm → 開卡 + paused）
+                if (outcome.Replan is { } signal)
+                {
+                    return await HandleReplanSignalAsync(session.Id, taskInput, signal, ct);
+                }
 
                 dispatchNames = talentPicks.Select(t => t.Name).ToList();
             }
@@ -582,7 +590,7 @@ public class PetraOrchestratorService(
     /// Talent 個人記憶寫回起步 = candidate A（key=`last-task-summary` / content = output 前 500 字元）。
     /// useV5Memory=false → skip memory 段保 v5.5 既有行為 0 regression。
     /// </summary>
-    private async Task<List<WorkerDispatchSummary>> DispatchTalentsAsync(
+    private async Task<DispatchOutcome> DispatchTalentsAsync(
         Guid sessionId,
         string taskInput,
         SubtaskPlan plan,
@@ -591,6 +599,7 @@ public class PetraOrchestratorService(
         bool useV5Memory,
         IReadOnlyDictionary<string, Guid> talentNameToIdMap,   // Stage 75：non-nullable（per-Talent lock 永遠用到 / Forge spike 揭架構盲點修根因）
         IReadOnlyList<ImageAttachment>? images,                 // Stage 79：v5.5 image flow 補完 — 條件性 per-subtask NeedsImageContext flag 才 propagate
+        PetraSessionContext ctx,                                // Stage 81：InvokePetraReplanAsync 需要 ctx 取 sessionId / workingDir / model
         CancellationToken ct)
     {
         // Stage 75：talentNameToIdMap 永遠非 null（caller StartAsync 提前 build）— memoryEnabled 直接看 useV5Memory flag
@@ -652,13 +661,23 @@ public class PetraOrchestratorService(
                 var levelResults = await Task.WhenAll(levelTasks);
 
                 // sequential：DB write + summaries append + memory upsert + compact threshold（subtask Id 升序 deterministic）
+                // Stage 81：每個 subtask 處理後檢查 cost cap + trigger evaluate — 並行 level 中第一個觸發的 subtask 決定 signal（保留所有 parallel outputs 不丟失）
+                ReplanSignal? firstReplanSignal = null;
                 foreach (var r in levelResults.OrderBy(x => x.SubtaskId))
                 {
                     await ProcessSubtaskResultAsync(
                         r.SubtaskId, r.OutputText, r.Index, sessionId, summaries,
                         plan, talentPicks, dependsOnLookup, talentNameToIdMap, memoryEnabled,
                         compactKeep, compactThresholdPct, levels.Count, levelIdx, isParallel: true, ct);
+
+                    if (firstReplanSignal is null)
+                    {
+                        firstReplanSignal = await CheckReplanTriggerAfterDispatchAsync(
+                            sessionId, taskInput, plan.Subtasks[r.Index], talentPicks[r.Index].Name,
+                            r.OutputText, summaries, ctx, ct);
+                    }
                 }
+                if (firstReplanSignal is not null) return new DispatchOutcome(summaries, firstReplanSignal);
             }
             else
             {
@@ -694,9 +713,14 @@ public class PetraOrchestratorService(
                     subtaskId, outputText, i, sessionId, summaries,
                     plan, talentPicks, dependsOnLookup, talentNameToIdMap, memoryEnabled,
                     compactKeep, compactThresholdPct, levels.Count, levelIdx, isParallel: false, ct);
+
+                // Stage 81：每個 subtask 處理後檢查 cost cap + trigger evaluate
+                var sequentialSignal = await CheckReplanTriggerAfterDispatchAsync(
+                    sessionId, taskInput, plan.Subtasks[i], talentName, outputText, summaries, ctx, ct);
+                if (sequentialSignal is not null) return new DispatchOutcome(summaries, sequentialSignal);
             }
         }
-        return summaries;
+        return new DispatchOutcome(summaries, null);
     }
 
     /// <summary>
@@ -1249,7 +1273,8 @@ public class PetraOrchestratorService(
             "Stage 80：HITL plan_confirm reject sessionId={SessionId} subtasks={Count}",
             session.Id, planContext.Subtasks.Count);
 
-        return PetraOrchestratorResult.Done(session.Id, planContext.Subtasks.Select(s => s.Skill).ToList(),
+        // Stage 81 子項 10（議題 #3 + #8 命名語意收口）：Cancelled 工廠取代 Done — DispatchedWorkerCount=0 真實對齊 reject path 0 chain dispatch。
+        return PetraOrchestratorResult.Cancelled(session.Id, planContext.Subtasks.Select(s => s.Skill).ToList(),
             $"Petra plan 被 Christ HITL reject — task_memory `decision/plan-rejected` 已寫入 / session cancelled。");
     }
 
@@ -1278,10 +1303,16 @@ public class PetraOrchestratorService(
                 .Where(t => names.Contains(t.Name) && t.ProjectId == null)
                 .ToDictionaryAsync(t => t.Name, t => t.Id, ct);
 
-            await DispatchTalentsAsync(
+            var outcome = await DispatchTalentsAsync(
                 ctx.SessionId, taskInput, plan, talentPicks, talentAgents,
-                useV5Memory, talentNameToIdMap, images, ct);
+                useV5Memory, talentNameToIdMap, images, ctx, ct);
             await db.SaveChangesAsync(ct);
+
+            // Stage 81：replan signal handling（DispatchAndFinalize 也走同 flow / approve resume 期間可能再觸發 replan loop）
+            if (outcome.Replan is { } signal)
+            {
+                return await HandleReplanSignalAsync(ctx.SessionId, taskInput, signal, ct);
+            }
 
             var decidedCapabilities = plan.Subtasks.Select(s => s.SkillName).ToList();
             var prUrl = await FinalizeGitAsync(ctx, taskInput, decidedCapabilities, dispatchNames, ct);
@@ -1447,6 +1478,16 @@ public class PetraOrchestratorService(
   輸入：「Stage 79 結案紀錄章節寫 Roadmap.md」
   輸出：{"subtasks":[{"id":1,"skill":"documentation","description":"寫 Stage 79 Roadmap 實作紀錄","needsImageContext":false}],"dependencies":[]}
 
+★ Few-shot 反例 1（Stage 81 議題 #2 修法 — 純文字 prompt 無 attachment）：
+  輸入：「補 PetraInbox FIFO ordering xUnit test」
+  輸出：{"subtasks":[{"id":1,"skill":"qa_testing","description":"補 FIFO ordering test","needsImageContext":false}],"dependencies":[]}
+  ⚠️ 紀律：prompt 0 image attachment → 所有 subtask needsImageContext 必 false（避免 Trial_v24 揭純文字誤判 true）
+
+★ Few-shot 反例 2（Stage 81 議題 #2 修法 — 含 image 但純後端 / docs 改動）：
+  輸入：「[附截圖] 修 PetraInboxRepository.GetRecentAsync 排序 bug」
+  輸出：{"subtasks":[{"id":1,"skill":"code_implementation","description":"修 GetRecentAsync 排序","needsImageContext":false}],"dependencies":[]}
+  ⚠️ 紀律：即使含 image，subtask 性質純後端 / docs → needsImageContext=false
+
 """
             : """
 
@@ -1530,5 +1571,687 @@ public class PetraOrchestratorService(
         if (petra is null) return null;
 
         return await promptResolver.ResolveTalentPersonaAsync(petra.Id, ct);
+    }
+
+    // ========== Stage 81：動態 replan + HITL retry gate（LangGraph cycles 對齊 v1.1 議題 1+2+#3-#8 收口） ==========
+
+    /// <summary>Stage 81：DispatchTalentsAsync 回傳結構 — Summaries（已完成 subtask 摘要）+ Replan（觸發信號 / null = 正常完成）。</summary>
+    internal sealed record DispatchOutcome(
+        List<WorkerDispatchSummary> Summaries,
+        ReplanSignal? Replan);
+
+    /// <summary>Stage 81：replan / cap-reached 觸發信號 — caller 路由分支 HandleReplanSignalAsync 用。
+    /// Kind="replan_confirm" → 開卡 + Replanning result / Kind="cap_reached_iter|cost" → intervention card + Cancelled result。</summary>
+    internal sealed record ReplanSignal(
+        string Kind,
+        int CurrentSubtaskId,
+        string TriggerReason,
+        string RetryInstruction,
+        string LastOutputPreview,
+        int CompletedCount,
+        int ReplanIteration,
+        int? CapValueInt,
+        decimal? CapValueDecimal);
+
+    /// <summary>Stage 81：Petra LLM JSON 回應結構 — LangGraph cycles 紀律：不回 plan 結構 / 只回 retry instruction（W8 對齊）。</summary>
+    internal sealed record ReplanDecisionJson(
+        [property: JsonPropertyName("shouldReplan")]     bool   ShouldReplan,
+        [property: JsonPropertyName("reason")]           string Reason,
+        [property: JsonPropertyName("retryInstruction")] string RetryInstruction,
+        [property: JsonPropertyName("targetSubtaskId")]  int    TargetSubtaskId);
+
+    /// <summary>Stage 81：replan_confirm BossInteraction.ContextJson 結構 — render UI + Resume 用。</summary>
+    internal sealed record ReplanConfirmContext(
+        Guid   SessionId,
+        string TaskInput,
+        int    CurrentSubtaskId,
+        string CurrentSkillName,
+        string CurrentTalentName,
+        string TriggerReason,
+        string RetryInstruction,
+        string LastOutputPreview,
+        int    CompletedCount,
+        int    ReplanIteration);
+
+    // Stage 81 議題 #7：trigger 偵測 regex — schema 對齊 CLAUDE_Vera.md L113 `"critical":[{...}]` 非空 + CLAUDE_Quinn.md L75 `"status":"failed"`
+    private static readonly Regex VeraCriticalPattern =
+        new("\"critical\"\\s*:\\s*\\[\\s*\\{", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex QuinnFailedPattern =
+        new("\"status\"\\s*:\\s*\"failed\"", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Stage 81：純規則式偵測 — Vera code_review subtask 含 critical 非空 / Quinn qa_testing subtask 含 status=failed。
+    /// 其他 skill 永遠不觸發 replan（避免 scope creep — W1 紀律）。</summary>
+    internal static (bool ShouldTrigger, string TriggerReason) DetectReplanTrigger(string skill, string outputText)
+    {
+        if (string.IsNullOrEmpty(outputText)) return (false, "");
+        if (string.Equals(skill, "code_review", StringComparison.OrdinalIgnoreCase)
+            && VeraCriticalPattern.IsMatch(outputText))
+            return (true, "vera_critical");
+        if (string.Equals(skill, "qa_testing", StringComparison.OrdinalIgnoreCase)
+            && QuinnFailedPattern.IsMatch(outputText))
+            return (true, "quinn_failed");
+        return (false, "");
+    }
+
+    /// <summary>Stage 81：每個 subtask dispatch 完成後檢查 — cost cap → trigger 偵測 → iter cap → Petra LLM call → return signal。
+    /// null = 正常 / 非 null = caller 應該 return DispatchOutcome with signal 並 stop 後續 dispatch。</summary>
+    private async Task<ReplanSignal?> CheckReplanTriggerAfterDispatchAsync(
+        Guid sessionId,
+        string taskInput,
+        Subtask subtask,
+        string talentName,
+        string outputText,
+        List<WorkerDispatchSummary> summaries,
+        PetraSessionContext ctx,
+        CancellationToken ct)
+    {
+        // 1. 更新 session cost USD（每個 dispatch 都 update / 不論 flag）
+        await sessionRepo.UpdateSessionCostUsdAsync(sessionId, ct);
+        await db.SaveChangesAsync(ct);
+
+        // 2. 讀 flag — UseDynamicReplanning 內部已守 UseHITLPlanConfirmation=true 為前置（補強 #A）
+        var useDynamicReplanning = await workflowResolver.GetUseDynamicReplanningAsync(ct);
+        if (!useDynamicReplanning) return null;
+
+        var (iter, cost) = await sessionRepo.GetReplanStateAsync(sessionId, ct);
+        var maxIter = await workflowResolver.GetMaxReplanIterationsAsync(ct);
+        var capUsd  = await workflowResolver.GetReplanCostCapUsdAsync(ct);
+
+        // 3. cost cap 永遠檢查（場景 H — 超過上限直接 abort / 不論是否 trigger）
+        if (cost > capUsd)
+        {
+            logger.LogWarning(
+                "[Stage 81] session cost cap reached sessionId={SessionId} cost={Cost} cap={Cap} — abort + intervention",
+                sessionId, cost, capUsd);
+            return new ReplanSignal("cap_reached_cost", subtask.Id,
+                $"cost cap ${capUsd:F2} reached (current=${cost:F4})",
+                "", "", summaries.Count, iter, null, capUsd);
+        }
+
+        // 4. trigger 偵測（Vera critical / Quinn failed）
+        var (shouldTrigger, triggerReason) = DetectReplanTrigger(subtask.SkillName, outputText);
+        if (!shouldTrigger) return null;
+
+        // 5. iter cap（場景 G — 已到上限不再 fire replan / 改 intervention）
+        if (iter >= maxIter)
+        {
+            logger.LogWarning(
+                "[Stage 81] max replan iterations reached sessionId={SessionId} iter={Iter} max={Max} — abort + intervention",
+                sessionId, iter, maxIter);
+            return new ReplanSignal("cap_reached_iter", subtask.Id,
+                $"max iterations N={maxIter} reached",
+                "", "", summaries.Count, iter, maxIter, null);
+        }
+
+        // 6. Petra LLM call 給 retry instruction（W8 紀律 — 不回 plan 結構）
+        var decision = await InvokePetraReplanAsync(taskInput, summaries, subtask, triggerReason, outputText, ctx, ct);
+        if (decision is null || !decision.ShouldReplan)
+        {
+            logger.LogInformation(
+                "[Stage 81] Petra 判斷不需 replan sessionId={SessionId} subtaskId={SubtaskId} — 容錯往下走",
+                sessionId, subtask.Id);
+            return null;
+        }
+
+        var preview = outputText.Length > 500 ? outputText[..500] + "..." : outputText;
+        logger.LogInformation(
+            "[Stage 81] replan trigger fire sessionId={SessionId} subtaskId={SubtaskId} trigger={Trigger} iter={Iter}",
+            sessionId, subtask.Id, triggerReason, iter);
+        return new ReplanSignal("replan_confirm", subtask.Id, triggerReason,
+            decision.RetryInstruction, preview, summaries.Count, iter, null, null);
+    }
+
+    /// <summary>Stage 81：caller 從 DispatchTalentsAsync 收到 ReplanSignal 後分支 — replan_confirm 開卡 / cap_reached 開 intervention。</summary>
+    private async Task<PetraOrchestratorResult> HandleReplanSignalAsync(
+        Guid sessionId, string taskInput, ReplanSignal signal, CancellationToken ct)
+    {
+        if (signal.Kind == "cap_reached_iter" || signal.Kind == "cap_reached_cost")
+            return await HandleCapReachedAsync(sessionId, signal, ct);
+
+        // 取 plan_confirm ContextJson 還原 currentSkill / currentTalent（render UI + Resume 用 / single source of truth）
+        var planInteraction = await db.BossInteractions
+            .Where(x => x.InteractionType == "plan_confirm" && x.ContextJson != null
+                        && x.ContextJson.Contains(sessionId.ToString()))
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        string currentSkill = "", currentTalentName = "";
+        if (planInteraction?.ContextJson is not null)
+        {
+            try
+            {
+                var pctx = JsonSerializer.Deserialize<PlanConfirmContext>(planInteraction.ContextJson, PlanConfirmJsonOptions);
+                var found = pctx?.Subtasks.FirstOrDefault(s => s.Id == signal.CurrentSubtaskId);
+                if (found is not null)
+                {
+                    currentSkill = found.Skill;
+                    currentTalentName = found.TalentName;
+                }
+            }
+            catch (JsonException) { /* render fallback 空字串 */ }
+        }
+
+        await WaitForReplanConfirmationAsync(
+            sessionId, taskInput, signal.CurrentSubtaskId, currentSkill, currentTalentName,
+            signal.TriggerReason, signal.RetryInstruction, signal.LastOutputPreview,
+            signal.CompletedCount, signal.ReplanIteration, ct);
+        await db.SaveChangesAsync(ct);
+
+        return PetraOrchestratorResult.Replanning(
+            sessionId, signal.CurrentSubtaskId, signal.RetryInstruction, signal.TriggerReason);
+    }
+
+    /// <summary>Stage 81 場景 G + H：max iter / cost cap 達上限 → 開 intervention 卡 + 寫 task_memory + CancelAsync + Cancelled。</summary>
+    private async Task<PetraOrchestratorResult> HandleCapReachedAsync(
+        Guid sessionId, ReplanSignal signal, CancellationToken ct)
+    {
+        var memoryContent = signal.Kind == "cap_reached_iter"
+            ? $"max iterations N={signal.CapValueInt} reached"
+            : $"cost cap ${signal.CapValueDecimal:F2} reached";
+
+        try
+        {
+            await memoryRepo.UpsertTaskMemoryAsync(
+                sessionId, projectId: null,
+                key: "decision/replan-cap-reached",
+                content: memoryContent,
+                createdByTalent: "Petra",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Stage 81 HandleCapReached：UpsertTaskMemoryAsync 失敗（容錯不擋）sessionId={SessionId}", sessionId);
+        }
+
+        // 開既有 intervention 卡（Christ 拍板介入 / NotifyActionsJson 「我知道了」ack 按鈕）
+        _ = interactionService.CreateInteractionAsync(
+            interactionType:      "intervention",
+            title:                "動態 replan cap 達上限",
+            description:          $"Stage 81：{memoryContent} — session cancelled / chain dispatch 0 啟動。",
+            project:              null,
+            agentName:            "Petra",
+            availableActionsJson: InteractionService.NotifyActionsJson,
+            contextJson:          $$"""{"sessionId":"{{sessionId}}","kind":"{{signal.Kind}}","subtaskId":{{signal.CurrentSubtaskId}}}""",
+            systemNotes:          $"[Stage 81 replan-cap] sessionId={sessionId.ToString("N")[..8]} — kind={signal.Kind}");
+
+        await sessionRepo.CancelAsync(sessionId, ct);
+        await db.SaveChangesAsync(ct);
+
+        return PetraOrchestratorResult.Cancelled(sessionId, Array.Empty<string>(),
+            $"Stage 81 replan cap reached：{memoryContent} — session cancelled / intervention card opened.");
+    }
+
+    /// <summary>Stage 81：開 BossInteraction replan_confirm 卡 + PauseAsync（對齊 Stage 80 WaitForPlanConfirmationAsync pattern）。</summary>
+    private async Task WaitForReplanConfirmationAsync(
+        Guid sessionId, string taskInput, int currentSubtaskId,
+        string currentSkillName, string currentTalentName,
+        string triggerReason, string retryInstruction, string lastOutputPreview,
+        int completedCount, int replanIteration, CancellationToken ct)
+    {
+        var context = new ReplanConfirmContext(
+            SessionId:         sessionId,
+            TaskInput:         taskInput,
+            CurrentSubtaskId:  currentSubtaskId,
+            CurrentSkillName:  currentSkillName,
+            CurrentTalentName: currentTalentName,
+            TriggerReason:     triggerReason,
+            RetryInstruction:  retryInstruction,
+            LastOutputPreview: lastOutputPreview,
+            CompletedCount:    completedCount,
+            ReplanIteration:   replanIteration);
+
+        var contextJson = JsonSerializer.Serialize(context, PlanConfirmJsonOptions);
+        var taskFirstLine = (taskInput ?? "").Split('\n').FirstOrDefault() ?? "";
+        var title = taskFirstLine.Length > 200 ? taskFirstLine[..200] + "…" : taskFirstLine;
+        var description = $"Petra 建議 retry subtask #{currentSubtaskId}（{currentTalentName} / {currentSkillName}）— 觸發：{triggerReason}";
+        var systemNotes = $"[Stage 81 動態 replan #{replanIteration + 1}] sessionId={sessionId.ToString("N")[..8]} — 4 decision：approve（同 subtask 重 dispatch）/ edit（修 retry instruction）/ reject（不採納 / 接受原結果繼續）/ respond（補充）";
+
+        _ = interactionService.CreateInteractionAsync(
+            interactionType:      "replan_confirm",
+            title:                title,
+            description:          description,
+            project:              null,
+            agentName:            "Petra",
+            availableActionsJson: InteractionService.ReplanConfirmActionsJson,
+            contextJson:          contextJson,
+            systemNotes:          systemNotes);
+
+        await sessionRepo.PauseAsync(sessionId, ct);
+    }
+
+    /// <summary>Stage 81：Petra LLM call 給 retry instruction（W8 紀律 — 不回新 plan 結構）。
+    /// 容錯：JSON parse 失敗 / null shouldReplan → return null caller fallback 不 fire replan（保 chain 不中斷）。</summary>
+    private async Task<ReplanDecisionJson?> InvokePetraReplanAsync(
+        string taskInput, List<WorkerDispatchSummary> done, Subtask currentSubtask,
+        string triggerReason, string lastOutput, PetraSessionContext ctx, CancellationToken ct)
+    {
+        var systemPrompt = BuildReplanRetrySystemPrompt();
+        var doneText = done.Count == 0
+            ? "（無）"
+            : string.Join("\n", done.Select(d => $"- {d.WorkerName}({d.Capability}): {Truncate(d.Output, 300)}"));
+        var lastTrunc = Truncate(lastOutput, 1500);
+        // 用 $$"""..."""（雙 $）— literal brace 寫 `{` `}` / 插值寫 `{{var}}` `}}`
+        var userPrompt = $$"""
+            【ORIGINAL TASK】{{taskInput}}
+
+            【ALREADY COMPLETED】
+            {{doneText}}
+
+            【CURRENT SUBTASK】#{{currentSubtask.Id}} {{currentSubtask.SkillName}} — {{currentSubtask.Description}}
+
+            【LAST OUTPUT (TRIGGER REASON: {{triggerReason}})】
+            {{lastTrunc}}
+
+            請判斷是否需要 retry — 只回 JSON: {"shouldReplan":true/false,"reason":"...","retryInstruction":"...","targetSubtaskId":{{currentSubtask.Id}}}
+            """;
+
+        try
+        {
+            var provider = providerFactory.Create(PetraAgentName);
+            var resp = await provider.CompleteAsync(systemPrompt, userPrompt, ct, images: null);
+            await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant",
+                $"[Stage 81 replan decide / trigger={triggerReason}]\n{resp.Content}", ct: ct);
+            await db.SaveChangesAsync(ct);
+            return TryParseReplanDecision(resp.Content);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "[Stage 81] InvokePetraReplanAsync 失敗 sessionId={SessionId} subtaskId={SubtaskId} — 容錯回 null（fallback 不 fire replan）",
+                ctx.SessionId, currentSubtask.Id);
+            return null;
+        }
+    }
+
+    private static string BuildReplanRetrySystemPrompt() => """
+你是 Petra — 動態 replan + HITL retry gate 評估者（Stage 81 LangGraph cycles 業界紀律）。
+
+收到 Worker dispatch 結果觸發 replan condition（Vera critical 非空 / Quinn status=failed），請判斷：
+1. 是否真的需要 retry？（有時 Vera critical 是低風險可接受 / Quinn failed 是 unverifiable_targets 不可修）
+2. 如需 retry，給 currentSubtask 的「retry instruction」(對應 currentTalent 該怎麼重做的具體指示)
+
+【重要紀律】
+- **不回新 SubtaskPlan 結構** — 只回 retry instruction string 給 currentSubtask
+- retry instruction 要具體 actionable（含修哪個 file / 哪行 / 改什麼）
+- 對齊 LangGraph cycles 真實語意：同 subtask 重 dispatch with new instruction
+
+【輸出格式】只回單行 JSON：
+{"shouldReplan":true/false,"reason":"...","retryInstruction":"...","targetSubtaskId":N}
+
+【Few-shot 範例 1：Vera critical → retry】
+trigger=vera_critical, last output 含 "critical":[{"file":"PipelineView.razor","line":42,"message":"Circuit 斷線無 catch"}]
+→ {"shouldReplan":true,"reason":"Vera 揭 Circuit 斷線真實 production 風險","retryInstruction":"Cody 重做 PipelineView.razor 第 42 行附近 5 個 handler 加 try-catch Exception 防 Circuit 斷線","targetSubtaskId":1}
+
+【Few-shot 範例 2：Quinn failed → retry】
+trigger=quinn_failed, last output 含 "status":"failed","failed_tests":["FooTests.cs 第 23 行型別不相符"]
+→ {"shouldReplan":true,"reason":"Quinn test 編譯失敗可修","retryInstruction":"Cody 修 FooTests.cs 第 23 行型別不相符 + 重跑 dotnet test","targetSubtaskId":1}
+
+【Few-shot 範例 3：Quinn unverifiable_targets → retry】
+trigger=quinn_failed, last output 含 "unverifiable_targets":["路徑1: 找不到類別 X"]
+→ {"shouldReplan":true,"reason":"target class 不存在 / 需 Cody 補建","retryInstruction":"Cody 補建 src/ 內 X 類別實作 + 重跑 QA","targetSubtaskId":1}
+
+【Few-shot 反例（不需 retry / shouldReplan=false）】
+trigger=vera_critical, Vera critical 是 documentation 微調建議 / 非 production safety
+→ {"shouldReplan":false,"reason":"Vera critical 是 doc 微調建議 / production safety 無風險 / 接受原 output","retryInstruction":"","targetSubtaskId":1}
+""";
+
+    private static ReplanDecisionJson? TryParseReplanDecision(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        // 去 markdown code fence 包裹（對齊 SubtaskPlanParser 既有紀律）
+        var stripped = raw.Trim();
+        if (stripped.StartsWith("```"))
+        {
+            var firstNewline = stripped.IndexOf('\n');
+            if (firstNewline > 0) stripped = stripped[(firstNewline + 1)..];
+            var fenceIdx = stripped.LastIndexOf("```", StringComparison.Ordinal);
+            if (fenceIdx >= 0) stripped = stripped[..fenceIdx];
+            stripped = stripped.Trim();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<ReplanDecisionJson>(stripped, PlanConfirmJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string Truncate(string s, int max)
+        => s.Length > max ? s[..max] + "...(truncated)" : s;
+
+    /// <summary>Stage 81：HITL replan_confirm 4 decision pattern resume — PlanConfirmationProcessor 看到 responded 拉起 fire。
+    /// approve → ContinueChainFromSubtaskAsync 從 currentSubtaskId 重 dispatch with retry instruction（LangGraph cycles）
+    /// edit / respond → 重 InvokePetraReplanAsync 含 override context → 新 retry instruction → 開新 replan_confirm 卡（loop）
+    /// reject → ContinueChainFromSubtaskAsync 從 currentSubtaskId+1 繼續（接受原 output / 不 cancel session / 議題 1 修法 v1.1）。</summary>
+    public virtual async Task<PetraOrchestratorResult> ResumeFromReplanConfirmationAsync(
+        Guid sessionId, string decision, string? contextOverride, CancellationToken ct = default)
+    {
+        var session = await sessionRepo.GetWithMessagesAsync(sessionId, ct);
+        if (session is null)
+        {
+            logger.LogWarning("ResumeFromReplanConfirmationAsync 找不到 sessionId={SessionId}", sessionId);
+            return PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(), "session 不存在");
+        }
+
+        var replanInteraction = await db.BossInteractions
+            .Where(x => x.InteractionType == "replan_confirm" && x.ContextJson != null)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(x => x.ContextJson!.Contains(sessionId.ToString()), ct);
+        if (replanInteraction?.ContextJson is null)
+        {
+            logger.LogWarning("ResumeFromReplanConfirmationAsync 找不到 replan_confirm ContextJson sessionId={SessionId}", sessionId);
+            return PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(), "replan_confirm ContextJson 不存在");
+        }
+
+        ReplanConfirmContext? ctxRecord;
+        try
+        {
+            ctxRecord = JsonSerializer.Deserialize<ReplanConfirmContext>(replanInteraction.ContextJson, PlanConfirmJsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogError(ex, "ResumeFromReplanConfirmationAsync ContextJson 解析失敗 sessionId={SessionId}", sessionId);
+            return PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(), $"ContextJson parse failed: {ex.Message}");
+        }
+        if (ctxRecord is null)
+            return PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(), "replan_confirm ContextJson deserialize null");
+
+        logger.LogInformation(
+            "Stage 81：HITL replan_confirm resume decision={Decision} sessionId={SessionId} currentSubtaskId={SubtaskId} iter={Iter}",
+            decision, sessionId, ctxRecord.CurrentSubtaskId, ctxRecord.ReplanIteration);
+
+        return decision switch
+        {
+            "approve" => await ResumeReplanApproveAsync(session, ctxRecord, ct),
+            "edit" or "respond"
+                      => await ResumeReplanEditOrRespondAsync(session, ctxRecord, decision, contextOverride, ct),
+            "reject"  => await ResumeReplanRejectAsync(session, ctxRecord, ct),
+            _         => PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(), $"未知 decision={decision}"),
+        };
+    }
+
+    /// <summary>Stage 81 場景 C：approve = LangGraph cycles 同 subtask 重 dispatch with retry instruction（不從頭跑）。</summary>
+    private async Task<PetraOrchestratorResult> ResumeReplanApproveAsync(
+        PetraSession session, ReplanConfirmContext ctxRecord, CancellationToken ct)
+    {
+        await sessionRepo.IncrementReplanIterationAsync(session.Id, ct);
+        await db.SaveChangesAsync(ct);
+
+        // 從 currentSubtaskId 起重 dispatch（含 retry instruction prepend）— 對齊 LangGraph cycles
+        return await ContinueChainFromSubtaskAsync(
+            session, ctxRecord.CurrentSubtaskId, ctxRecord.RetryInstruction, ct);
+    }
+
+    /// <summary>Stage 81 場景 D + F：edit / respond = 重 InvokePetraReplanAsync 含 override → 新 retry instruction → 開新 replan_confirm 卡。</summary>
+    private async Task<PetraOrchestratorResult> ResumeReplanEditOrRespondAsync(
+        PetraSession session, ReplanConfirmContext ctxRecord, string decision,
+        string? contextOverride, CancellationToken ct)
+    {
+        await sessionRepo.IncrementReplanIterationAsync(session.Id, ct);
+        await db.SaveChangesAsync(ct);
+
+        var overrideText = string.IsNullOrWhiteSpace(contextOverride) ? "" : contextOverride;
+        await sessionRepo.AppendMessageAsync(session.Id, "user",
+            $"[Stage 81 replan_{decision}] {overrideText}", ct: ct);
+        await db.SaveChangesAsync(ct);
+
+        // 取 plan_confirm ContextJson 還原 currentSubtask 細節（single source of truth）
+        var planInteraction = await db.BossInteractions
+            .Where(x => x.InteractionType == "plan_confirm" && x.ContextJson != null
+                        && x.ContextJson.Contains(session.Id.ToString()))
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (planInteraction?.ContextJson is null)
+            return PetraOrchestratorResult.Failure(session.Id, Array.Empty<string>(),
+                "edit/respond 路徑找不到 plan_confirm ContextJson（補強 #A 紀律 — single source of truth）");
+
+        var planContext = JsonSerializer.Deserialize<PlanConfirmContext>(planInteraction.ContextJson, PlanConfirmJsonOptions);
+        var currentSub = planContext?.Subtasks.FirstOrDefault(s => s.Id == ctxRecord.CurrentSubtaskId);
+        if (planContext is null || currentSub is null)
+            return PetraOrchestratorResult.Failure(session.Id, Array.Empty<string>(),
+                $"plan_confirm ContextJson subtask #{ctxRecord.CurrentSubtaskId} 不存在");
+
+        var subtask = new Subtask(currentSub.Id, currentSub.Skill, currentSub.Description, currentSub.NeedsImageContext);
+        var summaries = await BuildSummariesFromSessionMessagesAsync(session.Id, ct);
+
+        // 合 retry instruction + Christ override → 新 trigger reason
+        var mergedTriggerReason = $"{ctxRecord.TriggerReason} + christ_{decision}";
+        var augmentedLastOutput = $"{ctxRecord.LastOutputPreview}\n\n[Stage 81 retry instruction 既有]: {ctxRecord.RetryInstruction}\n[Stage 81 Christ {decision.ToUpperInvariant()}]: {overrideText}";
+
+        var ctx = BuildSessionContext(session.TaskGroupId) with { SessionId = session.Id };
+        var newDecision = await InvokePetraReplanAsync(
+            ctxRecord.TaskInput, summaries, subtask,
+            mergedTriggerReason, augmentedLastOutput, ctx, ct);
+
+        if (newDecision is null || !newDecision.ShouldReplan)
+        {
+            logger.LogInformation(
+                "[Stage 81] edit/respond Petra 判斷新 plan 不需 replan sessionId={SessionId} — fallback 接受原 output 繼續",
+                session.Id);
+            return await ContinueChainFromSubtaskAsync(session, ctxRecord.CurrentSubtaskId + 1, null, ct);
+        }
+
+        var newPreview = augmentedLastOutput.Length > 500 ? augmentedLastOutput[..500] + "..." : augmentedLastOutput;
+        var (newIter, _) = await sessionRepo.GetReplanStateAsync(session.Id, ct);
+
+        await WaitForReplanConfirmationAsync(
+            session.Id, ctxRecord.TaskInput, ctxRecord.CurrentSubtaskId,
+            ctxRecord.CurrentSkillName, ctxRecord.CurrentTalentName,
+            mergedTriggerReason, newDecision.RetryInstruction, newPreview,
+            ctxRecord.CompletedCount, newIter, ct);
+        await db.SaveChangesAsync(ct);
+
+        return PetraOrchestratorResult.Replanning(
+            session.Id, ctxRecord.CurrentSubtaskId, newDecision.RetryInstruction, mergedTriggerReason);
+    }
+
+    /// <summary>Stage 81 場景 E：reject = 接受原 worker output / 繼續 chain dispatch 下個 subtask（不 cancel session / iter 不變 / v1.1 議題 1）。</summary>
+    private async Task<PetraOrchestratorResult> ResumeReplanRejectAsync(
+        PetraSession session, ReplanConfirmContext ctxRecord, CancellationToken ct)
+    {
+        // 不 increment iter — reject 不算 replan 輪數（議題 1 v1.1 紀律）
+        await sessionRepo.AppendMessageAsync(session.Id, "user",
+            $"[Stage 81 replan_reject] 不採納 Petra retry 建議 / 接受原 output 繼續 subtaskId={ctxRecord.CurrentSubtaskId}", ct: ct);
+        await db.SaveChangesAsync(ct);
+
+        return await ContinueChainFromSubtaskAsync(session, ctxRecord.CurrentSubtaskId + 1, null, ct);
+    }
+
+    /// <summary>Stage 81：從 plan_confirm ContextJson 還原 plan + talent picks → 從 startFromSubtaskId 起繼續 chain dispatch。
+    /// 補強 #A 紀律：plan_confirm ContextJson 是 single source of truth — 不另存 plan 在 replan_confirm ContextJson 避重複。</summary>
+    private async Task<PetraOrchestratorResult> ContinueChainFromSubtaskAsync(
+        PetraSession session, int startFromSubtaskId, string? retryInstructionForFirst, CancellationToken ct)
+    {
+        var planInteraction = await db.BossInteractions
+            .Where(x => x.InteractionType == "plan_confirm" && x.ContextJson != null
+                        && x.ContextJson.Contains(session.Id.ToString()))
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (planInteraction?.ContextJson is null)
+            return PetraOrchestratorResult.Failure(session.Id, Array.Empty<string>(),
+                "ContinueChainFromSubtaskAsync：找不到 plan_confirm ContextJson（補強 #A 紀律違反 — UseDynamicReplanning 應依賴 UseHITLPlanConfirmation）");
+
+        PlanConfirmContext? planContext;
+        try { planContext = JsonSerializer.Deserialize<PlanConfirmContext>(planInteraction.ContextJson, PlanConfirmJsonOptions); }
+        catch (JsonException ex) { return PetraOrchestratorResult.Failure(session.Id, Array.Empty<string>(), $"ContextJson parse failed: {ex.Message}"); }
+        if (planContext is null)
+            return PetraOrchestratorResult.Failure(session.Id, Array.Empty<string>(), "plan_confirm ContextJson deserialize null");
+
+        // session 從 paused 改 running
+        var sessionRow = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == session.Id, ct);
+        if (sessionRow is not null)
+        {
+            sessionRow.Status = "running";
+            sessionRow.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+
+        // 還原 SubtaskPlan + Talents
+        var allSubtasks = planContext.Subtasks
+            .Select(s => new Subtask(s.Id, s.Skill, s.Description, s.NeedsImageContext))
+            .ToList();
+        var allDeps = planContext.Dependencies
+            .Select(d => new DependencyEdge(d.From, d.To,
+                string.Equals(d.Type, "nested", StringComparison.OrdinalIgnoreCase) ? DependencyType.Nested : DependencyType.Sequential))
+            .ToList();
+        var fullPlan = new SubtaskPlan(allSubtasks, allDeps);
+
+        var talentsList = await talentFactory.GetAllAsync(ct);
+        var talentPicks = new List<ITalent>(allSubtasks.Count);
+        foreach (var s in planContext.Subtasks)
+        {
+            var pick = talentsList.FirstOrDefault(t => string.Equals(t.Name, s.TalentName, StringComparison.OrdinalIgnoreCase))
+                       ?? FindTalentForSkill(s.Skill, talentsList);
+            if (pick is null)
+                return PetraOrchestratorResult.Failure(session.Id, planContext.Subtasks.Select(x => x.Skill).ToList(),
+                    $"ContinueChain：找不到 Talent={s.TalentName}/Skill={s.Skill}");
+            talentPicks.Add(pick);
+        }
+
+        // 過濾剩餘 subtasks
+        var remainingSubtasks = allSubtasks.Where(s => s.Id >= startFromSubtaskId).ToList();
+        var ctx = BuildSessionContext(session.TaskGroupId) with { SessionId = session.Id };
+
+        if (remainingSubtasks.Count == 0)
+        {
+            // 全部已完成 → 直接 finalize
+            logger.LogInformation(
+                "[Stage 81] ContinueChain 0 剩餘 subtask sessionId={SessionId} → finalize",
+                session.Id);
+            var prUrl = await FinalizeGitAsync(ctx, planContext.TaskInput,
+                allSubtasks.Select(s => s.SkillName).ToList(),
+                planContext.TalentNames, ct);
+            await sessionRepo.CompleteAsync(session.Id, ct);
+            await db.SaveChangesAsync(ct);
+            return PetraOrchestratorResult.Done(session.Id,
+                allSubtasks.Select(s => s.SkillName).ToList(),
+                $"Stage 81 ContinueChain：0 剩餘 subtask / 完成 chain" + (prUrl is null ? "。" : $" + PR {prUrl}。"));
+        }
+
+        // 還原 summaries from PetraSessionMessages tool rows
+        var existingSummaries = await BuildSummariesFromSessionMessagesAsync(session.Id, ct);
+
+        // 簡化 sequential dispatch — 重 dispatch remaining subtasks（不走 level grouping / 對齊 unit test 簡化 + Trial_v25 production 真實驗）
+        return await DispatchRemainingSubtasksAsync(
+            ctx, planContext.TaskInput, fullPlan, talentPicks, existingSummaries,
+            remainingSubtasks, retryInstructionForFirst, planContext.TalentNames, ct);
+    }
+
+    /// <summary>Stage 81：simplified sequential dispatch for remaining subtasks（ContinueChain 用 / 不走 level grouping）。
+    /// 每個 subtask 後做 UpdateSessionCostUsdAsync + cap check + trigger detect（與 DispatchTalentsAsync 對齊紀律）。</summary>
+    private async Task<PetraOrchestratorResult> DispatchRemainingSubtasksAsync(
+        PetraSessionContext ctx,
+        string taskInput,
+        SubtaskPlan fullPlan,
+        IReadOnlyList<ITalent> talentPicks,
+        List<WorkerDispatchSummary> summaries,
+        IReadOnlyList<Subtask> remainingSubtasks,
+        string? retryInstructionForFirst,
+        IReadOnlyList<string> dispatchNames,
+        CancellationToken ct)
+    {
+        var idToIndex = new Dictionary<int, int>(fullPlan.Subtasks.Count);
+        for (var i = 0; i < fullPlan.Subtasks.Count; i++) idToIndex[fullPlan.Subtasks[i].Id] = i;
+
+        try
+        {
+            for (var k = 0; k < remainingSubtasks.Count; k++)
+            {
+                var subtask = remainingSubtasks[k];
+                var i = idToIndex[subtask.Id];
+                var talent = talentPicks[i];
+                var talentName = talent.Name;
+
+                var inputMessages = new List<ChatMessage>();
+                if (k == 0 && !string.IsNullOrWhiteSpace(retryInstructionForFirst))
+                {
+                    inputMessages.Add(new ChatMessage(ChatRole.System,
+                        $"[Stage 81 RETRY INSTRUCTION] {retryInstructionForFirst}"));
+                }
+                inputMessages.Add(new ChatMessage(ChatRole.User, taskInput));
+                foreach (var s in summaries)
+                {
+                    inputMessages.Add(new ChatMessage(ChatRole.Assistant,
+                        $"[前一個 worker：{s.WorkerName}（capability={s.Capability}）已完成]\n\n{s.Output}"));
+                }
+
+                logger.LogInformation(
+                    "[Stage 81] ContinueChain dispatch subtaskId={SubtaskId} talent={Talent} skill={Skill} retryInstruction={HasRetry} sessionId={SessionId}",
+                    subtask.Id, talentName, subtask.SkillName, !string.IsNullOrEmpty(retryInstructionForFirst) && k == 0, ctx.SessionId);
+
+                var agent = talent.CreateAgent(ctx, subtask.SkillName);
+                var response = await agent.RunAsync(inputMessages, session: null, options: null, ct);
+                var outputText = response.Text ?? "";
+
+                var toolCallId = Guid.NewGuid().ToString("N");
+                var toolMessage = BuildToolMessage(talentName, subtask.SkillName, outputText);
+                await sessionRepo.AppendMessageAsync(ctx.SessionId, "tool", toolMessage, toolCallId, ct);
+                await db.SaveChangesAsync(ct);
+                summaries.Add(new WorkerDispatchSummary(talentName, subtask.SkillName, outputText, toolCallId));
+
+                // cap check + trigger evaluate（與 DispatchTalentsAsync 對齊紀律）
+                var signal = await CheckReplanTriggerAfterDispatchAsync(
+                    ctx.SessionId, taskInput, subtask, talentName, outputText, summaries, ctx, ct);
+                if (signal is not null)
+                {
+                    return await HandleReplanSignalAsync(ctx.SessionId, taskInput, signal, ct);
+                }
+            }
+
+            // 全部完成 → finalize
+            var decidedCapabilities = fullPlan.Subtasks.Select(s => s.SkillName).ToList();
+            var prUrl = await FinalizeGitAsync(ctx, taskInput, decidedCapabilities, dispatchNames, ct);
+            await sessionRepo.CompleteAsync(ctx.SessionId, ct);
+            await db.SaveChangesAsync(ct);
+
+            var summary = $"Petra 完成 {dispatchNames.Count} dispatch（{string.Join(" → ", dispatchNames)}）"
+                + (prUrl is null ? "。" : $" + PR {prUrl}。");
+            return PetraOrchestratorResult.Done(ctx.SessionId, decidedCapabilities, summary);
+        }
+        catch (OperationCanceledException)
+        {
+            await sessionRepo.EscalateAsync(ctx.SessionId, CancellationToken.None);
+            await db.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[Stage 81] DispatchRemainingSubtasksAsync 失敗 sessionId={SessionId}", ctx.SessionId);
+            await sessionRepo.EscalateAsync(ctx.SessionId, CancellationToken.None);
+            await db.SaveChangesAsync(CancellationToken.None);
+            return PetraOrchestratorResult.Failure(ctx.SessionId, Array.Empty<string>(), ex.Message);
+        }
+    }
+
+    /// <summary>Stage 81：從 PetraSessionMessages tool role rows 還原 WorkerDispatchSummary list（Resume path 鋪 chain context）。
+    /// 解析 BuildToolMessage 既有 format `[{worker}|{capability}|outputLen={N}]\n{text}`。</summary>
+    private async Task<List<WorkerDispatchSummary>> BuildSummariesFromSessionMessagesAsync(
+        Guid sessionId, CancellationToken ct)
+    {
+        var toolMessages = await db.PetraSessionMessages
+            .Where(m => m.SessionId == sessionId && m.Role == "tool")
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync(ct);
+
+        var summaries = new List<WorkerDispatchSummary>(toolMessages.Count);
+        foreach (var m in toolMessages)
+        {
+            // parse `[worker|capability|outputLen=N]\ntext`
+            var content = m.Content ?? "";
+            var firstNl = content.IndexOf('\n');
+            if (firstNl <= 0) continue;
+            var header = content[..firstNl];
+            var body = content[(firstNl + 1)..];
+            if (!header.StartsWith('[') || !header.EndsWith(']')) continue;
+            var inner = header[1..^1];
+            var parts = inner.Split('|');
+            if (parts.Length < 2) continue;
+            var workerName = parts[0];
+            var capability = parts[1];
+            summaries.Add(new WorkerDispatchSummary(workerName, capability, body, m.ToolCallId ?? ""));
+        }
+        return summaries;
     }
 }

@@ -36,6 +36,10 @@ internal static class PetraWorkerHelper
         Guid? talentId = null,                                                   // Stage 74：dispatch site 傳 talentId（既有 ITalent.Id）/ null = v5 既有 path
         TalentSkillModelResolver? talentSkillModelResolver = null)              // Stage 74：null = adapter 用 ctx.Model fallback / 非 null = 三層 fallback chain resolve
     {
+        // Stage 81 議題 #5：v5 path 透傳 PetraSession.Id 給 adapter → token_logs.PetraSessionId 精準累計 cost。
+        // ctx.SessionId == Guid.Empty 視為 null（spike forward path / xUnit reflection invoke 場景）。
+        Guid? petraSessionId = ctx.SessionId == Guid.Empty ? null : ctx.SessionId;
+
         var adapter = new ClaudeCodeChatClientAdapter(
             claudeCode,
             capability,
@@ -47,7 +51,8 @@ internal static class PetraWorkerHelper
             loggerFactory.CreateLogger<ClaudeCodeChatClientAdapter>(),
             promptResolver,
             talentId,                                                            // Stage 74
-            talentSkillModelResolver);                                           // Stage 74
+            talentSkillModelResolver,                                            // Stage 74
+            petraSessionId);                                                     // Stage 81
 
         return new ChatClientAgent(
             chatClient: adapter,

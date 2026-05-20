@@ -52,6 +52,32 @@
         </MudCardContent>
     }
 
+    @if (Interaction.InteractionType == "replan_confirm" && _replanContext is not null)
+    {
+        @* Stage 81：replan_confirm UI render — Petra 建議 retry instruction + 觸發原因 + 進度顯示 + 原 worker output 預覽。
+           對齊 plan_confirm pattern 但 render 內容不同（retry instruction string vs SubtaskPlan 結構 / W8 LangGraph cycles 紀律）。 *@
+        <MudCardContent>
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                🔄 觸發原因：@_replanContext.TriggerReason — Petra 建議 retry subtask #@_replanContext.CurrentSubtaskId
+            </MudAlert>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                ✅ 已完成 @_replanContext.CompletedCount 個 subtask / 中斷在 #@_replanContext.CurrentSubtaskId（@_replanContext.CurrentTalentName / @_replanContext.CurrentSkillName）/ replan iteration #@_replanContext.ReplanIteration
+            </MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-1">📌 Petra 建議 retry instruction</MudText>
+            <MudPaper Outlined="true" Class="pa-2 mb-2" Style="background: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">@_replanContext.RetryInstruction</MudText>
+            </MudPaper>
+            @if (!string.IsNullOrWhiteSpace(_replanContext.LastOutputPreview))
+            {
+                <MudExpansionPanels Dense="true" Elevation="0">
+                    <MudExpansionPanel Text="原 worker output 預覽（前 500 字）">
+                        <MudText Typo="Typo.caption" Style="white-space: pre-wrap; word-break: break-word;">@_replanContext.LastOutputPreview</MudText>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        </MudCardContent>
+    }
+
     @if (Interaction.InteractionType == "plan_confirm")
     {
         @* Stage 80 子項 4：plan_confirm SubtaskPlan render（subtask 列表 + dependency 圖 + talent picks）。
@@ -146,6 +172,9 @@
     private List<PlanConfirmDependencyView> _planDependencies = new();
     private string? _planParseError;
 
+    // Stage 81：replan_confirm ContextJson 解析後 cache（對齊 plan_confirm pattern / 0 跨 type 重 parse）。
+    private ReplanContextView? _replanContext;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -156,20 +185,37 @@
         if (Interaction.InteractionType == "plan_confirm" && !string.IsNullOrWhiteSpace(Interaction.ContextJson))
         {
             (_planSubtasks, _planDependencies, _planParseError) = ParsePlanContext(Interaction.ContextJson);
+            _replanContext = null;
+        }
+        else if (Interaction.InteractionType == "replan_confirm" && !string.IsNullOrWhiteSpace(Interaction.ContextJson))
+        {
+            _replanContext = ParseReplanContext(Interaction.ContextJson);
+            _planSubtasks = new();
+            _planDependencies = new();
+            _planParseError = null;
         }
         else
         {
             _planSubtasks = new();
             _planDependencies = new();
             _planParseError = null;
+            _replanContext = null;
         }
     }
 
     private async Task ConfirmAndRespondAsync(InteractionActionDto action)
     {
+        // Stage 81 議題 #3：replan_reject 用獨立確認文字 — 區分 Stage 80 plan_reject「拒絕」整個 cancel 語意
+        // replan_reject = 接受原 worker output 繼續往下跑 / plan_reject = 整個任務取消
+        var (title, message) = action.Id switch
+        {
+            "replan_reject" => ("確認不採納 Petra retry 建議",
+                                "確定不採納 Petra 的 retry 建議 / 接受原結果繼續往下跑嗎？（任務不會取消 / 繼續執行剩餘 subtask）"),
+            _               => ("確認回覆", $"確定執行「{action.Label}」？"),
+        };
+
         var confirmed = await DialogService.ShowMessageBox(
-            "確認回覆",
-            $"確定執行「{action.Label}」？",
+            title, message,
             yesText: "確定", cancelText: "取消");
 
         if (confirmed != true) return;
@@ -192,6 +238,9 @@
             "design_modify"  => ("設計規劃修改",     "請輸入您對設計規劃書的修改指引"),
             "plan_edit"      => ("修改計劃",         "請輸入您對 Petra 拆解計劃的修改意見（例：Cody 只做 backend、UI 留 Vera 處理）"),
             "plan_respond"   => ("補充指示",         "請輸入額外指示或考量（例：另外考慮 mobile responsive）"),
+            // Stage 81：replan_confirm 4 decision pattern
+            "replan_edit"    => ("修改 retry instruction", "請輸入您對 Petra 建議的 retry instruction 的修改意見（例：請 Cody 改用其他方式 review）"),
+            "replan_respond" => ("補充 retry 指示",   "請輸入額外指示或考量（例：請 Cody 加 mobile responsive 考量）"),
             _                => (action.Label,       "請輸入修改意見")
         };
 
@@ -275,4 +324,39 @@
     private sealed record PlanConfirmSubtaskView(int Id, string Skill, string Description, string TalentName, bool NeedsImageContext);
 
     private sealed record PlanConfirmDependencyView(int From, int To, string Type);
+
+    // Stage 81：replan_confirm ContextJson 對應 view record（對齊後端 PetraOrchestratorService.ReplanConfirmContext schema / camelCase JsonOpts）。
+    private sealed record ReplanContextView(
+        int CurrentSubtaskId,
+        string CurrentSkillName,
+        string CurrentTalentName,
+        string TriggerReason,
+        string RetryInstruction,
+        string LastOutputPreview,
+        int CompletedCount,
+        int ReplanIteration);
+
+    // Stage 81：replan_confirm ContextJson 解析 — JsonDocument 淺解避免雙端 type linking（Dashboard 0 反向依賴 Bot 內部 record）。
+    // schema 對齊 PetraOrchestratorService.ReplanConfirmContext（camelCase JsonOpts / PlanConfirmJsonOptions）。
+    private static ReplanContextView? ParseReplanContext(string contextJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(contextJson);
+            var root = doc.RootElement;
+            return new ReplanContextView(
+                CurrentSubtaskId:  root.TryGetProperty("currentSubtaskId", out var p1) && p1.ValueKind == JsonValueKind.Number ? p1.GetInt32() : 0,
+                CurrentSkillName:  root.TryGetProperty("currentSkillName", out var p2) ? p2.GetString() ?? "" : "",
+                CurrentTalentName: root.TryGetProperty("currentTalentName", out var p3) ? p3.GetString() ?? "" : "",
+                TriggerReason:     root.TryGetProperty("triggerReason", out var p4) ? p4.GetString() ?? "" : "",
+                RetryInstruction:  root.TryGetProperty("retryInstruction", out var p5) ? p5.GetString() ?? "" : "",
+                LastOutputPreview: root.TryGetProperty("lastOutputPreview", out var p6) ? p6.GetString() ?? "" : "",
+                CompletedCount:    root.TryGetProperty("completedCount", out var p7) && p7.ValueKind == JsonValueKind.Number ? p7.GetInt32() : 0,
+                ReplanIteration:   root.TryGetProperty("replanIteration", out var p8) && p8.ValueKind == JsonValueKind.Number ? p8.GetInt32() : 0);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

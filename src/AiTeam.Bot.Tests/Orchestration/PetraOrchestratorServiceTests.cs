@@ -1,6 +1,7 @@
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.Orchestration.Petra;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Repositories;
 using Microsoft.Agents.AI;
@@ -840,6 +841,7 @@ public class PetraOrchestratorServiceTests
             true,
             talentNameToIdMap,
             null,   // Stage 79：images null（Test 29 不驗 image dispatch / DispatchTalentsAsync 簽名擴 images param 對齊）
+            new PetraSessionContext(session.Id, Guid.Empty, 0, "", "", ""),   // Stage 81：ctx param（不走 replan path / WorkflowSettingsResolver=null! 不 fire trigger）
             CancellationToken.None
         })!;
         await task;
@@ -880,6 +882,7 @@ public class PetraOrchestratorServiceTests
             true,
             talentNameToIdMap,
             null,   // Stage 79：images null（Test 30 不驗 image dispatch / DispatchTalentsAsync 簽名擴 images param 對齊）
+            new PetraSessionContext(session.Id, Guid.Empty, 0, "", "", ""),   // Stage 81：ctx param
             CancellationToken.None
         })!;
         await task;
@@ -1118,5 +1121,191 @@ roster={{capabilityRoster}}
         Assert.DoesNotContain("{{capabilityRoster}}", prompt);
         Assert.DoesNotContain("{{decompositionSection}}", prompt);
         Assert.DoesNotContain("{{outputSection}}", prompt);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Stage 81 unit tests（場景 B-L unit test 層 / production 真實業務驗留 Trial_v25）
+    // ═════════════════════════════════════════════════════════════════════════
+
+    // ─── Stage 81 場景 B1：DetectReplanTrigger Vera critical 非空 → 觸發 ──────
+    [Fact]
+    public void Stage81_DetectReplanTrigger_VeraCritical_True()
+    {
+        // schema 對齊 CLAUDE_Vera.md L113 — "critical":[{"id":...,"file":...,"line":...,"message":...}]
+        var veraOutput = """{"critical":[{"id":1,"file":"PipelineView.razor","line":42,"message":"Circuit 斷線無 catch"}],"warning":[],"info":[],"summary":"…","impact":"…"}""";
+
+        var (shouldTrigger, reason) = InvokeDetectReplanTrigger("code_review", veraOutput);
+
+        Assert.True(shouldTrigger);
+        Assert.Equal("vera_critical", reason);
+    }
+
+    // ─── Stage 81 場景 B2：DetectReplanTrigger Quinn status=failed → 觸發 ─────
+    [Fact]
+    public void Stage81_DetectReplanTrigger_QuinnFailed_True()
+    {
+        // schema 對齊 CLAUDE_Quinn.md L75 — "status": "passed|failed|no_applicable_tests"
+        var quinnOutput = """{"status":"failed","passed_tests":[],"failed_tests":["FooTests.cs 第 23 行型別不相符"]}""";
+
+        var (shouldTrigger, reason) = InvokeDetectReplanTrigger("qa_testing", quinnOutput);
+
+        Assert.True(shouldTrigger);
+        Assert.Equal("quinn_failed", reason);
+    }
+
+    // ─── Stage 81 場景 B3：normal output（critical 空陣列 / Quinn passed）→ 不觸發 ──
+    [Theory]
+    [InlineData("code_review",  """{"critical":[],"warning":[],"info":[],"summary":"OK"}""", false, "Vera critical 空 array 不應 match")]
+    [InlineData("qa_testing",   """{"status":"passed","passed_tests":["..."]}""",            false, "Quinn passed 不應 match")]
+    [InlineData("code_implementation", """{"critical":[{"file":"x"}]}""",                    false, "Cody (code_implementation) skill 不應觸發 replan，避免 scope creep")]
+    [InlineData("documentation",       """{"status":"failed"}""",                            false, "Sage (documentation) skill 不應觸發 replan")]
+    public void Stage81_DetectReplanTrigger_NormalOutput_False(string skill, string output, bool expected, string reason)
+    {
+        var (shouldTrigger, _) = InvokeDetectReplanTrigger(skill, output);
+        Assert.Equal(expected, shouldTrigger);
+        _ = reason;   // 文件用：assertion 失敗時 reason 釐清預期
+    }
+
+    // ─── Stage 81 場景 I：QA prepend — adapter capability=qa_testing → prompt 加 QA 報告紀律 ───
+    [Theory]
+    [InlineData("qa_testing",          true,  "Quinn qa_testing 必含 QA 報告紀律 prepend")]
+    [InlineData("code_implementation", false, "Cody 不含 QA 報告紀律 (Cody-only 廣範圍指令 prepend 已驗 in Test 13)")]
+    [InlineData("code_review",         false, "Vera 不含 QA 報告紀律")]
+    [InlineData("documentation",       false, "Sage 不含 QA 報告紀律")]
+    public async Task Stage81_Adapter_QaSummaryEnforce_PrependsForQaTestingOnly(string capability, bool shouldContainQa, string _reason)
+    {
+        var stub = new StubClaudeCodeService();
+        var adapter = new ClaudeCodeChatClientAdapter(
+            stub, capability, "TestWorker", "mock-model", "mock-key",
+            workingDir: "",
+            tokenLogService: null,
+            NullLogger<ClaudeCodeChatClientAdapter>.Instance);
+
+        var input = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "跑 dotnet test 補測試") };
+        await adapter.GetResponseAsync(input);
+
+        Assert.NotNull(stub.LastReceivedPrompt);
+        if (shouldContainQa)
+        {
+            Assert.Contains("QA 報告紀律", stub.LastReceivedPrompt!);
+            Assert.Contains("CLAUDE_Quinn.md JSON schema", stub.LastReceivedPrompt!);
+        }
+        else
+        {
+            Assert.DoesNotContain("QA 報告紀律", stub.LastReceivedPrompt!);
+        }
+    }
+
+    // ─── Stage 81 場景 J：BuildPetraSystemPrompt few-shot 補 NeedsImageContext negative example ──
+    [Fact]
+    public void Stage81_BuildPetraSystemPrompt_NeedsImageContext_NegativeExamplePresent()
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "BuildPetraSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var prompt = (string)method!.Invoke(null, new object?[] { "code_implementation,code_review,qa_testing", true, null })!;
+
+        // 純文字 prompt 反例段（議題 #2 修法）
+        Assert.Contains("純文字 prompt 無 attachment", prompt);
+        Assert.Contains("補 PetraInbox FIFO ordering xUnit test", prompt);
+        Assert.Contains("含 image 但純後端", prompt);
+        Assert.Contains("修 PetraInboxRepository.GetRecentAsync", prompt);
+    }
+
+    // ─── Stage 81 場景 K：Cancelled 工廠 DispatchedWorkerCount=0 / Success=true ────
+    [Fact]
+    public void Stage81_PetraOrchestratorResult_Cancelled_ZeroDispatched()
+    {
+        var sessionId = Guid.NewGuid();
+        var caps = new[] { "code_implementation", "code_review", "qa_testing", "documentation" };
+
+        var result = PetraOrchestratorResult.Cancelled(sessionId, caps, "Stage 80 reject test");
+
+        Assert.Equal(sessionId, result.SessionId);
+        Assert.True(result.Success);
+        Assert.Equal(0, result.DispatchedWorkerCount);   // 真實 0 dispatched（vs Done 雜用 caps.Count=4 / 議題 #3 修法）
+        Assert.Equal(caps, result.DecidedCapabilities);
+    }
+
+    // ─── Stage 81：Replanning 工廠攜帶 currentSubtaskId + retryInstruction ──────
+    [Fact]
+    public void Stage81_PetraOrchestratorResult_Replanning_CarriesSubtaskIdAndInstruction()
+    {
+        var sessionId = Guid.NewGuid();
+        var result = PetraOrchestratorResult.Replanning(sessionId, 2, "Cody 改用 try-catch", "vera_critical");
+
+        Assert.Equal(sessionId, result.SessionId);
+        Assert.True(result.Success);
+        Assert.Equal(0, result.DispatchedWorkerCount);   // pause 期間 0 dispatch
+        Assert.Equal(2, result.PausedAtSubtaskId);
+        Assert.Equal("Cody 改用 try-catch", result.RetryInstruction);
+        Assert.Contains("vera_critical", result.Summary);
+    }
+
+    // ─── Stage 81 場景 L / 議題 #8：MapActionToDecision 涵蓋 8 個 action（plan_* + replan_*）──
+    [Theory]
+    [InlineData("plan_approve",   "approve")]
+    [InlineData("plan_edit",      "edit")]
+    [InlineData("plan_reject",    "reject")]
+    [InlineData("plan_respond",   "respond")]
+    [InlineData("replan_approve", "approve")]
+    [InlineData("replan_edit",    "edit")]
+    [InlineData("replan_reject",  "reject")]
+    [InlineData("replan_respond", "respond")]
+    [InlineData("unknown_action", null)]
+    public void Stage81_PlanConfirmationProcessor_MapActionToDecision_HandlesBothPrefixes(
+        string action, string? expected)
+    {
+        var result = PlanConfirmationProcessor.MapActionToDecision(action);
+        Assert.Equal(expected, result);
+    }
+
+    // ─── Stage 81：ReplanConfirmActionsJson 4 button 結構 + replan_reject warning 色（議題 #3）──
+    [Fact]
+    public void Stage81_ReplanConfirmActionsJson_FourButtons_RejectIsWarning()
+    {
+        var json = InteractionService.ReplanConfirmActionsJson;
+
+        // 4 button id 完整
+        Assert.Contains("\"id\":\"replan_approve\"", json);
+        Assert.Contains("\"id\":\"replan_edit\"",    json);
+        Assert.Contains("\"id\":\"replan_reject\"",  json);
+        Assert.Contains("\"id\":\"replan_respond\"", json);
+
+        // replan_reject 用 warning 色（vs Stage 80 plan_reject error / 議題 #3 區分修法）
+        Assert.Contains("\"id\":\"replan_reject\",\"label\":\"不採納（保留原結果）↩\",\"color\":\"warning\"", json);
+        // approve 走 success
+        Assert.Contains("\"id\":\"replan_approve\",\"label\":\"核准 ✅\",\"color\":\"success\"", json);
+
+        // edit / respond requiresInput=true（modal 收文字）
+        Assert.Contains("\"id\":\"replan_edit\",\"label\":\"修改 ✏️\",\"color\":\"info\",\"requiresInput\":true", json);
+        Assert.Contains("\"id\":\"replan_respond\",\"label\":\"補充 💬\",\"color\":\"info\",\"requiresInput\":true", json);
+    }
+
+    // ─── Stage 81：WorkflowSettings default flag — UseDynamicReplanning 預設 false（守 Stage 80 baseline）──
+    [Fact]
+    public void Stage81_WorkflowSettings_UseDynamicReplanning_DefaultFalse()
+    {
+        var settings = new WorkflowSettings();
+        Assert.False(settings.UseDynamicReplanning);
+        Assert.Equal(3, settings.MaxReplanIterations);
+        Assert.Equal(5m, settings.ReplanCostCapUsd);
+    }
+
+    // ─── Stage 81 helper：reflection invoke private static DetectReplanTrigger（pure function） ──
+    private static (bool ShouldTrigger, string TriggerReason) InvokeDetectReplanTrigger(string skill, string output)
+    {
+        var method = typeof(PetraOrchestratorService).GetMethod(
+            "DetectReplanTrigger",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        var result = method!.Invoke(null, new object[] { skill, output })!;
+        // ValueTuple<bool, string> reflection access — pattern-match
+        var type = result.GetType();
+        var shouldTrigger = (bool)type.GetField("Item1")!.GetValue(result)!;
+        var reason = (string)type.GetField("Item2")!.GetValue(result)!;
+        return (shouldTrigger, reason);
     }
 }

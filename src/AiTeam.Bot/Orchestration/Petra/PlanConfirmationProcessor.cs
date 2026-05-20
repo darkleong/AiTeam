@@ -7,11 +7,13 @@ namespace AiTeam.Bot.Orchestration.Petra;
 
 /// <summary>
 /// Stage 80：HITL plan_confirm 4 decision dispatch consumer（BackgroundService polling 模式）。
+/// Stage 81：擴 routing `replan_confirm`（動態 replan + HITL retry gate） — 同 BackgroundService 兩 InteractionType 共用 polling + dispatch 分支。
 ///
 /// 設計脈絡：Stage 78c 一次過砍了 InteractionProcessor / WorkflowEngine / Pipeline framework 整套
 /// — v5.5 baseline 內 BossInteraction 是「Dashboard 純顯示 + Christ ack」單向通道 / 0 Bot 端消費 dispatch。
 /// Stage 80 引入 HITL plan_confirm 後需要把 responded `plan_confirm` interaction 拉起餵 Petra resume 4 decision routing
 /// — 故新建本 BackgroundService 取代「InteractionProcessor 路由擴」（Roadmap §5 設計意圖：4 decision dispatch / 不是要復活 InteractionProcessor 框架）。
+/// Stage 81：對齊 Roadmap §子項 6 — `replan_confirm` 純複用此 BackgroundService（0 新 BackgroundService）。
 ///
 /// 紀律對齊：
 /// - 3 秒 polling 間隔（對齊 PetraInboxProcessor / Stage 78c 前 InteractionProcessor 既有紀律）
@@ -32,7 +34,7 @@ public class PlanConfirmationProcessor(
         try { await Task.Delay(TimeSpan.FromSeconds(StartupDelaySeconds), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
-        logger.LogInformation("PlanConfirmationProcessor 啟動 — 3s polling responded plan_confirm interactions");
+        logger.LogInformation("PlanConfirmationProcessor 啟動 — 3s polling responded plan_confirm / replan_confirm interactions (Stage 81)");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,6 +59,7 @@ public class PlanConfirmationProcessor(
     {
         Guid interactionId;
         Guid sessionId;
+        string interactionType;
         string responseAction;
         string? responseContent;
 
@@ -64,9 +67,10 @@ public class PlanConfirmationProcessor(
         {
             var pickDb = pickScope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // FIFO：最早 RespondedAt 的 plan_confirm responded interaction 優先
+            // FIFO：最早 RespondedAt 的 plan_confirm / replan_confirm responded interaction 優先
+            // Stage 81：擴 filter 涵蓋 replan_confirm（動態 replan HITL retry gate）
             var pending = await pickDb.BossInteractions
-                .Where(x => x.InteractionType == "plan_confirm"
+                .Where(x => (x.InteractionType == "plan_confirm" || x.InteractionType == "replan_confirm")
                             && x.Status == "responded"
                             && !x.ProcessedByBot)
                 .OrderBy(x => x.RespondedAt)
@@ -81,17 +85,18 @@ public class PlanConfirmationProcessor(
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.ProcessedByBot, true), ct);
             if (marked == 0) return;
 
-            // 從 ContextJson 還原 sessionId（PetraOrchestratorService.WaitForPlanConfirmationAsync 寫入時 SessionId 是 root field）
+            // 從 ContextJson 還原 sessionId（PetraOrchestratorService.WaitFor*ConfirmationAsync 寫入時 sessionId 是 root field）
             var sid = ExtractSessionId(pending.ContextJson);
             if (sid is null)
             {
                 logger.LogWarning(
-                    "PlanConfirmationProcessor: ContextJson 缺 sessionId interactionId={Id} — skip", pending.Id);
+                    "PlanConfirmationProcessor: ContextJson 缺 sessionId interactionId={Id} type={Type} — skip", pending.Id, pending.InteractionType);
                 return;
             }
 
             interactionId   = pending.Id;
             sessionId       = sid.Value;
+            interactionType = pending.InteractionType;
             responseAction  = pending.ResponseAction ?? "";
             responseContent = pending.ResponseContent;
         }
@@ -100,32 +105,41 @@ public class PlanConfirmationProcessor(
         if (decision is null)
         {
             logger.LogWarning(
-                "PlanConfirmationProcessor: 未知 ResponseAction={Action} interactionId={Id} — skip dispatch",
-                responseAction, interactionId);
+                "PlanConfirmationProcessor: 未知 ResponseAction={Action} interactionId={Id} type={Type} — skip dispatch",
+                responseAction, interactionId, interactionType);
             return;
         }
 
         logger.LogInformation(
-            "PlanConfirmationProcessor pickup interactionId={Id} sessionId={SessionId} action={Action} decision={Decision}",
-            interactionId, sessionId, responseAction, decision);
+            "PlanConfirmationProcessor pickup interactionId={Id} type={Type} sessionId={SessionId} action={Action} decision={Decision}",
+            interactionId, interactionType, sessionId, responseAction, decision);
 
         await using var runScope = serviceProvider.CreateAsyncScope();
         var orchestrator = runScope.ServiceProvider.GetRequiredService<PetraOrchestratorService>();
-        var result = await orchestrator.ResumeFromPlanConfirmationAsync(sessionId, decision, responseContent, ct);
+
+        // Stage 81：dispatch 分支 — plan_confirm 走 Stage 80 既有 / replan_confirm 走新 ResumeFromReplanConfirmationAsync
+        var result = interactionType switch
+        {
+            "plan_confirm"   => await orchestrator.ResumeFromPlanConfirmationAsync(sessionId, decision, responseContent, ct),
+            "replan_confirm" => await orchestrator.ResumeFromReplanConfirmationAsync(sessionId, decision, responseContent, ct),
+            _ => Orchestration.Petra.PetraOrchestratorResult.Failure(sessionId, Array.Empty<string>(),
+                    $"未知 InteractionType={interactionType}"),
+        };
 
         logger.LogInformation(
-            "PlanConfirmationProcessor 完成 interactionId={Id} sessionId={SessionId} decision={Decision} success={Success} dispatched={Count}",
-            interactionId, sessionId, decision, result.Success, result.DispatchedWorkerCount);
+            "PlanConfirmationProcessor 完成 interactionId={Id} type={Type} sessionId={SessionId} decision={Decision} success={Success} dispatched={Count}",
+            interactionId, interactionType, sessionId, decision, result.Success, result.DispatchedWorkerCount);
     }
 
-    /// <summary>4 decision pattern action → decision string mapping（對齊 InteractionService.PlanConfirmActionsJson）。</summary>
+    /// <summary>4 decision pattern action → decision string mapping（對齊 InteractionService.PlanConfirmActionsJson + ReplanConfirmActionsJson）。
+    /// Stage 81：擴 4 replan_* action 對應同 decision string（dispatch 端用 interactionType 分支走不同 Resume method）。</summary>
     internal static string? MapActionToDecision(string action) => action switch
     {
-        "plan_approve" => "approve",
-        "plan_edit"    => "edit",
-        "plan_reject"  => "reject",
-        "plan_respond" => "respond",
-        _              => null,
+        "plan_approve" or "replan_approve" => "approve",
+        "plan_edit"    or "replan_edit"    => "edit",
+        "plan_reject"  or "replan_reject"  => "reject",
+        "plan_respond" or "replan_respond" => "respond",
+        _                                  => null,
     };
 
     /// <summary>淺解 JSON 取 sessionId field（避雙端 PlanConfirmContext type 重新 link）— JsonDocument property lookup 0 額外 dep。</summary>
