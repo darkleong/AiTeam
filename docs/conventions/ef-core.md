@@ -217,6 +217,17 @@ EF Core auto-generated Migration **不識別 C# property initializer** — 對 `
 
 **對齊既有紀律**：Trial_v9 + Stage 67 揭「PostgreSQL NULL unique 雷三層修根因」同類根因延伸 — Migration 不全照 entity C# 行為 / 必檢視。
 
+### ⚠️ `dotnet ef migrations add` 不要用 `--no-build`（Stage 80 揭）
+
+EF Core tools `dotnet ef migrations add` 預設**先 build 才執行**（用最新 DLL 讀 entity / DbContext model snapshot 比對產 Migration）。若加 `--no-build` flag 跳過 build → 用 obj/ 內 **stale DLL**（不含本次 entity 改動）→ 產出**空 Migration**（什麼都沒抓到）+ **`AppDbContextModelSnapshot.cs` 也被 stale snapshot 覆蓋**（後續 Migration 全部基準錯亂）。
+
+**修法**：
+1. **預設不要加 `--no-build`** — 對齊 EF tools 預設行為（多 30 秒 build 換正確 Migration 值得）
+2. 若已踩雷 → `git checkout` 還原 stale snapshot + 重 build 不加 `--no-build` 再跑 `migrations add`
+3. 萬不得已不能 build（broken state）→ 手動寫 Migration `.cs` + 從**正確的** `AppDbContextModelSnapshot.cs` 複製產 Designer.cs（避免動 snapshot baseline）
+
+**Stage 80 真實案例**：[`20260520023659_Stage80BossInteractionSystemNotes.cs`](../../src/AiTeam.Data/Migrations/20260520023659_Stage80BossInteractionSystemNotes.cs) 第一次跑用 `--no-build` 產空 Migration / 用 stale snapshot 覆蓋 → git checkout 還原 + 手動寫 Migration + Python 腳本產 Designer.cs 救回。
+
 ## Repository 模式
 
 ```csharp

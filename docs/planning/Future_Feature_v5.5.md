@@ -579,7 +579,40 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v23 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 預留（A HITL plan confirmation + 🔴 #1 hotfix 合進 / M）** → Trial_v24（驗 HITL 業務體驗）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Trial_v23 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → Trial_v24（驗 HITL 業務體驗）→ 81 預留（B 動態 re-planning / L）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Stage 80 ✅ A HITL plan confirmation 閘門 + Trial_v23 4 議題收口（2026-05-20） v3.72.0 ⭐⭐⭐⭐⭐
+
+**v3.72.0 / Stage 80 Forge 結案** — commit `958ad6e` 單 commit + 結案第一段 `1653c12` / 22 檔變動 net +2014 行 / 0 follow-up bug / Aria gate1 Tier 0+1+2+Tier 3 #11 通過（升 1 級補 Forge 跳過 Plan Mode 漏層）/ **連續 16 Stage 0 follow-up + clean delivery 連續第八次** ⭐⭐⭐⭐⭐⭐⭐⭐（Stage 75-78c-79-80）
+
+**戰略意義**：**Stage 80 達成 Christ 親口要的 HITL plan confirmation 業務功能** — Petra 拆完 plan 後 flag-gated 開 BossInteraction plan_confirm 卡 + 4 decision pattern（approve / edit / reject / respond）+ session pause/resume — 業界 LangGraph interrupt + 4 decision pattern 業界紀律內化到 AiTeam v5.5 orchestrator + Trial_v24 啟動條件達成 + Phase 4 接近完整收口。
+
+**HITL 主體（5 子項）**：
+- §1 BossInteraction.InteractionType `plan_confirm` + InteractionCenter switch Icon/Color/Label + PlanConfirmActionsJson 4 button 常數
+- §2 HITL pause point [PetraOrchestratorService.cs:111-124](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L111) `DecideTalentsWithPlanAsync` 完成後 + `DispatchTalentsAsync` 前 + `WaitForPlanConfirmationAsync` 開卡 + `sessionRepo.PauseAsync`
+- §3 4 decision resume routing — `ResumeFromPlanConfirmationAsync` + 3 子 method（Approve / EditOrRespond / Reject）+ `DispatchAndFinalizeAsync` helper（approve path 從 ContextJson 重建 SubtaskPlan + talentPicks 不重 call Petra LLM cost 節省 ⭐）
+- §4 InteractionCard.razor plan_confirm UI — SubtaskPlan render（subtask 列表 + dependency 圖 + 附圖 chip + talent picks）+ 4 button + ContextJson parse 失敗 fallback alert 0 crash
+- §5 **新建 `PlanConfirmationProcessor` BackgroundService（Forge spike 偏離 plan）** — Roadmap §5 寫「InteractionProcessor 路由擴」對齊 Stage 78c 已砍真實 → 新建 BackgroundService 達成同等設計意圖（3s polling responded plan_confirm + ProcessedByBot 原子標 + IServiceScope per row + 對齊 PetraInboxProcessor 紀律）
+
+**Trial_v23 議題收口（4 子項）**：
+- 🔴 #1 DashboardAppSettingsService ctor → `IDbContextFactory<AppDbContext>` + 3 method `await using var db = await dbFactory.CreateDbContextAsync(ct)` + Program.cs `AddDbContextFactory<AppDbContext>` 並存註冊（修 Blazor InteractiveServer 並行 OnInit 撞 Scoped DbContext 根因）
+- 🟡 #2 CommandHandler v5.5 path 改 `EmptyActionsJson`（0 按鈕純 ack 卡）+ description 純 Christ 任務 + systemNotes Victoria reply
+- 🟡 #3 **不修紀錄** — PipelineView 5 handler 真實是 Stage 78c 砍後 placeholder code 0 production risk（Aria gate1 反查 production code 真實狀態紀律候選）
+- 🟡 #4 BossInteraction.SystemNotes? + Migration AddColumn nullable + AppSetting `Workflow:UseHITLPlanConfirmation` seed default false + InteractionCard 主題變數深色友善
+
+**AppSetting flag default false 守 v5.5 baseline 0 regression** — Trial_v24 開時切 true → 結案切回 false（對齊 aria-trial-summary skill flag 切回紀律）
+
+**Forge self-verify 全 8 場景 PASS**（A flag=false 0 regression + B flag=true 開卡 + C plan_approve + D plan_edit + E plan_reject + F plan_respond + G 🔴 #1 hotfix verify 5 並行 Home GET 0 second operation + H 🟡 #4 SystemNotes 後端 SoT）/ Christ 視覺驗收項目留 Trial_v24
+
+**4 踩坑紀錄 / 2 know-how 升級**：
+① `dotnet ef migrations add --no-build` stale DLL 雷 → 升級 `docs/conventions/ef-core.md` 加紀律
+② Roadmap §5 漏掃 Stage 78c 砍範圍 InteractionProcessor（Aria 規劃 grep 紀律候選 / 留 /aria-end workflow_aria.md 第三節 A 第 7 條延伸範圍 #12 升級）
+③ Internal API JSON body lowercase `text` 同類根因第四次 → 升級 `forge-self-verify skill` 加 JSON body 欄位名紀律（既有「Internal API port + auth + endpoint」紀律延伸 cover JSON body）
+④ MockMode auto-approve fallback `ack` 對 plan_confirm 無效（不阻塞 / Future_Feature 候選）
+
+**Aria 自我反思候選 2 條**（留 /aria-end 統一升級）：
+- 規劃 reference 既有 class / processor 時必 grep verify 真實存在（特別 Stage 78a/b/c 砍範圍對 source of truth 紀律的影響）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #12
+- Vera review 並非絕對正確 / Aria gate1 Tier 0 反查 Vera/Cody review 對 production code 真實狀態紀律候選
 
 ### Phase 3 cost 總預估（對齊自省點 #38 雙因子）
 
