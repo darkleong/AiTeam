@@ -2,8 +2,8 @@
 
 > 對應系統版本：v3.71.0 → v3.72.0
 > 規模：M+
-> 狀態：規劃中
-> 文件版本：v1.0
+> 狀態：✅ 已完成（2026-05-20）
+> 文件版本：v2.0
 > 性質：新業務功能（HITL plan confirmation 閘門 — Petra 拆完 plan 開 BossInteraction + 4 decision pattern + Petra pause/resume）+ Trial_v23 4 議題收口（🔴 #1 DbContext concurrency hotfix + 🟡 #2 v5.5 confirm 按鈕重新定義 + 🟡 #4 InteractionCard 設計 issue）
 > Model + Effort 建議：**Opus 1M + high**（M+ 規模 / Christ 自決升 Extra high 兜底空間 / 不慣性推 Extra high 對齊自省點 #39 反向校準）
 > Stage 期間餘額影響：**0 燒 AiTeam 餘額**（Aria + Forge session 走 Claude Code subscription）/ Trial_v24 才燒（預估 $1-3）
@@ -196,8 +196,80 @@ Vera Case A review 揭 critical 議題 grep verify 後揭真實是 false positiv
 
 ---
 
+## 實作紀錄（v2.0 / 2026-05-20）
+
+### 實作完成項目
+
+**HITL 主體（5 子項）**：
+1. ✅ **`plan_confirm` InteractionType** + Icon/Color/Label 加入 [InteractionCenter.razor.cs](../../src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs) 三個 switch + `PlanConfirmActionsJson` 4 button 常數加入 [InteractionService.cs](../../src/AiTeam.Bot/Services/InteractionService.cs:84)
+2. ✅ **HITL pause point** 插在 [PetraOrchestratorService.cs:111-124](../../src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs#L111)（`DecideTalentsWithPlanAsync` 完成後 / `DispatchTalentsAsync` 前）+ `WaitForPlanConfirmationAsync` 開 BossInteraction + `sessionRepo.PauseAsync` + return `PetraOrchestratorResult.Paused`
+3. ✅ **4 decision resume routing** — `ResumeFromPlanConfirmationAsync(sessionId, decision, contextOverride, ct)` + 3 子 method（`ResumeApproveAsync` / `ResumeEditOrRespondAsync` / `ResumeRejectAsync`）+ `DispatchAndFinalizeAsync` helper（從 StartAsync 抽出收尾段供 approve resume + 既有 StartAsync 共用）
+4. ✅ **InteractionCard.razor plan_confirm UI** — SubtaskPlan render（subtask 列表 + dependency 圖 + 附圖 chip + talent picks）+ 4 button（edit/respond 走 TextInputDialog）+ ContextJson 透過 BossInteractionDto 暴露前端 + JsonDocument 淺解避免雙端 type linking
+5. ✅ **新建 PlanConfirmationProcessor BackgroundService**（取代 Stage 78c 砍掉的 InteractionProcessor）— 3s polling responded plan_confirm + `ProcessedByBot` 原子標 + IServiceScope per row + ResumeFromPlanConfirmationAsync dispatch
+
+**Trial_v23 議題收口（4 子項）**：
+- 🔴 #1 ✅ [DashboardAppSettingsService.cs](../../src/AiTeam.Dashboard/Services/DashboardAppSettingsService.cs) ctor → `IDbContextFactory<AppDbContext>` + 3 method `await using var db = await dbFactory.CreateDbContextAsync(ct)` + Program.cs `AddDbContextFactory<AppDbContext>` 並存註冊
+- 🟡 #2 ✅ [CommandHandler.cs](../../src/AiTeam.Bot/Discord/CommandHandler.cs) 兩個 v5.5 path 改 `EmptyActionsJson`（0 按鈕純 ack 卡）+ description = userInput / `BuildCeoConfirmDescription` 整 method 砍（0 caller）
+- 🟡 #3 ✅ **不修紀錄** — grep verify [PipelineView.razor.cs:205-228](../../src/AiTeam.Dashboard/Components/Pages/Tasks/PipelineView.razor.cs#L205) 5 handler 真實是 Stage 78c 砍後 placeholder（4 行 `Snackbar.Add`），對齊「Vera review 並非絕對正確 / production code 真實狀態反查」紀律候選
+- 🟡 #4 ✅ `BossInteraction.SystemNotes?` 加欄位 + Migration `Stage80BossInteractionSystemNotes`（AddColumn nullable + AppSetting `Workflow:UseHITLPlanConfirmation` seed default false）+ BossInteractionDto + DashboardTaskService MapToDto + CommandHandler 寫入 `ceoResponse.Reply` + InteractionCard 獨立區塊（`var(--mud-palette-background-grey)` 背景 + `var(--mud-palette-divider)` border / 深色主題友善）
+
+**版本 bump**：`src/Directory.Build.props` 3.71.0 → 3.72.0。
+
+### 關鍵設計決策
+
+1. **`PlanConfirmationProcessor` 新 BackgroundService（Forge spike 偏離 plan）** — Roadmap §5 寫「InteractionProcessor 路由擴」但 Stage 78c 已砍 InteractionProcessor。Forge 對齊 Roadmap 設計意圖（4 decision dispatch / 不是要復活 InteractionProcessor 框架）新建專責 BackgroundService。對齊既有 `PetraInboxProcessor` 3s polling + IServiceScope per row 紀律。
+
+2. **`PetraSession.Status="paused"` + 「重啟重跑」紀律對齊** — `PetraSessionRecoveryService` 只掃 `running` session（不掃 paused）→ Bot 重啟期 paused session 不被誤救 + plan_confirm BossInteraction 仍在 DB / 0 漏單 / 等 PlanConfirmationProcessor 拉起 resume。
+
+3. **approve path 從 ContextJson 還原 SubtaskPlan + Talents 而非重 call Petra LLM** — Christ 已 approve 的 plan 必須沿用 / 不能 Petra 重 decide（避免漂移）/ 0 額外 LLM cost。
+
+4. **edit/respond path 同 session 內 redecide（不開新 PetraSession）** — append `[plan_confirm edit/respond]` user message 進 session messages 維持 audit trail / loop until approve/reject 對齊業界 LangGraph interrupt 慣例。
+
+5. **`SystemNotes` 後端 SoT 取代前端 ParseDescription** — Description = 純 Christ 任務 / SystemNotes = 系統提示。前端 0 string pattern 耦合 / 未來擴展系統提示 0 schema migration。
+
+6. **MockMode auto-approve 對 plan_confirm 預設不處理（fallback `ack` 觸發 skip）** — 避免 MockMode 自動干擾 4 decision 手動測試 / production 0 影響（MockMode=false 才是 production）。Follow-up 候選留 Future_Feature.md 純 Mock 自驗工具增強。
+
+### 驗收結果（Forge self-verify 2026-05-20）
+
+| 場景 | 結果 | 重點驗證 |
+|---|---|---|
+| **G** 🔴 #1 DbContext concurrency | ✅ | 5 並行 Home GET → 0 `second operation` / 0 `Circuit terminated` |
+| **A** flag=false baseline | ✅ | 0 `WaitForPlanConfirmationAsync` fire / 0 plan_confirm 卡 / 真實 task 跑通 Cody dispatch → 完成 |
+| **B** flag=true HITL 開卡 | ✅ | `Stage 80：HITL plan_confirm 閘門 fire` log + BossInteraction + SystemNotes + session=paused |
+| **C** plan_approve | ✅ | ResumeApproveAsync → DispatchAndFinalize → Cody dispatch → session paused→running→done |
+| **D** plan_edit | ✅ | redecide 完成 + 新 plan_confirm 卡開（**2 plan_confirms for same session**）/ session 仍 paused |
+| **E** plan_reject | ✅ | `task_memory.decision/plan-rejected` 寫入 + session paused→cancelled |
+| **F** plan_respond | ✅ | redecide 完成 同 edit path 對齊 |
+| **H** 🟡 #4 SystemNotes 後端 | ✅ | `ceo_confirm` row: Description=純 Christ 任務 / SystemNotes="[v5.5] Task 已接收..." 分離 |
+
+**本機驗證**：`dotnet build AiTeam.slnx` 0 Error / `dotnet test`（non-Playwright）229 pass（102 Bot + 127 Generated）。
+
+**Christ 視覺驗收項目（無法 Forge 自驗）**：
+- Dashboard 操作中心 plan_confirm 卡 UI render（SubtaskPlan 列表 + dependency 圖 + 4 button）
+- 深色主題 SystemNotes 區塊視覺辨識（MudBlazor 主題變數對齊）
+- 真實業務 task 端對端流暢度 → 留 **Trial_v24** 真實驗
+
+### Mock 覆蓋情況
+
+**全自驗用 MockMode=true 跑**：MockLlmProvider 對 Petra DecideTalentsWithPlanAsync 回固定 JSON → SubtaskPlanParser 解析失敗 → fallback `Linear[code_implementation]` 1 subtask → 走 Cody dispatch。MockClaudeCodeService 對 Worker dispatch 回 mock 文字。**0 API cost / 0 burn AiTeam 餘額**（對齊 Stage 80 規劃書「0 燒 / Trial_v24 才燒」紀律）。
+
+驗收完成後 flag 切回 baseline：`Workflow:UseHITLPlanConfirmation=false` + `MockMode=false` + `/internal/reload-cache` 套用（對齊 aria-trial-summary skill flag 切回紀律）。
+
+### 踩坑紀錄
+
+1. **`dotnet ef migrations add --no-build` 用 stale DLL** — 第一次跑 EF tools 加 Migration 但 `--no-build` 用了未含 SystemNotes 的 stale DLL → 產出空 Migration + snapshot 也被 stale 覆蓋。**修法**：`git checkout` 還原 Stage79 + 手動寫 Migration .cs + Python 腳本從更新後 `AppDbContextModelSnapshot.cs` 產 Designer.cs（替換 class header + `BuildModel` → `BuildTargetModel`）。**紀律**：`dotnet ef migrations add` 不要用 `--no-build`（避免 stale assembly 干擾 model snapshot）。
+
+2. **Roadmap §5 寫「InteractionProcessor 路由擴」但 Stage 78c 已砍** — 規劃前 Aria 漏掃 Stage 78c 砍範圍（InteractionProcessor 整檔砍）。Forge spike 路線 D 偏離 plan 對齊設計意圖新建 `PlanConfirmationProcessor`。**紀律候選**：規劃前 grep verify 既有 class 真實存在 / Stage 78c 砍範圍對 Stage 80+ 後續 Stage 影響面評估（留 /aria-end 統一升級）。
+
+3. **`Internal API /internal/ceo/command` JSON body 必含 lowercase `text` field** — ASP.NET Core 預設 CamelCase JSON binding / 試 `"text"` 通 / `"Text"` 不通。**紀律延伸**：API 自驗試 JSON body 必確認 binding policy（不憑 record positional param PascalCase 印象寫）。
+
+4. **MockMode auto-approve fallback `ack` 對 plan_confirm 無效** — InteractionService.CreateInteractionAsync auto-approve switch 缺 `plan_confirm` case → 落到 `_ => "ack"` → PlanConfirmationProcessor `MapActionToDecision("ack")` 回 null → log warning + skip dispatch（resilience verified）。自驗用 SQL 手動 UPDATE ResponseAction 覆蓋。production 0 影響 / Trial_v24 0 影響（真實 LLM + Christ 真實點按鈕）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-05-20 | Stage 80 規劃書建立（Aria 撰寫 / Trial_v23 結案後即進）。**核心結構**：HITL 主體（5 子項 — InteractionType `plan_confirm` + Petra pause/resume + 4 decision routing + InteractionCard UI + InteractionProcessor 路由）+ Trial_v23 議題收口（4 子項 — 🔴 #1 DbContext concurrency hotfix + 🟡 #2 v5.5 confirm 按鈕重新定義 + 🟡 #3 false positive 不修紀錄 + 🟡 #4 InteractionCard 設計 issue）+ 7 設計決策拍板 + 8 驗收情境 + 5 Aria 預警。**Effort baseline Opus 1M + high**（M+ 規模 / 對齊自省點 #39 反向校準紀律不慣性推 Extra high）。**0 WebSearch 觸發**（Stage 77 既有結論 reference + 0 third-party framework 真實使用 / 純內部 business logic 設計）。**規劃前 grep verify 完整**（BossInteraction.cs / PetraOrchestratorService.cs / DashboardAppSettingsService.cs / PipelineView.razor.cs / InteractionCard.razor 真實狀態 verify）。**Migration**：Stage80BossInteractionSystemNotes（AddColumn nullable）。**AppSetting**：Workflow:UseHITLPlanConfirmation default false。 |
+| v2.0 | 2026-05-20 | Stage 80 實作完成 + Forge self-verify 全 8 場景 PASS（A/B/C/D/E/F/G + H 後端）+ flag 切回 baseline。**commit `958ad6e`**。**v3.71.0 → v3.72.0**。**Forge spike 偏離 plan 1 點**：Roadmap §5「InteractionProcessor 路由擴」對齊 Stage 78c 已砍真實 → 新建 `PlanConfirmationProcessor` BackgroundService 達成同等設計意圖（4 decision dispatch / 不復活整套框架）。**Migration**：`Stage80BossInteractionSystemNotes` AddColumn nullable + AppSetting `Workflow:UseHITLPlanConfirmation` seed default false。**自驗 0 API cost**（MockMode + MockLlmProvider fallback Linear[code_implementation] / 對齊「0 燒 / Trial_v24 才燒」紀律）。**4 踩坑紀錄**：① `dotnet ef migrations add --no-build` stale DLL → 手動寫 Migration + Python 產 Designer.cs ② Roadmap §5 規劃漏掃 Stage 78c 砍範圍（Aria 紀律候選）③ Internal API JSON body lowercase `text` field ④ MockMode auto-approve fallback `ack` 對 plan_confirm 無效（不阻塞 / Future_Feature 候選）。**Christ 視覺驗收項目** 留 Trial_v24：plan_confirm 卡 UI render + 深色主題 SystemNotes 視覺辨識 + 端對端業務體驗。 |
