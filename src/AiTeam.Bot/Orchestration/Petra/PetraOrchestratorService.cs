@@ -44,7 +44,7 @@ public class PetraOrchestratorService(
 {
     private const string PetraAgentName = "PM";   // 對齊既有 appsettings.json BotAgentSettings.Agents.PM 鍵
 
-    // Stage 67：v5.5 path round-robin counter（PetraOrchestratorService 是 Scoped — session 級無需 thread-safe）。
+    // Stage 67：v5.5 path round-robin counter（Interlocked.Increment 保 lock-free thread-safe — defensive: Scoped 單 session，但 framework callback 並發情境下不假設）。
     private int _roundRobinCounter;
 
     /// <summary>啟動新 session — Petra 動態決策 + BuildSequential dispatch。taskGroupId 可為 null（spike forward path 無 TaskGroup）。</summary>
@@ -256,7 +256,7 @@ public class PetraOrchestratorService(
 
     // Trial_v9 修：對齊官方 doc Sequential Orchestration 範例 — fire 真實 events 是 AgentResponseUpdateEvent（intermediate worker output）+ ExecutorInvokedEvent + ExecutorCompletedEvent + WorkflowOutputEvent（terminal）
     // accumulator 累積每個 worker streaming update text，executor complete 時 flush 寫 tool message
-    private readonly Dictionary<string, System.Text.StringBuilder> _executorAccumulators = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.StringBuilder> _executorAccumulators = new();
 
     private void LogWorkflowEvent(Guid sessionId, WorkflowEvent ev)
     {
@@ -266,12 +266,8 @@ public class PetraOrchestratorService(
         if (ev is AgentResponseUpdateEvent aru)
         {
             var execId = aru.ExecutorId ?? "(unknown)";
-            if (!_executorAccumulators.TryGetValue(execId, out var sb))
-            {
-                sb = new System.Text.StringBuilder();
-                _executorAccumulators[execId] = sb;
-            }
-            sb.Append(aru.Update.Text);
+            var sb = _executorAccumulators.GetOrAdd(execId, _ => new System.Text.StringBuilder());
+            lock (sb) sb.Append(aru.Update.Text);
             logger.LogTrace("Workflow event AgentResponseUpdate executor={Exec} delta={Len}", execId, aru.Update.Text?.Length ?? 0);
             return;
         }
@@ -281,10 +277,11 @@ public class PetraOrchestratorService(
         {
             var execId = ece.ExecutorId ?? "(unknown)";
             string toolText;
-            if (_executorAccumulators.TryGetValue(execId, out var sb) && sb.Length > 0)
+            if (_executorAccumulators.TryRemove(execId, out var sb))
             {
-                toolText = sb.ToString();
-                _executorAccumulators.Remove(execId);
+                string sbText;
+                lock (sb) { sbText = sb.ToString(); }
+                toolText = sbText.Length > 0 ? sbText : (ece.Data?.ToString() ?? "");
             }
             else
             {
@@ -448,9 +445,8 @@ public class PetraOrchestratorService(
         if (pool.Count == 0) return null;
         if (pool.Count == 1) return pool[0];
 
-        // multi-instance — round-robin baseline（future 加 IsPrimary / Priority 排序由 TalentSkill 對齊複雜化留 Phase 2/3）
-        var index = _roundRobinCounter % pool.Count;
-        _roundRobinCounter++;
+        // multi-instance — round-robin baseline（Interlocked.Increment lock-free atomic — future 加 IsPrimary / Priority 排序）
+        var index = (int)((uint)Interlocked.Increment(ref _roundRobinCounter) % pool.Count);
         return pool[index];
     }
 

@@ -24,8 +24,10 @@ namespace AiTeam.Bot.Orchestration.Petra;
 /// Stage 64 補強：
 /// 1. ~~CLAUDE.md 注入儀式~~（Stage 65 子項 1 修根因 — 移除 ritual 改用 CLI --append-system-prompt，見下方 Stage 65 補強）。
 /// 2. token_logs null-safe — Usage=null 仍寫 cost=0 紀錄保留觀測完整性（TokenLogService 本身 early return null usage）。
-/// 3. Transient 5xx retry — DispatchAsync 結果 Output 含 5xx pattern → 3 次 exponential backoff（1s/2s/4s）。
-///    不 catch LlmApiFailureException（auth/quota retry 無意義 — 直接 propagate）。
+/// 3. Transient 5xx + timeout retry — DispatchAsync 結果 Output 含 transient pattern → 3 次 exponential backoff（2s/4s/8s）。
+///    4xx client error（rate-limit / bad-request 等）→ 直接 throw LlmApiFailureException 不 retry。
+///    非 transient 非 4xx（未知失敗）→ return failed result。
+///    不 catch LlmApiFailureException（auth/quota 由 ClaudeCodeService 層先攔截 — 直接 propagate）。
 ///
 /// Stage 65 補強：
 /// 1. CLAUDE.md inject ritual 修根因 — 改用 Claude Code CLI --append-system-prompt（workspace CLAUDE.md 0 動 = 0 commit 污染）。
@@ -47,7 +49,7 @@ internal sealed class ClaudeCodeChatClientAdapter(
 {
     private readonly ChatClientMetadata _metadata = new("ClaudeCode-via-IChatClient-adapter", defaultModelId: model);
 
-    // Stage 64 6b：5xx transient error pattern（Claude Code CLI subprocess 內部 HTTP 5xx 文字訊號 — string match 是唯一可行 detection）。
+    // transient error patterns — 5xx HTTP errors + network timeout（LLM 暫時不可用，exponential backoff 後重試合理）。
     // 對齊 ClaudeCodeService.DetectApiFailureSignal 不 cover 5xx 的事實：5xx 走 result.Success=false path（非 LlmApiFailureException）。
     private static readonly string[] TransientPatterns =
     {
@@ -55,10 +57,29 @@ internal sealed class ClaudeCodeChatClientAdapter(
         "internal server error",
         "overloaded",
         "upstream",
+        "timeout",
+        "timed out",
+        "deadline exceeded",
     };
 
-    // Stage 64 6b：exponential backoff delay（attempt 1 後 1s / attempt 2 後 2s / attempt 3 後 4s — 第 4 次不重試直接 return）。
-    private static readonly int[] RetryDelaysMs = { 1000, 2000, 4000 };
+    // exponential backoff delay — attempt 1 後 2s / attempt 2 後 4s / attempt 3 後 8s（v2：1/2/4s → 2/4/8s，對 LLM overloaded 更寬鬆）。
+    private static readonly int[] RetryDelaysMs = { 2000, 4000, 8000 };
+
+    // 4xx client error patterns — 直接丟 LlmApiFailureException 不 retry。
+    // 注意：401/authentication_error 已由 ClaudeCodeService.DetectApiFailureSignal 在 subprocess 層先攔截 → 此處是第二道防線，
+    // 補 catch ClaudeCodeResult.Success=false 且 output text 含 4xx 語意的情境（如 400 Bad Request / 403 Forbidden / 429 Rate Limit）。
+    private static readonly string[] ClientErrorPatterns =
+    {
+        "400 bad request",
+        "403 forbidden",
+        "429 too many requests",
+        "429",
+        "rate limit",
+        "quota exceeded",
+        "insufficient_quota",
+        "invalid api key",
+        "invalid_api_key",
+    };
 
     // Stage 64 1：capability → CLAUDE_<X>.md 對應表（release_publishing 無對齊 template → fallback warning + skip，路線 A）。
     private static readonly Dictionary<string, string?> CapabilityToTemplate = new(StringComparer.OrdinalIgnoreCase)
@@ -184,7 +205,16 @@ internal sealed class ClaudeCodeChatClientAdapter(
 
             if (!IsTransient5xx(last.Output))
             {
-                // 非 transient — propagate failure 不重試
+                // 4xx client error — 直接丟 LlmApiFailureException 不 retry
+                if (IsClientError4xx(last.Output))
+                {
+                    var rawError = last.Output?.Length > 200 ? last.Output[..200] : last.Output ?? "";
+                    logger.LogError(
+                        "ClaudeCodeChatClientAdapter 4xx client error 直接丟錯，不 retry worker={Worker}",
+                        workerName);
+                    throw new LlmApiFailureException(LlmProviderType.Anthropic, rawError);
+                }
+                // 其他非 transient（未知失敗）— propagate failure 不重試
                 return last;
             }
 
@@ -207,6 +237,13 @@ internal sealed class ClaudeCodeChatClientAdapter(
         if (string.IsNullOrEmpty(output)) return false;
         var lower = output.ToLowerInvariant();
         return TransientPatterns.Any(p => lower.Contains(p));
+    }
+
+    private static bool IsClientError4xx(string? output)
+    {
+        if (string.IsNullOrEmpty(output)) return false;
+        var lower = output.ToLowerInvariant();
+        return ClientErrorPatterns.Any(p => lower.Contains(p));
     }
 
     // Stage 65 子項 1：每個 capability dispatch 透傳 systemPrompt（IClaudeCodeService 6 method default null 對 v4 caller 透明 —
