@@ -142,43 +142,55 @@ public class DashboardAgentService(AppDbContext db)
             })
             .ToListAsync(cancellationToken);
 
-    /// <summary>取得所有 Agent 的初始狀態 ViewModel（首頁用）。</summary>
+    /// <summary>
+    /// 取得所有 Agent 的初始狀態 ViewModel（Monitoring AgentStatus tab + Home 速覽用）。
+    ///
+    /// Stage 83 v3 Bug 5 修根因：改 query `talents` 表（Stage 67 v5.5 baseline 6 Talent — Cody/Vera/Quinn/Sage/Petra/Victoria）
+    /// 取代既有 `agent_configs` 表（v4 dead seed 9 Agent — PM/CEO/Doc/Release/Designer/Requirements/Dev/Reviewer/QA + Ops）。
+    /// 對齊真實 v5.5 dynamic orchestrator architecture / Stage 78a 砍 v4 class 後 agent_configs row 對齊 v5.5 已 dead。
+    /// TrustLevel = 0（Talent entity 無此欄位 / v5.5 沒這個概念 / UI 不顯示 trust）。
+    /// </summary>
     public async Task<List<AgentStatusViewModel>> GetAllAgentStatusesAsync(
         CancellationToken cancellationToken = default)
     {
-        var configs = await GetAgentConfigsAsync(cancellationToken);
-        var today = DateTime.UtcNow.Date;
+        var talents = await db.Talents
+            .AsNoTracking()
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.Name)
+            .Select(t => new { t.Name })
+            .ToListAsync(cancellationToken);
 
+        var today = DateTime.UtcNow.Date;
         var result = new List<AgentStatusViewModel>();
-        foreach (var cfg in configs)
+        foreach (var t in talents)
         {
             var completedToday = await db.Tasks
                 .AsNoTracking()
-                .CountAsync(t => t.AssignedAgent == cfg.Name
-                              && t.Status == AiTeam.Shared.Constants.TaskStatus.Done
-                              && t.CreatedAt >= today,
+                .CountAsync(x => x.AssignedAgent == t.Name
+                              && x.Status == AiTeam.Shared.Constants.TaskStatus.Done
+                              && x.CreatedAt >= today,
                     cancellationToken);
 
             var failedToday = await db.Tasks
                 .AsNoTracking()
-                .CountAsync(t => t.AssignedAgent == cfg.Name
-                              && t.Status == AiTeam.Shared.Constants.TaskStatus.Failed
-                              && t.CreatedAt >= today,
+                .CountAsync(x => x.AssignedAgent == t.Name
+                              && x.Status == AiTeam.Shared.Constants.TaskStatus.Failed
+                              && x.CreatedAt >= today,
                     cancellationToken);
 
             var running = await db.Tasks
                 .AsNoTracking()
-                .Where(t => t.AssignedAgent == cfg.Name
-                         && t.Status == AiTeam.Shared.Constants.TaskStatus.Running)
-                .OrderByDescending(t => t.CreatedAt)
-                .Select(t => t.Title)
+                .Where(x => x.AssignedAgent == t.Name
+                         && x.Status == AiTeam.Shared.Constants.TaskStatus.Running)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => x.Title)
                 .FirstOrDefaultAsync(cancellationToken);
 
             result.Add(new AgentStatusViewModel
             {
-                AgentName           = cfg.Name,
+                AgentName           = t.Name,
                 Status              = running != null ? "running" : "idle",
-                TrustLevel          = cfg.TrustLevel,
+                TrustLevel          = 0,   // Stage 83 v3 Bug 5：Talent entity 無 TrustLevel / v5.5 沒這個概念
                 CurrentTaskTitle    = running,
                 TodayCompletedCount = completedToday,
                 TodayFailedCount    = failedToday,
