@@ -1,5 +1,37 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-<MudThemeProvider />
+@inject IJSRuntime JS
+
+<MudThemeProvider IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
+
+@code {
+    private bool _isDarkMode;
+
+    /// <summary>
+    /// Stage 83 v4 Bug 9 修根因：MudThemeProvider IsDarkMode sync localStorage（既有 App.razor head JS `window.appTheme.init()` 設 data-theme + return bool）。
+    ///
+    /// Root cause（Aria v3 揭）：MudProviders 既有 `<MudThemeProvider />` 0 binding IsDarkMode（default false / 一直 light theme）
+    /// → MudBlazor component（MudPaper / MudCard / MudTabs）一直 light vs wwwroot/css/app.css data-theme 變數 dark → 兩套主題不同步
+    /// → redirect navigate 觸發 MudProviders re-render 視覺被注意「dark→light switch」（既有 Pipeline redirect 也踩同 bug / 既有路徑使用率低沒人 notice）
+    ///
+    /// 修法：OnAfterRenderAsync firstRender 讀 localStorage `theme` 設 _isDarkMode（用既有 `window.appTheme.init()` 純讀不副作用）。
+    /// trade-off：Christ 切換 theme 後即時切換 UX 留 Stage 84+（需 MainLayout setDark JS 改 C# event + MudProviders subscribe / 範圍 +S）。
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _isDarkMode = await JS.InvokeAsync<bool>("appTheme.init");
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS 未 init / OK — IsDarkMode 保持 false（既有行為）
+            }
+        }
+    }
+}
