@@ -6,17 +6,21 @@ using MudBlazor;
 namespace AiTeam.Dashboard.Components.Pages.Settings;
 
 /// <summary>
-/// Stage 83 子項 3：Settings 分區主頁 — MudTabs 8 subtab 整合
-/// （WorkflowFlags / TokenGuard / Agents / Talents / SkillPrompts / TalentPrompts / Rules+Projects / MockMode）。
+/// Stage 83 子項 3：Settings 分區主頁 — MudTabs 8 subtab 整合（補做版）。
 ///
-/// 議題 C1：WorkflowFlags 完整實裝（21 Workflow:* flag toggle + 數值 + Restart Bot 按鈕）—
-/// 21 flag 全 require restart（AppSettingsService startup read-once / 5 分鐘 re-read 未實裝 → FF C2 候選 Stage 84+）。
+/// 議題 C1：WorkflowFlags 完整實裝（21 Workflow:* flag）+ Restart Bot 按鈕。21 flag 全 require restart
+/// （AppSettingsService startup read-once / 5 分鐘 re-read 未實裝 → FF C2 候選 Stage 84+）。
 ///
-/// Phased delivery 紀律（Forge implementation 階段揭 trade-off）：
-/// - WorkflowFlags = 完整新建（核心議題）
-/// - 其他 7 tab = 暫保 link to 既有 page button + entity summary 簡單 list（子項 5 整合或保留舊 page）
-///   原因：5 既有頁總 1170 行邏輯 / 全 inline migrate 進 SettingsHub 規模超 L+++ context budget /
-///   對齊「最後測驗」精神 + 「不重做能用的」紀律延伸（既有 page 留 active / NavMenu 主入口 4 link）
+/// Stage 83 補做（Aria gate1 plan ↔ delivery gap 收口）：
+/// - Tab 2 TokenGuard + 一般系統設定 → reuse `&lt;SystemSettings /&gt;` page component（inline 整合 / 不是 link out）
+/// - Tab 3 Agents → reuse `&lt;AgentSettings /&gt;` component
+/// - Tab 4 Talents → full CRUD（Stage 67 v5.5 Phase 1 Talent + TalentSkill 多對多）
+/// - Tab 5 SkillPrompts → full CRUD（Stage 72 v5.5 Phase 2 版本管理 / IsActive 切 / 不刪舊版本）
+/// - Tab 6 TalentPrompts → full CRUD（per-Talent persona / baseline 0 row / Phase 3 補）
+/// - Tab 7 Rules + Projects → reuse `&lt;RuleManagement /&gt; + &lt;ProjectManagement /&gt;` components
+/// - Tab 8 MockMode → reuse `&lt;SystemSettings /&gt;`（內含 MockMode toggle + Delay 範圍 section）
+///
+/// 對齊「component reuse 算 inline 整合 / 不是 link out 既有 page 路徑 button」紀律。
 /// </summary>
 public partial class SettingsHub
 {
@@ -31,17 +35,13 @@ public partial class SettingsHub
 
     #endregion
 
-    #region Private State
+    #region Private State — WorkflowFlags（議題 C1）
 
     private Dictionary<string, string?> _flagValues = new();
-    private List<TalentSummary>  _talents       = [];
-    private List<PromptSummary>  _skillPrompts  = [];
-    private List<PromptSummary>  _talentPrompts = [];
     private bool   _pendingRestart;
     private bool   _isRestarting;
     private string? _saveMessage;
 
-    // 議題 C1：21 flag 分組
     private static readonly string[] _v4FrameworkFlags =
     [
         "Workflow:UseFrameworkAppealLoop",
@@ -79,10 +79,45 @@ public partial class SettingsHub
 
     #endregion
 
+    #region Private State — Talents / SkillPrompts / TalentPrompts CRUD（補做）
+
+    // Stage 78a：4 Final Skill hardcode（對齊 DefaultSkillRegistry）— code-defined 不開放動態加
+    private static readonly string[] _allSkillNames =
+    [
+        "code_implementation",
+        "code_review",
+        "qa_testing",
+        "documentation",
+    ];
+
+    private List<TalentRow>        _talents              = [];
+    private List<SkillPromptRow>   _skillPromptsActive   = [];
+    private List<TalentPromptRow>  _talentPromptsActive  = [];
+
+    // Talent CRUD state
+    private bool   _newTalentOpen;
+    private string _newTalentName        = "";
+    private string _newTalentDisplayName = "";
+    private string _newTalentDescription = "";
+    private TalentRow? _editingTalent;
+
+    // SkillPrompt edit state
+    private SkillPromptRow? _editingSkillPrompt;
+    private string          _editingPromptBody = "";
+
+    // TalentPrompt edit state
+    private Guid?  _editingTalentPromptTalentId;
+    private string _editingTalentPromptTalentName = "";
+    private string _editingPersonaBody = "";
+
+    #endregion
+
     protected override async Task OnInitializedAsync()
     {
         await LoadFlagsAsync();
-        await LoadSummariesAsync();
+        await LoadTalentsAsync();
+        await LoadSkillPromptsAsync();
+        await LoadTalentPromptsAsync();
     }
 
     private async Task LoadFlagsAsync()
@@ -100,52 +135,6 @@ public partial class SettingsHub
         catch (Exception ex)
         {
             Logger.LogError(ex, "SettingsHub LoadFlagsAsync 失敗");
-        }
-    }
-
-    private async Task LoadSummariesAsync()
-    {
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            _talents = await db.Talents
-                .AsNoTracking()
-                .Select(t => new TalentSummary
-                {
-                    Name       = t.Name,
-                    IsActive   = t.IsActive,
-                    SkillCount = db.TalentSkills.Count(ts => ts.TalentId == t.Id),
-                })
-                .ToListAsync();
-
-            _skillPrompts = await db.SkillPrompts
-                .AsNoTracking()
-                .Where(p => p.IsActive)
-                .OrderBy(p => p.SkillName)
-                .Select(p => new PromptSummary
-                {
-                    Name          = p.SkillName,
-                    Version       = p.VersionNumber,
-                    ContentLength = p.PromptBody.Length,
-                })
-                .ToListAsync();
-
-            _talentPrompts = await db.TalentPrompts
-                .AsNoTracking()
-                .Where(p => p.IsActive)
-                .Join(db.Talents, p => p.TalentId, t => t.Id, (p, t) => new PromptSummary
-                {
-                    Name          = t.Name,
-                    Version       = p.VersionNumber,
-                    ContentLength = p.PersonaBody.Length,
-                })
-                .OrderBy(p => p.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "SettingsHub LoadSummariesAsync 失敗");
         }
     }
 
@@ -209,7 +198,7 @@ public partial class SettingsHub
 
     #endregion
 
-    #region Flag 描述（議題 C1 UX）
+    #region Flag 描述
 
     private static string GetFlagDescription(string key) => key switch
     {
@@ -241,17 +230,342 @@ public partial class SettingsHub
 
     #endregion
 
-    public record TalentSummary
+    #region Talent CRUD（Stage 67 v5.5 Phase 1）
+
+    private async Task LoadTalentsAsync()
     {
-        public string Name { get; init; } = "";
-        public bool IsActive { get; init; }
-        public int SkillCount { get; init; }
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _talents = await db.Talents
+                .AsNoTracking()
+                .OrderBy(t => t.Name)
+                .Select(t => new TalentRow
+                {
+                    Id          = t.Id,
+                    Name        = t.Name,
+                    DisplayName = t.DisplayName,
+                    Description = t.Description,
+                    Provider    = t.Provider,
+                    Model       = t.Model,
+                    IsActive    = t.IsActive,
+                    Skills = db.TalentSkills
+                        .Where(ts => ts.TalentId == t.Id)
+                        .Select(ts => new TalentSkillRow
+                        {
+                            SkillName = ts.SkillName,
+                            IsPrimary = ts.IsPrimary,
+                            Priority  = ts.Priority,
+                        })
+                        .ToList(),
+                })
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LoadTalentsAsync 失敗");
+        }
     }
 
-    public record PromptSummary
+    private async Task CreateTalentAsync()
     {
-        public string Name { get; init; } = "";
-        public int Version { get; init; }
-        public int ContentLength { get; init; }
+        if (string.IsNullOrWhiteSpace(_newTalentName))
+        {
+            Snackbar.Add("Name 不能為空", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var t = new Talent
+            {
+                Name        = _newTalentName.Trim(),
+                DisplayName = string.IsNullOrWhiteSpace(_newTalentDisplayName) ? _newTalentName.Trim() : _newTalentDisplayName.Trim(),
+                Description = _newTalentDescription.Trim(),
+                IsActive    = true,
+            };
+            db.Talents.Add(t);
+            await db.SaveChangesAsync();
+            Snackbar.Add($"Talent「{t.Name}」已新增", Severity.Success);
+            _newTalentOpen = false;
+            _newTalentName = _newTalentDisplayName = _newTalentDescription = "";
+            await LoadTalentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"新增 Talent 失敗：{ex.Message}", Severity.Error);
+        }
     }
+
+    private async Task ToggleTalentActiveAsync(TalentRow row, bool newValue)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var t = await db.Talents.FindAsync(row.Id);
+            if (t is null) return;
+            t.IsActive  = newValue;
+            t.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            row.IsActive = newValue;
+            Snackbar.Add($"Talent「{row.Name}」已{(newValue ? "啟用" : "停用")}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"更新失敗：{ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task OpenTalentSkillsAsync(TalentRow row)
+    {
+        _editingTalent = row;
+        return Task.CompletedTask;
+    }
+
+    private async Task ToggleSkillAssignmentAsync(TalentRow talent, string skillName, bool assign)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            if (assign)
+            {
+                var exists = await db.TalentSkills
+                    .AnyAsync(ts => ts.TalentId == talent.Id && ts.SkillName == skillName);
+                if (!exists)
+                {
+                    db.TalentSkills.Add(new TalentSkill
+                    {
+                        TalentId  = talent.Id,
+                        SkillName = skillName,
+                        IsPrimary = false,
+                        Priority  = 0,
+                    });
+                    await db.SaveChangesAsync();
+                    talent.Skills.Add(new TalentSkillRow { SkillName = skillName, IsPrimary = false, Priority = 0 });
+                }
+            }
+            else
+            {
+                var existing = await db.TalentSkills
+                    .FirstOrDefaultAsync(ts => ts.TalentId == talent.Id && ts.SkillName == skillName);
+                if (existing is not null)
+                {
+                    db.TalentSkills.Remove(existing);
+                    await db.SaveChangesAsync();
+                    talent.Skills.RemoveAll(s => s.SkillName == skillName);
+                }
+            }
+            Snackbar.Add($"{talent.Name} {skillName} 已{(assign ? "指派" : "移除")}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"更新 Skill assignment 失敗：{ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SetSkillPrimaryAsync(TalentRow talent, string skillName, bool isPrimary)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ts = await db.TalentSkills
+                .FirstOrDefaultAsync(x => x.TalentId == talent.Id && x.SkillName == skillName);
+            if (ts is null) return;
+            ts.IsPrimary = isPrimary;
+            await db.SaveChangesAsync();
+            var row = talent.Skills.FirstOrDefault(s => s.SkillName == skillName);
+            if (row is not null) row.IsPrimary = isPrimary;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"更新 IsPrimary 失敗：{ex.Message}", Severity.Error);
+        }
+    }
+
+    #endregion
+
+    #region SkillPrompt CRUD（Stage 72 版本管理）
+
+    private async Task LoadSkillPromptsAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _skillPromptsActive = await db.SkillPrompts
+                .AsNoTracking()
+                .Where(p => p.IsActive)
+                .OrderBy(p => p.SkillName)
+                .Select(p => new SkillPromptRow
+                {
+                    Id            = p.Id,
+                    SkillName     = p.SkillName,
+                    PromptBody    = p.PromptBody,
+                    VersionNumber = p.VersionNumber,
+                    UpdatedAt     = p.UpdatedAt,
+                })
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LoadSkillPromptsAsync 失敗");
+        }
+    }
+
+    private void OpenSkillPromptEditAsync(SkillPromptRow row)
+    {
+        _editingSkillPrompt = row;
+        _editingPromptBody  = row.PromptBody;
+    }
+
+    private async Task SaveNewSkillPromptVersionAsync()
+    {
+        if (_editingSkillPrompt is null) return;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            // 1. 找舊 active 切 IsActive=false
+            var oldActives = await db.SkillPrompts
+                .Where(p => p.SkillName == _editingSkillPrompt.SkillName && p.IsActive)
+                .ToListAsync();
+            foreach (var old in oldActives)
+            {
+                old.IsActive  = false;
+                old.UpdatedAt = DateTime.UtcNow;
+            }
+            // 2. 新版本 VersionNumber +1 + IsActive=true
+            var newRow = new SkillPrompt
+            {
+                SkillName     = _editingSkillPrompt.SkillName,
+                PromptBody    = _editingPromptBody,
+                VersionNumber = _editingSkillPrompt.VersionNumber + 1,
+                IsActive      = true,
+            };
+            db.SkillPrompts.Add(newRow);
+            await db.SaveChangesAsync();
+            Snackbar.Add($"SkillPrompt「{_editingSkillPrompt.SkillName}」v{newRow.VersionNumber} 已儲存（舊 v{_editingSkillPrompt.VersionNumber} 保留 audit）", Severity.Success);
+            _editingSkillPrompt = null;
+            _editingPromptBody  = "";
+            await LoadSkillPromptsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+    }
+
+    #endregion
+
+    #region TalentPrompt CRUD（Stage 72 per-Talent persona / baseline 0 row）
+
+    private async Task LoadTalentPromptsAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _talentPromptsActive = await db.TalentPrompts
+                .AsNoTracking()
+                .Where(p => p.IsActive)
+                .Select(p => new TalentPromptRow
+                {
+                    Id            = p.Id,
+                    TalentId      = p.TalentId,
+                    PersonaBody   = p.PersonaBody,
+                    VersionNumber = p.VersionNumber,
+                    UpdatedAt     = p.UpdatedAt,
+                })
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LoadTalentPromptsAsync 失敗");
+        }
+    }
+
+    private void OpenTalentPromptEditAsync(Guid talentId, string talentName, TalentPromptRow? existing)
+    {
+        _editingTalentPromptTalentId   = talentId;
+        _editingTalentPromptTalentName = talentName;
+        _editingPersonaBody            = existing?.PersonaBody ?? "";
+    }
+
+    private async Task SaveNewTalentPromptVersionAsync()
+    {
+        if (_editingTalentPromptTalentId is null) return;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var talentId = _editingTalentPromptTalentId.Value;
+            // 1. 切舊 active IsActive=false
+            var oldActives = await db.TalentPrompts
+                .Where(p => p.TalentId == talentId && p.IsActive)
+                .ToListAsync();
+            var nextVersion = oldActives.Count == 0 ? 1 : oldActives.Max(p => p.VersionNumber) + 1;
+            foreach (var old in oldActives)
+            {
+                old.IsActive  = false;
+                old.UpdatedAt = DateTime.UtcNow;
+            }
+            // 2. 新版本
+            db.TalentPrompts.Add(new TalentPrompt
+            {
+                TalentId      = talentId,
+                PersonaBody   = _editingPersonaBody,
+                VersionNumber = nextVersion,
+                IsActive      = true,
+            });
+            await db.SaveChangesAsync();
+            Snackbar.Add($"TalentPrompt「{_editingTalentPromptTalentName}」v{nextVersion} 已儲存", Severity.Success);
+            _editingTalentPromptTalentId   = null;
+            _editingTalentPromptTalentName = "";
+            _editingPersonaBody            = "";
+            await LoadTalentPromptsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+    }
+
+    #endregion
+
+    #region Row records
+
+    public class TalentRow
+    {
+        public Guid    Id          { get; set; }
+        public string  Name        { get; set; } = "";
+        public string  DisplayName { get; set; } = "";
+        public string  Description { get; set; } = "";
+        public string? Provider    { get; set; }
+        public string? Model       { get; set; }
+        public bool    IsActive    { get; set; }
+        public List<TalentSkillRow> Skills { get; set; } = [];
+    }
+
+    public class TalentSkillRow
+    {
+        public string SkillName { get; set; } = "";
+        public bool   IsPrimary { get; set; }
+        public int    Priority  { get; set; }
+    }
+
+    public class SkillPromptRow
+    {
+        public Guid     Id            { get; set; }
+        public string   SkillName     { get; set; } = "";
+        public string   PromptBody    { get; set; } = "";
+        public int      VersionNumber { get; set; }
+        public DateTime UpdatedAt     { get; set; }
+    }
+
+    public class TalentPromptRow
+    {
+        public Guid     Id            { get; set; }
+        public Guid     TalentId      { get; set; }
+        public string   PersonaBody   { get; set; } = "";
+        public int      VersionNumber { get; set; }
+        public DateTime UpdatedAt     { get; set; }
+    }
+
+    #endregion
 }

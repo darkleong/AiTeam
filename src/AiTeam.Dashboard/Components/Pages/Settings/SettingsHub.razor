@@ -1,7 +1,12 @@
 @page "/settings"
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data
 @using AiTeam.Shared.Dtos
+@using AiTeam.Dashboard.Components.Pages.Agents
+@using AiTeam.Dashboard.Components.Pages.Projects
+@using AiTeam.Dashboard.Components.Pages.Rules
+@using AiTeam.Dashboard.Components.Pages.Settings
 
 <PageTitle>設定中心 - AI Team Dashboard</PageTitle>
 
@@ -30,13 +35,12 @@
 
 <MudTabs Elevation="2" Rounded="true" PanelClass="pa-4" Position="Position.Top">
 
-    @* Tab 1：Workflow Flags — 議題 C1 完整實裝（21 flag toggle + Restart Bot 按鈕）*@
+    @* Tab 1：Workflow Flags — 議題 C1 完整實裝 *@
     <MudTabPanel Text="Workflow Flags" Icon="@Icons.Material.Filled.ToggleOn">
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            21 Workflow:* flag 統一管理。所有 flag 修改後需重啟 Bot 才生效（AppSettingsService startup read-once / 5 分鐘 re-read 未實裝 — 見 FF C2 候選）。
+            21 Workflow:* flag 統一管理。修改後需重啟 Bot 才生效（FF C2 候選 Stage 84+ AppSettingsService 5 分鐘 re-read）。
         </MudText>
 
-        @* 群組 1：v4 framework 5 flag *@
         <MudExpansionPanel Text="v4 Framework 控制（5 flag）" Expanded="false">
             @foreach (var key in _v4FrameworkFlags)
             {
@@ -51,7 +55,6 @@
             }
         </MudExpansionPanel>
 
-        @* 群組 2：v5/v5.5 動態架構 7 flag *@
         <MudExpansionPanel Text="v5 / v5.5 動態架構（7 flag）" Expanded="true">
             @foreach (var key in _v5Flags)
             {
@@ -66,8 +69,7 @@
             }
         </MudExpansionPanel>
 
-        @* 群組 3：數值 cap 9 flag *@
-        <MudExpansionPanel Text="數值上限（9 flag）" Expanded="false">
+        <MudExpansionPanel Text="數值上限（11 flag）" Expanded="false">
             @foreach (var (key, min, max) in _numericFlags)
             {
                 <div class="d-flex align-center justify-space-between py-2">
@@ -75,143 +77,265 @@
                         <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
                     </div>
-                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                        <MudNumericField T="int" Value="@GetIntFlag(key)"
-                                         ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
-                                         Variant="Variant.Outlined" Min="@min" Max="@max"
-                                         Style="max-width:140px" Dense="true" />
-                    </MudStack>
+                    <MudNumericField T="int" Value="@GetIntFlag(key)"
+                                     ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
+                                     Variant="Variant.Outlined" Min="@min" Max="@max"
+                                     Style="max-width:140px" />
                 </div>
             }
         </MudExpansionPanel>
     </MudTabPanel>
 
-    @* Tab 2-8：既有 page 暫保 active / 子項 5 整合（phased delivery / 對齊 plan trade-off）*@
-    <MudTabPanel Text="Token 守門" Icon="@Icons.Material.Filled.Shield">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            Token 守門設定（全域月限 / 單次請求上限 / per-agent 日限+月限）仍在原頁面。
-        </MudAlert>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.OpenInNew"
-                   OnClick="@(() => Nav.NavigateTo("/system-settings"))">
-            開啟系統設定頁（含 Token 守門 + Mock + 流程輪次上限）
-        </MudButton>
+    @* Tab 2：TokenGuard + 一般系統設定 — reuse 既有 SystemSettings page component（inline 整合 / 對齊 Aria 補做紀律 / 議題 D） *@
+    <MudTabPanel Text="Token 守門 + 系統設定" Icon="@Icons.Material.Filled.Shield">
+        <SystemSettings />
     </MudTabPanel>
 
+    @* Tab 3：Agents CRUD — reuse 既有 AgentSettings page component（inline 整合） *@
     <MudTabPanel Text="Agents" Icon="@Icons.Material.Filled.SmartToy">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            Agent CRUD + Provider/Model + Token 限額仍在原頁面。
-        </MudAlert>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.OpenInNew"
-                   OnClick="@(() => Nav.NavigateTo("/agents"))">
-            開啟 Agent 設定頁
-        </MudButton>
+        <AgentSettings />
     </MudTabPanel>
 
+    @* Tab 4：Talents full CRUD — Stage 67 v5.5 Phase 1 Talent + TalentSkill 多對多 *@
     <MudTabPanel Text="Talents" Icon="@Icons.Material.Filled.People">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            v5.5 Phase 1 Talent + TalentSkill 簡單 read-only 摘要（CRUD 留 Stage 84+ Phase 2）。
-        </MudAlert>
+        <MudStack Row="true" Spacing="2" Class="mb-3">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => _newTalentOpen = !_newTalentOpen)">
+                @(_newTalentOpen ? "取消新增" : "新增 Talent")
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadTalentsAsync">重新載入</MudButton>
+        </MudStack>
+
+        @if (_newTalentOpen)
+        {
+            <MudPaper Elevation="1" Class="pa-3 mb-3">
+                <MudStack Spacing="2">
+                    <MudTextField T="string" @bind-Value="_newTalentName" Label="Name（對齊 worker name：Cody / Vera / Quinn / Sage 等）" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_newTalentDisplayName" Label="DisplayName" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_newTalentDescription" Label="Description" Variant="Variant.Outlined" Lines="2" />
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   OnClick="CreateTalentAsync">建立</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+
         @if (_talents.Count == 0)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 Talent 資料</MudText>
+            <MudAlert Severity="Severity.Info">尚無 Talent — 對齊 Stage 67 baseline 6 instance（DbSeeder seed Cody / Vera / Quinn / Sage / Petra / Victoria）。</MudAlert>
         }
         else
         {
-            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentSummary">
+            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentRow">
                 <HeaderContent>
                     <MudTh>Name</MudTh>
+                    <MudTh>DisplayName</MudTh>
+                    <MudTh>Provider / Model</MudTh>
                     <MudTh>Active</MudTh>
-                    <MudTh>Skills 數</MudTh>
+                    <MudTh>Skills</MudTh>
+                    <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Name</MudTd>
-                    <MudTd><MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
-                        @(context.IsActive ? "啟用" : "停用")
-                    </MudChip></MudTd>
-                    <MudTd>@context.SkillCount</MudTd>
+                    <MudTd>@context.DisplayName</MudTd>
+                    <MudTd>
+                        <MudText Typo="Typo.caption">@(context.Provider ?? "—") / @(context.Model ?? "—")</MudText>
+                    </MudTd>
+                    <MudTd>
+                        <MudSwitch T="bool" Value="@context.IsActive"
+                                   ValueChanged="@((bool v) => ToggleTalentActiveAsync(context, v))" />
+                    </MudTd>
+                    <MudTd>
+                        <MudText Typo="Typo.caption">
+                            @string.Join(", ", context.Skills.Select(s => s.SkillName + (s.IsPrimary ? "*" : "")))
+                        </MudText>
+                    </MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="@(() => OpenTalentSkillsAsync(context))">
+                            管理 Skills
+                        </MudButton>
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         }
+
+        @if (_editingTalent is not null)
+        {
+            <MudPaper Elevation="2" Class="pa-3 mt-3">
+                <MudText Typo="Typo.h6" Class="mb-2">@_editingTalent.Name — TalentSkill 多對多 assignment</MudText>
+                @foreach (var skill in _allSkillNames)
+                {
+                    var assigned = _editingTalent.Skills.FirstOrDefault(s => s.SkillName == skill);
+                    <div class="d-flex align-center justify-space-between py-1">
+                        <MudCheckBox T="bool" Value="@(assigned is not null)"
+                                     ValueChanged="@((bool v) => ToggleSkillAssignmentAsync(_editingTalent, skill, v))"
+                                     Label="@skill" />
+                        @if (assigned is not null)
+                        {
+                            <MudStack Row="true" Spacing="1">
+                                <MudCheckBox T="bool" Value="@assigned.IsPrimary"
+                                             ValueChanged="@((bool v) => SetSkillPrimaryAsync(_editingTalent, skill, v))"
+                                             Label="Primary" />
+                            </MudStack>
+                        }
+                    </div>
+                }
+                <MudButton Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                           OnClick="@(() => _editingTalent = null)" Class="mt-2">關閉</MudButton>
+            </MudPaper>
+        }
     </MudTabPanel>
 
+    @* Tab 5：SkillPrompts full CRUD — Stage 72 v5.5 Phase 2 SkillPrompt 版本管理（IsActive 切 / 不刪舊版本） *@
     <MudTabPanel Text="SkillPrompts" Icon="@Icons.Material.Filled.Article">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            v5.5 Phase 1 SkillPrompt active 版本 read-only 列（版本切換 + 編輯留 Stage 84+ Phase 2）。
-        </MudAlert>
-        @if (_skillPrompts.Count == 0)
+        <MudStack Row="true" Spacing="2" Class="mb-3">
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadSkillPromptsAsync">重新載入</MudButton>
+        </MudStack>
+
+        @if (_skillPromptsActive.Count == 0)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 SkillPrompt 資料</MudText>
+            <MudAlert Severity="Severity.Info">尚無 SkillPrompt 資料 — 對齊 Stage 72 DbSeeder 6 Skill baseline。</MudAlert>
         }
         else
         {
-            <MudTable Items="_skillPrompts" Dense="true" Hover="true" T="PromptSummary">
+            <MudTable Items="_skillPromptsActive" Dense="true" Hover="true" T="SkillPromptRow">
                 <HeaderContent>
                     <MudTh>SkillName</MudTh>
-                    <MudTh>Version</MudTh>
+                    <MudTh>Active Version</MudTh>
                     <MudTh>Length</MudTh>
+                    <MudTh>UpdatedAt</MudTh>
+                    <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>@context.Name</MudTd>
-                    <MudTd>v@context.Version</MudTd>
-                    <MudTd>@context.ContentLength chars</MudTd>
+                    <MudTd>@context.SkillName</MudTd>
+                    <MudTd>v@context.VersionNumber</MudTd>
+                    <MudTd>@context.PromptBody.Length chars</MudTd>
+                    <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="@(() => OpenSkillPromptEditAsync(context))">
+                            編輯（新版本）
+                        </MudButton>
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         }
+
+        @if (_editingSkillPrompt is not null)
+        {
+            <MudPaper Elevation="2" Class="pa-3 mt-3">
+                <MudText Typo="Typo.h6" Class="mb-2">@_editingSkillPrompt.SkillName — 新版本 v@(_editingSkillPrompt.VersionNumber + 1)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    存檔後自動 VersionNumber +1 + IsActive=true / 舊版 IsActive=false（partial unique index 守同 SkillName 只一條 active）。舊版本保留 audit trail / 不刪除。
+                </MudText>
+                <MudTextField T="string" @bind-Value="_editingPromptBody"
+                              Variant="Variant.Outlined" Lines="15" Class="mb-2" />
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               OnClick="SaveNewSkillPromptVersionAsync">儲存新版本</MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                               OnClick="@(() => { _editingSkillPrompt = null; _editingPromptBody = string.Empty; })">取消</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
     </MudTabPanel>
 
+    @* Tab 6：TalentPrompts full CRUD — Stage 72 v5.5 Phase 2 TalentPrompt（per-Talent persona / baseline 0 row） *@
     <MudTabPanel Text="TalentPrompts" Icon="@Icons.Material.Filled.Description">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            v5.5 Phase 1 TalentPrompt active 版本 read-only 列（baseline 0 row — Phase 3 才補）。
-        </MudAlert>
-        @if (_talentPrompts.Count == 0)
+        <MudStack Row="true" Spacing="2" Class="mb-3">
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadTalentPromptsAsync">重新載入</MudButton>
+        </MudStack>
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            per-Talent persona body — Phase 3 才補（baseline 0 row）。對齊 Christ 議題 2 拍板「同 Skill 多 Talent 不重複存職責 / Talent 個性風格分開」。
+        </MudText>
+
+        @if (_talents.Count == 0)
         {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 TalentPrompt 資料（對齊 Stage 67 baseline）</MudText>
+            <MudAlert Severity="Severity.Info">尚無 Talent — 先到 Talents tab 確認 baseline。</MudAlert>
         }
         else
         {
-            <MudTable Items="_talentPrompts" Dense="true" Hover="true" T="PromptSummary">
+            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentRow">
                 <HeaderContent>
-                    <MudTh>TalentName</MudTh>
-                    <MudTh>Version</MudTh>
-                    <MudTh>Length</MudTh>
+                    <MudTh>Talent</MudTh>
+                    <MudTh>Persona 狀態</MudTh>
+                    <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
+                    @{
+                        var existing = _talentPromptsActive.FirstOrDefault(p => p.TalentId == context.Id);
+                    }
                     <MudTd>@context.Name</MudTd>
-                    <MudTd>v@context.Version</MudTd>
-                    <MudTd>@context.ContentLength chars</MudTd>
+                    <MudTd>
+                        @if (existing is null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">未設定</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                v@(existing.VersionNumber) · @existing.PersonaBody.Length chars
+                            </MudChip>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))">
+                            編輯 persona
+                        </MudButton>
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         }
+
+        @if (_editingTalentPromptTalentId is not null)
+        {
+            <MudPaper Elevation="2" Class="pa-3 mt-3">
+                <MudText Typo="Typo.h6" Class="mb-2">@_editingTalentPromptTalentName — Persona 編輯</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    存檔後自動 VersionNumber +1 + IsActive=true / 舊版 IsActive=false（partial unique index 守同 TalentId 只一條 active）。
+                </MudText>
+                <MudTextField T="string" @bind-Value="_editingPersonaBody"
+                              Variant="Variant.Outlined" Lines="10" Class="mb-2"
+                              Placeholder="風格 / 個性 / 語氣等" />
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               OnClick="SaveNewTalentPromptVersionAsync">儲存新版本</MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                               OnClick="@(() => { _editingTalentPromptTalentId = null; _editingPersonaBody = string.Empty; })">取消</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
     </MudTabPanel>
 
+    @* Tab 7：Rules + Projects — reuse 既有 RuleManagement + ProjectManagement page component（inline 整合） *@
     <MudTabPanel Text="Rules + Projects" Icon="@Icons.Material.Filled.Folder">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            Rules CRUD + Projects CRUD 仍在原頁面。
-        </MudAlert>
-        <MudStack Row="true" Spacing="2">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                       OnClick="@(() => Nav.NavigateTo("/rules"))">
-                開啟規則管理頁
-            </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                       OnClick="@(() => Nav.NavigateTo("/projects"))">
-                開啟專案管理頁
-            </MudButton>
-        </MudStack>
+        <MudExpansionPanel Text="Rules（規則管理）" Expanded="true">
+            <RuleManagement />
+        </MudExpansionPanel>
+        <MudExpansionPanel Text="Projects（專案管理）" Expanded="false">
+            <ProjectManagement />
+        </MudExpansionPanel>
     </MudTabPanel>
 
-    <MudTabPanel Text="Mock Mode" Icon="@Icons.Material.Filled.BugReport">
+    @* Tab 8：MockMode — reuse SystemSettings 內含 MockMode toggle + Delay 範圍（同 Tab 2） *@
+    <MudTabPanel Text="MockMode" Icon="@Icons.Material.Filled.BugReport">
         <MudAlert Severity="Severity.Info" Class="mb-3">
-            Mock Mode toggle + Mock Delay 範圍仍在原頁面（系統設定頁 → Mock Mode section）。
+            Mock Mode toggle + Mock Delay 範圍同 Tab 2「Token 守門 + 系統設定」（既有 SystemSettings page 整套 reuse）— 或在此 tab 同 component reuse 一次。
         </MudAlert>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.OpenInNew"
-                   OnClick="@(() => Nav.NavigateTo("/system-settings"))">
-            開啟系統設定頁（含 Mock Mode）
-        </MudButton>
+        <SystemSettings />
     </MudTabPanel>
 </MudTabs>
