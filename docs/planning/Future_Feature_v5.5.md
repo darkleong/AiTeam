@@ -607,6 +607,20 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 詳見 [Trial_v26_Plan.md](../experiments/Trial_v26_Plan.md) v1.0。
 
+### Phase 4 候選 — FF C2 AppSettingsService 5 分鐘 re-read（Stage 83 子項 3 議題 C 衍生 / 2026-05-21 新立）
+
+**Forge implementation 階段揭 — Stage 83 子項 3 WorkflowFlags subtab 真實狀態**：21 Workflow:* flag 全部 require restart（AppSettingsService startup read-once / 5 分鐘 re-read 未實裝）。CLAUDE.md「Token limit / 系統設定 5 分鐘內生效，不重啟」是指 AgentConfig token limit 走 reload-cache，**不**是 Workflow:* flag。
+
+**FF C2 拍板路線**（Christ 2026-05-21 拍板 Plan Mode 議題 C 推薦 C1 + 順手立 C2 候選）：
+- **C1**（已實裝 Stage 83 子項 3）：WorkflowFlags subtab 每 toggle 顯示「⚠️ 需重啟 Bot 才生效」warning + 旁邊 Restart Bot 按鈕（reuse DashboardBotService.RestartBotAsync → POST `/internal/restart`）
+- **C2**（候選 Stage 84+）：AppSettingsService 加 5 分鐘 re-read 機制（IMemoryCache + TTL 或 Polly Caching policy）— 21 Workflow:* flag 修改後 5 分鐘內自動生效 / 不需 Restart Bot
+
+**評估時機**：Stage 84+ 真實痛點累積後評估（Christ 真實使用 Settings 分區 toggle flag 頻率 + Restart Bot ×3-5 min downtime 累積打擾感）— 對齊「不做沒驗的東西」+「YAGNI」紀律。
+
+**影響範圍評估**：規模 S（AppSettingsService.cs ~50 行 / IMemoryCache + InMemoryCachePolicy / 既有 AddDbContextFactory pattern 不動）。
+
+---
+
 ### Phase 4 候選 — Stage 82 ✅ Quinn outputLen 修根因（路線 A）+ Stage 81 子項 8 砍 + Trial_v25 三 🟡 議題收口（2026-05-21） v3.74.0 ⭐⭐⭐⭐⭐
 
 **v3.74.0 / Stage 82 Forge 結案** — commit [`a413aee`](https://github.com/darkleong/AiTeam/commit/a413aee) 單 commit / 10 檔變動 net +406 -81 行 / 0 follow-up bug / Aria gate1 Tier 0+1+2 通過（規模 S→M 邊緣升 Tier 2 / ParseJsonOutput 對 v4+v5 4 worker path 都影響 production critical path）/ **連續 18 Stage 0 follow-up + clean delivery 連續第十次** ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐（Stage 75-78a-78b-78c-79-80-81-82）/ Forge context 真實 179K → 274K Opus 1M + high。

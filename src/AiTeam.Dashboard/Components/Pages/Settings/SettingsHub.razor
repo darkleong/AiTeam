@@ -1,0 +1,217 @@
+@page "/settings"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Shared.Dtos
+
+<PageTitle>設定中心 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>設定中心</h2>
+    @if (_pendingRestart)
+    {
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-0">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-1" Size="Size.Small" />
+                Workflow flag 變更後需重啟 Bot 才生效
+            </MudAlert>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.RestartAlt"
+                       OnClick="RestartBotAsync" Disabled="@_isRestarting">
+                @(_isRestarting ? "重啟中..." : "重啟 Bot")
+            </MudButton>
+        </MudStack>
+    }
+</div>
+
+@if (_saveMessage is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3">@_saveMessage</MudAlert>
+}
+
+<MudTabs Elevation="2" Rounded="true" PanelClass="pa-4" Position="Position.Top">
+
+    @* Tab 1：Workflow Flags — 議題 C1 完整實裝（21 flag toggle + Restart Bot 按鈕）*@
+    <MudTabPanel Text="Workflow Flags" Icon="@Icons.Material.Filled.ToggleOn">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            21 Workflow:* flag 統一管理。所有 flag 修改後需重啟 Bot 才生效（AppSettingsService startup read-once / 5 分鐘 re-read 未實裝 — 見 FF C2 候選）。
+        </MudText>
+
+        @* 群組 1：v4 framework 5 flag *@
+        <MudExpansionPanel Text="v4 Framework 控制（5 flag）" Expanded="false">
+            @foreach (var key in _v4FrameworkFlags)
+            {
+                <div class="d-flex align-center justify-space-between py-2">
+                    <div>
+                        <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
+                    </div>
+                    <MudSwitch T="bool" Value="@GetBoolFlag(key)"
+                               ValueChanged="@((bool v) => SetBoolFlagAsync(key, v))" Color="Color.Warning" />
+                </div>
+            }
+        </MudExpansionPanel>
+
+        @* 群組 2：v5/v5.5 動態架構 7 flag *@
+        <MudExpansionPanel Text="v5 / v5.5 動態架構（7 flag）" Expanded="true">
+            @foreach (var key in _v5Flags)
+            {
+                <div class="d-flex align-center justify-space-between py-2">
+                    <div>
+                        <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
+                    </div>
+                    <MudSwitch T="bool" Value="@GetBoolFlag(key)"
+                               ValueChanged="@((bool v) => SetBoolFlagAsync(key, v))" Color="Color.Primary" />
+                </div>
+            }
+        </MudExpansionPanel>
+
+        @* 群組 3：數值 cap 9 flag *@
+        <MudExpansionPanel Text="數值上限（9 flag）" Expanded="false">
+            @foreach (var (key, min, max) in _numericFlags)
+            {
+                <div class="d-flex align-center justify-space-between py-2">
+                    <div style="flex:1">
+                        <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
+                    </div>
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudNumericField T="int" Value="@GetIntFlag(key)"
+                                         ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
+                                         Variant="Variant.Outlined" Min="@min" Max="@max"
+                                         Style="max-width:140px" Dense="true" />
+                    </MudStack>
+                </div>
+            }
+        </MudExpansionPanel>
+    </MudTabPanel>
+
+    @* Tab 2-8：既有 page 暫保 active / 子項 5 整合（phased delivery / 對齊 plan trade-off）*@
+    <MudTabPanel Text="Token 守門" Icon="@Icons.Material.Filled.Shield">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Token 守門設定（全域月限 / 單次請求上限 / per-agent 日限+月限）仍在原頁面。
+        </MudAlert>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                   OnClick="@(() => Nav.NavigateTo("/system-settings"))">
+            開啟系統設定頁（含 Token 守門 + Mock + 流程輪次上限）
+        </MudButton>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Agents" Icon="@Icons.Material.Filled.SmartToy">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Agent CRUD + Provider/Model + Token 限額仍在原頁面。
+        </MudAlert>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                   OnClick="@(() => Nav.NavigateTo("/agents"))">
+            開啟 Agent 設定頁
+        </MudButton>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Talents" Icon="@Icons.Material.Filled.People">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            v5.5 Phase 1 Talent + TalentSkill 簡單 read-only 摘要（CRUD 留 Stage 84+ Phase 2）。
+        </MudAlert>
+        @if (_talents.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 Talent 資料</MudText>
+        }
+        else
+        {
+            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentSummary">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Active</MudTh>
+                    <MudTh>Skills 數</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd><MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "啟用" : "停用")
+                    </MudChip></MudTd>
+                    <MudTd>@context.SkillCount</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="SkillPrompts" Icon="@Icons.Material.Filled.Article">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            v5.5 Phase 1 SkillPrompt active 版本 read-only 列（版本切換 + 編輯留 Stage 84+ Phase 2）。
+        </MudAlert>
+        @if (_skillPrompts.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 SkillPrompt 資料</MudText>
+        }
+        else
+        {
+            <MudTable Items="_skillPrompts" Dense="true" Hover="true" T="PromptSummary">
+                <HeaderContent>
+                    <MudTh>SkillName</MudTh>
+                    <MudTh>Version</MudTh>
+                    <MudTh>Length</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd>v@context.Version</MudTd>
+                    <MudTd>@context.ContentLength chars</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="TalentPrompts" Icon="@Icons.Material.Filled.Description">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            v5.5 Phase 1 TalentPrompt active 版本 read-only 列（baseline 0 row — Phase 3 才補）。
+        </MudAlert>
+        @if (_talentPrompts.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">尚無 TalentPrompt 資料（對齊 Stage 67 baseline）</MudText>
+        }
+        else
+        {
+            <MudTable Items="_talentPrompts" Dense="true" Hover="true" T="PromptSummary">
+                <HeaderContent>
+                    <MudTh>TalentName</MudTh>
+                    <MudTh>Version</MudTh>
+                    <MudTh>Length</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Name</MudTd>
+                    <MudTd>v@context.Version</MudTd>
+                    <MudTd>@context.ContentLength chars</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="Rules + Projects" Icon="@Icons.Material.Filled.Folder">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Rules CRUD + Projects CRUD 仍在原頁面。
+        </MudAlert>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                       OnClick="@(() => Nav.NavigateTo("/rules"))">
+                開啟規則管理頁
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                       OnClick="@(() => Nav.NavigateTo("/projects"))">
+                開啟專案管理頁
+            </MudButton>
+        </MudStack>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Mock Mode" Icon="@Icons.Material.Filled.BugReport">
+        <MudAlert Severity="Severity.Info" Class="mb-3">
+            Mock Mode toggle + Mock Delay 範圍仍在原頁面（系統設定頁 → Mock Mode section）。
+        </MudAlert>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.OpenInNew"
+                   OnClick="@(() => Nav.NavigateTo("/system-settings"))">
+            開啟系統設定頁（含 Mock Mode）
+        </MudButton>
+    </MudTabPanel>
+</MudTabs>
