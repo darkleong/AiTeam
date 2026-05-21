@@ -78,8 +78,19 @@ public partial class Home : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        // Stage 83 子項 1：3 endpoint 任一觸發 reload 4 metric — 子項 6 重 wire 5 endpoint 細分 subscribe
+        // Stage 83 子項 6 補做：Home 速覽 5 endpoint 全 subscribe（從 3 → 5）— 任一觸發 reload 4 metric
+        // 對齊 Aria 拍板：Home 入口頁 subscribe 全部 5 endpoint（速覽全分區 metric / 對齊「老闆控制中心」精神）
+        _hubConnection.On<object>(AgentStatusHub.ReceiveAgentStatus, async _ =>
+        {
+            await LoadMetricsAsync();
+            await InvokeAsync(StateHasChanged);
+        });
         _hubConnection.On<object>(AgentStatusHub.ReceiveTaskUpdate, async _ =>
+        {
+            await LoadMetricsAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+        _hubConnection.On(AgentStatusHub.ReceiveQueueUpdate, async () =>
         {
             await LoadMetricsAsync();
             await InvokeAsync(StateHasChanged);

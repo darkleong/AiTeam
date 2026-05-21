@@ -280,14 +280,11 @@ public partial class MonitoringHub : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
+        // Stage 83 子項 6 補做：MonitoringHub subscribe 2 endpoint（ReceiveAgentStatus + ReceiveTokenUpdate）
+        // 對齊 Aria 拍板「Monitoring subscribe ReceiveAgentStatus + ReceiveTokenUpdate」 — 砍 ReceiveQueueUpdate（Queue 屬 Tasks 視角 / Home 入口頁有 cover）
         _hubConnection.On<AgentStatusViewModel>(AgentStatusHub.ReceiveAgentStatus, async status =>
         {
             UpdateAgentStatus(status);
-            await InvokeAsync(StateHasChanged);
-        });
-        _hubConnection.On(AgentStatusHub.ReceiveQueueUpdate, async () =>
-        {
-            _agentQueues = await TaskService.GetAgentQueuesAsync();
             await InvokeAsync(StateHasChanged);
         });
         _hubConnection.On<object>(AgentStatusHub.ReceiveTokenUpdate, async _ =>
