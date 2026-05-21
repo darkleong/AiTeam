@@ -10,62 +10,69 @@
         <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
             ● SignalR @(_hubConnected ? "已連線" : "未連線")
         </span>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="TestSignalRAsync">測試推送</MudButton>
     </MudStack>
 </div>
 
+@* Stage 83 子項 1：4 metric 速覽卡 — Active session / Pending inbox / Pending HITL / 今日 Token *@
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Active 任務</MudText>
+            <MudText Typo="Typo.h4">@_activeSessionCount</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">PetraSession running + paused</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Pending 收件</MudText>
+            <MudText Typo="Typo.h4">@_pendingInboxCount</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">PetraInbox 待 dispatch</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Large" Color="Color.Warning" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">待處理確認卡</MudText>
+            <MudText Typo="Typo.h4">@_pendingHitlCount</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">BossInteraction pending</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.Token" Size="Size.Large" Color="Color.Info" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">今日 Token</MudText>
+            <MudText Typo="Typo.h4">@_todayTokenTotal.ToString("N0")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Input + Output 合計</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Stage 83 子項 1：3 分區跳轉按鈕 *@
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Assignment"
+                   OnClick="@(() => Nav.NavigateTo("/tasks"))">
+            任務中心
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Settings"
+                   OnClick="@(() => Nav.NavigateTo("/settings"))">
+            設定中心
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.MonitorHeart"
+                   OnClick="@(() => Nav.NavigateTo("/monitoring"))">
+            監控中心
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+@* Stage 83 子項 1：保留 QuickCommandCard reuse（Home 入口頁 — Christ 快速送 CEO command） *@
 <QuickCommandCard />
-
-<section class="agent-status-section">
-    <h3>Agent 狀態</h3>
-    @if (_agentStatuses.Count == 0)
-    {
-        <div class="empty-state">
-            <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Large" Color="Color.Default" /></div>
-            <p class="empty-state-title">尚未載入 Agent 資料</p>
-            <p class="empty-state-hint">請確認 Bot 服務已啟動，並重新整理頁面</p>
-        </div>
-    }
-    else
-    {
-        <MudGrid Spacing="2" Class="mb-2">
-            @foreach (var agent in _agentStatuses)
-            {
-                var queueInfo = _agentQueues.FirstOrDefault(q => q.AgentName == agent.AgentName);
-                <MudItem xs="12" sm="6" md="4" lg="3">
-                    <AgentStatusCard Agent="agent" QueueInfo="queueInfo" />
-                </MudItem>
-            }
-        </MudGrid>
-    }
-</section>
-
-<section class="recent-tasks-section">
-    <h3>最近流程</h3>
-    <div class="task-list-simple">
-        @foreach (var group in _recentGroups)
-        {
-            <div class="task-row">
-                <StatusBadge Status="@group.Status" />
-                <MudChip T="string" Size="Size.Small" Color="@WorkflowTypeColor(group.WorkflowType)"
-                         Style="margin:0">
-                    @WorkflowTypeLabel(group.WorkflowType)
-                </MudChip>
-                <span class="task-title">@group.Title</span>
-                <small>@group.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</small>
-                @if (!string.IsNullOrEmpty(group.DevPrUrl))
-                {
-                    <MudLink Href="@group.DevPrUrl" Target="_blank" Typo="Typo.caption" rel="noopener" aria-label="@($"Open {PrNumberHelper.ExtractPrNumber(group.DevPrUrl)} on GitHub")">@PrNumberHelper.ExtractPrNumber(group.DevPrUrl)</MudLink>
-                }
-            </div>
-        }
-        @if (_recentGroups.Count == 0)
-        {
-            <div class="empty-state">
-                <div class="empty-state-icon"><MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Default" /></div>
-                <p class="empty-state-title">還沒有任何流程</p>
-                <p class="empty-state-hint">去 Discord 的 <strong>#victoria-ceo</strong> 頻道下達指令，或直接在各 Agent 頻道分配任務</p>
-            </div>
-        }
-    </div>
-</section>

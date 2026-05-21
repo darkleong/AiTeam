@@ -51,6 +51,10 @@ public class PetraInboxRepository(AppDbContext db)
     public Task<int> CountPendingBySourceAsync(string source, CancellationToken ct = default)
         => db.PetraInbox.CountAsync(x => x.Status == "pending" && x.Source == source, ct);
 
+    /// <summary>Stage 83：取得全 source pending row count（Home 速覽用 / 對齊 CountPendingBySourceAsync pattern）。</summary>
+    public Task<int> CountPendingTotalAsync(CancellationToken ct = default)
+        => db.PetraInbox.CountAsync(x => x.Status == "pending", ct);
+
     /// <summary>切 running + StartedAt — W2 trade-off：「先 read 再 UPDATE」非 atomic（單 Bot OK / 多 instance 才踩）。</summary>
     public async Task<bool> TryMarkRunningAsync(Guid id, CancellationToken ct = default)
     {

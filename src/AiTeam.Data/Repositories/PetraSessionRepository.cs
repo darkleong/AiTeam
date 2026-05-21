@@ -50,6 +50,10 @@ public class PetraSessionRepository(AppDbContext db)
             .OrderBy(x => x.CreatedAt)
             .ToListAsync(ct);
 
+    /// <summary>Stage 83：取得 active session count — running + paused 視為「進行中」（Home 速覽 + Tasks 分區 ActiveSessions 用）。</summary>
+    public Task<int> CountActiveAsync(CancellationToken ct = default)
+        => db.PetraSessions.CountAsync(x => x.Status == "running" || x.Status == "paused", ct);
+
     /// <summary>取 session 含 messages（時序排序）。</summary>
     public Task<PetraSession?> GetWithMessagesAsync(Guid sessionId, CancellationToken ct = default)
         => db.PetraSessions

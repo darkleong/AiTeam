@@ -71,8 +71,8 @@ builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReviewerAgent
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<QaAgentService>());
 builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DocAgentService>());
 
-// Stage 63B：Petra Orchestrator + Session Repository + Recovery hosted service（v5 動態架構 PoC）
-builder.Services.AddScoped<PetraSessionRepository>();
+// Stage 63B：Petra Orchestrator + Recovery hosted service（v5 動態架構 PoC）
+// Stage 83：PetraSessionRepository 移到 AddAiTeamData extension（Bot + Dashboard 共用 Repository pattern / DRY）
 builder.Services.AddScoped<PetraOrchestratorService>();
 builder.Services.AddHostedService<PetraSessionRecoveryService>();
 

@@ -24,6 +24,8 @@ public static class DataServiceExtensions
         builder.Services.AddScoped<BossCommandLogRepository>();
         // Stage 75：v5.5 Phase 3 — Petra 接收層 queue（Dashboard InteractionCenter + TaskCenter 用）
         builder.Services.AddScoped<PetraInboxRepository>();
+        // Stage 83：Dashboard Home 速覽 active count + Tasks 分區 ActiveSessions / History 用（Bot 端 PetraOrchestratorService 既有 inject）
+        builder.Services.AddScoped<PetraSessionRepository>();
         return builder;
     }
 }

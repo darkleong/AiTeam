@@ -1,66 +1,76 @@
-using System.Net.Http.Json;
 using AiTeam.Data.Hubs;
-using AiTeam.Shared.Dtos;
-using AiTeam.Shared.ViewModels;
+using AiTeam.Data.Repositories;
+using AiTeam.Dashboard.Services;
 using Microsoft.AspNetCore.SignalR.Client;
-using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Home;
 
+/// <summary>
+/// Stage 83 子項 1：Home 入口頁重做 — 4 metric 速覽卡 + 3 分區跳轉 + QuickCommandCard reuse。
+///
+/// 砍既有 AgentStatus section（搬 Monitoring 分區 / 子項 4）+ RecentGroups section（搬 Tasks 分區 / 子項 2）—
+/// Home 純粹當入口頁 / 不堆 mixed scope content。
+///
+/// SignalR Hub：簡化 3 endpoint reload metric（ReceiveTaskUpdate / ReceiveInteractionUpdate / ReceiveTokenUpdate）—
+/// 子項 6 重 wire 完整 5 endpoint subscribe 細分（不同分區 subscribe 對應 endpoint）。
+/// </summary>
 public partial class Home : IAsyncDisposable
 {
     #region Dependencies
 
-    [Inject]
-    private DashboardAgentService AgentService { get; set; } = null!;
-
-    [Inject]
-    private DashboardTaskService TaskService { get; set; } = null!;
-
-    [Inject]
-    private NavigationManager Navigation { get; set; } = null!;
-
-    [Inject]
-    private IHttpClientFactory HttpClientFactory { get; set; } = null!;
-
-    [Inject]
-    private IConfiguration Configuration { get; set; } = null!;
-
-    [Inject]
-    private ILogger<Home> Logger { get; set; } = null!;
+    [Inject] private PetraSessionRepository SessionRepo { get; set; } = null!;
+    [Inject] private PetraInboxRepository   InboxRepo   { get; set; } = null!;
+    [Inject] private DashboardTaskService   TaskService { get; set; } = null!;
+    [Inject] private DashboardTokenService  TokenService { get; set; } = null!;
+    [Inject] private NavigationManager      Nav { get; set; } = null!;
+    [Inject] private IConfiguration         Configuration { get; set; } = null!;
+    [Inject] private ILogger<Home>          Logger { get; set; } = null!;
 
     #endregion
 
     #region Private Variables
 
-    private List<AgentStatusViewModel> _agentStatuses = [];
-    private List<TaskGroupDto>         _recentGroups  = [];
-    private List<AgentQueueDto>        _agentQueues   = [];
-    private HubConnection?             _hubConnection;
-    private bool                       _hubConnected;
+    private int  _activeSessionCount;
+    private int  _pendingInboxCount;
+    private int  _pendingHitlCount;
+    private long _todayTokenTotal;
+    private HubConnection? _hubConnection;
+    private bool _hubConnected;
 
     #endregion
-
-    #region Override Methods
 
     protected override async Task OnInitializedAsync()
     {
-        _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
-        _recentGroups  = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
-        _agentQueues   = await TaskService.GetAgentQueuesAsync();
+        await LoadMetricsAsync();
         await ConnectSignalRAsync();
     }
 
-    #endregion
+    private async Task LoadMetricsAsync()
+    {
+        try
+        {
+            _activeSessionCount = await SessionRepo.CountActiveAsync();
+            _pendingInboxCount  = await InboxRepo.CountPendingTotalAsync();
 
-    #region Private Methods
+            var pendingInteractions = await TaskService.GetPendingInteractionsAsync();
+            _pendingHitlCount   = pendingInteractions.Count;
+
+            var todayStart = DateTime.UtcNow.Date;
+            var summary    = await TokenService.GetSummaryAsync(todayStart, todayStart.AddDays(1));
+            _todayTokenTotal = summary.AgentSummaries.Sum(a => (long)a.TotalInputTokens + a.TotalOutputTokens);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Home 速覽 metric 載入失敗");
+        }
+    }
 
     private async Task ConnectSignalRAsync()
     {
         // Docker 容器內部用 Dashboard__HubBaseUrl 覆蓋（避免用外部 port 連不到自己）
         var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
         var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
-            ? Navigation.ToAbsoluteUri("/hubs/agent-status").ToString()
+            ? Nav.ToAbsoluteUri("/hubs/agent-status").ToString()
             : $"{hubBaseUrl.TrimEnd('/')}/hubs/agent-status";
 
         _hubConnection = new HubConnectionBuilder()
@@ -68,47 +78,39 @@ public partial class Home : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<AgentStatusViewModel>(
-            AgentStatusHub.ReceiveAgentStatus,
-            async status =>
-            {
-                UpdateAgentStatus(status);
-                await InvokeAsync(StateHasChanged);
-            });
+        // Stage 83 子項 1：3 endpoint 任一觸發 reload 4 metric — 子項 6 重 wire 5 endpoint 細分 subscribe
+        _hubConnection.On<object>(AgentStatusHub.ReceiveTaskUpdate, async _ =>
+        {
+            await LoadMetricsAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+        _hubConnection.On<object>(AgentStatusHub.ReceiveInteractionUpdate, async _ =>
+        {
+            await LoadMetricsAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+        _hubConnection.On<object>(AgentStatusHub.ReceiveTokenUpdate, async _ =>
+        {
+            await LoadMetricsAsync();
+            await InvokeAsync(StateHasChanged);
+        });
 
-        _hubConnection.On<object>(
-            AgentStatusHub.ReceiveTaskUpdate,
-            async _ =>
-            {
-                _recentGroups = await TaskService.GetRecentTaskGroupsAsync(limit: 10);
-                await InvokeAsync(StateHasChanged);
-            });
-
-        _hubConnection.On(
-            AgentStatusHub.ReceiveQueueUpdate,
-            async () =>
-            {
-                _agentQueues = await TaskService.GetAgentQueuesAsync();
-                await InvokeAsync(StateHasChanged);
-            });
-
-        _hubConnection.Closed += async _ =>
+        _hubConnection.Closed += _ =>
         {
             _hubConnected = false;
-            await InvokeAsync(StateHasChanged);
+            return InvokeAsync(StateHasChanged);
         };
-
-        _hubConnection.Reconnected += async _ =>
+        _hubConnection.Reconnected += _ =>
         {
             _hubConnected = true;
-            await InvokeAsync(StateHasChanged);
+            return InvokeAsync(StateHasChanged);
         };
 
         try
         {
             await _hubConnection.StartAsync();
             _hubConnected = true;
-            Logger.LogInformation("SignalR Hub 連線成功：{Url}", Navigation.ToAbsoluteUri("/hubs/agent-status"));
+            Logger.LogInformation("SignalR Hub 連線成功：{Url}", hubUrl);
         }
         catch (Exception ex)
         {
@@ -117,58 +119,9 @@ public partial class Home : IAsyncDisposable
         }
     }
 
-    private void UpdateAgentStatus(AgentStatusViewModel updated)
-    {
-        // Stage 33：白名單過濾 — 只更新初始從 DB agent_configs 撈出來的真 Agent。
-        // Bot 端 AgentQueueProcessor 推送時 AgentName 直接用 task.AssignedAgent，
-        // 會包含 workflow-only 的階段名（Dev_plan / Kickoff / Design）。
-        // 若盲接 Add 會在首頁多出 runtime ghost 卡。
-        var idx = _agentStatuses.FindIndex(a => a.AgentName == updated.AgentName);
-        if (idx < 0) return;
-        _agentStatuses[idx] = updated;
-    }
-
-    /// <summary>測試 SignalR 推送管道：POST /internal/agent-status/test → Hub → 頁面更新。</summary>
-    private async Task TestSignalRAsync()
-    {
-        try
-        {
-            var client = HttpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(Navigation.BaseUri);
-            var response = await client.PostAsync("/internal/agent-status/test", null);
-            Logger.LogInformation("測試推送回應：{StatusCode}", response.StatusCode);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "測試推送失敗");
-        }
-    }
-
-    private static string WorkflowTypeLabel(string? workflowType) => workflowType switch
-    {
-        "new_feature"      => "新功能",
-        "bug_fix"          => "Bug Fix",
-        "tech_improvement" => "技術改善",
-        _                  => workflowType ?? ""
-    };
-
-    private static Color WorkflowTypeColor(string? workflowType) => workflowType switch
-    {
-        "new_feature"      => Color.Primary,
-        "bug_fix"          => Color.Warning,
-        "tech_improvement" => Color.Secondary,
-        _                  => Color.Default
-    };
-
-    #endregion
-
-    #region IAsyncDisposable
-
     public async ValueTask DisposeAsync()
     {
         if (_hubConnection is not null)
             await _hubConnection.DisposeAsync();
     }
-
-    #endregion
 }
