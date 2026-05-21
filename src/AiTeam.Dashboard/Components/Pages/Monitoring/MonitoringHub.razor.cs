@@ -214,18 +214,20 @@ public partial class MonitoringHub : IAsyncDisposable
     private async Task RefreshHealthAsync()
     {
         // 走 /internal/health endpoint（Stage 83 子項 4 新加）
+        // Stage 83 v3 Bug 3 修根因：對齊既有 docker-compose.prod.yml Dashboard env naming（`Bot:` prefix / 不是 `AgentSettings:`） —
+        // Dashboard 端把 Bot 視為「外部 service」用 Bot:InternalApiKey + Bot:InternalUrl env / 既有 Stage X 已 inject。
         try
         {
-            var apiKey = Configuration["AgentSettings:InternalApiKey"];
+            var apiKey = Configuration["Bot:InternalApiKey"];
             if (string.IsNullOrEmpty(apiKey))
             {
                 _botHealthy = false;
-                _botStatusDetail = "AgentSettings:InternalApiKey 未設定";
+                _botStatusDetail = "Bot:InternalApiKey 未設定（docker-compose Bot__InternalApiKey env）";
                 return;
             }
 
-            // Bot Internal API on port 5052（同 docker-compose 內部 service）
-            var botBaseUrl = Configuration["AgentSettings:InternalBaseUrl"] ?? "http://aiteam-bot:5052";
+            // Bot Internal API URL — docker-compose Dashboard env `Bot__InternalUrl: "http://aiteam-bot:8080"`（內部 docker network port 8080）
+            var botBaseUrl = Configuration["Bot:InternalUrl"] ?? "http://aiteam-bot:8080";
 
             var client = HttpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
