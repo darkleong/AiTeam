@@ -51,7 +51,7 @@ AiTeam.slnx         ← 解決方案檔位於 repo root（注意 .slnx 不是 .s
       ├── AiTeam.AppHost          ← Aspire 入口
       ├── AiTeam.ServiceDefaults  ← 共用遙測 / 健康檢查
       ├── AiTeam.Bot              ← Discord Bot 主程式 + Agent 邏輯
-      ├── AiTeam.Dashboard        ← Blazor Web App（MudBlazor 8.x / InteractiveServer）
+      ├── AiTeam.Dashboard        ← Blazor Web App(MudBlazor 8.x / InteractiveServer）
       ├── AiTeam.Data             ← EF Core DbContext / Entities / Repositories / Migrations
       ├── AiTeam.Shared           ← 共用 DTO / 介面 / 常數
       └── AiTeam.Tests.Playwright ← Playwright E2E 截圖測試
@@ -122,68 +122,22 @@ Windows 11 本機 Docker Compose（非雲端）：
 
 ---
 
-## 自主執行原則
+## EF Core Migration
 
-**老闆只動嘴 / 能自己做的事不要叫老闆做。**
+新 Migration 指令：
 
-實作完畢進驗收前，以下自行完成（不需請老闆）：
+```
+dotnet ef migrations add {Name} --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
+dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
+```
 
-- `dotnet build AiTeam.slnx`（repo root 執行）
-- `dotnet test`
-- EF Core Migration（有新 Migration 時）：
-  ```
-  dotnet ef migrations add {Name} --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
-  dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext
-  ```
-  **注意**：`startup-project` 必須 `src/AiTeam.Dashboard`（含 EntityFrameworkCore.Design）/ 用 AppHost 找不到 DLL / 多 DbContext 必加 `--context AppDbContext`
-- git commit + push 到 main（直接執行 / 不詢問「要不要 push」）
-- 程式碼靜態分析（無明顯 warning）
-- **Playwright 驗收**：可截圖驗證的 UI 變更自行執行 / 不請老闆開瀏覽器
-
-**需要請老闆操作**：
-- 重啟 Docker 容器（`docker compose restart`）
-- Discord 執行 `/reload-rules`（規則快取更新）
-- Discord 實際測試 Bot 對話流程
-- Dashboard 視覺驗收 UI 功能
-
----
-
-## 實作完成後的結案 SOP
-
-1. 本機驗證：`dotnet build` / `dotnet test` / Playwright 截圖（如適用）
-2. 自行 commit（聚焦「為什麼」/ 從近期 commit 觀察風格）
-3. 自行 push 到 main（不詢問 / **直接 push**）
-4. CI/CD 自動接手：push → GitHub Actions self-hosted runner → `docker compose build + up` → 老闆本機 Win11 Docker
-5. 回報「實作完成 + 已 push」+ commit hash / 等老闆驗收
-
-> 除非該 commit 涉及破壞性操作（force push / reset --hard 等）或老闆明確指示 review，否則一氣呵成完成。
+**AiTeam 特殊紀律**：
+- `startup-project` 必須 `src/AiTeam.Dashboard`（含 `Microsoft.EntityFrameworkCore.Design`）/ 用 `AppHost` 找不到 DLL
+- 多 DbContext 必加 `--context AppDbContext`
+- Bot 容器啟動自動 `MigrateAsync()` AppDbContext（`Bot/Program.cs:184`）/ push 後容器 recreate 自動套用 / 不需手動跑 `dotnet ef database update`
 
 ---
 
 ## 開發語言
 
-老闆用繁體中文溝通 / 程式碼註解繁體中文 / 變數與方法名英文。
-
----
-
-## Session 起手規則
-
-進入「實作 / 修 Bug / 驗收」類 session 時，第一件事：
-
-1. 讀 `docs/planning/Stage_{current}_Roadmap.md`（若 Stage 工作）
-2. `git log --oneline -10` 了解最近進度
-3. 掃 `docs/planning/Future_Feature.md` 前段（🔴🟡 狀態 bug 區塊）
-
-純諮詢 / 設計討論類 session 不需要。
-
----
-
-## 回答老闆觀察到的異常時
-
-老闆回報「這合理嗎 / 為什麼 X / 我看到 Y」時，**先查程式碼實證 / 不靠推論解釋**。
-
-- 讀相關檔案 / 確認實際流程
-- 比對 Roadmap / 計劃書預期行為
-- 確認後再下判斷
-
-不要用「這是既有設計」「不影響正確性」這類結論打發 — 除非已有程式碼實證支撐。老闆觀察通常基於真實使用感受 / 即使初判「不是 bug」也要**先記錄到 Future_Feature.md 再下結論** / 別直接 dismiss。
+程式碼註解使用繁體中文 / 變數與方法名使用英文。
