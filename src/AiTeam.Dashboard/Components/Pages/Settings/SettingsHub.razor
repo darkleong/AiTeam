@@ -216,8 +216,8 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.SkillName</MudTd>
-                    <MudTd>v@context.VersionNumber</MudTd>
-                    <MudTd>@context.PromptBody.Length chars</MudTd>
+                    <MudTd>v@(context.VersionNumber)</MudTd>
+                    <MudTd>@(context.PromptBody.Length) chars</MudTd>
                     <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
                     <MudTd>
                         <MudButton Size="Size.Small" Variant="Variant.Outlined"
