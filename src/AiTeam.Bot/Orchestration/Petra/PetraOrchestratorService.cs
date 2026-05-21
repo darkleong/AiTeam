@@ -257,6 +257,8 @@ public class PetraOrchestratorService(
         var systemPrompt = await BuildPetraSystemPromptForRuntimeAsync(capabilityRoster, useSubtaskPlanning: false, ct);
 
         var provider = providerFactory.Create(PetraAgentName);
+        // Stage 82 子項 2：AsyncLocal scope — token_logs.PetraSessionId 透傳（vs Stage 81 議題 #5 worker dispatch path 紀律對齊）
+        using var _scope = TokenTrackingProvider.BeginPetraSessionScope(ctx.SessionId);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
@@ -464,6 +466,8 @@ public class PetraOrchestratorService(
 
         var provider = providerFactory.Create(PetraAgentName);
         // Stage 79：v5.5 image flow 補完 — images 傳給 ILlmProvider.CompleteAsync（GeminiProvider multimodal 真實看圖）
+        // Stage 82 子項 2：AsyncLocal scope — token_logs.PetraSessionId 透傳
+        using var _scope = TokenTrackingProvider.BeginPetraSessionScope(ctx.SessionId);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
@@ -533,6 +537,8 @@ public class PetraOrchestratorService(
 
         var provider = providerFactory.Create(PetraAgentName);
         // Stage 79：v5.5 image flow 補完 — images 傳給 ILlmProvider.CompleteAsync（GeminiProvider multimodal 真實看圖 + Petra 拍板 NeedsImageContext per subtask）
+        // Stage 82 子項 2：AsyncLocal scope — token_logs.PetraSessionId 透傳
+        using var _scope = TokenTrackingProvider.BeginPetraSessionScope(ctx.SessionId);
         var response = await provider.CompleteAsync(systemPrompt, $"任務：{taskInput}", ct, images);
 
         await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant", response.Content, ct: ct);
@@ -1848,6 +1854,8 @@ public class PetraOrchestratorService(
         try
         {
             var provider = providerFactory.Create(PetraAgentName);
+            // Stage 82 子項 2：AsyncLocal scope — token_logs.PetraSessionId 透傳（replan decide LLM call）
+            using var _scope = TokenTrackingProvider.BeginPetraSessionScope(ctx.SessionId);
             var resp = await provider.CompleteAsync(systemPrompt, userPrompt, ct, images: null);
             await sessionRepo.AppendMessageAsync(ctx.SessionId, "assistant",
                 $"[Stage 81 replan decide / trigger={triggerReason}]\n{resp.Content}", ct: ct);

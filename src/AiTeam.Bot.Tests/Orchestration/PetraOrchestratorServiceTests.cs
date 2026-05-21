@@ -1166,35 +1166,7 @@ roster={{capabilityRoster}}
         _ = reason;   // 文件用：assertion 失敗時 reason 釐清預期
     }
 
-    // ─── Stage 81 場景 I：QA prepend — adapter capability=qa_testing → prompt 加 QA 報告紀律 ───
-    [Theory]
-    [InlineData("qa_testing",          true,  "Quinn qa_testing 必含 QA 報告紀律 prepend")]
-    [InlineData("code_implementation", false, "Cody 不含 QA 報告紀律 (Cody-only 廣範圍指令 prepend 已驗 in Test 13)")]
-    [InlineData("code_review",         false, "Vera 不含 QA 報告紀律")]
-    [InlineData("documentation",       false, "Sage 不含 QA 報告紀律")]
-    public async Task Stage81_Adapter_QaSummaryEnforce_PrependsForQaTestingOnly(string capability, bool shouldContainQa, string _reason)
-    {
-        var stub = new StubClaudeCodeService();
-        var adapter = new ClaudeCodeChatClientAdapter(
-            stub, capability, "TestWorker", "mock-model", "mock-key",
-            workingDir: "",
-            tokenLogService: null,
-            NullLogger<ClaudeCodeChatClientAdapter>.Instance);
-
-        var input = new[] { new Microsoft.Extensions.AI.ChatMessage(Microsoft.Extensions.AI.ChatRole.User, "跑 dotnet test 補測試") };
-        await adapter.GetResponseAsync(input);
-
-        Assert.NotNull(stub.LastReceivedPrompt);
-        if (shouldContainQa)
-        {
-            Assert.Contains("QA 報告紀律", stub.LastReceivedPrompt!);
-            Assert.Contains("CLAUDE_Quinn.md JSON schema", stub.LastReceivedPrompt!);
-        }
-        else
-        {
-            Assert.DoesNotContain("QA 報告紀律", stub.LastReceivedPrompt!);
-        }
-    }
+    // ─── Stage 82 子項 1c：砍 Stage 81 場景 I QA prepend test — Stage 81 子項 8 假設修法錯方向（Trial_v25 揭真實根因 = stream-json result 空 / 路線 A 修對地方 in ClaudeCodeServiceParseJsonOutputTests）───
 
     // ─── Stage 81 場景 J：BuildPetraSystemPrompt few-shot 補 NeedsImageContext negative example ──
     [Fact]

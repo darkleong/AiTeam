@@ -30,6 +30,24 @@ public class TokenTrackingProvider(
     string agentName,
     string model) : ILlmProvider
 {
+    // Stage 82 子項 2：AsyncLocal scope — Petra LLM call 4 site 包 using scope，TokenTrackingProvider 寫 TokenLog 時透傳 PetraSessionId
+    // （對齊 Stage 81 議題 #5 worker dispatch path PetraSessionId 透傳紀律）。
+    // ILlmProvider 介面 0 動（W1 紀律 / 介面穩定）/ 既有所有 caller（CeoAgentService / DashboardAgentService / AgentQueueProcessor）透明 /
+    // Petra 4 call site 加 using scope。
+    internal static readonly AsyncLocal<Guid?> PetraSessionAmbient = new();
+
+    public static IDisposable BeginPetraSessionScope(Guid sessionId)
+    {
+        var prev = PetraSessionAmbient.Value;
+        PetraSessionAmbient.Value = sessionId;
+        return new PopScope(prev);
+    }
+
+    private sealed class PopScope(Guid? previous) : IDisposable
+    {
+        public void Dispose() => PetraSessionAmbient.Value = previous;
+    }
+
     public async Task<LlmResponse> CompleteAsync(
         string systemPrompt,
         string userMessage,
@@ -122,13 +140,15 @@ public class TokenTrackingProvider(
             model, response.InputTokens, response.OutputTokens, cacheCreate: 0, cacheRead: 0);
         tokenRepository.Add(new TokenLog
         {
-            AgentName    = agentName,
-            Model        = model,
-            InputTokens  = response.InputTokens,
-            OutputTokens = response.OutputTokens,
-            TotalCostUsd = cost,
-            IsEstimated  = isEstimated,
-            CreatedAt    = DateTime.UtcNow
+            AgentName       = agentName,
+            Model           = model,
+            InputTokens     = response.InputTokens,
+            OutputTokens    = response.OutputTokens,
+            TotalCostUsd    = cost,
+            IsEstimated     = isEstimated,
+            CreatedAt       = DateTime.UtcNow,
+            // Stage 82 子項 2：AsyncLocal 透傳 — Petra 4 LLM call site 包 BeginPetraSessionScope 時填入 / 其他 caller default null（對齊既有行為）
+            PetraSessionId  = PetraSessionAmbient.Value,
         });
         await tokenRepository.SaveAsync(cancellationToken);
 

@@ -104,16 +104,6 @@ internal sealed class ClaudeCodeChatClientAdapter(
             prompt = enforceSection + "\n\n" + prompt;
         }
 
-        // Stage 81 子項 8：🟡 #1 Quinn outputLen=0 修根因 — qa_testing capability prepend「QA 報告紀律」要求 final turn 必輸出 markdown 摘要。
-        // 對齊 Cody-only prepend pattern（純 adapter 層 / 不污染 CLAUDE_Quinn.md 跨專案守則）。
-        // 假設根因：Quinn 跑完 Write tests + dotnet test 後 CLI session 結束時無 final text turn → `result` JSON 欄位空 → outputLen=0
-        // ⚠️ 若 docker logs 揭真實 root cause ≠ 此假設（如 ParseJsonOutput edge case / maxTurns 不夠）→ escalate Christ 拍板（紀律 1）
-        if (string.Equals(capability, "qa_testing", StringComparison.OrdinalIgnoreCase))
-        {
-            var qaSection = BuildQaSummaryEnforceSection();
-            prompt = qaSection + "\n\n" + prompt;
-        }
-
         // Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 動態 resolve（三層 fallback chain：per-Skill > per-Talent > runtime）。
         // resolver=null / talentId=null → 走 ctor default model（v5 既有 path + xUnit test 0 regression）。
         var resolvedModel = model;
@@ -289,20 +279,6 @@ internal sealed class ClaudeCodeChatClientAdapter(
         "documentation"       => claudeCode.RunReadOnlyAsync(workingDir, prompt, resolvedModel, apiKey, maxTurns: null, ct: ct, systemPrompt: systemPrompt),
         _ => throw new InvalidOperationException($"未知 capability: {capability}（對齊 ClaudeCodeChatClientAdapter dispatch 表 — Stage 78a 縮為 v5.5 4 Worker baseline）"),
     };
-
-    /// <summary>
-    /// Stage 81 子項 8：🟡 #1 Quinn outputLen=0 修根因 — qa_testing capability prepend「QA 報告紀律」段。
-    /// 對齊 Cody-only prepend pattern（純 adapter 層 / 不污染 CLAUDE_Quinn.md 跨專案守則）。
-    /// </summary>
-    private static string BuildQaSummaryEnforceSection() => """
-【QA 報告紀律 — 必須在 final turn 輸出】
-
-完成 dotnet test + Write tests 後，**必須在最後一個 turn 輸出 markdown 摘要**：
-
-- 對應 CLAUDE_Quinn.md JSON schema：status / passed_tests / failed_tests / unverifiable_targets / summary
-- 即使所有 test 通過也要 output JSON 摘要供 Petra 收尾判讀
-- 不要省略 final text turn / 不要只跑 tool calls 就結束（CLI session 結束時無 final text → result JSON 欄位空 = outputLen=0 不可接受）
-""";
 
     /// <summary>
     /// Stage 66 子項 3：廣範圍指令處理紀律 enforce 段（generic / 無專案特定 mapping — Christ 2026-05-14 拍板）。

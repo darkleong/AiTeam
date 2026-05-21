@@ -494,7 +494,9 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
                $"--dangerously-skip-permissions " +
                $"{toolsArg}" +
                $"{sysPromptArg}" +
-               $"--output-format json " +
+               // Stage 82 子項 1：--output-format json → stream-json + --verbose（對齊既有 image path RunCoreWithImagesAsync L171 pattern）
+               // 修根因 cover Quinn tool-heavy 場景：最後 turn 是 tool_use 而非 text 時，result 欄位 empty → ParseJsonOutput accumulate assistant content blocks fallback
+               $"--output-format stream-json --verbose " +
                $"--max-turns {maxTurns} " +
                $"{sessionArg}" +
                $"--model {model}";
@@ -516,27 +518,33 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
                $"--dangerously-skip-permissions " +
                $"{toolsArg}" +
                $"{sysPromptArg}" +
-               $"--output-format json " +
+               // Stage 82 子項 1：--output-format json → stream-json + --verbose（同上一 BuildArgs 修法 / 對齊既有 image path L171）
+               $"--output-format stream-json --verbose " +
                $"--max-turns {maxTurns} " +
                $"--no-session-persistence " +
                $"--model {model}";
     }
 
     /// <summary>
-    /// 解析 Claude Code JSON 輸出，提取執行結果與摘要。
-    /// --output-format json 的最終結果為最後一行 JSON，type="result"。
+    /// 解析 Claude Code stream-json 輸出，提取執行結果與摘要。
     /// Stage 44：額外解析 usage 子物件 + 頂層 total_cost_usd 供 token_logs 寫入。
+    /// Stage 82 子項 1：升級 cover stream-json NDJSON — line-by-line iterate，accumulate type=assistant.message.content[]
+    /// 的 type=text 內容；若 type=result row 的 result 欄位空（Quinn tool-heavy 場景 final turn 是 tool_use 而非 text）→
+    /// fallback accumulated text（修根因）。Normal text-only turn → result 非空 → 對齊既有行為 0 regression。
     /// </summary>
     private (bool Success, string Output, TokenUsage? Usage) ParseJsonOutput(string rawOutput, int exitCode)
     {
         if (string.IsNullOrWhiteSpace(rawOutput))
             return (exitCode == 0, "（無輸出）", null);
 
-        // JSON 輸出為逐行 JSON，最後一行是 type="result" 的結果物件
         var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        for (var i = lines.Length - 1; i >= 0; i--)
+
+        // Stage 82 子項 1：accumulate `type=assistant.message.content[]` 的 type=text 內容（修根因 — Quinn tool-heavy 場景 final turn tool_use → result 空）
+        var accumulatedText = new StringBuilder();
+
+        foreach (var rawLine in lines)
         {
-            var line = lines[i].Trim();
+            var line = rawLine.Trim();
             if (!line.StartsWith('{')) continue;
 
             try
@@ -545,24 +553,54 @@ public class ClaudeCodeService(ILogger<ClaudeCodeService> logger) : IClaudeCodeS
                 var root = doc.RootElement;
 
                 if (!root.TryGetProperty("type", out var typeProp)) continue;
-                if (typeProp.GetString() != "result") continue;
+                var typeStr = typeProp.GetString();
 
-                var isError = root.TryGetProperty("is_error", out var errProp) && errProp.GetBoolean();
-                var result  = root.TryGetProperty("result", out var resProp)
-                    ? resProp.GetString() ?? ""
-                    : "";
-                var usage = TryParseUsage(root);
+                if (typeStr == "assistant"
+                    && root.TryGetProperty("message", out var msg)
+                    && msg.TryGetProperty("content", out var content)
+                    && content.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var block in content.EnumerateArray())
+                    {
+                        if (block.TryGetProperty("type", out var bt) && bt.GetString() == "text"
+                            && block.TryGetProperty("text", out var tv))
+                        {
+                            var s = tv.GetString();
+                            if (!string.IsNullOrEmpty(s))
+                            {
+                                if (accumulatedText.Length > 0) accumulatedText.Append('\n');
+                                accumulatedText.Append(s);
+                            }
+                        }
+                    }
+                }
+                else if (typeStr == "result")
+                {
+                    var isError = root.TryGetProperty("is_error", out var errProp) && errProp.GetBoolean();
+                    var resultStr = root.TryGetProperty("result", out var resProp)
+                        ? resProp.GetString() ?? ""
+                        : "";
+                    var usage = TryParseUsage(root);
 
-                return (!isError && exitCode == 0, result, usage);
+                    // 優先取 result.result（normal text-only turn 對齊既有行為）；空時 fallback accumulated（tool-heavy 場景修根因）
+                    var output = !string.IsNullOrWhiteSpace(resultStr)
+                        ? resultStr
+                        : accumulatedText.ToString();
+
+                    return (!isError && exitCode == 0, output, usage);
+                }
             }
             catch (JsonException)
             {
-                // 非 JSON 行，繼續往上找
+                // 非 JSON 行，繼續處理下一行
             }
         }
 
-        // 找不到 result 物件：fallback 到 exit code 判斷
-        return (exitCode == 0, lines.LastOrDefault(l => l.Trim().Length > 0) ?? "（無摘要）", null);
+        // 找不到 result row — fallback accumulated text（若也空走原 lastOrDefault 邏輯）
+        var fallback = accumulatedText.Length > 0
+            ? accumulatedText.ToString()
+            : lines.LastOrDefault(l => l.Trim().Length > 0) ?? "（無摘要）";
+        return (exitCode == 0, fallback, null);
     }
 
     /// <summary>

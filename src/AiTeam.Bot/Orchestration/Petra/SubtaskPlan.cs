@@ -100,6 +100,7 @@ internal static class SubtaskPlanParser
         }
 
         var stripped = StripCodeFence(raw.Trim());
+        stripped = StripPreambleAndPostamble(stripped);   // Stage 82 子項 3：對話前綴 / 後綴 strip 防呆
 
         SubtaskPlanDto? dto;
         try
@@ -159,6 +160,16 @@ internal static class SubtaskPlanParser
         var fenceEnd = inner.LastIndexOf("```", StringComparison.Ordinal);
         if (fenceEnd < 0) return inner.Trim();
         return inner[..fenceEnd].Trim();
+    }
+
+    // Stage 82 子項 3：對 LLM 健談行為防呆（找 first '{' index + last '}' index substring extract）/ 對齊「修根因 > 補丁」紀律。
+    // Petra system prompt 純 JSON 紀律維持（既有 Sonnet 4.6 純 JSON OK）+ 底層 parser robust 防呆雙保險。
+    private static string StripPreambleAndPostamble(string s)
+    {
+        var first = s.IndexOf('{');
+        var last  = s.LastIndexOf('}');
+        if (first < 0 || last < 0 || last <= first) return s;
+        return s[first..(last + 1)];
     }
 
     private sealed class SubtaskPlanDto
