@@ -49,6 +49,17 @@ Stage 7-12 期間 Demi（Designer Agent）為 Dev 產出的 UI 規格 Markdown�
 
 含多份 Reviewer 報告統計行的重複版（早期試驗殘留）。
 
+### `agents-v4/software-team-v4/` — v4 Agent 個別設計檔（已過時）
+
+> 歸檔日期：2026-05-21
+> 原位置：`docs/agents/software team/`
+
+v4 hierarchical static 時期 12 個 Agent 個別設計檔（CEO/PM/Dev/Reviewer/QA/Doc/Designer/Requirements/Release/Ops/Software_Team_Plan/Agent_Capability_Gaps）。
+
+**Stage 78a 後砍範圍**：Rosa（Requirements）/ Demi（UI Design）/ Rena（Release Publishing）對應 capability 砍 + Maya（Ops）未實作。**v5.5 真實 baseline 只 6 Talent**（Victoria/Petra/Cody/Vera/Quinn/Sage），詳見活檔 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)。
+
+歷史價值保留 — Christ 未來如要重啟某 Agent 角色（如 Ops 自動 ALERT / Reporter 自動週報）可參考此 archive 設計原點。
+
 ---
 
 ## 取消歸檔（如需要）

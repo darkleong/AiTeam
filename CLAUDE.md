@@ -13,7 +13,7 @@
 - 視覺化：Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）
 - LLM：**v5.5 production active 6 Talent**：
   - **Victoria** flag forward only（CeoAgentService 寫 PetraInbox + return ack / 不直接 call LLM）
-  - **Petra** 走 `LlmProviderFactory.Create("PM")`（Gemini default per Trial_v22 token_logs 驗 / 可選 Anthropic）— PetraOrchestratorService.cs:227/407/474 真實 3 call sites decide capability / skill / SubtaskPlan
+  - **Petra** 走 `LlmProviderFactory.Create("PM")`（**Anthropic Sonnet 4.6 production active default** — Stage 82 後 Christ 拍板「reliability > cost」/ 過去 Gemini Flash default 已切換 / DB SoT `agent_configs.Provider/Model` Dashboard 動態調）— PetraOrchestratorService.cs:227/407/474 真實 3 call sites decide capability / skill / SubtaskPlan + Stage 81 子項 4 `InvokePetraReplanAsync` 第 4 call site
   - **Cody / Vera / Quinn / Sage** 走 Claude Code CLI subprocess（via ClaudeCodeChatClientAdapter）
   > csproj 內 `Anthropic.SDK 5.10.0` 保留（Petra 透過 LlmProviderFactory + AnthropicProvider 仍可選 Anthropic）。Stage 78a 砍 1 dead nuget `Microsoft.Agents.AI.Anthropic 1.3.0-preview`（src/ 0 import 真實 dead）。
 - 部署：Docker Compose on Windows 11（本機，非雲端）
