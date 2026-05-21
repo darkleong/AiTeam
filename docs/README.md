@@ -59,7 +59,7 @@
 
 ### `agents/` — Agent 文件（依需查閱）
 
-各 AI Agent 的能力說明、行為設定與協作架構記錄。**v5.5 baseline 主檔**：[`agents/v5.5_team_plan.md`](agents/v5.5_team_plan.md)（6 Talent 清單 + Talent-Skill separation + Petra 動態 orchestrator + HITL 兜底 / 對應 v3.74.0 Stage 82 後狀態 / 2026-05-21 大整理）+ [`agents/Advisor_Agent.md`](agents/Advisor_Agent.md)（Aria 角色 lore）。
+各 AI Agent 的能力說明、行為設定與協作架構記錄。**v5.5 baseline 主檔**：[`agents/v5.5_team_plan.md`](agents/v5.5_team_plan.md)（6 Talent 清單 + Talent-Skill separation + Petra 動態 orchestrator + HITL 兜底 / 對應 v3.75.0 Stage 83 後狀態 / 2026-05-21 大整理）。
 
 v4 hierarchical static 時期 12 個 Agent 個別設計檔已歸檔至 [`_archive/agents-v4/`](_archive/agents-v4/)。執行細節（行為、工具權限、輸出格式）以 `src/AiTeam.Bot/Resources/CLAUDE_*.md` 為準。
 
