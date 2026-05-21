@@ -83,4 +83,49 @@ public class QuickCommandCardTests
 
         GetError(instance).Should().BeNull("有效圖片應無錯誤訊息");
     }
+
+    // ── OnFilesValidated：Snackbar 雙通知驗證 ────────────────────────────────
+
+    [Fact]
+    public void OnFilesValidated_非圖片檔案_應同步呼叫Snackbar警告通知()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = new QuickCommandCard();
+        typeof(QuickCommandCard)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, snackbar);
+
+        var nonImageFile = Substitute.For<IBrowserFile>();
+        nonImageFile.ContentType.Returns("application/pdf");
+        nonImageFile.Name.Returns("document.pdf");
+        nonImageFile.Size.Returns(1024L);
+
+        SetSelectedFiles(instance, new List<IBrowserFile> { nonImageFile });
+        InvokeOnFilesValidated(instance);
+
+        snackbar.Received(1).Add(
+            Arg.Is<string>(s => s.Contains("不是有效的圖片格式")),
+            Severity.Warning,
+            Arg.Any<Action<SnackbarOptions>?>());
+    }
+
+    [Fact]
+    public void OnFilesValidated_有效圖片檔案_應不觸發Snackbar通知()
+    {
+        var snackbar = Substitute.For<ISnackbar>();
+        var instance = new QuickCommandCard();
+        typeof(QuickCommandCard)
+            .GetProperty("Snackbar", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(instance, snackbar);
+
+        var imageFile = Substitute.For<IBrowserFile>();
+        imageFile.ContentType.Returns("image/png");
+        imageFile.Name.Returns("image.png");
+        imageFile.Size.Returns(512L);
+
+        SetSelectedFiles(instance, new List<IBrowserFile> { imageFile });
+        InvokeOnFilesValidated(instance);
+
+        snackbar.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<Severity>(), Arg.Any<Action<SnackbarOptions>?>());
+    }
 }
