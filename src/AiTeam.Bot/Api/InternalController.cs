@@ -207,6 +207,37 @@ public class InternalController(
         });
     }
 
+    /// <summary>
+    /// Stage 83 子項 4 補做：Bot 容器健康檢測（Dashboard Monitoring 分區 SystemHealth tab 用）。
+    /// 回 Bot Process uptime + PostgreSQL CanConnect + Discord state（state 未 inject — 簡化 placeholder）。
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<IActionResult> GetHealth(CancellationToken ct)
+    {
+        if (!IsAuthorized()) return Unauthorized();
+
+        bool dbOk     = false;
+        string dbDetail = "";
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            dbOk     = await db.Database.CanConnectAsync(ct);
+            dbDetail = dbOk ? "AppDbContext 連線正常" : "Cannot connect";
+        }
+        catch (Exception ex) { dbDetail = ex.Message.Length > 100 ? ex.Message[..100] + "..." : ex.Message; }
+
+        var uptimeMin = (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMinutes;
+        return Ok(new HealthStatusDto(
+            BotProcessUp:    true,
+            BotProcessDetail: $"Bot Process uptime {uptimeMin:F1} 分鐘",
+            DbConnected:     dbOk,
+            DbDetail:        dbDetail,
+            DiscordConnected: false,  // 簡化 — DiscordSocketClient state 未 inject / Stage 84+ 候選
+            DiscordDetail:    "（Discord state inject 留 Stage 84+ 補）",
+            Timestamp:       DateTime.UtcNow));
+    }
+
     private bool IsAuthorized()
     {
         if (string.IsNullOrEmpty(_apiKey)) return false;
@@ -221,3 +252,10 @@ public record DeploymentRecordRequest(
     string? Sha,
     string? Status,
     string? TriggeredBy);
+
+/// <summary>Stage 83 子項 4 補做：Bot 健康檢測 response（Dashboard SystemHealth tab 用）。</summary>
+public record HealthStatusDto(
+    bool BotProcessUp, string BotProcessDetail,
+    bool DbConnected, string DbDetail,
+    bool DiscordConnected, string DiscordDetail,
+    DateTime Timestamp);

@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using AiTeam.Data;
 using AiTeam.Data.Hubs;
 using AiTeam.Dashboard.Services;
@@ -10,28 +11,24 @@ using MudBlazor;
 namespace AiTeam.Dashboard.Components.Pages.Monitoring;
 
 /// <summary>
-/// Stage 83 子項 4：Monitoring 分區主頁 — MudTabs 4 subtab
-/// （Token 統計 / Agent 狀態 / 部署紀錄 / 系統健康）。
+/// Stage 83 子項 4：Monitoring 分區主頁 — MudTabs 4 subtab（補做版）。
 ///
-/// reuse 既有 component：
-/// - AgentStatusCard.razor（Stage 33 老闆控制中心遺產）
-/// - DashboardTokenService.GetSummaryAsync（Stage 22 既有）
-/// - DashboardAgentService.GetAllAgentStatusesAsync（Stage 33 既有）
-/// - DashboardTaskService.GetRecentTasksAsync(filter AssignedAgent='Ops')（既有部署紀錄）
-///
-/// TokenLogDetail drawer + per-PetraSession 切換 + 警戒線視覺化 — 留 Stage 84+ 真實需求累積後評估
-/// （對齊「最後測驗」精神 + L+++ context budget trade-off）。
+/// Stage 83 補做（Aria gate1 plan ↔ delivery gap 收口）：
+/// - Tab 1 Token 統計：inline MudChart 趨勢圖 + MudSelect 維度切換（per-Talent / per-PetraSession）+ 警戒線 alert（80% 全域月限）+ click row 開 TokenLogDetail drawer
+/// - Tab 4 System Health：query /internal/health endpoint（Stage 83 子項 4 新加 endpoint）+ Discord status 4 個 status card
 /// </summary>
 public partial class MonitoringHub : IAsyncDisposable
 {
     #region Dependencies
 
     [Inject] private DashboardAgentService    AgentService  { get; set; } = null!;
-    [Inject] private DashboardInteractionQueryService TaskService   { get; set; } = null!;
+    [Inject] private DashboardInteractionQueryService TaskService { get; set; } = null!;
     [Inject] private DashboardTokenService    TokenService  { get; set; } = null!;
+    [Inject] private DashboardAppSettingsService SettingsSvc { get; set; } = null!;
     [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = null!;
-    [Inject] private NavigationManager        Navigation    { get; set; } = null!;
+    [Inject] private IHttpClientFactory       HttpClientFactory { get; set; } = null!;
     [Inject] private IConfiguration           Configuration { get; set; } = null!;
+    [Inject] private NavigationManager        Navigation    { get; set; } = null!;
     [Inject] private ILogger<MonitoringHub>   Logger        { get; set; } = null!;
 
     #endregion
@@ -42,6 +39,14 @@ public partial class MonitoringHub : IAsyncDisposable
     private List<AgentQueueDto>        _agentQueues       = [];
     private TokenSummaryDto?           _todaySummary;
     private List<TaskItemDto>          _recentDeployments = [];
+    private List<PerSessionRow>        _perSessionRows    = [];
+    private List<TokenLog>             _selectedAgentLogs = [];
+
+    private string _selectedDimension = "per-Talent";
+    private bool   _isTokenDrawerOpen;
+
+    private int  _todayTotalKtokens;
+    private int  _globalMonthlyLimitK;
 
     private HubConnection? _hubConnection;
     private bool _hubConnected;
@@ -50,6 +55,12 @@ public partial class MonitoringHub : IAsyncDisposable
     private string _botStatusDetail = "未檢測";
     private bool _dbHealthy;
     private string _dbStatusDetail = "未檢測";
+    private bool _discordHealthy;
+    private string _discordStatusDetail = "未檢測";
+
+    // MudChart data
+    private List<ChartSeries> _perTalentChartSeries = [];
+    private string[] _perTalentXAxisLabels = [];
 
     #endregion
 
@@ -67,10 +78,8 @@ public partial class MonitoringHub : IAsyncDisposable
             _agentStatuses = await AgentService.GetAllAgentStatusesAsync();
             _agentQueues   = await TaskService.GetAgentQueuesAsync();
 
-            var todayStart = DateTime.UtcNow.Date;
-            _todaySummary  = await TokenService.GetSummaryAsync(todayStart, todayStart.AddDays(1));
+            await LoadTokensAsync();
 
-            // 部署紀錄 = TaskItem WHERE AssignedAgent='Ops'（既有 DeploymentHistory.razor 邏輯）
             await using var db = await DbFactory.CreateDbContextAsync();
             _recentDeployments = await db.Tasks
                 .AsNoTracking()
@@ -94,27 +103,169 @@ public partial class MonitoringHub : IAsyncDisposable
         }
     }
 
-    private async Task RefreshHealthAsync()
+    private async Task LoadTokensAsync()
     {
-        // Bot 健康 = 對齊 Stage 67 既有 /internal/restart endpoint reachable + Internal API key 機制
-        // 不在乎是否真實 reachable — 仰賴 SignalR Hub 連線狀態（_hubConnected）= 因 SignalR Hub 由 Dashboard mount + Bot push 來判斷
-        // 簡化：用 DB ping 同時驗 Dashboard process healthy（自身 always healthy）
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            await db.Database.CanConnectAsync();
-            _dbHealthy = true;
-            _dbStatusDetail = "AppDbContext 連線正常";
+            var todayStart = DateTime.UtcNow.Date;
+            _todaySummary  = await TokenService.GetSummaryAsync(todayStart, todayStart.AddDays(1));
+
+            // 計算今日 K tokens（警戒線用）
+            _todayTotalKtokens = (int)(_todaySummary.AgentSummaries
+                .Sum(a => (long)a.TotalInputTokens + a.TotalOutputTokens) / 1000);
+
+            // 載入 global monthly limit（DB SoT）
+            var limitRow = await SettingsSvc.GetAsync("Token:GlobalMonthlyLimitK");
+            int.TryParse(limitRow?.Value, out _globalMonthlyLimitK);
+
+            // 建 MudChart series（per-Talent input + output stacked bar）
+            BuildPerTalentChart();
+
+            // per-PetraSession 維度
+            await LoadPerSessionAsync();
         }
         catch (Exception ex)
         {
-            _dbHealthy = false;
-            _dbStatusDetail = ex.Message.Length > 50 ? ex.Message[..50] + "..." : ex.Message;
+            Logger.LogError(ex, "LoadTokensAsync 失敗");
         }
+    }
 
-        // Bot 健康暫用 SignalR Hub 連線狀態代理（真實 /internal/health endpoint Stage 84+ 補）
-        _botHealthy = _hubConnected;
-        _botStatusDetail = _hubConnected ? "SignalR Hub 連線（Bot pushable）" : "SignalR Hub 斷線";
+    private void BuildPerTalentChart()
+    {
+        if (_todaySummary is null || _todaySummary.AgentSummaries.Count == 0)
+        {
+            _perTalentChartSeries = [];
+            _perTalentXAxisLabels = [];
+            return;
+        }
+        _perTalentXAxisLabels = _todaySummary.AgentSummaries.Select(a => a.AgentName).ToArray();
+        _perTalentChartSeries =
+        [
+            new ChartSeries
+            {
+                Name = "Input (K tokens)",
+                Data = _todaySummary.AgentSummaries.Select(a => (double)a.TotalInputTokens / 1000).ToArray(),
+            },
+            new ChartSeries
+            {
+                Name = "Output (K tokens)",
+                Data = _todaySummary.AgentSummaries.Select(a => (double)a.TotalOutputTokens / 1000).ToArray(),
+            },
+        ];
+    }
+
+    private async Task LoadPerSessionAsync()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var todayStart = DateTime.UtcNow.Date;
+            _perSessionRows = await db.TokenLogs
+                .AsNoTracking()
+                .Where(t => t.CreatedAt >= todayStart && t.PetraSessionId != null)
+                .GroupBy(t => t.PetraSessionId!.Value)
+                .Select(g => new PerSessionRow
+                {
+                    PetraSessionId   = g.Key,
+                    RowCount         = g.Count(),
+                    TotalInputTokens = g.Sum(l => l.InputTokens),
+                    TotalOutputTokens = g.Sum(l => l.OutputTokens),
+                    TotalCostUsd     = g.Sum(l => l.TotalCostUsd ?? 0m),
+                })
+                .OrderByDescending(r => r.TotalInputTokens + r.TotalOutputTokens)
+                .Take(50)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LoadPerSessionAsync 失敗");
+        }
+    }
+
+    private async Task OnDimensionChangedAsync(string newValue)
+    {
+        _selectedDimension = newValue;
+        await LoadTokensAsync();
+    }
+
+    private async Task OnAgentRowClick(TableRowClickEventArgs<TokenAgentSummaryDto> args)
+    {
+        var agentName = args.Item?.AgentName;
+        if (string.IsNullOrEmpty(agentName)) return;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var todayStart = DateTime.UtcNow.Date;
+            _selectedAgentLogs = await db.TokenLogs
+                .AsNoTracking()
+                .Where(t => t.AgentName == agentName && t.CreatedAt >= todayStart)
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(10)
+                .ToListAsync();
+            _isTokenDrawerOpen = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "OnAgentRowClick 失敗");
+        }
+    }
+
+    private async Task RefreshHealthAsync()
+    {
+        // 走 /internal/health endpoint（Stage 83 子項 4 新加）
+        try
+        {
+            var apiKey = Configuration["AgentSettings:InternalApiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                _botHealthy = false;
+                _botStatusDetail = "AgentSettings:InternalApiKey 未設定";
+                return;
+            }
+
+            // Bot Internal API on port 5052（同 docker-compose 內部 service）
+            var botBaseUrl = Configuration["AgentSettings:InternalBaseUrl"] ?? "http://aiteam-bot:5052";
+
+            var client = HttpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+            client.Timeout = TimeSpan.FromSeconds(5);
+
+            var response = await client.GetAsync($"{botBaseUrl}/internal/health");
+            if (response.IsSuccessStatusCode)
+            {
+                var health = await response.Content.ReadFromJsonAsync<HealthResponse>();
+                if (health is not null)
+                {
+                    _botHealthy = health.BotProcessUp;
+                    _botStatusDetail = health.BotProcessDetail;
+                    _dbHealthy = health.DbConnected;
+                    _dbStatusDetail = health.DbDetail;
+                    _discordHealthy = health.DiscordConnected;
+                    _discordStatusDetail = health.DiscordDetail;
+                    return;
+                }
+            }
+            _botHealthy = false;
+            _botStatusDetail = $"HTTP {(int)response.StatusCode}";
+        }
+        catch (Exception ex)
+        {
+            _botHealthy = false;
+            _botStatusDetail = ex.Message.Length > 50 ? ex.Message[..50] + "..." : ex.Message;
+            // Fallback：DB ping 直接 Dashboard 端做
+            try
+            {
+                await using var db = await DbFactory.CreateDbContextAsync();
+                _dbHealthy = await db.Database.CanConnectAsync();
+                _dbStatusDetail = _dbHealthy ? "Dashboard 端 DB ping OK" : "Cannot connect";
+            }
+            catch (Exception dbEx)
+            {
+                _dbHealthy = false;
+                _dbStatusDetail = dbEx.Message;
+            }
+        }
     }
 
     private async Task ConnectSignalRAsync()
@@ -129,7 +280,6 @@ public partial class MonitoringHub : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        // Monitoring 分區 subscribe ReceiveAgentStatus + ReceiveTokenUpdate + ReceiveQueueUpdate
         _hubConnection.On<AgentStatusViewModel>(AgentStatusHub.ReceiveAgentStatus, async status =>
         {
             UpdateAgentStatus(status);
@@ -142,8 +292,7 @@ public partial class MonitoringHub : IAsyncDisposable
         });
         _hubConnection.On<object>(AgentStatusHub.ReceiveTokenUpdate, async _ =>
         {
-            var todayStart = DateTime.UtcNow.Date;
-            _todaySummary  = await TokenService.GetSummaryAsync(todayStart, todayStart.AddDays(1));
+            await LoadTokensAsync();
             await InvokeAsync(StateHasChanged);
         });
 
@@ -180,4 +329,20 @@ public partial class MonitoringHub : IAsyncDisposable
     {
         if (_hubConnection is not null) await _hubConnection.DisposeAsync();
     }
+
+    public class PerSessionRow
+    {
+        public Guid    PetraSessionId    { get; set; }
+        public int     RowCount          { get; set; }
+        public int     TotalInputTokens  { get; set; }
+        public int     TotalOutputTokens { get; set; }
+        public decimal TotalCostUsd      { get; set; }
+    }
+
+    /// <summary>對齊 InternalController HealthStatusDto schema（避免跨 project DTO reference / 簡化用本地 record）。</summary>
+    private record HealthResponse(
+        bool BotProcessUp, string BotProcessDetail,
+        bool DbConnected, string DbDetail,
+        bool DiscordConnected, string DiscordDetail,
+        DateTime Timestamp);
 }

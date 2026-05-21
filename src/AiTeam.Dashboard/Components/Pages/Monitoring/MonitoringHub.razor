@@ -1,6 +1,7 @@
 @page "/monitoring"
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data
 @using AiTeam.Shared.Dtos
 @using AiTeam.Shared.ViewModels
 @using AiTeam.Dashboard.Components.Pages.Home
@@ -18,45 +19,102 @@
 
 <MudTabs Elevation="2" Rounded="true" PanelClass="pa-4" Position="Position.Top">
 
-    @* Tab 1：Token Analytics — 今日 + per-Agent summary（reuse DashboardTokenService）*@
+    @* Tab 1：Token Analytics inline MudChart + 維度切換 + 警戒線 + TokenLogDetail drawer *@
     <MudTabPanel Text="Token 統計" Icon="@Icons.Material.Filled.BarChart">
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            今日（@DateTime.UtcNow.Date.ToString("yyyy-MM-dd") UTC）各 Agent Token 使用量摘要 +
-            <MudLink Href="/tokens" Underline="Underline.Always">詳細圖表頁</MudLink>。
-        </MudText>
-        @if (_todaySummary is null || _todaySummary.AgentSummaries.Count == 0)
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">維度：</MudText>
+            <MudSelect T="string" Value="_selectedDimension" ValueChanged="OnDimensionChangedAsync"
+                       Variant="Variant.Outlined" Style="max-width:200px">
+                <MudSelectItem Value="@("per-Talent")">per-Talent（per-AgentName）</MudSelectItem>
+                <MudSelectItem Value="@("per-PetraSession")">per-PetraSession（Stage 81+ 加 PetraSessionId）</MudSelectItem>
+            </MudSelect>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadTokensAsync">重新載入</MudButton>
+        </MudStack>
+
+        @* 警戒線 alert — 80% 全域月限 / 90% per-agent 日限 *@
+        @if (_globalMonthlyLimitK > 0 && _todayTotalKtokens > 0)
         {
-            <MudAlert Severity="Severity.Info">今日無 Token 使用紀錄。</MudAlert>
+            var pctMonth = (double)_todayTotalKtokens / _globalMonthlyLimitK * 100;
+            if (pctMonth >= 80)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-2">
+                    ⚠️ 全域月限警戒：今日已用 @_todayTotalKtokens.ToString("N0") K tokens / 月限 @_globalMonthlyLimitK.ToString("N0") K（@pctMonth.ToString("F1")%）
+                </MudAlert>
+            }
         }
-        else
+
+        @if (_selectedDimension == "per-Talent")
         {
-            <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" T="TokenAgentSummaryDto">
-                <HeaderContent>
-                    <MudTh>Agent</MudTh>
-                    <MudTh>Model</MudTh>
-                    <MudTh>Input</MudTh>
-                    <MudTh>Output</MudTh>
-                    <MudTh>Cost (USD)</MudTh>
-                    <MudTh>Estimated</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>@context.AgentName</MudTd>
-                    <MudTd>@context.Model</MudTd>
-                    <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
-                    <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
-                    <MudTd>@context.EstimatedCostUsd.ToString("F4")</MudTd>
-                    <MudTd>
-                        @if (context.HasEstimated)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">est.</MudChip>
-                        }
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
+            @if (_todaySummary is null || _todaySummary.AgentSummaries.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">今日無 Token 使用紀錄。</MudAlert>
+            }
+            else
+            {
+                @* MudChart inline 趨勢圖（Bar）— per-Agent Input + Output 累計 *@
+                <MudPaper Elevation="1" Class="pa-3 mb-3">
+                    <MudChart ChartType="ChartType.Bar"
+                              ChartSeries="@_perTalentChartSeries"
+                              XAxisLabels="@_perTalentXAxisLabels"
+                              Width="100%" Height="320px" />
+                </MudPaper>
+
+                <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" T="TokenAgentSummaryDto"
+                          OnRowClick="OnAgentRowClick" RowClass="cursor-pointer">
+                    <HeaderContent>
+                        <MudTh>Agent</MudTh>
+                        <MudTh>Model</MudTh>
+                        <MudTh>Input</MudTh>
+                        <MudTh>Output</MudTh>
+                        <MudTh>Cost (USD)</MudTh>
+                        <MudTh>Estimated</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.AgentName</MudTd>
+                        <MudTd>@context.Model</MudTd>
+                        <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.EstimatedCostUsd.ToString("F4")</MudTd>
+                        <MudTd>
+                            @if (context.HasEstimated)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">est.</MudChip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        }
+        else if (_selectedDimension == "per-PetraSession")
+        {
+            @if (_perSessionRows.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">今日無 PetraSession Token 紀錄（Stage 81 PetraSessionId 加 + Stage 82 AsyncLocal 寫入後才有資料）。</MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_perSessionRows" Dense="true" Hover="true" T="PerSessionRow">
+                    <HeaderContent>
+                        <MudTh>PetraSessionId</MudTh>
+                        <MudTh>Row Count</MudTh>
+                        <MudTh>Input</MudTh>
+                        <MudTh>Output</MudTh>
+                        <MudTh>Cost (USD)</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.PetraSessionId.ToString()[..8]</MudTd>
+                        <MudTd>@context.RowCount</MudTd>
+                        <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
+                        <MudTd>@context.TotalCostUsd.ToString("F4")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
         }
     </MudTabPanel>
 
-    @* Tab 2：Agent Status — reuse AgentStatusCard + DashboardAgentService.GetAllAgentStatusesAsync *@
+    @* Tab 2：Agent Status *@
     <MudTabPanel Text="Agent 狀態" Icon="@Icons.Material.Filled.SmartToy">
         @if (_agentStatuses.Count == 0)
         {
@@ -76,10 +134,10 @@
         }
     </MudTabPanel>
 
-    @* Tab 3：Deployments — TaskItem WHERE AssignedAgent='Ops' 摘要 + link to /deployments *@
+    @* Tab 3：Deployments *@
     <MudTabPanel Text="部署紀錄" Icon="@Icons.Material.Filled.RocketLaunch">
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            最近 10 筆部署紀錄 + <MudLink Href="/deployments" Underline="Underline.Always">完整部署歷史頁</MudLink>。
+            最近 10 筆部署紀錄（TaskItem WHERE AssignedAgent='Ops'）。
         </MudText>
         @if (_recentDeployments.Count == 0)
         {
@@ -104,10 +162,10 @@
         }
     </MudTabPanel>
 
-    @* Tab 4：System Health — 簡單 status placeholder *@
+    @* Tab 4：System Health — query /internal/health endpoint *@
     <MudTabPanel Text="系統健康" Icon="@Icons.Material.Filled.HealthAndSafety">
         <MudGrid Spacing="3">
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="3">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="@(_botHealthy ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">Bot 容器</MudText>
@@ -115,7 +173,7 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@_botStatusDetail</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="3">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="@(_dbHealthy ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">PostgreSQL</MudText>
@@ -123,7 +181,15 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@_dbStatusDetail</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="12" md="4">
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                    <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Large" Color="@(_discordHealthy ? Color.Success : Color.Default)" />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Discord</MudText>
+                    <MudText Typo="Typo.body2">@(_discordHealthy ? "✅ Connected" : "— Stage 84+")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_discordStatusDetail</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="3">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="@(_hubConnected ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">SignalR Hub</MudText>
@@ -135,7 +201,59 @@
         <MudStack Row="true" Spacing="2" Class="mt-4">
             <MudButton Variant="Variant.Outlined" Size="Size.Small"
                        StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="RefreshHealthAsync">重新檢測</MudButton>
+                       OnClick="RefreshHealthAsync">重新檢測（/internal/health）</MudButton>
         </MudStack>
     </MudTabPanel>
 </MudTabs>
+
+@* TokenLogDetail drawer — 點 TokenAnalytics row 開 *@
+<MudDrawer @bind-Open="_isTokenDrawerOpen" Anchor="Anchor.End" Elevation="3" Width="500px" Variant="DrawerVariant.Temporary">
+    <MudDrawerHeader>
+        <MudText Typo="Typo.h6">Token 細節（最近 10 筆 / per Agent）</MudText>
+    </MudDrawerHeader>
+    <div class="pa-4" style="overflow-y:auto">
+        @if (_selectedAgentLogs.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">無資料</MudText>
+        }
+        else
+        {
+            @foreach (var log in _selectedAgentLogs)
+            {
+                <MudCard Outlined="true" Class="my-2">
+                    <MudCardContent Class="py-2">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@log.AgentName</MudChip>
+                            <MudText Typo="Typo.caption">@log.Model</MudText>
+                            @if (log.IsEstimated)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">est.</MudChip>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.body2">
+                            Stage: @(log.Stage ?? "—") · Round: @log.Round
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Input: @log.InputTokens.ToString("N0") · Output: @log.OutputTokens.ToString("N0")
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Cache Creation: @((log.CacheCreationTokens ?? 0).ToString("N0")) · Cache Read: @((log.CacheReadTokens ?? 0).ToString("N0"))
+                        </MudText>
+                        <MudText Typo="Typo.body2">
+                            Cost: @(log.TotalCostUsd?.ToString("F6") ?? "—") USD
+                        </MudText>
+                        @if (log.PetraSessionId.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                PetraSession: @log.PetraSessionId.Value.ToString()[..8]
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @log.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            }
+        }
+    </div>
+</MudDrawer>
