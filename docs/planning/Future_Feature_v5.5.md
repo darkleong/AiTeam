@@ -579,7 +579,32 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v27 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → **Trial_v26 🟢⭐** → **Trial_v27 🟡⭐**（戰略性結案 / 揭 LLM alignment 業界 safety net 第二道防線實證）→ **WebUI Stage**（Phase 4 最後 / v4 entity drop + Dashboard 重設計為 PetraSession-based）→ **v5.5 完整收口**
+**Phase 4 完成路徑（Stage 83 結案後 final）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → **Trial_v26 🟢⭐** → **Trial_v27 🟡⭐** → **Stage 83 ✅⭐⭐⭐⭐⭐⭐** → **v5.5 完整收口 ✅**
+
+### Phase 4 候選 — Stage 83 ✅⭐⭐⭐⭐⭐⭐ WebUI 全砍重設計 + Christ「最後測驗」精神達成（2026-05-21）v3.75.0
+
+**Stage 83 結果 ✅** — Dashboard 11 頁全砍 → 3 大分區（Tasks + Settings + Monitoring）+ Home + Auth 獨立 + Office 砍 / L+++ scope / 5 round 17 commit / Aria gate1 + Chrome 視覺驗 4 輪揭 15+ bug 全收口 / 9/11 修根因典範。
+
+**戰略意義 ⭐⭐⭐⭐⭐⭐**：Christ「最後測驗」精神達成 — Forge L+++ scope 5 輪修補 + Aria 5 輪 gate1 + Chrome MCP 視覺驗 3 輪 + SQL fallback verify = v5.5 dynamic orchestrator + Dashboard 真實對齊。對 Christ「不抱期待 + 真實跑一次看結果」精神 — 直覺對（v1 視覺驗揭 27 條觀察含 11 條 bug 真實）但 Forge 5 輪修補後 11/11 全收口 = **遠超預期**。**v5.5 完整收口進 production 自然累積期路線達成**。
+
+**Stage 84+ 候選 12 條**（Stage 83 phased delivery 留的 / production 自然累積期評估動工 / 不阻 v5.5 收口）：
+
+| # | 候選 | 規模 |
+|---|---|---|
+| 1 | ExtractPrNumber DRY refactor（TaskHub reuse 既有 PrNumberHelper） | XS |
+| 2 | Chrome MCP click stale spike（Aria 視覺驗收環境議題 / 不影響人類滑鼠 click） | S |
+| 3 | WorkflowFlags UseHITLPlanConfirmation + UseDynamicReplanning toggle on production 拍板 | XS |
+| 4 | Theme 即時切換 C# event 改造（MainLayout setDark + MudProviders subscribe）| S |
+| 5 | Bug 4 既有 row PR URL retroactive backfill（從 PetraSessionMessages parse） | S |
+| 6 | Monitoring 警戒線 MudChart ReferenceLine + per-Skill 維度（需 TokenLog.SkillName 欄位）| M |
+| 7 | Bot /internal/health Discord 連線真實 check（非 placeholder） | XS |
+| 8 | MockMode 4 流程觸發 UI button（既有 Discord `/mock` path 已用 / UI 加 button trigger） | S |
+| 9 | env naming convention 紀律升級 → `CLAUDE.md` ops 配置改動 SoP 加 Dashboard `Bot:` prefix vs Bot 自己 `AgentSettings:` prefix | XS |
+| 10 | MudThemeProvider IsDarkMode binding 紀律 → `docs/conventions/mudblazor.md` 加紀律 | XS |
+| 11 | FF C2 AppSettingsService 5 分鐘 re-read（Workflow:* flag 動態 reload 不需重啟 Bot）| M |
+| 12 | DashboardService 進一步重組（Home / TaskHub PetraSession query 直接走 Repository 評估） | S |
+
+詳見 [Stage_83_Roadmap.md](Stage_83_Roadmap.md) v2.0 結案紀錄章節。
 
 ### Phase 4 候選 — Trial_v27 🟡⭐ 戰略性結案 + 跳出 Trial→Fix 迴圈業界共識對齊（2026-05-21）
 
