@@ -11,8 +11,9 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：**Trial_v26**（補驗 Stage 81 動態 replan + Stage 82 修法雙驗證 — 4 case + 5 場景 Stage 82 收口後 production 真實 fire / 9-step 模板 + Chrome MCP 自跑紀律延伸）→ WebUI Stage（K WebUI Talent CRUD + Effort 擴展 + E Token monitoring 視覺化 + v4 entity drop + Dashboard 重設計為 PetraSession-based）→ v5.5 完整收口。
-- **Phase 4 候選路徑**：78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → Trial_v23 ✅ → 80 ✅ → Trial_v24 ✅ → 81 ✅ → Trial_v25 🟡 → 82 ✅ → Trial_v26（補驗動態 replan + Stage 82 雙驗證）→ WebUI Stage 預留 → v5.5 完整收口。
+- **下個動作候選**：**Trial_v27**（補驗 Stage 81 動態 replan UI 卡 production 真實 fire — Trial_v26 Case C W1 預警 Vera 不可控接受 / Vera-critical prompt 強化 或 SQL fallback 反向驗 routing wire / 預估 $2-4 / 餘額 $7.56 buffer 充足）→ WebUI Stage（K WebUI Talent CRUD + Effort 擴展 + E Token monitoring 視覺化 + v4 entity drop + Dashboard 重設計為 PetraSession-based）→ v5.5 完整收口。
+- **Phase 4 候選路徑**：78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → Trial_v23 ✅ → 80 ✅ → Trial_v24 ✅ → 81 ✅ → Trial_v25 🟡 → 82 ✅ → **Trial_v26 🟢⭐** → Trial_v27（補驗動態 replan UI 卡）→ WebUI Stage 預留 → v5.5 完整收口。
+- **Trial_v26 戰略 finding ⭐**：Christ 戰略 question 點破 + WebSearch 3 query 揭 **AiTeam Petra LLM + worker CLI + HITL 三層分工對齊業界主流 supervisor pattern**（LangGraph / Databricks / Claude Agent SDK 共識）/ 撤回「Petra 切 CLI」FF 候選 / 新 FF 候選：Vera review 紀律升級 + Read-only Codebase Explorer agent（看 Christ 拍板）。詳見 [Trial_v26_Plan.md](docs/experiments/Trial_v26_Plan.md)。
 
 ---
 

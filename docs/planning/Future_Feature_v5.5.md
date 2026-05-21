@@ -579,7 +579,19 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Stage 82 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → Trial_v26（補驗 Stage 81 動態 replan + Stage 82 雙驗證）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Trial_v26 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → **Trial_v26 🟢⭐** → Trial_v27（補驗 Stage 81 動態 replan UI 卡 production 真實 fire / W1 預警 Vera 不可控接受）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Trial_v26 🟢⭐ Stage 82 雙修法 production 真實生效驗證 + 業界對齊驗證 ⭐（2026-05-21）
+
+**Trial_v26 結果 🟢⭐ 核心驗收全綠** — Case A baseline 全綠 ⭐⭐⭐⭐⭐（Stage 82 雙修法 production 真實生效 / Quinn outputLen=1352 vs Trial_v22-v25 連續 4 Trial=0 突破 / PM PetraSessionId 100% 透傳 vs Trial_v25 PM 0/24 NULL）+ Case C 動態 replan 🟡 部分（HITL plan_confirm fire ✅ + DetectReplanTrigger 紀律正確不誤觸發 ✅ + replan UI 卡 production 真實 fire 留 Trial_v27 / Vera 真實 review OK W1 預警接受）/ cost $5.37 / 餘額 $12.93 → $7.56 buffer 充足。
+
+**戰略 finding ⭐ — 業界對齊驗證**：Christ 戰略 question 點破「Aria 推論 vs 業界 reference」+ WebSearch 3 query 揭 **AiTeam Petra LLM API + worker Claude Code CLI + HITL 兜底三層分工對齊業界主流 supervisor pattern**（LangGraph supervisor / Databricks supervisor agent / Claude Agent SDK 共識）。撤回前面「Petra 切 CLI」FF 候選（業界不推薦 / cost 5x + hallucination 風險）。
+
+**新 FF 候選**（Christ 拍板）：
+- 🟡 Vera review 紀律升級（system prompt / few-shot 更多「該標 critical 的反例」/ 對齊業界「升級 worker review 紀律」第 1 解法）
+- 🟡 Read-only Codebase Explorer agent（獨立 worker / 給 Petra 第二來源訊號 / 對齊業界「fast read-only agent」第 2 解法）
+
+詳見 [Trial_v26_Plan.md](../experiments/Trial_v26_Plan.md) v1.0。
 
 ### Phase 4 候選 — Stage 82 ✅ Quinn outputLen 修根因（路線 A）+ Stage 81 子項 8 砍 + Trial_v25 三 🟡 議題收口（2026-05-21） v3.74.0 ⭐⭐⭐⭐⭐
 
