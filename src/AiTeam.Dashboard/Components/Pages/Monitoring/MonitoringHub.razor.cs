@@ -27,7 +27,7 @@ public partial class MonitoringHub : IAsyncDisposable
     #region Dependencies
 
     [Inject] private DashboardAgentService    AgentService  { get; set; } = null!;
-    [Inject] private DashboardTaskService     TaskService   { get; set; } = null!;
+    [Inject] private DashboardInteractionQueryService TaskService   { get; set; } = null!;
     [Inject] private DashboardTokenService    TokenService  { get; set; } = null!;
     [Inject] private IDbContextFactory<AppDbContext> DbFactory { get; set; } = null!;
     [Inject] private NavigationManager        Navigation    { get; set; } = null!;

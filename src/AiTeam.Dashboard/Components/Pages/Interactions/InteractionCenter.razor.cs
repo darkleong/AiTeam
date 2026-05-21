@@ -13,7 +13,7 @@ public partial class InteractionCenter : IAsyncDisposable
     #region Dependencies
 
     [Inject]
-    private DashboardTaskService TaskService { get; set; } = null!;
+    private DashboardInteractionQueryService TaskService { get; set; } = null!;
 
     [Inject]
     private ISnackbar Snackbar { get; set; } = null!;

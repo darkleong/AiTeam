@@ -26,7 +26,7 @@ public partial class TaskHub : IAsyncDisposable
 {
     #region Dependencies
 
-    [Inject] private DashboardTaskService      TaskService     { get; set; } = null!;
+    [Inject] private DashboardInteractionQueryService TaskService     { get; set; } = null!;
     [Inject] private PetraSessionRepository    SessionRepo     { get; set; } = null!;
     [Inject] private InteractionRespondService RespondService  { get; set; } = null!;
     [Inject] private IServiceScopeFactory      ScopeFactory    { get; set; } = null!;

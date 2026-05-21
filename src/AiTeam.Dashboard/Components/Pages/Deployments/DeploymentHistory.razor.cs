@@ -7,7 +7,7 @@ public partial class DeploymentHistory
     #region Dependencies
 
     [Inject]
-    private DashboardTaskService TaskService { get; set; } = null!;
+    private DashboardDeploymentService TaskService { get; set; } = null!;
 
     #endregion
 

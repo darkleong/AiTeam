@@ -20,7 +20,7 @@ public partial class Home : IAsyncDisposable
 
     [Inject] private PetraSessionRepository SessionRepo { get; set; } = null!;
     [Inject] private PetraInboxRepository   InboxRepo   { get; set; } = null!;
-    [Inject] private DashboardTaskService   TaskService { get; set; } = null!;
+    [Inject] private DashboardInteractionQueryService TaskService { get; set; } = null!;
     [Inject] private DashboardTokenService  TokenService { get; set; } = null!;
     [Inject] private NavigationManager      Nav { get; set; } = null!;
     [Inject] private IConfiguration         Configuration { get; set; } = null!;
