@@ -579,7 +579,29 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v25 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **Stage 82**（Quinn outputLen 修根因 + Stage 81 子項 8 砍 + 順手議題）→ Trial_v26（補驗 Stage 81 動態 replan + Stage 82 雙驗證）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Stage 82 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → Trial_v26（補驗 Stage 81 動態 replan + Stage 82 雙驗證）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+
+### Phase 4 候選 — Stage 82 ✅ Quinn outputLen 修根因（路線 A）+ Stage 81 子項 8 砍 + Trial_v25 三 🟡 議題收口（2026-05-21） v3.74.0 ⭐⭐⭐⭐⭐
+
+**v3.74.0 / Stage 82 Forge 結案** — commit [`a413aee`](https://github.com/darkleong/AiTeam/commit/a413aee) 單 commit / 10 檔變動 net +406 -81 行 / 0 follow-up bug / Aria gate1 Tier 0+1+2 通過（規模 S→M 邊緣升 Tier 2 / ParseJsonOutput 對 v4+v5 4 worker path 都影響 production critical path）/ **連續 18 Stage 0 follow-up + clean delivery 連續第十次** ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐（Stage 75-78a-78b-78c-79-80-81-82）/ Forge context 真實 179K → 274K Opus 1M + high。
+
+**戰略意義**：**「修根因 > 補丁」紀律深度實踐** — Stage 81 子項 8 假設「無 final text turn」修法錯方向 / Trial_v25 揭真實根因「Quinn 燒 27K output 但 result 欄位空」 → Stage 82 砍錯修法 + 修對地方（stream-json accumulate）+ 收口 Trial_v25 三 🟡 議題 / Trial_v26 補驗 Stage 81 動態 replan + Stage 82 修法雙驗證。
+
+**3 子項**：
+- 子項 1 ⭐ Quinn outputLen 修根因（路線 A stream-json）— ClaudeCodeService BuildArgs 切 `--output-format stream-json --verbose` + ParseJsonOutput 升級 cover NDJSON line-by-line accumulate `type=assistant.message.content[].text` + `type=result` row 優先 result 空時 fallback accumulated / TryParseUsage 0 動（既有 schema 完全對齊 — Aria gate1 補強 spike 子項 1.5 verify）/ 砍 ClaudeCodeChatClientAdapter Stage 81 子項 8 qa_testing prepend + BuildQaSummaryEnforceSection 整段
+- 子項 2 PM PetraSessionId 透傳 — TokenTrackingProvider AsyncLocal scope（`BeginPetraSessionScope` IDisposable wrapper + PopScope nested class）+ TokenLog 寫入加 PetraSessionId 透傳 / PetraOrchestratorService 4 LLM call site 包 using scope / ILlmProvider 介面 0 動（既有 caller 透明 / Forge spike 揭真實 PM 24 row 但 PetraSessionId 0/24 全 NULL 修法落點調整）
+- 子項 3 SubtaskPlanParser conversational preamble robust 防呆 — `StripPreambleAndPostamble`（first `{` + last `}` substring extract）對齊「修根因 > 補丁」紀律 + Petra 純 JSON 紀律維持雙保險
+
+**xUnit 14 新 test + dotnet test 136 passed**（含 T2 用 Trial_v25 真實揭 27K output 數據 assert tool-heavy fallback + T6 Aria gate1 補強 nested schema verify + T3 巢狀 AsyncLocal Dispose 順序）。
+
+**Aria 自審紀律生效驗證連續第二次** ⭐ — Stage 82 plan review v1.0 → v1.1 揭 1 🟡 議題（gate1 階段 TryParseUsage schema verify）→ Forge 補 spike 子項 1.5 micro-spike → 實作 0 動 0 follow-up bug 實證（對齊 Stage 81 v1.0 → v1.1 自審揭 8 議題首次大規模實踐生效精神延伸到 gate1 階段）。
+
+**3 know-how 升級**：
+1. workflow_aria.md 第三節 A 第 7 條延伸範圍 #13 — 規劃含 token_logs / DB row 既有狀態評估時必 SQL grep 真實狀態（同類根因第 13 次累積）
+2. workflow_aria_session_lessons.md 自省點 #42 立 — Stage 修根因前先 spike / production 數據 verify 假設真實（Trial_v25 Stage 81 子項 8 真實案例）
+3. workflow_aria_session_lessons.md #40 補充段 — Aria gate1 階段主動補 micro-spike 紀律首次大規模實踐生效
+
+詳見 [Stage_82_Roadmap.md](Stage_82_Roadmap.md) v2.0。
 
 ### Phase 4 候選 — Trial_v25 🟡 Stage 81 動態 replan production 真實驗（部分完成）（2026-05-20）
 

@@ -227,8 +227,45 @@ Sources（Forge 補查用）：
 
 ---
 
+## 實作紀錄（v2.0）
+
+### Forge 結案總覽
+
+- **commit**：[`a413aee`](https://github.com/darkleong/AiTeam/commit/a413aee) feat(stage82) — 10 檔變動 / +406 / -81 / 0 follow-up bug
+- **Forge context 真實耗用**：規劃書 179K → gate1 修正 184K → 實作 253K → self-verify 270K → 結案 274K（Opus 1M + high effort）
+- **本機驗證**：dotnet build 0 error / 105 baseline warning 對齊 / dotnet test 136 passed 0 failed / 6 sec
+- **Aria gate1 通過**：Tier 0 + Tier 1 + Tier 2 全綠 — 對齊 plan v1.1 規模升 M+ tier 建議
+
+### Forge spike 揭真實 vs Aria Roadmap 假設
+
+| Spike 子項 | Aria Roadmap 假設 | 真實揭 | 修法調整 |
+|---|---|---|---|
+| 1 — claude CLI stream-json schema | 4 row type schema 推測 | 跑真實 `claude --output-format stream-json --verbose -p` 揭 4 row type（system init / assistant message / rate_limit_event / result）+ assistant.message.content[] 內 type=text / type=tool_use 對齊 | 路線 A spike 證實實作成本可控（ParseJsonOutput +30 行）|
+| 1.5 — TryParseUsage schema verify（Aria gate1 補強）| 「stream-json result row usage nested 跟 json mode 一致性沒明確 verify」 | spike 跑真實 + 4 nested 欄位（input/output/cache_creation/cache_read）+ top-level total_cost_usd **完全對齊既有 TryParseUsage** | TryParseUsage **0 動** + xUnit T6 補對應 verify case |
+| 2 — PM agent token_logs 真實狀態 | 「Petra LLM call 沒進 token_logs / 0 row」 | PostgreSQL grep 真實揭 PM 24 row 真實有 row（45464 input / 3847 output）但 PetraSessionId **0/24 全 NULL** | 修法落點調整 — 不是包 TokenTrackingProvider（已包），而是 TokenLog 寫入加 PetraSessionId AsyncLocal 透傳 |
+
+### 設計決策真實拍板（vs Roadmap §設計決策 D1-D4）
+
+- **D1 路線 A vs B**：🥇 A — spike 證實 ParseJsonOutput +30 行 + image path 0 regression + 修根因徹底
+- **路線 A 全 4 worker 切 stream-json vs 只 qa_testing**：全切（一致性紀律 + 未來 Cody/Vera/Sage 也可能踩 tool-heavy edge case）
+- **D2 子項 2 AsyncLocal vs ILlmProvider param**：🥇 AsyncLocal — 介面 0 動 / 既有 caller 透明 / 只 Petra 4 site 包 scope
+- **D3 子項 3 strip 防呆 + Petra 純 JSON 紀律雙保險**：對齊 Roadmap 拍板維持
+- **D4 不 amend Stage 81 既有 commit `92eadb9`**：Stage 82 新 commit 砍 prepend + 修對地方 — 對齊 plan 紀律
+
+### 跨 Stage know-how 升級（Aria 結案第二段 step 0 順手做）
+
+對齊 workflow_aria.md 第五節 step 0「跨 Stage know-how 升級評估」+「順手 grep 同檔同類根因」紀律：
+
+1. **workflow_aria.md 第三節 A 第 7 條延伸範圍 #13** — 規劃含 token_logs / DB row 既有狀態評估時必 SQL grep 真實狀態（不憑印象 / 不憑 commit message 推測）— 同類根因第 13 次累積（既有 12 條延伸）
+2. **workflow_aria_session_lessons.md #42 立** — Stage 修根因前先 spike / production 數據 verify 假設真實（Trial_v25 揭 Stage 81 子項 8 假設「無 final text turn」錯方向真實案例 — 修根因前驗證根因假設真實才動 / 對齊「修根因 > 補丁」紀律延伸）
+3. **workflow_aria_session_lessons.md #40 補充段** — Aria gate1 階段主動補 micro-spike 紀律首次大規模實踐生效（Stage 82 plan v1.0 → v1.1 揭 TryParseUsage schema verify 議題 → Forge 補 micro-spike → 實作 0 動 0 follow-up bug 實證）
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
-| v1.0 | 2026-05-21 | Stage 82 規劃書建立（Aria 撰寫 / Trial_v25 結案後即進 Stage 82 / 對齊「修根因 > 補丁」+「對冗餘不容忍」紀律）。**核心**：3 子項（① Quinn outputLen 修根因 + Stage 81 子項 8 砍 / ② Petra Anthropic provider token_logs / ③ SubtaskPlanParser conversational preamble robust 防呆）+ 5 場景 + 4 設計決策 + WebSearch 結論段（Claude Code CLI stream-json vs json 業界 reference + Aria 傾向路線 A）+ 規劃前置 grep 5 觸點對齊 source of truth 紀律。**戰略意義**：「修根因 > 補丁」紀律深度實踐 — Stage 81 假設方向 vs Trial_v25 真實根因截然不同方向，Stage 82 砍錯修法 + 修對地方，讓 Trial_v26 補驗 Stage 81 動態 replan + Stage 82 修法雙驗證。**Stage 規模 S** / 0 燒 AiTeam 餘額（Aria + Forge session 走 Claude Code subscription / 真實 0 cost API call）。 |
+| v1.0 | 2026-05-21 | Stage 82 規劃書建立（Aria 撰寫 / Trial_v25 結案後即進 Stage 82 / 對齊「修根因 > 補丁」+「對冗餘不容忍」紀律）。**核心**：3 子項 + 5 場景 + 4 設計決策 + WebSearch 結論段 + 規劃前置 grep 5 觸點。**Stage 規模 S** / 0 燒 AiTeam 餘額。 |
+| v1.1 | 2026-05-21 | **Aria gate1 plan review 揭 🟡 議題收口** — Forge 補 spike 子項 1.5 micro-spike 跑真實 claude CLI 取 result row 完整 schema verify TryParseUsage 4 nested 欄位 + top-level total_cost_usd 對齊 / xUnit T6 補對應 verify case / Vera blind spot 延伸風險解除。「Aria 自審紀律 + gate1 補強 micro-spike」延伸實踐生效。 |
+| v2.0 | 2026-05-21 | **Forge 實作完成 + Aria gate1 通過 + 結案 in-place**。commit [`a413aee`](https://github.com/darkleong/AiTeam/commit/a413aee) / 10 檔 +406 -81 / 0 follow-up bug / 連續 18 Stage 0 follow-up + clean delivery 連續第十次 ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐（Stage 75-82）。Forge spike Plan Mode 揭真實 vs Roadmap 兩處假設修正（子項 1.5 schema 0 動 + 子項 2 修法落點調整 PetraSessionId 透傳 NULL 而非「0 row」）。Forge context 真實耗用 179K → 274K Opus 1M + high。**戰略意義**：「修根因 > 補丁」紀律深度實踐 — 砍 Stage 81 子項 8 prepend 錯方向 + 修對地方（stream-json accumulate）+ 收口 Trial_v25 三 🟡 議題（含 SubtaskPlanParser preamble 防呆 + PM PetraSessionId AsyncLocal 透傳）/ Trial_v26 補驗 Stage 81 動態 replan + Stage 82 修法雙驗證。**3 跨 Stage know-how 升級**（第三節 A 第 7 條延伸範圍 #13 + 自省點 #42 + #40 補充段）。 |
