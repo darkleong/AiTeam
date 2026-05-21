@@ -1,0 +1,8 @@
+@page "/rules"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@* Stage 83 子項 5：/rules redirect → /settings（SettingsHub Rules + Projects tab reuse RuleManagement component） *@
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/settings", forceLoad: false);
+}

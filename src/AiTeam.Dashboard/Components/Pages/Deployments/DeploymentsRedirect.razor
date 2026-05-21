@@ -1,0 +1,8 @@
+@page "/deployments"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@* Stage 83 子項 5：/deployments redirect → /monitoring（MonitoringHub 部署紀錄 tab） *@
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/monitoring", forceLoad: false);
+}

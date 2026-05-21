@@ -1,0 +1,8 @@
+@page "/agents"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@* Stage 83 子項 5：/agents redirect → /settings（SettingsHub Agents tab reuse AgentSettings component） *@
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/settings", forceLoad: false);
+}
