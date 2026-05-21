@@ -1,7 +1,9 @@
 # Stage 83 Roadmap — WebUI 全砍重設計（3 大分區 + Home + Auth）
 
+> **狀態：✅ 已完成（2026-05-21）**
+> **文件版本：v2.0**（Forge 實作紀錄補完）
 > 對應系統版本：v3.75.0（Stage 83 完成後）
-> Stage 規模：**L+++**（Dashboard 11 頁全砍重做 / 預估 20-30 個新 .razor + razor.cs / DashboardService 重組 / 0 Migration / 0 燒 AiTeam 餘額 — 純 Blazor + EF Core / 0 LLM call）
+> Stage 規模：**L+++**（Dashboard 11 頁全砍重做 / 預估 20-30 個新 .razor + razor.cs / DashboardService 重組 / **+1 Migration**（v5 補 Bug 4 ResultPrUrl）/ 0 燒 AiTeam 餘額 — 純 Blazor + EF Core / 0 LLM call）
 > 觸發來源：v5.5 Phase 4 候選 — Trial_v26/v27 揭 AiTeam v5.5 + HITL + 業界 safety net 三層分工完整對齊業界主流 / Dashboard 仍 v4 結構未對齊
 > 戰略意義：**「最後測驗」戰略節點** — 跑得順 + Dashboard 真的好用 → AiTeam v5.5 完整收口進 production 自然累積期；跑不順 / Dashboard 仍難用 / Forge 跑 L+++ 失控 → 真實評估「燒掉 vs 繼續」/ 不擺爛繼續
 
@@ -251,6 +253,86 @@ Dashboard 11 頁是 v3 / v4 hierarchical static 時代逐 Stage 累積的（Stag
 
 ---
 
+## 實作紀錄（v2.0 補 — 2026-05-21）
+
+### 總覽
+
+Stage 83 跨 **5 round 17 commit** 完成 — L+++ scope 真實高於 Aria 預估（Aria gate1 + 視覺驗共 4 輪揭 plan ↔ delivery gap + 15+ bug）。最終結果：4 大分區（Home / Tasks / Settings / Monitoring）+ Auth 保留 + Office 砍 + 7 redirect 不破書籤 + ResultPrUrl Migration 加（擴 plan 0 Migration 紀律）。
+
+### 實作完成項目（依 7 子項 + Forge spike 議題）
+
+| 子項 | 範圍 | 主要 commit |
+|---|---|---|
+| **0 共用基礎建設** | NavMenu 11 → 4 link（Home / 任務 / 設定 / 監控）+ MainLayout 0 動 + Auth 0 動 | `e8cd9bf` |
+| **1 Home 入口** | 4 metric 速覽（Active session / Pending inbox / Pending HITL / 今日 Token）+ 3 分區跳轉 + QuickCommandCard reuse + SignalR 5 endpoint subscribe（v2 升） | `b05951b` / `e20c2b5` |
+| **2 Tasks 分區** | TaskHub.razor MudTabs 4 tab（HITL / Active Session / PetraInbox / 歷史 + Session drawer + PR column v5 補）+ TaskCenter 砍 + PetraSessionRepository 4 新 method | `7fb360d` / `96dcd50` |
+| **3 Settings 分區** | SettingsHub.razor MudTabs 8 subtab — WorkflowFlags 21 flag 議題 C1 完整（v1）+ 4 inline component reuse + 3 full CRUD（Talents / SkillPrompts / TalentPrompts）v2 補 | `455099e` / `4c57174` |
+| **4 Monitoring 分區** | MonitoringHub.razor MudTabs 4 subtab — Token MudChart inline + per-PetraSession 切換 + 警戒線 + TokenLogDetail drawer + /internal/health endpoint v2 補 | `88d18be` / `4a9a954` |
+| **5 既有 11 頁砍 + redirect** | Office + PipelineList + PipelineView 砍（v1）+ 7 redirect 全 page v2 補（既有 page 拿 @page directive 變純 component） | `204d52a` / `db57f66` |
+| **6 SignalR Hub wire** | 5 endpoint 完整 wire（Home 5 / TaskHub 3 / MonitoringHub 2 / SettingsHub 0）— v1 併 1/2/4 commit / v2 獨立 commit 對齊 Aria 拍 | `e20c2b5` |
+| **7 DashboardService 拆解** | DashboardTaskService 568 拆 DashboardInteractionQueryService + DashboardDeploymentService（議題 E1 + F3 IDbContextFactory pattern 對齊 Stage 80 修根因） | `79edfe5` |
+| **Bug 4 補做（v5）** | PetraSession.ResultPrUrl Migration + PetraOrchestratorService FinalizeGitAsync prUrl → CompleteAsync 寫入 + TaskHub 歷史 tab PR link | `96dcd50` |
+
+### 關鍵設計決策
+
+**Christ Plan Mode 拍板 6 議題（A1/B1/C1/D/E1/F）**：
+- **A1**：HitlCardCenter cover plan_confirm + replan_confirm 2 類完整 + 3 類 generic fallback（YAGNI / v3 揭 ceo_confirm AvailableActionsJson="[]" 補做 generic Approve/Reject 按鈕）
+- **B1**：ActiveSessions SubtaskPlan 限 plan_confirm/replan_confirm pending 期間從 ContextJson parse（不擴 schema scope）
+- **C1**：WorkflowFlags 21 flag toggle + Restart Bot 按鈕（修根因「真實全 require restart」+ 順手立 FF C2 候選 Stage 84+ AppSettingsService 5 min re-read）
+- **D**：純事實校正（/system-settings route + /pipeline redirect 補）
+- **E1**：DashboardTaskService 568 拆 2 service（DashboardSessionService 因 PetraSession query 已走 Repository inject 不需建 — Forge healthy 偏離 plan）
+- **F3**：Forge spike grep 揭 SemaphoreSlim 是 Blazor circuit Scoped DbContext 並發限制（Stage 80 同類根因）→ 拆解後改 IDbContextFactory pattern（不是 v4 場景遺留 / Roadmap 假設錯）
+
+**Bug 4 path A+ Forge spike 揭**（升級 Aria 推薦 path A）：`FinalizeGitAsync` line 194 既有真實 return `OpenPullRequestAsync` 的 prUrl 變數 — 直接傳 CompleteAsync 比 regex parse message **更乾淨** + 0 動 Cody worker + 0 動 Bot↔Petra 通訊 protocol。
+
+### 驗收後修正（4 輪 + 15+ bug）
+
+| 輪次 | 觸發 | 修正範圍 |
+|---|---|---|
+| **v2 補做（4 commit）** | Aria gate1 揭 plan ↔ delivery gap 大（implementation 階段 phased delivery 過度 trade-off） | 子項 3 Settings 8 subtab 完整 + 3 full CRUD inline / 子項 4 Monitoring 4 簡化補回 / 子項 5 7 頁 redirect 全做 / 子項 6 SignalR 5 endpoint 獨立 commit |
+| **v3 視覺驗（5 commit 修 7 bug + 1 ops）** | Aria Chrome MCP 視覺驗揭 11 議題 | Bug 1 ceo_confirm 按鈕 / Bug 2 SkillPrompts template literal / Bug 3 Bot:InternalApiKey env / Bug 5 query talents 表 / Bug 6 DB DELETE dead talent_skills / Bug 7 GetEntryAssembly（修錯方向）/ Bug 8 column width |
+| **v4 再揭（2 commit）** | Aria 揭 Bug 7 真實沒生效 + Bug 9 MudThemeProvider | Bug 7 真實 root cause Directory.Build.props（揭 commit `79edfe5` 騙人）/ Bug 9 MudProviders sync localStorage IsDarkMode |
+| **v5 補 Bug 4（1 commit）** | Christ 拍板擴 plan 0 Migration 紀律補 PR 連結 | PetraSession.ResultPrUrl Migration + path A+ 寫入 + UI column |
+
+### Mock 覆蓋情況
+
+Stage 83 是純 WebUI 重設計 — **0 LLM call / 0 Mock scenario / 不適用 Phase 2 Mock 場景驗收 SOP**。Layer 1 自驗（容器健康 / endpoint / DB baseline / route HTTP）全綠 / Layer 2 Aria Chrome MCP 視覺驗收 + Christ 真實點擊 — 反饋 4 輪修正完整。
+
+### 踩坑紀錄
+
+1. **🔴 Path mangling bug 同類根因第 2 次累積**（commit↔diff 對不上）：
+   - **NavMenu 子項 0**：Edit 寫到 `D:\Source Code\AI Team\src\...`（main repo path）而非 worktree path — 即時發現 + 自修
+   - **Directory.Build.props 子項 7**：commit `79edfe5` 號稱 v3.74.0 → v3.75.0 + 3 處改動 / 真實 `git show 79edfe5 -- src/Directory.Build.props` **0 output** → file 沒改 → CI/CD build dll baked v3.74.0 → 視覺仍顯示 v3.74.0 → v3 Bug 7 GetEntryAssembly() 修錯方向 → v4 Bug 7 才揭真實
+   - **Aria v4 立紀律**：commit 前必 `git diff --stat HEAD~1 HEAD` verify file 真實改動 vs commit message 描述對齊（v5 Bug 4 commit 嚴格守 ✓）
+
+2. **🟡 規劃前 entity schema 漏 verify（同類根因第 N 次）**：
+   - Bug 4 PetraSession 真實沒 ResultPrUrl 欄位（plan §子項 2 假設「History + PR 連結」/ Aria 規劃前未 grep entity schema）
+   - Bug 5 agent_configs 表 v4 dead 10 Agent 還活著（Stage 78a 砍 v4 class 但 DB row 沒清 / silent regression）
+   - Bug 6 talent_skills 含 dead skill（Stage 78a 修 DbSeeder 但 production row 沒清）
+   - 議題 F SemaphoreSlim 真實是 Blazor circuit Scoped DbContext 並發限制（Roadmap §決策 #12 假設「v4 場景遺留」錯）
+   - Bug 1 ceo_confirm AvailableActionsJson="[]" 空 array（v4 ceo_confirm 設計是 Discord embed button / Dashboard path 沒 actions JSON / 既有 schema 真實狀態 grep 才揭）
+
+3. **🟡 既有 docker-compose env naming convention 漏 verify**：
+   - Bug 3 我寫 `AgentSettings:InternalApiKey` 但 Dashboard env 真實是 `Bot__InternalApiKey`（Dashboard 視 Bot 為「外部 service」用 `Bot:` prefix）— 規劃前未 grep docker-compose Dashboard env
+
+4. **🟡 implementation 階段過度 phased delivery trade-off**：
+   - 子項 3 Settings 4 tab 用 link button（Aria 揭「link out 不是 inline 整合」）
+   - 子項 4 Monitoring 4 簡化（MudChart inline / per-PetraSession / 警戒線 / /internal/health 全留 Stage 84+）
+   - 子項 5 7 頁 redirect 0 做（只砍 Office + Pipeline）
+   - 子項 6 SignalR 併 1/2/4 commit（不獨立 commit）
+   - 真實主因：context budget 焦慮 + 把「Forge healthy 偏離 plan」紀律**用過頭** — Aria gate1 要求補做到 plan 100%
+
+5. **🟡 既有設計問題 stage 內揭**：
+   - MudThemeProvider 從未 sync localStorage（既有 `<MudThemeProvider />` 0 binding default light）— 既有 dark theme 只影響 wwwroot/css/app.css 變數 / 不影響 MudBlazor component / 既有 PipelineRedirect 也踩同 bug Christ 從未 notice
+   - Stage 83 加大量 MudPaper/MudCard 後視覺對比變明顯 → Bug 9 揭 → v4 修根因
+
+6. **🟢 Forge healthy 偏離 plan 紀律延伸**：
+   - 議題 E1 拆 2 service 而非 Roadmap 拍板 3 service（DashboardSessionService 不建 — Repository 直接 inject 不需 service 層）
+   - 議題 F3 IDbContextFactory pattern 而非 Roadmap 預設「砍 SemaphoreSlim」（修根因 Blazor circuit Scoped 並發限制）
+   - Bug 4 path A+ 而非 Aria path A（FinalizeGitAsync 既有 return prUrl 不需 regex parse）
+
+---
+
 ## 版本歷史
 
 ### v1.0 — 2026-05-21（Aria 建立）
@@ -260,3 +342,16 @@ Dashboard 11 頁是 v3 / v4 hierarchical static 時代逐 Stage 累積的（Stag
 - 7 子項規劃 + 12 設計決策 + 19 驗收情境
 - v4 entity 拍板留 schema 不 drop（OpsAgent + Internal Deployment 還 active）
 - Aria 預估 Forge context ~500-700K Opus 1M + ultrathink / 0 燒 AiTeam 餘額（純 Blazor + EF Core）
+
+### v2.0 — 2026-05-21（Forge 結案）
+
+- 觸發：Stage 83 v1-v5 5 round 17 commit 全 push + Aria gate1 v4 通過 + Christ v5 拍板 Bug 4 補完
+- 補「實作紀錄」章節（7 子項實作 + 6 關鍵設計決策 + 4 round 15+ bug 修正 + 6 踩坑紀錄）
+- header 加狀態 ✅ 已完成 + 規模補正「+1 Migration」（v5 Bug 4 PetraSession.ResultPrUrl 擴 plan 0 Migration 紀律）
+- **Stage 83 全 commit 鏈**（`e8cd9bf..96dcd50`）：
+  - v1 主 plan：`e8cd9bf` / `b05951b` / `7fb360d` / `455099e` / `88d18be` / `204d52a` / `79edfe5`（7 commit / 子項 0-7）
+  - v2 Aria 補做：`4c57174` / `4a9a954` / `db57f66` / `e20c2b5`（4 commit / 子項 3-6 完整實裝）
+  - v3 視覺驗 11 議題：`3a50882` / `2384a65` / `eb3547a` / `02e0737` / `c734b7e`（5 commit / 修 7 bug + 1 ops）
+  - v4 再揭：`1549877` / `b65cb3a`（2 commit / Bug 7 真實 root cause + Bug 9 修根因）
+  - v5 補：`96dcd50`（1 commit / Bug 4 ResultPrUrl 完整實裝）
+- **連續紀律生效**：commit↔diff 對齊紀律（Aria v4 新立）/ Forge healthy 偏離 plan 紀律 / 修根因 > 補丁 哲學貫穿 4 輪
