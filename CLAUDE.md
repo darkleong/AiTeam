@@ -2,7 +2,7 @@
 
 ## 專案背景
 
-Christ 老闆 / AI 團隊執行軟體開發：
+AI 團隊執行軟體開發（老闆 + AI Talent 協作）：
 
 - **v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員（完整描述見 [docs/agents/v5.5_team_plan.md](docs/agents/v5.5_team_plan.md)）
 - **核心工具**：Discord（Discord.Net）+ PostgreSQL + Blazor Dashboard（MudBlazor 8.x / InteractiveServer）
@@ -124,9 +124,9 @@ Windows 11 本機 Docker Compose（非雲端）：
 
 ## 自主執行原則
 
-**Christ 只動嘴 / 能自己做的事不要叫 Christ 做。**
+**老闆只動嘴 / 能自己做的事不要叫老闆做。**
 
-實作完畢進驗收前，以下自行完成（不需請 Christ）：
+實作完畢進驗收前，以下自行完成（不需請老闆）：
 
 - `dotnet build AiTeam.slnx`（repo root 執行）
 - `dotnet test`
@@ -138,9 +138,9 @@ Windows 11 本機 Docker Compose（非雲端）：
   **注意**：`startup-project` 必須 `src/AiTeam.Dashboard`（含 EntityFrameworkCore.Design）/ 用 AppHost 找不到 DLL / 多 DbContext 必加 `--context AppDbContext`
 - git commit + push 到 main（直接執行 / 不詢問「要不要 push」）
 - 程式碼靜態分析（無明顯 warning）
-- **Playwright 驗收**：可截圖驗證的 UI 變更自行執行 / 不請 Christ 開瀏覽器
+- **Playwright 驗收**：可截圖驗證的 UI 變更自行執行 / 不請老闆開瀏覽器
 
-**需要請 Christ 操作**：
+**需要請老闆操作**：
 - 重啟 Docker 容器（`docker compose restart`）
 - Discord 執行 `/reload-rules`（規則快取更新）
 - Discord 實際測試 Bot 對話流程
@@ -153,16 +153,16 @@ Windows 11 本機 Docker Compose（非雲端）：
 1. 本機驗證：`dotnet build` / `dotnet test` / Playwright 截圖（如適用）
 2. 自行 commit（聚焦「為什麼」/ 從近期 commit 觀察風格）
 3. 自行 push 到 main（不詢問 / **直接 push**）
-4. CI/CD 自動接手：push → GitHub Actions self-hosted runner → `docker compose build + up` → Christ 本機 Win11 Docker
-5. 回報「實作完成 + 已 push」+ commit hash / 等 Christ 驗收
+4. CI/CD 自動接手：push → GitHub Actions self-hosted runner → `docker compose build + up` → 老闆本機 Win11 Docker
+5. 回報「實作完成 + 已 push」+ commit hash / 等老闆驗收
 
-> 除非該 commit 涉及破壞性操作（force push / reset --hard 等）或 Christ 明確指示 review，否則一氣呵成完成。
+> 除非該 commit 涉及破壞性操作（force push / reset --hard 等）或老闆明確指示 review，否則一氣呵成完成。
 
 ---
 
 ## 開發語言
 
-Christ 用繁體中文溝通 / 程式碼註解繁體中文 / 變數與方法名英文。
+老闆用繁體中文溝通 / 程式碼註解繁體中文 / 變數與方法名英文。
 
 ---
 
@@ -178,12 +178,12 @@ Christ 用繁體中文溝通 / 程式碼註解繁體中文 / 變數與方法名�
 
 ---
 
-## 回答 Christ 觀察到的異常時
+## 回答老闆觀察到的異常時
 
-Christ 回報「這合理嗎 / 為什麼 X / 我看到 Y」時，**先查程式碼實證 / 不靠推論解釋**。
+老闆回報「這合理嗎 / 為什麼 X / 我看到 Y」時，**先查程式碼實證 / 不靠推論解釋**。
 
 - 讀相關檔案 / 確認實際流程
 - 比對 Roadmap / 計劃書預期行為
 - 確認後再下判斷
 
-不要用「這是既有設計」「不影響正確性」這類結論打發 — 除非已有程式碼實證支撐。Christ 觀察通常基於真實使用感受 / 即使初判「不是 bug」也要**先記錄到 Future_Feature.md 再下結論** / 別直接 dismiss。
+不要用「這是既有設計」「不影響正確性」這類結論打發 — 除非已有程式碼實證支撐。老闆觀察通常基於真實使用感受 / 即使初判「不是 bug」也要**先記錄到 Future_Feature.md 再下結論** / 別直接 dismiss。
