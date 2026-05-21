@@ -153,6 +153,29 @@
             }
         </MudCardActions>
     }
+    else
+    {
+        @* Stage 83 v3 Bug 1：generic fallback Approve/Reject 按鈕 — cover AvailableActionsJson="[]" 空 array 場景（v4 ceo_confirm 開卡時設計是 Discord embed button / Dashboard path AvailableActionsJson 是空 → Christ 至少要能 respond / 不破壞 production workflow）。 *@
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                       Disabled="_isResponding"
+                       OnClick="@(() => GenericRespondAsync("approve"))"
+                       StartIcon="@Icons.Material.Filled.Check"
+                       Class="mr-2">
+                Approve
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                       Disabled="_isResponding"
+                       OnClick="@(() => GenericRespondAsync("reject"))"
+                       StartIcon="@Icons.Material.Filled.Close"
+                       Class="mr-2">
+                Reject
+            </MudButton>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">
+                generic fallback（AvailableActions 空 — InteractionType 預設按鈕）
+            </MudText>
+        </MudCardActions>
+    }
 </MudCard>
 
 @code {
@@ -224,6 +247,27 @@
         StateHasChanged();
 
         await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action.Id, null));
+
+        _isResponding = false;
+    }
+
+    /// <summary>
+    /// Stage 83 v3 Bug 1：generic fallback Approve/Reject 按鈕回覆 — cover AvailableActionsJson="[]" 空 array 場景。
+    /// 對齊既有 InteractionRespondService.RespondAsync(id, action, content) 樂觀鎖 pattern / ResponseAction='approve' or 'reject'。
+    /// </summary>
+    private async Task GenericRespondAsync(string action)
+    {
+        var label = action == "approve" ? "確認" : "拒絕";
+        var confirmed = await DialogService.ShowMessageBox(
+            $"{label}互動",
+            $"確定要{label}此 {Interaction.InteractionType} 卡片嗎？",
+            yesText: label, cancelText: "取消");
+        if (confirmed != true) return;
+
+        _isResponding = true;
+        StateHasChanged();
+
+        await OnRespond.InvokeAsync(new ResponseRequest(Interaction.Id, action, null));
 
         _isResponding = false;
     }
