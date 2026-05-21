@@ -54,6 +54,22 @@ public class PetraSessionRepository(AppDbContext db)
     public Task<int> CountActiveAsync(CancellationToken ct = default)
         => db.PetraSessions.CountAsync(x => x.Status == "running" || x.Status == "paused", ct);
 
+    /// <summary>Stage 83：取得 active session list — running + paused（Tasks 分區 ActiveSessions 用 / UpdatedAt 倒序）。</summary>
+    public Task<List<PetraSession>> GetActiveAsync(int limit, CancellationToken ct = default)
+        => db.PetraSessions
+            .Where(x => x.Status == "running" || x.Status == "paused")
+            .OrderByDescending(x => x.UpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+    /// <summary>Stage 83：取得 history session list — done / escalated / cancelled（Tasks 分區 History 用 / UpdatedAt 倒序）。</summary>
+    public Task<List<PetraSession>> GetHistoryAsync(int limit, CancellationToken ct = default)
+        => db.PetraSessions
+            .Where(x => x.Status == "done" || x.Status == "escalated" || x.Status == "cancelled")
+            .OrderByDescending(x => x.UpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
     /// <summary>取 session 含 messages（時序排序）。</summary>
     public Task<PetraSession?> GetWithMessagesAsync(Guid sessionId, CancellationToken ct = default)
         => db.PetraSessions
