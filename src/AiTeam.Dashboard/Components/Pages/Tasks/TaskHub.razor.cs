@@ -223,6 +223,14 @@ public partial class TaskHub : IAsyncDisposable
         return $"{(int)duration.TotalDays} 天 {duration.Hours} 時";
     }
 
+    /// <summary>Stage 83 v5 Bug 4：從 GitHub PR URL 抽 PR # number 顯示（如「PR #372」）— 對齊 PrNumberHelper 既有 pattern。</summary>
+    private static string ExtractPrNumber(string? prUrl)
+    {
+        if (string.IsNullOrEmpty(prUrl)) return "—";
+        var match = System.Text.RegularExpressions.Regex.Match(prUrl, @"/pull/(\d+)");
+        return match.Success ? $"PR #{match.Groups[1].Value}" : "PR";
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_hubConnection is not null) await _hubConnection.DisposeAsync();

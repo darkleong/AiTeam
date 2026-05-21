@@ -25,6 +25,10 @@ public class PetraSession
     /// numeric(18,6) 對齊既有 TokenLog.TotalCostUsd 精度。對齊 Workflow:ReplanCostCapUsd soft cap。</summary>
     public decimal SessionCostUsd { get; set; } = 0m;
 
+    /// <summary>Stage 83 v5 Bug 4：v5.5 task 結束 FinalizeGitAsync OpenPullRequestAsync 真實 return 的 GitHub PR URL（nullable — 無 PR 場景 / 純 Q&A task / Mock workingDir 非 git repo 場景為 null）。
+    /// PetraOrchestratorService.CompleteAsync caller line 196 寫入 / Dashboard Tasks 歷史 tab 顯示 PR link。</summary>
+    public string? ResultPrUrl { get; set; }
+
     public TaskGroup? TaskGroup { get; set; }
     public List<PetraSessionMessage> Messages { get; set; } = new();
 }

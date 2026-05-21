@@ -76,13 +76,17 @@ public class PetraSessionRepository(AppDbContext db)
             .Include(x => x.Messages.OrderBy(m => m.CreatedAt))
             .FirstOrDefaultAsync(x => x.Id == sessionId, ct);
 
-    /// <summary>標記 session 完成。</summary>
-    public async Task CompleteAsync(Guid sessionId, CancellationToken ct = default)
+    /// <summary>標記 session 完成。
+    /// Stage 83 v5 Bug 4：加 optional prUrl 參數寫進 PetraSession.ResultPrUrl（FinalizeGitAsync OpenPullRequestAsync 真實 return / Dashboard 歷史 tab 顯示 PR link）。
+    /// null 場景（escalate path / 無 PR / Mock）— ResultPrUrl 保持 null 對齊 nullable schema 紀律。</summary>
+    public async Task CompleteAsync(Guid sessionId, CancellationToken ct = default, string? prUrl = null)
     {
         var session = await db.PetraSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
         if (session is null) return;
         session.Status = "done";
         session.UpdatedAt = DateTime.UtcNow;
+        if (!string.IsNullOrEmpty(prUrl))
+            session.ResultPrUrl = prUrl;
     }
 
     /// <summary>標記 session escalated（worker 失敗或需老闆介入）。</summary>

@@ -146,6 +146,7 @@
                     <MudTh>Status</MudTh>
                     <MudTh>Replan</MudTh>
                     <MudTh>Cost (USD)</MudTh>
+                    <MudTh Style="white-space:nowrap; min-width:80px">PR</MudTh>
                     <MudTh>Duration</MudTh>
                     <MudTh>Completed</MudTh>
                 </HeaderContent>
@@ -158,6 +159,18 @@
                     </MudTd>
                     <MudTd>@context.ReplanIteration</MudTd>
                     <MudTd>@context.SessionCostUsd.ToString("F4")</MudTd>
+                    <MudTd>
+                        @if (!string.IsNullOrEmpty(context.ResultPrUrl))
+                        {
+                            <MudLink Href="@context.ResultPrUrl" Target="_blank" rel="noopener" aria-label="@($"Open {ExtractPrNumber(context.ResultPrUrl)} on GitHub")">
+                                @ExtractPrNumber(context.ResultPrUrl)
+                            </MudLink>
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </MudTd>
                     <MudTd>@FormatDuration(context.UpdatedAt - context.CreatedAt)</MudTd>
                     <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
                 </RowTemplate>

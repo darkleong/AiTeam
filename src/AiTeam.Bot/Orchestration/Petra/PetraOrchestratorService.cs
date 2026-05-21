@@ -193,7 +193,8 @@ public class PetraOrchestratorService(
             // 無 git diff → 不誤建 PR。Mock 階段 workingDir 不是 git repo → FinalizeGitAsync 內捕例外 + log warning 不擋流程（adapter 跑 Mock 時 workingDir 通常為空）。
             var prUrl = await FinalizeGitAsync(sessionWithCtx, taskInput, decidedCapabilities, dispatchNames, ct);
 
-            await sessionRepo.CompleteAsync(session.Id, ct);
+            // Stage 83 v5 Bug 4：prUrl 寫進 PetraSession.ResultPrUrl（Dashboard Tasks 歷史 tab 顯示 PR link）
+            await sessionRepo.CompleteAsync(session.Id, ct, prUrl);
             await db.SaveChangesAsync(ct);
 
             var summary = $"Petra 完成 {dispatchNames.Count} dispatch（{string.Join(" → ", dispatchNames)}）"
