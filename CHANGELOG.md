@@ -11,9 +11,10 @@
 
 ## [Unreleased]
 
-- **下個動作候選**：**Trial_v27**（補驗 Stage 81 動態 replan UI 卡 production 真實 fire — Trial_v26 Case C W1 預警 Vera 不可控接受 / Vera-critical prompt 強化 或 SQL fallback 反向驗 routing wire / 預估 $2-4 / 餘額 $7.56 buffer 充足）→ WebUI Stage（K WebUI Talent CRUD + Effort 擴展 + E Token monitoring 視覺化 + v4 entity drop + Dashboard 重設計為 PetraSession-based）→ v5.5 完整收口。
-- **Phase 4 候選路徑**：78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → Trial_v23 ✅ → 80 ✅ → Trial_v24 ✅ → 81 ✅ → Trial_v25 🟡 → 82 ✅ → **Trial_v26 🟢⭐** → Trial_v27（補驗動態 replan UI 卡）→ WebUI Stage 預留 → v5.5 完整收口。
-- **Trial_v26 戰略 finding ⭐**：Christ 戰略 question 點破 + WebSearch 3 query 揭 **AiTeam Petra LLM + worker CLI + HITL 三層分工對齊業界主流 supervisor pattern**（LangGraph / Databricks / Claude Agent SDK 共識）/ 撤回「Petra 切 CLI」FF 候選 / 新 FF 候選：Vera review 紀律升級 + Read-only Codebase Explorer agent（看 Christ 拍板）。詳見 [Trial_v26_Plan.md](docs/experiments/Trial_v26_Plan.md)。
+- **下個動作候選**：**WebUI Stage**（Phase 4 最後一個 / v4 entity drop + Dashboard 重設計為 PetraSession-based / 規模 L+）→ **v5.5 完整收口**。
+- **Phase 4 候選路徑**：78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → Trial_v23 ✅ → 80 ✅ → Trial_v24 ✅ → 81 ✅ → Trial_v25 🟡 → 82 ✅ → Trial_v26 🟢⭐ → **Trial_v27 🟡⭐**（戰略性結案 / LLM alignment safety net 實證）→ **WebUI Stage** → v5.5 完整收口。
+- **Trial_v27 戰略結論 ⭐⭐⭐**：跳出 Trial→Fix 迴圈業界共識對齊 — Christ 戰略觀察「Trial→Fix 迴圈永遠不會結束」對齊業界共識（multi-agent LLM system production-ready 不是「Trial 全綠」/ 是「能用 + 可監控 + HITL 兜底 + 已知議題分類完整」）+ AiTeam 累積已達 production-ready（連續 15 Trial 業務級 + Stage 80/81 HITL 雙保險 + Stage 82 修根因 + 業界 supervisor pattern + LLM alignment 雙重 safety net）/ Aria 推薦直接 WebUI Stage 收 Phase 4 / 不再硬模擬 routing wire。詳見 [Trial_v27_Plan.md](docs/experiments/Trial_v27_Plan.md)。
+- **Trial_v26 戰略 finding ⭐**：AiTeam Petra LLM + worker CLI + HITL 三層分工對齊業界主流 supervisor pattern（LangGraph / Databricks / Claude Agent SDK 共識）/ WebSearch 3 query 驗證。詳見 [Trial_v26_Plan.md](docs/experiments/Trial_v26_Plan.md)。
 
 ---
 

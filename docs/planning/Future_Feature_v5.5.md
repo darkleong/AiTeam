@@ -579,7 +579,21 @@ Layer 2：Worker 執行層 per-Talent 1 task at a time（Petra → 各 Worker）
 
 **Aria 自我反思候選 +1 條**（留 /aria-end 統一升級）：Stage 79 規劃漏掃 Blazor InteractiveServer + Scoped DbContext concurrency 紀律（OnInitializedAsync 改 DB query 必 grep verify `IDbContextFactory.CreateDbContext()` pattern）— workflow_aria.md 第三節 A 第 7 條延伸範圍紀律延伸候選 #N+2（連同既有 #11 Dashboard UI validate 邏輯 → 同 Stage 不同盲點兩條根因累積）
 
-**Phase 4 後續路徑（Trial_v26 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → **Trial_v26 🟢⭐** → Trial_v27（補驗 Stage 81 動態 replan UI 卡 production 真實 fire / W1 預警 Vera 不可控接受）→ WebUI Stage 預留（v4 entity drop + Dashboard 重設計）→ v5.5 完整收口
+**Phase 4 後續路徑（Trial_v27 後修正）**：Stage 78a ✅ → 78b ✅ → 78c ✅ → 79 ✅ → **Trial_v23 ✅** → **80 ✅** → **Trial_v24 ✅** → **81 ✅** → **Trial_v25 🟡** → **82 ✅** → **Trial_v26 🟢⭐** → **Trial_v27 🟡⭐**（戰略性結案 / 揭 LLM alignment 業界 safety net 第二道防線實證）→ **WebUI Stage**（Phase 4 最後 / v4 entity drop + Dashboard 重設計為 PetraSession-based）→ **v5.5 完整收口**
+
+### Phase 4 候選 — Trial_v27 🟡⭐ 戰略性結案 + 跳出 Trial→Fix 迴圈業界共識對齊（2026-05-21）
+
+**Trial_v27 結果 🟡⭐ 戰略性結案** — 揭兩個業界 reference 重大 finding + Aria 推薦跳出 Trial→Fix 迴圈直接收 Phase 4：
+
+**真實流程**：① Round 1 Token 守門 fail-fast fire（Stage 22 production safety 第一道防線實證 ✅）② Round 2 月限調高 + reset inbox row 重跑驗證 **Stage 76 RequeueAsync 紀律**（不必重派指令 ✅）③ Round 2 重大發現 — **Petra LLM alignment 自帶 refuse 不安全 task**（業界 safety net 第二道防線實證 ✅）④ Stage 81 replan_confirm UI 卡 production 真實 fire 未驗（LLM alignment 擋在最前 / 留真實業務自然 fire）
+
+**戰略結論 ⭐⭐⭐ — 跳出 Trial→Fix 迴圈業界共識對齊**：Christ 戰略觀察「Trial→Fix 迴圈永遠不會結束」**對齊業界共識**（multi-agent LLM system production-ready 標準是「能用 + 可監控 + HITL 兜底 + 已知議題分類完整」**不是 Trial 全綠**）+ AiTeam 累積已達 production-ready（連續 15 Trial 業務級成功 + Stage 80/81 HITL 雙保險 + Stage 82 修根因 + 業界 supervisor pattern + LLM alignment 雙重 safety net）+ Aria 推薦直接 WebUI Stage 收 Phase 4。
+
+**新 🟡 議題候選**（Stage 84+ Phase 4 收口後評估 / 不阻 WebUI Stage）：SubtaskPlanParser 對 Petra refuse JSON fallback Linear 不夠優雅 — 升級 detect `{"error":"dispatch_rejected"}` pattern → 直接 escalate 給 Christ 不 fallback Linear。
+
+**真實 cost** $0.01-0.02（業界 safety net 在最前止損）/ 餘額 $7.56 → $7.54 充裕。
+
+詳見 [Trial_v27_Plan.md](../experiments/Trial_v27_Plan.md) v1.0。
 
 ### Phase 4 候選 — Trial_v26 🟢⭐ Stage 82 雙修法 production 真實生效驗證 + 業界對齊驗證 ⭐（2026-05-21）
 
