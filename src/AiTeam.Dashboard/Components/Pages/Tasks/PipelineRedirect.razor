@@ -1,0 +1,8 @@
+@page "/pipeline"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@* Stage 83 子項 5：v4 Pipeline 已 Stage 78c 砍 framework / UI 留 legacy 也砍（PipelineList + PipelineView 砍） — redirect to /tasks *@
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/tasks", forceLoad: false);
+}
