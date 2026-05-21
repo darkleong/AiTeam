@@ -1,0 +1,141 @@
+@page "/monitoring"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Shared.Dtos
+@using AiTeam.Shared.ViewModels
+@using AiTeam.Dashboard.Components.Pages.Home
+
+<PageTitle>監控中心 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>監控中心</h2>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+    </MudStack>
+</div>
+
+<MudTabs Elevation="2" Rounded="true" PanelClass="pa-4" Position="Position.Top">
+
+    @* Tab 1：Token Analytics — 今日 + per-Agent summary（reuse DashboardTokenService）*@
+    <MudTabPanel Text="Token 統計" Icon="@Icons.Material.Filled.BarChart">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            今日（@DateTime.UtcNow.Date.ToString("yyyy-MM-dd") UTC）各 Agent Token 使用量摘要 +
+            <MudLink Href="/tokens" Underline="Underline.Always">詳細圖表頁</MudLink>。
+        </MudText>
+        @if (_todaySummary is null || _todaySummary.AgentSummaries.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">今日無 Token 使用紀錄。</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" T="TokenAgentSummaryDto">
+                <HeaderContent>
+                    <MudTh>Agent</MudTh>
+                    <MudTh>Model</MudTh>
+                    <MudTh>Input</MudTh>
+                    <MudTh>Output</MudTh>
+                    <MudTh>Cost (USD)</MudTh>
+                    <MudTh>Estimated</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.AgentName</MudTd>
+                    <MudTd>@context.Model</MudTd>
+                    <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
+                    <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
+                    <MudTd>@context.EstimatedCostUsd.ToString("F4")</MudTd>
+                    <MudTd>
+                        @if (context.HasEstimated)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">est.</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    @* Tab 2：Agent Status — reuse AgentStatusCard + DashboardAgentService.GetAllAgentStatusesAsync *@
+    <MudTabPanel Text="Agent 狀態" Icon="@Icons.Material.Filled.SmartToy">
+        @if (_agentStatuses.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">尚未載入 Agent 資料 — 請確認 Bot 啟動。</MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="2">
+                @foreach (var agent in _agentStatuses)
+                {
+                    var queueInfo = _agentQueues.FirstOrDefault(q => q.AgentName == agent.AgentName);
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <AgentStatusCard Agent="agent" QueueInfo="queueInfo" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudTabPanel>
+
+    @* Tab 3：Deployments — TaskItem WHERE AssignedAgent='Ops' 摘要 + link to /deployments *@
+    <MudTabPanel Text="部署紀錄" Icon="@Icons.Material.Filled.RocketLaunch">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            最近 10 筆部署紀錄 + <MudLink Href="/deployments" Underline="Underline.Always">完整部署歷史頁</MudLink>。
+        </MudText>
+        @if (_recentDeployments.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">尚無部署紀錄。</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_recentDeployments" Dense="true" Hover="true" T="TaskItemDto">
+                <HeaderContent>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Title</MudTh>
+                    <MudTh>CreatedAt</MudTh>
+                    <MudTh>CompletedAt</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+                    <MudTd>@context.Title</MudTd>
+                    <MudTd>@context.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+                    <MudTd>@(context.CompletedAt?.ToLocalTime().ToString("MM/dd HH:mm") ?? "—")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    @* Tab 4：System Health — 簡單 status placeholder *@
+    <MudTabPanel Text="系統健康" Icon="@Icons.Material.Filled.HealthAndSafety">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                    <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="@(_botHealthy ? Color.Success : Color.Error)" />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Bot 容器</MudText>
+                    <MudText Typo="Typo.body2">@(_botHealthy ? "✅ Healthy" : "❌ Unreachable")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_botStatusDetail</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="@(_dbHealthy ? Color.Success : Color.Error)" />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">PostgreSQL</MudText>
+                    <MudText Typo="Typo.body2">@(_dbHealthy ? "✅ Connected" : "❌ Disconnected")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_dbStatusDetail</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                    <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="@(_hubConnected ? Color.Success : Color.Error)" />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">SignalR Hub</MudText>
+                    <MudText Typo="Typo.body2">@(_hubConnected ? "✅ Connected" : "❌ Disconnected")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">/hubs/agent-status</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+        <MudStack Row="true" Spacing="2" Class="mt-4">
+            <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="RefreshHealthAsync">重新檢測</MudButton>
+        </MudStack>
+    </MudTabPanel>
+</MudTabs>
