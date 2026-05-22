@@ -12,7 +12,7 @@
 ## [Unreleased]
 
 - **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅**）
-- **下個動作候選**：v5.5 production 自然累積期 + Stage 84+ 補強 Stage 83 phased delivery 留的 12 條候選（見 [Future_Feature_v5.5.md](docs/planning/Future_Feature_v5.5.md) Stage 84+ 候選段）
+- **下個動作候選**：v5.5 production 自然累積期 + Stage 84+ 補強 Stage 83 phased delivery 留的 12 條候選（見 [Future_Feature.md](docs/planning/Future_Feature.md) Stage 84+ 候選段）
 
 ---
 

@@ -31,8 +31,7 @@
 | 文件 | 說明 |
 |------|------|
 | `Stage_7_Roadmap.md` ~ `Stage_N_Roadmap.md` | 各 Stage 規劃書（早期 Stage 1-6 已歸檔到 [`_archive/early-stages/`](./_archive/early-stages/)） |
-| `Future_Feature.md` | active 功能候選清單 |
-| `Future_Feature_v5.5.md` ⭐ | v5.5 升級規劃 reference（進行中戰略主軸）|
+| `Future_Feature.md` | active 功能候選清單 + Stage 84+ 候選 + 不確定性 + 客戶交付規劃 |
 
 ---
 

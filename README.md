@@ -219,8 +219,7 @@ docker compose --env-file .env up -d
 | 想看的東西 | 去哪查 |
 |---|---|
 | 完整版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
-| Active 功能候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
-| **v5.5 升級規劃 ⭐** | [Future_Feature_v5.5.md](./docs/planning/Future_Feature_v5.5.md) |
+| Active 功能候選 + Stage 84+ 候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
 | 系統架構全景 | [docs/Architecture.md](./docs/Architecture.md) |
 | 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
 | 6 Talent baseline + Talent-Skill separation | [docs/Architecture.md](./docs/Architecture.md) |
