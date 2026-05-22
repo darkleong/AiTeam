@@ -99,30 +99,17 @@ docs/
 
 ## HITL（Human-in-the-Loop）兜底機制
 
-v5.5 後雙層確認機制升級為 HITL 閘門（業界 LangGraph interrupt pattern）：
+v5.5 後雙層確認機制升級為 HITL 閘門（業界 LangGraph interrupt pattern）— Petra 拆完 plan 開 `plan_confirm` 卡 / Vera critical 或 Quinn fail 開 `replan_confirm` 卡 / 你 4 button 拍板（approve / edit / reject / respond）。
 
-```
-你對 Victoria 說自然語言 (#victoria-ceo) 或從 Dashboard 操作中心
-    ↓
-Victoria flag forward → PetraInbox
-    ↓
-Petra LLM 拆 SubtaskPlan（JSON）
-    ↓ [若 UseHITLPlanConfirmation=true] 開 plan_confirm 卡 → 等你 4 button（approve / edit / reject / respond）
-Worker chain dispatch（Cody / Vera / Quinn / Sage）
-    ↓ [若 UseDynamicReplanning=true 且 Vera critical / Quinn fail] 開 replan_confirm 卡 → 同 4 button
-FinalizeGitAsync 開 PR → 完成
-```
-
-詳見 [docs/Architecture.md](./docs/Architecture.md)「HITL — plan_confirm + replan_confirm」段。
+詳細 flow + 4 decision routing 見 [docs/Architecture.md](./docs/Architecture.md)「HITL — plan_confirm + replan_confirm」段。
 
 ---
 
 ## 動態 Talent / Skill 框架（v5.5）
 
-- **Skill registry**：`ISkillRegistry` 4 Final Skill code-defined（code_implementation / code_review / qa_testing / documentation）
-- **Talent registry**：DB `talents` + `talent_skills` 表（per-Project `ProjectId` nullable / null = 全域共用）+ 6 預設 Talent seed
-- **Dispatch**：Petra LLM 動態拆 SubtaskPlan JSON → `FindTalentForSkill` 看 Skill 找 Talent pool → round-robin（baseline 1 instance / future horizontal scaling 多 instance 自然分流）
-- **WebUI 動態管理**：Dashboard Settings 分區 TALENTS / SKILLPROMPTS / TALENTPROMPTS full CRUD（Stage 83 完整收口）
+4 Final Skill code-defined（code_implementation / code_review / qa_testing / documentation）+ 6 預設 Talent（DB seed）+ Petra LLM 動態拆 SubtaskPlan JSON dispatch + WebUI Settings 分區 TALENTS / SKILLPROMPTS / TALENTPROMPTS full CRUD（Stage 83 完整收口）。
+
+詳細 Skill registry / Talent registry / Dispatch 機制 / horizontal scaling 見 [docs/Architecture.md](./docs/Architecture.md)「Talent + Skill 分離」段。
 
 ---
 
