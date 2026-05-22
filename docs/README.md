@@ -23,8 +23,7 @@
 | 文件 | 說明 |
 |------|------|
 | `00_Master_Plan.md` | 文件導覽 stub（變更紀錄已遷至 [`/CHANGELOG.md`](../CHANGELOG.md)） |
-| `03_Workflow_Overview.md` | 開發流程全景圖（NewFeature / BugFix / TechImprovement 流程細節） |
-| `About_Boss.md` | 老闆背景與工作風格（AI 團隊行為依據） |
+| `03_Workflow_Overview.md` | 開發流程全景圖（v5.5 三層分工 / HITL / Petra 動態 orchestrator） |
 
 > 早期 `01_Vision_and_Architecture.md` 已歸檔至 [`_archive/early-vision/`](./_archive/early-vision/)（保留設計初期願景紀錄）；`02_Infrastructure.md` 已刪除（內容散到 [CLAUDE.md](../CLAUDE.md) + [README.md](../README.md)）。
 

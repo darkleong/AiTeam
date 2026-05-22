@@ -15,7 +15,6 @@
 | 個別 Stage 完整實作紀錄 | [`docs/planning/Stage_*_Roadmap.md`](../planning/) |
 | 開發流程全景圖（NewFeature / BugFix / TechImprovement） | [`03_Workflow_Overview.md`](./03_Workflow_Overview.md) |
 | 早期願景紀錄（已歸檔，保留歷史脈絡） | [`docs/_archive/early-vision/`](../_archive/early-vision/) |
-| 老闆角色描述 | [`About_Boss.md`](./About_Boss.md) |
 | 編程規範（C# / Blazor / MudBlazor / EF Core / API / refactor SOP） | [`docs/conventions/`](../conventions/) |
 | Agent 角色 lore | [`docs/agents/`](../agents/) |
 
