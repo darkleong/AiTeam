@@ -1,11 +1,8 @@
 # 開發流程全景圖
 
-> 版本：**v4.1**（2026-05-21 — v5.5 完整收口 + Stage 83 WebUI 重設計後 version bump）
 > 對應系統版本：**v3.75.0**（Stage 83 結案後）
->
-> 最新狀態以 [`/CHANGELOG.md`](../../CHANGELOG.md) 為準；本檔記錄當前 v5.5 流程設計，後續每幾個 Stage 補一次。
->
-> Talent 角色清單 + 設計原則見 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)。
+> 最新狀態以 [`/CHANGELOG.md`](../../CHANGELOG.md) 為準 / 本檔記錄當前 v5.5 流程設計 / 後續每幾個 Stage 補一次
+> Talent 角色清單 + 設計原則見 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)
 
 ---
 
@@ -242,13 +239,3 @@ Christ（Discord / Dashboard）
 | Dashboard 操作中心 | `src/AiTeam.Dashboard/Components/Pages/Interactions/InteractionCenter.razor.cs` |
 | Dashboard 系統設定（flag）| `src/AiTeam.Dashboard/Components/Pages/Settings/SystemSettings.razor.cs` |
 
----
-
-## 版本歷史
-
-| 版本 | 日期 | 變更 |
-|---|---|---|
-| v1.0 | 2026-04-16 | 建立 — v3 hierarchical static 描述 |
-| v2.0 | 2026-04-26 | v3 → v4 framework 漸進遷移描述補 |
-| v3.0 | 2026-05-07 | v4 framework 全切換 + Stage 49-56 演進描述 |
-| **v4.0** | **2026-05-21** | **v5.5 動態架構 + Stage 82 修法後重寫**（取代 v3.0 v4 hierarchical static 描述 / 對應 v3.74.0 Stage 82）。**核心改動**：① 砍 v4 8 階段 Pipeline + 5 Feature Flag 描述（替換 v5.5 三層分工 + 22 flag）② 重寫 Petra 動態 orchestrator + Talent-Skill separation + HITL plan_confirm + replan_confirm 4 decision routing ③ stream-json output Stage 82 修法描述補 ④ token_logs PetraSessionId 透傳機制補 ⑤ 關鍵程式碼位置索引對齊真實 v5.5 src/ 結構 ⑥ Talent 角色清單拆出 `v5.5_team_plan.md`（避免重複）。對齊業界 supervisor pattern WebSearch 驗證（Trial_v26）。從 777 行 → 約 230 行（**-70% 漂移砍**）。 |
