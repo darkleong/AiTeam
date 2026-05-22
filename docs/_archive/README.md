@@ -38,7 +38,7 @@ Software Team 一直是唯一 Team，目前 Victoria 兼任此角色。
 
 v4 hierarchical static 時期 12 個 Agent 個別設計檔（CEO/PM/Dev/Reviewer/QA/Doc/Designer/Requirements/Release/Ops/Software_Team_Plan/Agent_Capability_Gaps）。
 
-**Stage 78a 後砍範圍**：Rosa（Requirements）/ Demi（UI Design）/ Rena（Release Publishing）對應 capability 砍 + Maya（Ops）未實作。**v5.5 真實 baseline 只 6 Talent**（Victoria/Petra/Cody/Vera/Quinn/Sage），詳見活檔 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)。
+**Stage 78a 後砍範圍**：Rosa（Requirements）/ Demi（UI Design）/ Rena（Release Publishing）對應 capability 砍 + Maya（Ops）未實作。**v5.5 真實 baseline 只 6 Talent**（Victoria/Petra/Cody/Vera/Quinn/Sage），詳見活檔 [`docs/Architecture.md`](../Architecture.md)「6 Talent baseline」段。
 
 歷史價值保留 — Christ 未來如要重啟某 Agent 角色（如 Ops 自動 ALERT / Reporter 自動週報）可參考此 archive 設計原點。
 

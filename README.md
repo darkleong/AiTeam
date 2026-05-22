@@ -223,5 +223,5 @@ docker compose --env-file .env up -d
 | **v5.5 升級規劃 ⭐** | [Future_Feature_v5.5.md](./docs/planning/Future_Feature_v5.5.md) |
 | 系統架構全景 | [docs/Architecture.md](./docs/Architecture.md) |
 | 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
-| Agent / Talent 角色 lore | [docs/agents/](./docs/agents/) |
+| 6 Talent baseline + Talent-Skill separation | [docs/Architecture.md](./docs/Architecture.md) |
 | Self-implement 試驗紀錄 | [docs/experiments/](./docs/experiments/) |

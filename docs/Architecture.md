@@ -2,7 +2,7 @@
 
 > 對應系統版本：**v3.75.0**（Stage 83 結案後）
 > 最新狀態以 [`/CHANGELOG.md`](../CHANGELOG.md) 為準 / 本檔記錄當前 v5.5 系統架構 + 流程設計 / 後續每幾個 Stage 補一次
-> Talent 角色清單 + 設計原則見 [`docs/agents/v5.5_team_plan.md`](agents/v5.5_team_plan.md)
+> 真實 Talent 設定 SoT：DB `talents` + `talent_prompts` + `skill_prompts` 表（Stage 67 Talent-Skill separation 起 / Stage 72 SkillPrompt DB 化）
 
 ---
 
@@ -86,12 +86,32 @@
 
 **Talent**（人物 identity）+ **Skill**（能力 capability）兩維度分離（Stage 67 起）：
 
-- **DB `talents` 表**：6 Talent baseline（Victoria / Petra / Cody / Vera / Quinn / Sage）+ `talent_prompts.PersonaBody`
+- **DB `talents` 表**：6 Talent baseline + `talent_prompts.PersonaBody`
 - **DB `skill_prompts` 表**：6 active SkillPrompt（`ceo_orchestration` / `petra_orchestration` / `code_implementation` / `code_review` / `qa_testing` / `documentation`）+ versioning（VersionNumber + IsActive partial unique index）
-- **`talent_skills` 表**：Talent ↔ Skill 多對多 mapping（如 Cody = code_implementation + ui_design + release_publishing 兼三 skill）
+- **`talent_skills` 表**：Talent ↔ Skill 多對多 mapping
 - **Petra dispatch 時**：依 task 拍 capability + skill → 對齊 `talent_skills` 找到 Talent → 派 worker
 
-詳細 6 Talent 角色 + 設計原則見 [`v5.5_team_plan.md`](agents/v5.5_team_plan.md)。
+### 6 Talent baseline
+
+| Talent | 人物名 | 主 Skill | 執行模式 | 備註 |
+|---|---|---|---|---|
+| **CEO** | Victoria | flag forward only | `CeoAgentService` 寫 PetraInbox + return ack | v5.5 後不直接 call LLM / Stage 78a 簡化 |
+| **PM** | Petra | `petra_orchestration` | `LlmProviderFactory.Create("PM")` → AnthropicProvider / GeminiProvider | 純 LLM API call / 動態 orchestrator / 對齊業界 supervisor pattern（Trial_v26 驗證）|
+| **Dev** | Cody | `code_implementation`（兼 `ui_design` + `release_publishing` 兼任）| Claude Code CLI subprocess | 主 Worker / Stage 78a 後兼 Demi/Rena 工作 |
+| **Code Reviewer** | Vera | `code_review` | Claude Code CLI subprocess | 結構化 JSON 輸出（critical / warning / info）|
+| **QA** | Quinn | `qa_testing` | Claude Code CLI subprocess | Stage 82 修法 stream-json accumulate fallback 解 outputLen=0 議題 |
+| **Doc / 收尾歸檔員** | Sage | `documentation` | Claude Code CLI subprocess | CHANGELOG / archive 整理 |
+
+**Aria（Strategy Advisor）** 不在這 6 Talent 內——Aria 是 Christ 親自開的 Claude Code session（規劃顧問 / 不是 Bot 內 Talent）。
+
+### v4 砍範圍歷史
+
+Stage 78a / 2026-05-18 砍 v4 hierarchical static 4 個 Agent：
+- Rosa（Requirements）/ Demi（UI Design）/ Rena（Release Publishing）= 3 純 v4 class 砍
+- 對應 capability：`requirements_extraction` / `ui_design` / `release_publishing` skill 砍（後兩個 Cody 兼任）
+- Maya（Ops）= 未實作 / 留 FF
+
+v4 12 個 Agent 設計檔已 archive 至 [`docs/_archive/agents-v4/software-team-v4/`](_archive/agents-v4/software-team-v4/)。歷史價值保留 — 未來如要重啟某 Agent 角色（如 Ops 自動 ALERT / Reporter 自動週報）可參考 archive 設計。
 
 ---
 

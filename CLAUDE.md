@@ -4,7 +4,7 @@
 
 AI 團隊執行軟體開發（老闆 + AI Talent 協作）：
 
-- **v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員（完整描述見 [docs/agents/v5.5_team_plan.md](docs/agents/v5.5_team_plan.md)）
+- **v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員（完整描述見 [docs/Architecture.md](docs/Architecture.md)）
 - **核心工具**：Discord（Discord.Net）+ PostgreSQL + Blazor Dashboard（MudBlazor 8.x / InteractiveServer）
 - **LLM 配置**：Petra 走 `LlmProviderFactory.Create("PM")` → Anthropic Sonnet 4.6 production active default（DB SoT `agent_configs.Provider/Model` Dashboard 動態調）/ Cody/Vera/Quinn/Sage 走 Claude Code CLI subprocess / Victoria flag forward only
 - **部署**：Windows 11 本機 Docker Compose（非雲端）
@@ -21,7 +21,6 @@ docs/
   Architecture.md    ← v5.5 系統架構全景（三層分工 / HITL / Petra 動態 SubtaskPlan / Worker CLI / 程式碼位置索引）
   planning/          ← Stage Roadmap + Future_Feature
   conventions/       ← 編程規範
-  agents/            ← v5.5_team_plan.md（6 Talent SoT）
 ```
 
 ---

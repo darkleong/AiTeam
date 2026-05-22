@@ -184,7 +184,7 @@
 
 ## 九、v5.5 6 Talent + 4 Final Skill Baseline
 
-完整描述見 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)（v5.5 SoT）。
+完整描述見 [`docs/Architecture.md`](../Architecture.md)「6 Talent baseline」段（v5.5 SoT）。
 
 **4 Final Skill**（Stage 78c 後 / Stage 83 production SQL DELETE 2 row 清乾淨）：
 1. `code_implementation` — Cody（寫 code）
