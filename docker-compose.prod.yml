@@ -21,8 +21,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Stage 65 子項 3：workspace named volume permission init（Trial_v10 揭：mount 後 named volume 預設 root-owned，appuser uid 999 寫不進 → 手動 chown 才跑下去）。
-    # 路線 B compose entrypoint：以 root 啟動 → chown workspace → exec gosu 切回 appuser 跑 dotnet（每次 container start 都 init permission）。Dockerfile 已裝 gosu。
+    # workspace named volume permission init — mount 後 named volume 預設 root-owned / appuser uid 999 寫不進 → 以 root 啟動 chown 後 exec gosu 切回 appuser 跑 dotnet（Dockerfile 已裝 gosu）
     user: "0:0"
     entrypoint:
       - /bin/sh
@@ -43,7 +42,7 @@ services:
       Discord__Channels__DocChannel: "sage-doc"
       Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
       Gemini__ApiKey: "${AITEAM_GEMINI_KEY}"
-      # Stage 63B Trial_v9 揭：v1 stable Gemini API 不支援 systemInstruction 欄位（400 BadRequest），改用 v1beta 對齊 Stage 63A spike 已驗 path
+      # Gemini v1 stable 不支援 systemInstruction 欄位（400 BadRequest）/ 必走 v1beta
       Gemini__BaseUrl: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
@@ -56,7 +55,7 @@ services:
       AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
       AgentSettings__SkipCeoConfirm: "false"
     volumes:
-      # Stage 64：workspace 持久化（v5 PoC Trial_v9 揭 #5 — Bot recreate workspace 蒸發手動 git clone 缺口）。compose 自動建 named volume 不走 external，self-hosted runner 部署無摩擦。既有 ephemeral 內容遺失（Trial_v9 已驗無 production 數據）。
+      # workspace 持久化 — Bot recreate 不蒸發手動 git clone / compose 自動建 named volume 不走 external（git clone 可重建 / 不需 external 護身符 vs postgres 真實資料）
       - aiteam-workspace-data:/tmp/aiteam-workspace
     ports:
       - "5052:8080"
@@ -68,7 +67,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5051:8080"   # Stage 22：只綁定 localhost，外部裝置無法直連
+      - "127.0.0.1:5051:8080"   # 只綁定 localhost / 外部裝置無法直連（走 Tailscale Funnel）
     environment:
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
@@ -84,5 +83,4 @@ volumes:
     name: aiteam-postgres-data
     external: true
   aiteam-workspace-data:
-    # Stage 64：compose 自動建（不走 external — workspace 是 git clone 可重建 ephemeral，不需 external 護身符 vs postgres 真實資料）
     name: aiteam-workspace-data
