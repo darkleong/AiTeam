@@ -147,5 +147,6 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.2 | 2026-05-22 | 加紀律「拆解完檔案大小不一定都變小」— 拆解時評估「搬去哪」是否也超閾值 / 避免創造新怪物（典型反例：Stage 36 CommandHandler 2172 → 瘦身 556 行 / 但搬去的 ButtonCallbackRouter 變 1091 行 = 沒真拆是搬家）|
 | v1.1 | 2026-05-10 | Stage 59 結案升級（Aria 結案第二段 step 0 — 跨 Stage know-how 升級評估首次實踐）— ① SOP 2 加 caller 改動成本評估三層分（ctor / IServiceProvider field / scope.GetRequiredService） ② SOP 6 加子目錄 / namespace 名稱避免與既有 entity 同名（C# child namespace shadow 規則）③ 實戰數據加 Stage 59 row + dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60% 觀察 + SOP 累積倍率持續下降（34-36 ×1.49-1.65 → 59 ×1.09）|
 | v1.0 | 2026-04-22 | 初版，由 Stage 34-36（FF 二十合集）累積而成 |
