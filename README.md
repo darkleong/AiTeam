@@ -67,7 +67,7 @@ src/
 └── AiTeam.Tests.Playwright/         ← Playwright E2E 截圖測試
 docs/
 ├── README.md                        ← 資料夾導覽入口
-├── architecture/                    ← 願景、基礎建設、老闆角色描述
+├── Architecture.md                  ← v5.5 系統架構全景
 ├── planning/                        ← 各 Stage Roadmap + Future_Feature
 ├── conventions/                     ← 編程規範（C# / Blazor / MudBlazor / EF Core / API / refactor-sop）
 ├── agents/                          ← Agent 角色 lore
@@ -221,7 +221,7 @@ docker compose --env-file .env up -d
 | 完整版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
 | Active 功能候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
 | **v5.5 升級規劃 ⭐** | [Future_Feature_v5.5.md](./docs/planning/Future_Feature_v5.5.md) |
-| 開發流程全景圖 | [docs/architecture/03_Workflow_Overview.md](./docs/architecture/03_Workflow_Overview.md) |
+| 系統架構全景 | [docs/Architecture.md](./docs/Architecture.md) |
 | 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
 | Agent / Talent 角色 lore | [docs/agents/](./docs/agents/) |
 | Self-implement 試驗紀錄 | [docs/experiments/](./docs/experiments/) |

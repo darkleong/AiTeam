@@ -18,7 +18,7 @@ AI 團隊執行軟體開發（老闆 + AI Talent 協作）：
 ```
 docs/
   README.md          ← 各子資料夾說明
-  architecture/      ← 系統流程全景（03_Workflow_Overview）
+  Architecture.md    ← v5.5 系統架構全景（三層分工 / HITL / Petra 動態 SubtaskPlan / Worker CLI / 程式碼位置索引）
   planning/          ← Stage Roadmap + Future_Feature
   conventions/       ← 編程規範
   agents/            ← v5.5_team_plan.md（6 Talent SoT）

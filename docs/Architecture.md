@@ -1,8 +1,8 @@
-# 開發流程全景圖
+# 系統架構全景
 
 > 對應系統版本：**v3.75.0**（Stage 83 結案後）
-> 最新狀態以 [`/CHANGELOG.md`](../../CHANGELOG.md) 為準 / 本檔記錄當前 v5.5 流程設計 / 後續每幾個 Stage 補一次
-> Talent 角色清單 + 設計原則見 [`docs/agents/v5.5_team_plan.md`](../agents/v5.5_team_plan.md)
+> 最新狀態以 [`/CHANGELOG.md`](../CHANGELOG.md) 為準 / 本檔記錄當前 v5.5 系統架構 + 流程設計 / 後續每幾個 Stage 補一次
+> Talent 角色清單 + 設計原則見 [`docs/agents/v5.5_team_plan.md`](agents/v5.5_team_plan.md)
 
 ---
 
@@ -91,7 +91,7 @@
 - **`talent_skills` 表**：Talent ↔ Skill 多對多 mapping（如 Cody = code_implementation + ui_design + release_publishing 兼三 skill）
 - **Petra dispatch 時**：依 task 拍 capability + skill → 對齊 `talent_skills` 找到 Talent → 派 worker
 
-詳細 6 Talent 角色 + 設計原則見 [`v5.5_team_plan.md`](../agents/v5.5_team_plan.md)。
+詳細 6 Talent 角色 + 設計原則見 [`v5.5_team_plan.md`](agents/v5.5_team_plan.md)。
 
 ---
 

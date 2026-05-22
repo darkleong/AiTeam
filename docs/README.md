@@ -16,16 +16,11 @@
 
 ## 資料夾說明
 
-### `architecture/` — 系統架構（靜態，少變動）
+### `Architecture.md` — v5.5 系統架構全景
 
-描述系統的願景、設計原則與基礎建設。這些是整個專案的底層共識，不隨 Stage 推進而頻繁修改。
+`docs/Architecture.md` — 系統架構雙層 / v5.5 三層分工（Petra LLM API + Worker CLI + Christ HITL）/ Workflow Feature Flag（22 個）/ Talent + Skill 分離 / 完整流程 — Christ 派指令 → PR / HITL plan_confirm + replan_confirm / Petra 動態 SubtaskPlan / Worker Claude Code CLI subprocess / Crash Recovery + 佇列 / Token 計費 / 關鍵程式碼位置索引。
 
-| 文件 | 說明 |
-|------|------|
-| `00_Master_Plan.md` | 文件導覽 stub（變更紀錄已遷至 [`/CHANGELOG.md`](../CHANGELOG.md)） |
-| `03_Workflow_Overview.md` | 開發流程全景圖（v5.5 三層分工 / HITL / Petra 動態 orchestrator） |
-
-> 早期 `01_Vision_and_Architecture.md` 已歸檔至 [`_archive/early-vision/`](./_archive/early-vision/)（保留設計初期願景紀錄）；`02_Infrastructure.md` 已刪除（內容散到 [CLAUDE.md](../CLAUDE.md) + [README.md](../README.md)）。
+> 早期 `architecture/` 子資料夾已砍（2026-05-22）— `00_Master_Plan.md` 跟本 README 重疊砍 / `About_Boss.md` 合進 `memory/user_christ.md`（user-local）/ `01_Vision_and_Architecture.md` 歸檔至 [`_archive/early-vision/`](./_archive/early-vision/) / `02_Infrastructure.md` 內容散到 [CLAUDE.md](../CLAUDE.md) + [README.md](../README.md)。
 
 ---
 
