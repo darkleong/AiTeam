@@ -64,18 +64,13 @@ public class DiscordBotService(
             _settings.Channels.TaskUpdates,
             _settings.Channels.Alerts,
             _settings.Channels.DailySummary,
-            // Stage 7：各 Agent 的專屬頻道
+            // v5.5 6 Talent 專屬頻道
             _settings.Channels.CeoChannel,
+            _settings.Channels.PmChannel,
             _settings.Channels.DevChannel,
-            _settings.Channels.OpsChannel,
+            _settings.Channels.ReviewerChannel,
             _settings.Channels.QaChannel,
             _settings.Channels.DocChannel,
-            _settings.Channels.RequirementsChannel,
-            _settings.Channels.ReviewerChannel,
-            _settings.Channels.ReleaseChannel,
-            _settings.Channels.DesignerChannel,
-            // Stage 16：Petra PM Agent 審核頻道
-            _settings.Channels.PmChannel,
         };
 
         foreach (var name in required)
