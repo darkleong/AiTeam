@@ -20,7 +20,7 @@
 
 `docs/Architecture.md` — 系統架構雙層 / v5.5 三層分工（Petra LLM API + Worker CLI + Christ HITL）/ Workflow Feature Flag（22 個）/ Talent + Skill 分離 / 完整流程 — Christ 派指令 → PR / HITL plan_confirm + replan_confirm / Petra 動態 SubtaskPlan / Worker Claude Code CLI subprocess / Crash Recovery + 佇列 / Token 計費 / 關鍵程式碼位置索引。
 
-> 早期 `architecture/` 子資料夾已砍（2026-05-22）— `00_Master_Plan.md` 跟本 README 重疊砍 / `About_Boss.md` 合進 `memory/user_christ.md`（user-local）/ `01_Vision_and_Architecture.md` 歸檔至 [`_archive/early-vision/`](./_archive/early-vision/) / `02_Infrastructure.md` 內容散到 [CLAUDE.md](../CLAUDE.md) + [README.md](../README.md)。
+> **2026-05-22 整理**：早期 `architecture/` 子資料夾已砍 — `00_Master_Plan.md` 跟本 README 重疊砍 / `About_Boss.md` 合進 `memory/user_christ.md`（user-local）/ `01_Vision_and_Architecture.md` 歸檔至 [`_archive/early-vision/`](./_archive/early-vision/) / `02_Infrastructure.md` 內容散到 [CLAUDE.md](../CLAUDE.md) + [README.md](../README.md)。早期 `agents/` 子資料夾已砍 — `v5.5_team_plan.md` 內容合進 Architecture.md「6 Talent baseline」段 / v4 hierarchical static 12 個 Agent 個別設計檔歸檔至 [`_archive/agents-v4/`](_archive/agents-v4/)。Agent 執行細節（行為、工具權限、輸出格式）以 `src/AiTeam.Bot/Resources/CLAUDE_*.md` 為準。
 
 ---
 
@@ -46,11 +46,7 @@
 | `mudblazor.md` | MudBlazor 8.x 使用規範、常見陷阱 |
 | `ef-core.md` | EF Core 查詢優化、Repository 模式 |
 | `api-design.md` | RESTful API 設計規範 |
-| `refactor-sop.md` | 服務層大檔案拆解守則（FF 二十實踐累積）|
-
----
-
-> 早期 `agents/` 子資料夾已砍（2026-05-22）— `v5.5_team_plan.md` 內容合進 [`Architecture.md`](Architecture.md)「6 Talent baseline」段 / v4 hierarchical static 12 個 Agent 個別設計檔歸檔至 [`_archive/agents-v4/`](_archive/agents-v4/)。執行細節（行為、工具權限、輸出格式）以 `src/AiTeam.Bot/Resources/CLAUDE_*.md` 為準。
+| `refactor-sop.md` | 服務層大檔案拆解守則（Stage 34-36+59 拆解 SOP 累積）|
 
 ---
 

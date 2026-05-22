@@ -14,19 +14,19 @@
     ↓ Discord 自然語言（在 #victoria-ceo 說話）
     或 Dashboard 操作中心（雙通道，先到先贏）
         │
-CEO Talent（Victoria）—— 解讀意圖、雙層確認、動態 dispatch
+CEO Talent（Victoria）—— flag forward only（寫 PetraInbox + return ack / v5.5 後不直接 call LLM）
     │
-PM Orchestrator（Petra）—— 動態決策 Skill 序列 + 看 Skill 找 Talent pool / round-robin
+PM Orchestrator（Petra）—— 純 LLM API call 動態拆 SubtaskPlan + 看 Skill 找 Talent pool
     │
-    ├── Cody（兼任 3 Skill）— code_implementation / ui_design / release_publishing
-    ├── Vera                — code_review
-    ├── Quinn               — qa_testing
-    ├── Sage                — documentation
+    ├── Cody    — code_implementation
+    ├── Vera    — code_review
+    ├── Quinn   — qa_testing
+    ├── Sage    — documentation
     │
     └── 結果回報 Discord + Dashboard + 詳細 log 寫入 PostgreSQL
 ```
 
-**v5.5 概念**：Talent = 人（Victoria/Petra/Cody/Vera/Quinn/Sage 六位）/ Skill = 職務（code_implementation / code_review / qa_testing / documentation / ui_design / release_publishing 六項）/ 一個 Talent 可兼多 Skill（如 Cody 兼三項）/ Petra dispatch 看 Skill 找 Talent pool，預備 horizontal scaling（多 instance round-robin）。
+**v5.5 概念**：Talent = 人（Victoria/Petra/Cody/Vera/Quinn/Sage 六位）/ Skill = 4 Final Skill code-defined（code_implementation / code_review / qa_testing / documentation）/ 一個 Talent 可兼多 Skill（baseline 1:1 / Stage 83 後 production 4 row）/ Petra dispatch 看 Skill 找 Talent pool，預備 horizontal scaling（多 instance round-robin）。完整 6 Talent baseline + Talent-Skill separation 見 [docs/Architecture.md](./docs/Architecture.md)。
 
 即時狀態透過 **Blazor Web App Dashboard** 可視化（SignalR 推送）。
 
@@ -56,21 +56,23 @@ src/
 ├── AiTeam.Shared/                   ← 共用 DTO、介面、常數
 ├── AiTeam.Data/                     ← EF Core DbContext、Entities、Repositories、Migrations
 ├── AiTeam.Bot/                      ← Discord Bot 主程式（含各 Agent 邏輯）
-│   ├── Agents/                      ← 各 AgentService、ClaudeCodeService、TokenTrackingProvider
-│   │   └── Pm/                      ← Petra 子模組（Stage 35 拆解後）
-│   ├── Orchestration/               ← MeetingService / 流程協調 services
-│   ├── Resources/                   ← CLAUDE_*.md（Agent 行為約束 template）
+│   ├── Agents/                      ← AgentService / ClaudeCodeService / LlmProviderFactory / TokenTrackingProvider
+│   ├── Orchestration/Petra/         ← Petra v5.5 動態 orchestrator（PetraOrchestratorService / ClaudeCodeChatClientAdapter / PetraInboxProcessor / PetraDispatchWorker / PlanConfirmationProcessor / SubtaskPlan）
+│   ├── Resources/                   ← CLAUDE_*.md（Agent fallback prompt / DB skill_prompts 為主 SoT）
 │   ├── Discord/                     ← DiscordBotService、CommandHandler、Routers
-│   ├── Api/                         ← Internal API
-│   └── Services/                    ← AppSettingsService、AgentQueueService 等
+│   ├── Api/                         ← Internal API（CeoCommand / InternalController）
+│   ├── Configuration/               ← AgentSettings / WorkflowSettings / DiscordSettings 等
+│   └── Services/                    ← AppSettingsService / PromptResolver / TalentDispatchLockService / TalentSkillModelResolver 等
 ├── AiTeam.Dashboard/                ← Blazor Web App Dashboard
+├── AiTeam.Bot.Tests/                ← xUnit 單元測試
 └── AiTeam.Tests.Playwright/         ← Playwright E2E 截圖測試
+tests/
+└── AiTeam.Tests.Generated/          ← Quinn 自動產出測試
 docs/
 ├── README.md                        ← 資料夾導覽入口
-├── Architecture.md                  ← v5.5 系統架構全景
+├── Architecture.md                  ← v5.5 系統架構全景（含 6 Talent baseline）
 ├── planning/                        ← 各 Stage Roadmap + Future_Feature
 ├── conventions/                     ← 編程規範（C# / Blazor / MudBlazor / EF Core / API / refactor-sop）
-├── agents/                          ← Agent 角色 lore
 ├── experiments/                     ← Self-implement 試驗紀錄
 └── _archive/                        ← 歷史歸檔
 ```
@@ -91,23 +93,27 @@ docs/
   # 任務動態 / # 警報 / # 每日摘要
 ```
 
-> v5.5 Phase 1 拍板砍 Rosa / Demi / Rena / Maya（合進其他 Talent / Skill 概念吸收）。
+> Stage 78a 砍 Rosa（Requirements）/ Demi（UI Design）/ Rena（Release）3 個 v4 Agent + Maya（Ops）未實作 / capability 合進其他 Talent 或 Skill 概念吸收。
 
 ---
 
-## 雙層確認機制
+## HITL（Human-in-the-Loop）兜底機制
+
+v5.5 後雙層確認機制升級為 HITL 閘門（業界 LangGraph interrupt pattern）：
 
 ```
-你對 CEO 說自然語言 (#victoria-ceo) 或從 Dashboard 操作中心
+你對 Victoria 說自然語言 (#victoria-ceo) 或從 Dashboard 操作中心
     ↓
-CEO Agent 解讀意圖 → 提案／決策（Embed + ✅❌按鈕 / Dashboard 卡片）
-    ↓ 你核准（Discord 或 Dashboard 任一端，先到先贏）
-執行 Agent 說明即將操作 → 再次確認
-    ↓ 你核准
-實際執行 → 結果回報 Discord + Dashboard + PostgreSQL
+Victoria flag forward → PetraInbox
+    ↓
+Petra LLM 拆 SubtaskPlan（JSON）
+    ↓ [若 UseHITLPlanConfirmation=true] 開 plan_confirm 卡 → 等你 4 button（approve / edit / reject / respond）
+Worker chain dispatch（Cody / Vera / Quinn / Sage）
+    ↓ [若 UseDynamicReplanning=true 且 Vera critical / Quinn fail] 開 replan_confirm 卡 → 同 4 button
+FinalizeGitAsync 開 PR → 完成
 ```
 
-> **SkipCeoConfirm**：Dashboard → 系統設定可開啟，跳過第一層 CEO 確認，5 分鐘內生效。
+詳見 [docs/Architecture.md](./docs/Architecture.md)「HITL — plan_confirm + replan_confirm」段。
 
 ---
 
@@ -179,7 +185,7 @@ dotnet user-secrets set "AgentSettings:InternalApiKey"   "Dashboard 呼叫 Bot �
 cd src/AiTeam.Dashboard
 
 dotnet user-secrets set "BotSettings:InternalApiKey"     "Dashboard 呼叫 Bot 用的 API Key"
-dotnet user-secrets set "BotSettings:BaseUrl"            "http://localhost:5050"
+dotnet user-secrets set "BotSettings:BaseUrl"            "http://localhost:5052"
 ```
 
 ### 啟動（開發模式）
@@ -210,7 +216,7 @@ docker compose --env-file .env up -d
 | `mudblazor.md` | MudBlazor 8.x 使用規範、常見陷阱（必讀） |
 | `ef-core.md` | EF Core 查詢優化、PostgreSQL 例外處理、Migration 流程 |
 | `api-design.md` | RESTful API、Internal API、SignalR Hub 設計規範 |
-| `refactor-sop.md` | 服務層大檔案拆解守則（FF 二十實踐累積） |
+| `refactor-sop.md` | 服務層大檔案拆解守則（Stage 34-36+59 拆解 SOP 累積） |
 
 ---
 
