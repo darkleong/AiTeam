@@ -7,6 +7,12 @@
 
 未實作功能候選見 [Future_Feature.md](docs/planning/Future_Feature.md)。
 
+## Entry 紀律
+
+- **新 entry format**：`## [X.Y.Z] — date — [Stage XX](path) 主題` + 換行 + body 段（~100-200 字）
+- 細節 link Stage Roadmap 不複述 / 超字數 → 砍重複 / 補 reference 而非展開
+- v3.54.0 以下純 link 保留為歷史 format（早期 Sage 自動寫紀律 / 不追溯改）
+
 ---
 
 ## [Unreleased]
@@ -76,27 +82,69 @@ PetraInbox schema 擴 4 欄（AttemptCount/MaxAttempts/NextRetryAt/DeadAt）+ Mi
 
 ---
 
-## [3.65.0] — 2026-05-17 — [Stage 75](docs/planning/Stage_75_Roadmap.md) v5.5 Phase 3 兩層 queue 配套 — Petra 接收層 + Worker 執行層 per-Talent serialization（PetraInbox table + PetraInboxProcessor BackgroundService + CeoAgentService 寫 inbox + ack + TalentDispatchLockService SemaphoreSlim per-Talent + DispatchTalentsAsync per-Talent lock wire + Forge spike 修根因 talentNameToIdMap unconditional build + 三 method 簽名 non-nullable + Dashboard UX status / 連續 9 Stage 0 follow-up bug fix）
+## [3.65.0] — 2026-05-17 — [Stage 75](docs/planning/Stage_75_Roadmap.md) v5.5 Phase 3 兩層 queue 配套
 
-## [3.64.0] — 2026-05-17 — [Stage 74](docs/planning/Stage_74_Roadmap.md) v5.5 Phase 3 Step 8 per-Skill Model + 真並行 dispatch + Skill registry metadata 擴展（TalentSkill schema 擴 Provider/Model + TalentSkillModelResolver 三層 fallback + ClaudeCodeChatClientAdapter 動態 Model 整合 + SubtaskPlanLevelGrouping DAG fan-out 路線 A + SkillDescriptor metadata 對齊 Agent Skills open standard / 連續 8 Stage 0 follow-up bug fix）
+Petra 接收層 + Worker 執行層 per-Talent serialization：PetraInbox table + PetraInboxProcessor BackgroundService + CeoAgentService 寫 inbox + TalentDispatchLockService SemaphoreSlim per-Talent + DispatchTalentsAsync per-Talent lock wire。Forge spike 修根因 `talentNameToIdMap` unconditional build。
 
-## [3.63.0] — 2026-05-17 — [Stage 73](docs/planning/Stage_73_Roadmap.md) v5.5 Phase 3 Step 7 Prompt content 升級 + Petra TalentPrompt persona seed（6 SkillPrompt v1→v2 走 versioning path + 4 拍板特質 persona + 對齊「品質 > 做法」精神 / 連續 7 Stage 0 follow-up bug fix）
+---
 
-## [3.62.0] — 2026-05-17 — [Stage 72](docs/planning/Stage_72_Roadmap.md) v5.5 Phase 2 Step 5 Prompt DB 化 + Talent identity 整合（SkillPrompts + TalentPrompts 兩層 schema + Versioning + rollback / 對齊業界 2026 prompt orchestration 主流 / 連續 6 Stage 0 follow-up bug fix）
+## [3.64.0] — 2026-05-17 — [Stage 74](docs/planning/Stage_74_Roadmap.md) v5.5 Phase 3 per-Skill Model + 真並行 dispatch
 
-## [3.61.0] — 2026-05-16 — [Stage 71](docs/planning/Stage_71_Roadmap.md) v5.5 Phase 2 Step 3+4 production-ready 補強（Trial_v15+v16 揭 2 議題收口 — Petra prompt 線性整包紀律 + memory 空 content guard / 連續 5 Stage 0 follow-up bug fix）
+TalentSkill schema 擴 Provider/Model + TalentSkillModelResolver 三層 fallback + ClaudeCodeChatClientAdapter 動態 Model 整合 + SubtaskPlanLevelGrouping DAG fan-out 路線 A + SkillDescriptor metadata 對齊 Agent Skills open standard。
 
-## [3.60.0] — 2026-05-16 — [Stage 70](docs/planning/Stage_70_Roadmap.md) v5.5 Phase 2 Step 4 Petra 拆解指令精準度（hierarchical decomposition + dependency graph / SubtaskPlan + Parser + TopoSort / Backwards-compatible 4 層守護）
+---
 
-## [3.59.0] — 2026-05-16 — [Stage 69](docs/planning/Stage_69_Roadmap.md) v5.5 Phase 2 Step 3 跨 session 長期持久記憶基底（TaskMemory + TalentMemory schema / 整合 v5.5 dispatch / v2.1 scope pivot TaskGroup → PetraSession 修 Aria 漏掃 v5.5 path 根因）
+## [3.63.0] — 2026-05-17 — [Stage 73](docs/planning/Stage_73_Roadmap.md) v5.5 Phase 3 Prompt content 升級 + Petra TalentPrompt persona seed
 
-## [3.58.0] — 2026-05-16 — [Stage 68](docs/planning/Stage_68_Roadmap.md) v5.5 Phase 1 完整收口前 production-ready 補強（AppendMessage async + v5 PoC post-confirm 收尾 + ef-core.md nullable unique pattern）
+6 SkillPrompt v1→v2 走 versioning path + Petra 4 拍板特質 persona（謹慎拍板 / 對冗餘不容忍 / 持續迭代 / 對等和互相）。對齊「品質 > 做法」精神。
 
-## [3.57.0] — 2026-05-15 — [Stage 67](docs/planning/Stage_67_Roadmap.md) v5.5 升級首發 Phase 1 Step 2 Talent-Skill separation 重構基底（架構級重構 / Trial_v13 啟動條件達成）
+---
 
-## [3.56.0] — 2026-05-14 — [Stage 66](docs/planning/Stage_66_Roadmap.md) v5 動態架構 Trial_v11 揭 3 🟡 議題收口（production-ready 補強第三波 / v5 上線前最後一個工程 Stage / Trial_v12 啟動條件達成）
+## [3.62.0] — 2026-05-17 — [Stage 72](docs/planning/Stage_72_Roadmap.md) v5.5 Phase 2 Prompt DB 化 + Talent identity 整合
 
-## [3.55.0] — 2026-05-14 — [Stage 65](docs/planning/Stage_65_Roadmap.md) v5 動態架構 Trial_v10 揭 4 🟡 議題收口（production-ready 補強第二波 + 結案後 merge feature/v5-poc → main）
+SkillPrompts + TalentPrompts 兩層 schema + Versioning + rollback + PromptRepository CRUD + PromptResolver 5-min TTL cache。對齊業界 2026 prompt orchestration 主流。
+
+---
+
+## [3.61.0] — 2026-05-16 — [Stage 71](docs/planning/Stage_71_Roadmap.md) v5.5 Phase 2 production-ready 補強
+
+Trial_v15+v16 揭 2 議題收口 — Petra prompt 線性整包紀律 + memory 空 content guard。
+
+---
+
+## [3.60.0] — 2026-05-16 — [Stage 70](docs/planning/Stage_70_Roadmap.md) v5.5 Phase 2 Petra 拆解指令精準度
+
+hierarchical decomposition + dependency graph / SubtaskPlan + Parser + TopoSort / Backwards-compatible 4 層守護。
+
+---
+
+## [3.59.0] — 2026-05-16 — [Stage 69](docs/planning/Stage_69_Roadmap.md) v5.5 Phase 2 跨 session 長期持久記憶基底
+
+TaskMemory + TalentMemory schema 整合 v5.5 dispatch。v2.1 scope pivot TaskGroup → PetraSession 修 Aria 漏掃 v5.5 path 根因。
+
+---
+
+## [3.58.0] — 2026-05-16 — [Stage 68](docs/planning/Stage_68_Roadmap.md) v5.5 Phase 1 完整收口前 production-ready 補強
+
+AppendMessage async + v5 PoC post-confirm 收尾 + ef-core.md nullable unique pattern 升級。
+
+---
+
+## [3.57.0] — 2026-05-15 — [Stage 67](docs/planning/Stage_67_Roadmap.md) v5.5 升級首發 Phase 1 Talent-Skill separation 重構基底
+
+架構級重構 / Migration `Stage67TalentSkillSeparation` / Trial_v13 啟動條件達成。
+
+---
+
+## [3.56.0] — 2026-05-14 — [Stage 66](docs/planning/Stage_66_Roadmap.md) v5 動態架構 Trial_v11 議題收口
+
+production-ready 補強第三波 / v5 上線前最後一個工程 Stage / Trial_v12 啟動條件達成。
+
+---
+
+## [3.55.0] — 2026-05-14 — [Stage 65](docs/planning/Stage_65_Roadmap.md) v5 動態架構 Trial_v10 議題收口
+
+production-ready 補強第二波 + 結案後 merge feature/v5-poc → main。
 
 ## [3.54.0] — 2026-05-13 — [Stage 64](docs/planning/Stage_64_Roadmap.md) v5 動態架構 production-ready 收口（Trial_v9 揭 7 議題 + Stage 63A errata）
 
