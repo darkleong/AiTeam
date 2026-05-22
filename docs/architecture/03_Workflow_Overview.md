@@ -73,11 +73,11 @@
 | `MaxReplanIterations` | 81 | `3` | replan loop 上限 |
 | `ReplanCostCapUsd` | 81 | `5` | 單 PetraSession 累積 cost cap |
 
-### v4 framework flag（dead code / Stage 78b 後續評估砍）
+### v4 framework flag（已隨 Stage 78c v4 path 全砍 / 留 flag 0 caller）
 
 | Flag | Stage | Default | 描述 |
 |---|---|---|---|
-| `UseFrameworkAppealLoop` / `UseFrameworkKickoff` / `UseFrameworkKickoffMidInterrupt` / `UseFrameworkDesign` / `UseFrameworkPipeline` | 49-53A | `true`（dead）| v4 hierarchical static framework 殘留 / 留 Stage 78b 評估全砍 |
+| `UseFrameworkAppealLoop` / `UseFrameworkKickoff` / `UseFrameworkKickoffMidInterrupt` / `UseFrameworkDesign` / `UseFrameworkPipeline` | 49-53A | `true`（0 caller）| Stage 78c 砍 v4 path 後 0 引用 / 留 DB 0 影響 |
 
 ### 其他 workflow 設定
 

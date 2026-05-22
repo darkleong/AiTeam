@@ -257,13 +257,11 @@ if (user.RegistrationDate < DateTime.Now.AddDays(-1))
 - [ ] Service / Controller 使用 Primary Constructor 注入（非 Blazor 組件）
 - [ ] ILogger 訊息使用結構化佔位符（非字串串接）
 
-## 跨 service fundamental type 標記（Stage 56）
+## 跨 service fundamental type 標記
 
-`WorkflowType` enum + `WorkflowStep` record（`src/AiTeam.Bot/Orchestration/WorkflowEngine.cs`）是 Stage 55A v4 漸進遷移後保留的**跨 service fundamental type，不是 dead code**。
+`WorkflowType` enum + `WorkflowStep` record（src/AiTeam.Bot/Orchestration/）是跨 service fundamental type / 不是 dead code。
 
-Stage 55A 已刪除原 `WorkflowEngine` class + `GetDecision` method + `NextAction` enum + `WorkflowDecision` record（v4 Pipeline framework 接管 routing），剩 type 定義廣泛被 `TaskGroupService` / `ProposalConfirmationService` / `ButtonCallbackRouter` / `MockScenarioService` 等 23+ service 使用。
-
-**規則**：未來重構若想動 `WorkflowType` / `WorkflowStep`，先 grep 全 reference 評估影響面再下手；不可單純看「WorkflowEngine.cs 內部 logic 已搬走」就誤判為殘留。
+Stage 78c v4 path 砍後仍有約 5 caller（CeoResponse / Entities / TaskGroupDto / ButtonCallbackRouter / Migrations）。未來重構若想動，先 grep 全 reference 評估影響面再下手。
 
 ## Raw string interpolation 含 JSON template 用 `$$"""`（Stage 81 揭）
 

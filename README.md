@@ -39,7 +39,8 @@ PM Orchestrator（Petra）—— 動態決策 Skill 序列 + 看 Skill 找 Talen
 | 詳細 Log | PostgreSQL（EF Core + Npgsql） |
 | 視覺化 | Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer） |
 | LLM | Anthropic Claude API + Google Gemini API（Provider/Model 經 Dashboard 動態配置） |
-| Claude Code CLI | Victoria / Cody / Vera / Quinn / Petra（session-based） |
+| Petra（PM）| `LlmProviderFactory.Create("PM")` → 純 LLM API call（Anthropic Sonnet 4.6 production active）|
+| Cody / Vera / Quinn / Sage（Worker）| Claude Code CLI subprocess（session-based / workspace 持續）|
 | 排程 | Quartz.NET |
 | 部署 | Docker Compose + GitHub Actions self-hosted runner |
 
@@ -112,10 +113,10 @@ CEO Agent 解讀意圖 → 提案／決策（Embed + ✅❌按鈕 / Dashboard �
 
 ## 動態 Talent / Skill 框架（v5.5）
 
-- **Skill registry**：`ISkillRegistry` 6 Skill code-defined（[`src/AiTeam.Bot/Orchestration/Petra/Skills/`](./src/AiTeam.Bot/Orchestration/Petra/Skills/)）
-- **Talent registry**：DB `talents` + `talent_skills` 表（per-Project `ProjectId` nullable / null = 全域共用）+ Migration `Stage67TalentSkillSeparation` seed 6 預設 Talent
-- **Dispatch**：Petra `DecideTalentsAsync` LLM 動態決策 Skill 序列 → `FindTalentForSkill` 看 Skill 找 Talent pool → round-robin（baseline 1 instance / future horizontal scaling 多 instance 自然分流）
-- **Phase 3 規劃**：WebUI Talent CRUD（Christ 直接在 Dashboard 加 Talent / 改 Skill 兼任）— 詳見 [`docs/planning/Future_Feature_v5.5.md`](./docs/planning/Future_Feature_v5.5.md)
+- **Skill registry**：`ISkillRegistry` 4 Final Skill code-defined（code_implementation / code_review / qa_testing / documentation）
+- **Talent registry**：DB `talents` + `talent_skills` 表（per-Project `ProjectId` nullable / null = 全域共用）+ 6 預設 Talent seed
+- **Dispatch**：Petra LLM 動態拆 SubtaskPlan JSON → `FindTalentForSkill` 看 Skill 找 Talent pool → round-robin（baseline 1 instance / future horizontal scaling 多 instance 自然分流）
+- **WebUI 動態管理**：Dashboard Settings 分區 TALENTS / SKILLPROMPTS / TALENTPROMPTS full CRUD（Stage 83 完整收口）
 
 ---
 
@@ -139,18 +140,11 @@ Self-hosted Runner（Christ 本機 Windows 11）
 
 ---
 
-## Discord 斜線指令
+## Discord 互動
 
-| 指令 | 說明 |
-|------|------|
-| 自然語言 | 直接在 `#victoria-ceo` 說話，不需格式 |
-| `/reload-rules` | 強制重新載入 DB 規則（清除記憶體快取） |
-| `/status` | 查詢各 Agent 目前狀態與啟用清單 |
-| `/new-session` | 清除 Victoria 對話 session（長期記憶不受影響） |
-| `/mock` | Mock Mode 限定，觸發指定工作流程（多種情境） |
-| `/pause <agent>` / `/resume <agent>` | 暫停/恢復指定 Agent 的任務佇列 |
-| `/stop-all` / `/resume-all` | 全域緊急停止 / 恢復所有 Agent |
-| `/queue` | 查看當前任務佇列狀態 |
+- 直接在 `#victoria-ceo` 用**自然語言**說話 / 不需格式
+- 斜線指令 Stage 78c 全砍（含 `/mock` / `/pause` / `/queue` / `/status` 等）/ 改走 Dashboard 操作中心
+- Dashboard URL：`http://localhost:5051`（區網 / Tailscale Funnel 對外）
 
 ---
 

@@ -1,7 +1,6 @@
 # MudBlazor 使用規範
 
 > 適用版本：MudBlazor 8.x
-> 建立日期：2026-04-11 / 精簡日期：2026-05-10（577 → ~400 行 / -30%）
 
 本文件記錄 AiTeam Dashboard 使用 MudBlazor 的標準做法與已驗證的踩坑規則。
 
