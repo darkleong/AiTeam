@@ -55,6 +55,7 @@
 | 10 | MudThemeProvider IsDarkMode binding 紀律 → docs/conventions/mudblazor.md | XS |
 | 11 | AppSettingsService 5 分鐘 re-read（21 Workflow:* flag 動態 reload 不需重啟 Bot）| M |
 | 12 | DashboardService 進一步重組（Home / TaskHub PetraSession query 直接走 Repository）| S |
+| 13 | **PetraOrchestratorService.cs 怪物大檔拆解**（2266 行 / 超 docs/conventions/refactor-sop.md 1000 行警戒 2.2 倍 / 含 dispatch + HITL pause/resume + replan + cap intervention + chain dispatch + SubtaskPlan grouping 5+ 職責）+ 對應 Tests 1283 行同步拆 / **觸發時機：下次動 Petra 加新功能前先拆 / 避免漸進累積無止盡** | M+ |
 
 **追加候選**（Trial_v26 戰略 finding）：
 - 🟡 Vera review 紀律升級（system prompt / few-shot 更多 critical 反例）
