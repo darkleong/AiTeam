@@ -75,4 +75,4 @@ v4 hierarchical static 時期 12 個 Agent 個別設計檔已歸檔至 [`_archiv
 
 收納早期設計、暫緩構想、停產自動產出。詳見 [`_archive/README.md`](./_archive/README.md)。
 
-> **`generated/`（Doc Agent 自動產出）與 `ui-specs/`（Demi UI 規格）兩資料夾已於 2026-04-25 整體歸檔**——前者因 Sage 轉型歸檔員停產，後者因 Stage 12 改 UI 規格存 DB（FF 十七）。
+> **`generated/`（Doc Agent 自動產出）與 `ui-specs/`（Demi UI 規格）兩資料夾**：2026-04-25 歸檔 → 2026-05-22 徹底刪除（純歷史快照 / 0 cross-link reference / git history 可查）。前者因 Sage 轉型歸檔員停產，後者因 Stage 12 改 UI 規格存 DB（FF 十七）。
