@@ -77,6 +77,7 @@
 - **無 singleton-level state**（只有 local 變數）→ 各方法自管，Commons 不需要 state dictionary
 - **有共享 state**（如 `_pendingConfirmations` dictionary）→ 抽成獨立 Singleton **Store**，跨 service 依賴此 Store 而非互相 reference
 - **升級 thread-safety**：抽成 Store 後跨 thread 呼叫機會增加（不再侷限於 Discord event loop 單執行緒）→ **用 `ConcurrentDictionary`**（Stage 36 踩過這個坑，原本 `Dictionary` 在抽 Store 後需要升級）
+- **state field 拆解時 caller 對應 owning service verify**（Stage 84 踩坑）：state field 拆解時不假設「主要 caller 在哪 service 就拆過去」/ 必先 grep 所有 caller 對應 owning service / 同一 state 跨多 service caller 時拆多份 instance field 對齊 Scoped lifecycle（Stage 84 `_roundRobinCounter` 4 caller 跨 3 service → 拆 3 份 instance field / 同 session 內 acceptable 小偏差 / round-robin 公平性不破 / plan v3 寫「拆 2 份」漏 PlanConfirmation 那份 = 預先 grep 不足）
 
 ### SOP 6：檔案夾組織（超過 10 檔就建子資料夾）
 
@@ -114,6 +115,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 | 35 | PmAgentService + Agents/Pm/ 子資料夾首次實踐 | 1389 | 6 檔共 1444 | — | Opus 1M + high | 261K / 1M = 26% |
 | 36 | TaskGroupService + CommandHandler 合併 | 4795 合計 | TGS 716（-73%）+ CH 556（-74%）+ 11 新檔 | 主檔大幅瘦身 | Opus 1M + high | 360K / 1M = 36% |
 | 59 | TaskGroupService（v4 路線後復發 1759 行）| 1759 | TGS 808（-54%）+ 4 新檔合計 1051 | 主檔中度瘦身 | Opus 1M + medium-high | 402K / 1M = 40% |
+| 84 | PetraOrchestratorService（v5 ecosystem + v5.5 拆解合集）| 2266 | 主檔 193（**-91.5%**）+ 5 sub-service + 1 helper + 1 DTO + 1 Commons 合計 2075 | 主檔極致瘦身 | Opus 1M + ultrathink | ~400-500K / 1M = 40-50%（single session 完成） |
 
 **觀察**：
 - **「SOP 累積後同類工作越做越省」** — Stage 36 規模最大但 context 倍率（×1.49）反而比 Stage 34（×1.60）低；**Stage 59 倍率 ×1.09**（SOP 累積第 4 次 + 新立 workflow_aria.md 第 5+6 條紀律生效 partial read + 不寫 code 範例）— FF 二十系列拆解倍率從 ×1.49-1.65 降到 ×1.09
@@ -132,6 +134,8 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 3. **踩坑記錄**（特別記錄 SOP 中沒涵蓋的新發現，供未來擴充此份文件）
 4. **驗收情境清單 + 零 follow-up commits 狀態**
 5. **Context 消耗實測**（供 Aria 校準公式）
+6. **Dangling reference 清理**（Stage 84 踩坑）：已砍 flag / feature 的 doc comment / XML doc / comment 字串 / dead test reflection target / 結案前 grep 一次清乾淨（Stage 84 `UseTalentSkillSeparation` flag 邏輯砍完 / WorkflowSettings.cs + Resolver 6 處 XML doc 殘留「必須 UseTalentSkillSeparation=true 才有意義」失準漏網）
+7. **Warning baseline 比對**（Stage 84 踩坑）：`dotnet build` warning 總數 vs Stage 開始前 baseline / verify 0 新引入 warning（特別 CS9113 unused parameter — 拆解後 sub-service 注入但 body 未用是高頻 case）/ 結案 commit message warning 數必對齊實測（Stage 84 commit message 寫「0 warning」實際 net 多 2 個 / 需 patch follow-up）
 
 ---
 
@@ -147,6 +151,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.3 | 2026-05-24 | Stage 84 結案升級（Aria 結案第二段 step 1 第 3 次實踐）— ① SOP 5 加「state field 拆解 caller 對應 owning service verify」（Stage 84 `_roundRobinCounter` 4 caller 跨 3 service 拆 3 份 vs plan 寫 2 份 = 預先 grep 不足）② 結案必做清單第 6 條「Dangling reference 清理」（防 dead flag dangling doc comment 殘留）③ 結案必做清單第 7 條「Warning baseline 比對」（防 CS9113 unused parameter 新 warning 漏網 + commit message warning 數對齊實測紀律）④ 實戰數據加 Stage 84 row（主檔 2266 → 193 / 瘦身 91.5% / SOP 累積第 5 次 + single-session 完成 M+ 規模新里程碑）|
 | v1.2 | 2026-05-22 | 加紀律「拆解完檔案大小不一定都變小」— 拆解時評估「搬去哪」是否也超閾值 / 避免創造新怪物（典型反例：Stage 36 CommandHandler 2172 → 瘦身 556 行 / 但搬去的 ButtonCallbackRouter 變 1091 行 = 沒真拆是搬家）|
 | v1.1 | 2026-05-10 | Stage 59 結案升級（Aria 結案第二段 step 0 — 跨 Stage know-how 升級評估首次實踐）— ① SOP 2 加 caller 改動成本評估三層分（ctor / IServiceProvider field / scope.GetRequiredService） ② SOP 6 加子目錄 / namespace 名稱避免與既有 entity 同名（C# child namespace shadow 規則）③ 實戰數據加 Stage 59 row + dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60% 觀察 + SOP 累積倍率持續下降（34-36 ×1.49-1.65 → 59 ×1.09）|
 | v1.0 | 2026-04-22 | 初版，由 Stage 34-36（FF 二十合集）累積而成 |

@@ -1,8 +1,8 @@
 # Stage 84 Roadmap — PetraOrchestratorService 怪物大檔拆解
 
-> **狀態：📋 規劃中**
-> **文件版本：v1.0**
-> 對應系統版本：v3.76.0（Stage 84 完成後 / minor bump）
+> **狀態：✅ 已完成（2026-05-24）**
+> **文件版本：v2.0**（Forge 結案實作紀錄 + Aria gate1 follow-up patch v2.1 + Aria 結案第二段 know-how 升級補完）
+> 對應系統版本：v3.76.0
 > Stage 規模：**M+**（單檔 2266 行拆解 + Tests 1283 行同步 / 預估 5-6 個新檔 + 1 DTO 獨立檔 / 0 行為改變 pure refactor / 0 燒 AiTeam 餘額 — 純 C# refactor / 0 LLM call）
 > 觸發來源：FF Stage 84+ 候選 #13 — Christ 拍板「Stage 84 排 Mock 友善項目 + #13 獨立一個 Stage」
 > 戰略意義：**降低未來動 Petra 加新功能 friction** — 當前 2266 行超 `refactor-sop.md` 1000 警戒 2.2 倍 / 5+ 職責同檔 / 下次動 Petra（追加 1 Vera 紀律升級 / 追加 2 Codebase Explorer agent / 追加 3 SubtaskPlan refuse fallback 任一條）前先拆 / 避免漸進累積無止盡
@@ -335,7 +335,7 @@ Forge plan mode 階段可調整順序（healthy 偏離 plan 紀律）/ 但 Tests
 - **SOP 2**（caller 改動成本）：4 caller 全 lazy resolve `scope.ServiceProvider.GetRequiredService<PetraOrchestratorService>()` / 0 改動 ✅
 - **SOP 3**（Commons 範圍界定）：PetraContextBuilder 真實多 service caller（TalentDispatch + DynamicReplan + 主入口）/ BuildMemoryContext / BuildPetraSystemPrompt 跨 service 共用 ✅
 - **SOP 4**（DI 註冊順序）：Commons → static helper（不註冊）→ Git → ContextBuilder → TalentDispatch → DynamicReplan（注入 TalentDispatch + Git + ContextBuilder）→ PlanConfirmation（注入 TalentDispatch + DynamicReplan + Git + ContextBuilder）→ 主 service ✅
-- **SOP 5**（state 管理）：`_roundRobinCounter` 拆 2 份（TalentDispatch + DynamicReplan 各持 instance field / Scoped lifecycle）/ counter 作 helper `ref int` param 傳入 ✅
+- **SOP 5**（state 管理）：`_roundRobinCounter` 真實拆 **3 份**（TalentDispatch + DynamicReplan + **PlanConfirmation** 各持 instance field / Scoped lifecycle）/ counter 作 helper `ref int` param 傳入 / plan v3 寫「拆 2 份」漏 PlanConfirmation 那份 = Aria 預先 grep 不足 = 升 SOP 5 「state field 拆解 caller 對應 owning service verify」紀律（refactor-sop.md v1.3）✅
 - **SOP 6**（子目錄組織）：全新 service 留 Orchestration/Petra/ 子目錄（既有命名空間 / 0 新子目錄）✅
 
 ### 健康偏離 plan 紀錄
@@ -356,7 +356,7 @@ Forge plan mode 階段可調整順序（healthy 偏離 plan 紀律）/ 但 Tests
 
 ### Mock 覆蓋
 
-- ✅ build：`dotnet build AiTeam.slnx` 0 error / 58 warning（NU1902 vulnerability + MSTEST0037 stylistic — 0 Stage 84 引入 / 0 CS9113 unused parameter warning after patch d2a4ff4）
+- ✅ build：`dotnet build AiTeam.slnx` 0 error / **101 warning**（baseline 對齊 / Forge commit message 寫「58 warning」是 sub-set 計數誤差 — 實測跨專案 propagated warning + Playwright Generated baseline 共 101 / 0 Stage 84 引入 / 0 CS9113 unused parameter warning after patch d2a4ff4 / 升 refactor-sop.md 結案必做清單第 7 條「Warning baseline 比對」紀律對齊）
 - ✅ xUnit：`dotnet test src/AiTeam.Bot.Tests` 130 passed / 2 skipped（Test29-30 待搬 PetraTalentDispatchServiceTests）/ 50 baseline + 2 新 smoke - 3 cut（Test6 + Test12 + Test17）= 49 active + 2 skip = 51 total
 - ✅ Runtime DI 驗：container 啟動乾淨（`docker logs aiteam-aiteam-bot-1` 0 exception / 0 DI 解析 error）/ PetraInboxChannel 初始化 log 出現（5 sub-service Scoped 註冊全 OK）
 - ⏳ MockMode 6 驗收情境（GUI 部分 — Discord 真實 plan_confirm / replan_confirm card 互動 + Dashboard `/tasks` PR link 顯示）：Christ 後續統一驗收（pure refactor / 0 行為改變 + xUnit 130 全綠 + caller 0 改動 = production cold path 真實顯示驗收可延後）

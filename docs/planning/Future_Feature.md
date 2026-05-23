@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v11.0
+> 版本：v12.0
 > 建立日期：2026-04-01
-> 最後更新：2026-05-22（v5.5 完整收口 + FF v5.5 子檔合進主檔 / 對齊 single source of truth）
+> 最後更新：2026-05-24（Stage 84 PetraOrchestratorService 拆解收口 / #13 移除）
 > 詳細實作紀錄：[CHANGELOG.md](../../CHANGELOG.md) + [Architecture.md](../Architecture.md)
 
 ---
@@ -11,12 +11,12 @@
 
 | # | 標題 | 狀態 |
 |---|---|---|
-| 一 | v5.5 完整收口 + Stage 84+ 候選 | ✅ Phase 1-4 全 deliver / production 自然累積期 / Stage 84+ 候選真實業務痛點觸發評估 |
+| 一 | v5.5 完整收口 + Stage 85+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 / production 自然累積期 / Stage 85+ 候選真實業務痛點觸發評估 |
 | 二 | 客戶專案交付流程與驗收閘門 | 🟡 中優先級（AiTeam 開始承接客戶專案時前置必要） |
 
 ---
 
-## 一、v5.5 完整收口 + Stage 84+ 候選
+## 一、v5.5 完整收口 + Stage 85+ 候選
 
 ### Phase 1-4 完整收口（2026-05-15 → 2026-05-21）
 
@@ -37,9 +37,9 @@
 | [Trial_v26](../experiments/Trial_v26_Plan.md) | 🟢 | 82 雙修法 + 業界 supervisor pattern 對齊驗證 |
 | [Trial_v27](../experiments/Trial_v27_Plan.md) | 🟡 戰略性結案 | LLM alignment 雙重 safety net 實證 / 跳出 Trial→Fix 迴圈 |
 
-### Stage 84+ 候選
+### Stage 85+ 候選
 
-從 Stage 83 phased delivery 留的 12 條：
+從 Stage 83 phased delivery 留的 12 條（#13 已由 [Stage 84](Stage_84_Roadmap.md) deliver / 2026-05-24 移除）：
 
 | # | 候選 | 規模 |
 |---|---|---|
@@ -55,7 +55,9 @@
 | 10 | MudThemeProvider IsDarkMode binding 紀律 → docs/conventions/mudblazor.md | XS |
 | 11 | AppSettingsService 5 分鐘 re-read（21 Workflow:* flag 動態 reload 不需重啟 Bot）| M |
 | 12 | DashboardService 進一步重組（Home / TaskHub PetraSession query 直接走 Repository）| S |
-| 13 | **PetraOrchestratorService.cs 怪物大檔拆解**（2266 行 / 超 docs/conventions/refactor-sop.md 1000 行警戒 2.2 倍 / 含 dispatch + HITL pause/resume + replan + cap intervention + chain dispatch + SubtaskPlan grouping 5+ 職責）+ 對應 Tests 1283 行同步拆 / **觸發時機：下次動 Petra 加新功能前先拆 / 避免漸進累積無止盡** | M+ |
+
+**Stage 84 follow-up minor 候選**：
+- 🟢 `WorkflowSettings.cs` + `WorkflowSettingsResolver.cs` 6 處 XML doc 改寫「必須 `UseTalentSkillSeparation=true` 才有意義」失準 dangling comment 清理（flag 已 Stage 84 砍 / doc 殘留）/ Test29-30 真實搬 PetraTalentDispatchServiceTests（Stage 84 Skip 標記）
 
 **追加候選**（Trial_v26 戰略 finding）：
 - 🟡 Vera review 紀律升級（system prompt / few-shot 更多 critical 反例）
@@ -139,3 +141,4 @@ AiTeam 定位不只開發自身系統 / 未來也會替客戶開發。目前流�
 |---|---|---|
 | v10.0 | 2026-05-21 | Stage 83 結案 / v3.75.0 — v5.5 完整收口進 production 自然累積期 |
 | **v11.0** | **2026-05-22** | **v5.5 子檔合進主檔** — Future_Feature_v5.5.md（239 行）整檔砍 / Phase 1-4 audit + Stage 84+ 候選 12+3 條 + 不確定性 3 條合進本檔一、v5.5 完整收口段 / 二、客戶交付段修 Maya（Stage 78a 砍）+ WorkflowEngine（Stage 78c 砍）漂移為「Talent / 分支策略」/ 結構從 95 + 239 = 334 → ~140 行 / 對齊「對冗餘不容忍 / single source of truth / v5.5 已收口不再是規劃 reference」精神 |
+| **v12.0** | **2026-05-24** | **Stage 84 結案** — #13 PetraOrchestratorService 拆解 deliver（v3.76.0 / 2266 → 193 行 / 瘦身 91.5%）/ Stage 84+ → Stage 85+ 重命名（12 條留下）/ 加「Stage 84 follow-up minor 候選」段（dangling doc comment 6 處 + Test29-30 真實搬遷）|
