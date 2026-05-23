@@ -24,7 +24,7 @@
 
 ## [3.76.0] — 2026-05-24 — [Stage 84](docs/planning/Stage_84_Roadmap.md) PetraOrchestratorService 怪物大檔拆解（pure refactor / 91.5% 瘦身）
 
-`PetraOrchestratorService.cs` 從 2266 → **193 行**（瘦身 91.5% / 超 plan ≤ 400 目標）。新增 8 檔：5 sub-service（PlanConfirmation / DynamicReplan / TalentDispatch / GitFinalization / ContextBuilder Commons）+ 1 static helper（PetraTalentLookupHelper 解 TalentDispatch ↔ DynamicReplan 雙向循環）+ 1 DTO 集中（PetraOrchestratorDtos.cs / 7 internal sealed record）。v5 IAgentTool ecosystem 整套砍（4 worker class + interface + attribute + Workflow:UseTalentSkillSeparation flag）對齊 Stage 78a pattern。Healthy 偏離 3 條：detection family 移 TalentDispatch / DispatchRemaining return DispatchOutcome / v5 ecosystem 砍範圍 200→640 行。xUnit 130 passed + 2 skip（Test29-30 待 Stage 85+ 搬）。Caller 4 處 0 改動 / Stage77 fixture base ctor 對齊新 10 dep。SOP 累積第 5 次 single-session 完成 M+ 規模新里程碑 / 升 refactor-sop.md v1.3 3 條 know-how（state field 拆解 caller verify / dangling reference 清理 / warning baseline 比對）。
+`PetraOrchestratorService.cs` 從 2266 → **193 行**（瘦身 91.5%）。新增 8 檔：5 sub-service + 1 static helper（解 TalentDispatch ↔ DynamicReplan 雙向循環）+ 1 DTO 集中 + 1 Commons。v5 IAgentTool ecosystem 整套砍（4 worker class + interface + attribute + flag）對齊 Stage 78a pattern。0 行為改變 / caller 4 處 0 改動 / xUnit 130 passed + 2 skip。SOP 累積第 5 次 single-session 完成 M+ 規模新里程碑 / 升 refactor-sop.md v1.3 3 條 know-how（細節見 [Stage Roadmap](docs/planning/Stage_84_Roadmap.md)）。
 
 ---
 
