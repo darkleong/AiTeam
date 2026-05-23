@@ -31,7 +31,6 @@ namespace AiTeam.Bot.Orchestration.Petra;
 /// 跨 service 呼叫：注入 PetraContextBuilder（BuildMemoryContext / BuildPetraSystemPromptForRuntime / BuildSummariesFromSessionMessages）
 /// </summary>
 public class PetraTalentDispatchService(
-    ITalentFactory talentFactory,
     MemoryRepository memoryRepo,
     PetraSessionRepository sessionRepo,
     AppDbContext db,

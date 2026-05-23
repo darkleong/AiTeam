@@ -27,7 +27,6 @@ public class PetraDynamicReplanService(
     PetraSessionRepository sessionRepo,
     MemoryRepository memoryRepo,
     InteractionService interactionService,
-    WorkflowSettingsResolver workflowResolver,
     ITalentFactory talentFactory,
     PetraTalentDispatchService talentDispatch,
     PetraGitFinalizationService gitFinalization,
