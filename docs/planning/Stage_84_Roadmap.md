@@ -356,9 +356,10 @@ Forge plan mode 階段可調整順序（healthy 偏離 plan 紀律）/ 但 Tests
 
 ### Mock 覆蓋
 
-- ✅ build：`dotnet build AiTeam.slnx` 0 error / 54 warning（NU1902 vulnerability + MSTEST0037 stylistic — 0 Stage 84 引入）
+- ✅ build：`dotnet build AiTeam.slnx` 0 error / 58 warning（NU1902 vulnerability + MSTEST0037 stylistic — 0 Stage 84 引入 / 0 CS9113 unused parameter warning after patch d2a4ff4）
 - ✅ xUnit：`dotnet test src/AiTeam.Bot.Tests` 130 passed / 2 skipped（Test29-30 待搬 PetraTalentDispatchServiceTests）/ 50 baseline + 2 新 smoke - 3 cut（Test6 + Test12 + Test17）= 49 active + 2 skip = 51 total
-- ⏳ MockMode 6 驗收情境：Forge 自驗待 push 後 docker compose recreate → `POST /internal/mock/scenario`（aria gate1 後觸發 `/forge-self-verify`）
+- ✅ Runtime DI 驗：container 啟動乾淨（`docker logs aiteam-aiteam-bot-1` 0 exception / 0 DI 解析 error）/ PetraInboxChannel 初始化 log 出現（5 sub-service Scoped 註冊全 OK）
+- ⏳ MockMode 6 驗收情境（GUI 部分 — Discord 真實 plan_confirm / replan_confirm card 互動 + Dashboard `/tasks` PR link 顯示）：Christ 後續統一驗收（pure refactor / 0 行為改變 + xUnit 130 全綠 + caller 0 改動 = production cold path 真實顯示驗收可延後）
 
 ### 踩坑紀錄
 
@@ -375,6 +376,22 @@ Forge plan mode 階段可調整順序（healthy 偏離 plan 紀律）/ 但 Tests
 - ✅ 0 Workflow Flag schema 改動（DB row `Workflow:UseTalentSkillSeparation = true` 不刪 / 變孤兒 harmless）
 - ✅ 0 BossInteraction schema 改動 / 0 PetraSession 欄位改動 / 0 Migration
 - ✅ 4 caller 0 改動驗：`PetraDispatchWorker.cs:140` + `PetraSessionRecoveryService.cs:30` + `PlanConfirmationProcessor.cs:118` + `Program.cs` 全保持 lazy resolve / 主入口 + 2 forwarder（ResumeFromPlanConfirmationAsync / ResumeFromReplanConfirmationAsync）保證行為等價
+
+### Aria gate1 follow-up patch（commit d2a4ff4）
+
+Aria gate1 audit 揭 2 個 CS9113 unused parameter warning（plan 寫「0 warning」但實際 net 多 2 個）：
+
+- `PetraDynamicReplanService.cs:30` `WorkflowSettingsResolver workflowResolver` — grep verify 0 method body usage → 砍
+- `PetraTalentDispatchService.cs:34` `ITalentFactory talentFactory` — grep verify 0 method body usage → 砍
+
+修法：純 primary constructor parameter 砍（2 檔 / 2 lines deleted）/ 0 行為改變 / 0 caller 改動 / 0 test 改動 / 0 DI 註冊改 / build 0 CS9113 / tests 130 passed / 2 skipped 不變。
+
+### 結案 commit chain
+
+- `8f99ea5`：Stage 84 主拆解（2266 → 193 行 / 5 sub-service + 1 static helper + 1 DTO + 1 Commons + v5 ecosystem 整套砍）
+- `d2a4ff4`：CS9113 unused parameter patch（Aria gate1 follow-up）
+
+GUI 部分（Discord plan_confirm / replan_confirm card 互動 + Dashboard `/tasks` PR link 顯示）後續 Christ 統一驗收 — pure refactor + xUnit 130 全綠 + caller 0 改動 = production cold path 真實顯示驗收可延後。
 
 ### Context 消耗實測
 
