@@ -11,7 +11,9 @@
 
 - **新 entry format**：`## [X.Y.Z] — date — [Stage XX](path) 主題` + 換行 + body 段（~100-200 字）
 - 細節 link Stage Roadmap 不複述 / 超字數 → 砍重複 / 補 reference 而非展開
+- **寫完自審 step**（B 紀律機械化 / 對抗 LLM 自然 inflation）：寫完 entry **必對比上一條 entry 字數**（visual / grep 行數估算）/ 超太多 → 砍細節 + 補「細節見 Stage Roadmap」reference / 不靠記憶力守紀律
 - v3.54.0 以下純 link 保留為歷史 format（早期 Sage 自動寫紀律 / 不追溯改）
+- **漂移反例**（C 具體警示 / 比抽象紀律直觀）：Stage 84 v3.76.0 寫成 ~300 字（5 sub-service 名全列 + 7 record 細節 + Healthy 偏離 3 條全攤）/ 修為 ~150 字（commit 40da039）— 同類根因第 6 次累積（context 充滿細節時 LLM 自然偏「都寫進去比較完整」）/ 落地寫完自審 step 防再犯
 
 ---
 
