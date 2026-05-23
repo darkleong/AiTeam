@@ -6,11 +6,11 @@ using Microsoft.Agents.AI;
 namespace AiTeam.Bot.Orchestration.Petra;
 
 /// <summary>
-/// Stage 67：v5.5 Phase 1 Step 2 — DB-driven Talent 通用實作（取代 7 個獨立 worker class 寫法）。
+/// Stage 67：v5.5 Phase 1 Step 2 — DB-driven Talent 通用實作。
 ///
 /// 演進設計（Aria 議題 3 路線 B endorse）：
 /// - ctor 注入 `Talent talent` entity（從 DB load 含 Skills nav）+ DI 服務（IClaudeCodeService / TokenLogService / ILoggerFactory）
-/// - Name / Skills 從 Talent entity 取（vs 既有 worker class 用 [AgentCapability] reflection）
+/// - Name / Skills 從 Talent entity 取
 /// - CreateAgent(ctx, skill) 動態建 ClaudeCodeChatClientAdapter — capability=skill 解 Talent 兼多 Skill 問題
 ///
 /// DI 註冊：Program.cs 啟動時 from DB load all active Talent + skill.Count &gt; 0 → AddScoped&lt;ITalent&gt;(sp =&gt; new GenericAgentTool(talent, ...))

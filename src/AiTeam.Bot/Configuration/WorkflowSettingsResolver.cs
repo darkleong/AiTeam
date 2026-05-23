@@ -70,12 +70,6 @@ public class WorkflowSettingsResolver(
     public Task<bool> GetUsePetraOrchestratorV5Async(CancellationToken ct = default)
         => GetBoolAsync("Workflow:UsePetraOrchestratorV5", Defaults.UsePetraOrchestratorV5, ct);
 
-    /// <summary>Stage 67：v5.5 Phase 1 Step 2 — Talent-Skill separation 重構基底 feature flag。預設 false（保留 v5 既有 IAgentTool + 7 worker class fallback path）。
-    /// 切 true 後 PetraOrchestratorService.StartAsync dispatch 走 ITalent + GenericAgentTool path（看 Skill 找 Talent pool / round-robin）。
-    /// 必須 UsePetraOrchestratorV5=true 才有意義（v5.5 是 v5 path 上面的演進）。</summary>
-    public Task<bool> GetUseTalentSkillSeparationAsync(CancellationToken ct = default)
-        => GetBoolAsync("Workflow:UseTalentSkillSeparation", Defaults.UseTalentSkillSeparation, ct);
-
     /// <summary>Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 feature flag。預設 false。
     /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（caller 自行檢查三 flag）。</summary>
     public Task<bool> GetUseV5MemoryAsync(CancellationToken ct = default)

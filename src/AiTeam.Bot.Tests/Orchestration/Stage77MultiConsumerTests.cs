@@ -44,19 +44,15 @@ public class Stage77MultiConsumerTests
 
         public StubPetraOrchestratorService(Func<CancellationToken, Task<PetraOrchestratorResult>> resultFactory)
             : base(
-                tools: [],
                 talentFactory: null!,
                 workflowResolver: null!,
                 sessionRepo: null!,
-                memoryRepo: null!,
                 db: null!,
-                providerFactory: null!,
-                gitHubService: null!,
-                configuration: null!,
-                promptResolver: null!,
-                talentLockService: null!,
-                interactionService: null!,   // Stage 80：stub StartAsync 不走 base / HITL path 不觸發
-                loggerFactory: NullLoggerFactory.Instance,
+                gitFinalization: null!,      // Stage 84
+                contextBuilder: null!,       // Stage 84
+                talentDispatch: null!,       // Stage 84
+                dynamicReplan: null!,        // Stage 84
+                planConfirmation: null!,     // Stage 84
                 logger: NullLogger<PetraOrchestratorService>.Instance)
         {
             _resultFactory = resultFactory;

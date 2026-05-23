@@ -54,7 +54,6 @@ public partial class SettingsHub
     private static readonly string[] _v5Flags =
     [
         "Workflow:UsePetraOrchestratorV5",
-        "Workflow:UseTalentSkillSeparation",
         "Workflow:UseV5Memory",
         "Workflow:UseV5SubtaskPlanning",
         "Workflow:UseV5PromptDb",
@@ -208,7 +207,6 @@ public partial class SettingsHub
         "Workflow:UseFrameworkDesign"              => "v4 Design Meeting fan-out/fan-in 走 Framework（Stage 52）",
         "Workflow:UseFrameworkPipeline"            => "v4 macro-orchestration Pipeline 走 Framework（Stage 53A）",
         "Workflow:UsePetraOrchestratorV5"          => "v5 PoC 動態 orchestrator 上線（Stage 63B）",
-        "Workflow:UseTalentSkillSeparation"        => "v5.5 Phase 1 Talent-Skill 拆分（Stage 67）",
         "Workflow:UseV5Memory"                     => "v5.5 Phase 2 跨 Session 長期記憶（Stage 69）",
         "Workflow:UseV5SubtaskPlanning"            => "v5.5 Phase 2 動態 SubtaskPlan 拆解",
         "Workflow:UseV5PromptDb"                   => "v5.5 Phase 2 Prompt DB 化（Stage 72）",

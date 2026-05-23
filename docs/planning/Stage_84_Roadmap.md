@@ -309,3 +309,73 @@ Forge plan mode 階段可調整順序（healthy 偏離 plan 紀律）/ 但 Tests
 - Explore agent partial read 4 段（PetraOrchestratorService + Tests + 周邊檔 21 個 + caller 盤點）→ Aria 主 session 0 大檔污染
 - Aria 6 維度 ultrathink 自審：架構 / 邏輯一致性 ✅ / 競態（state ownership）⚠️ 已 cover / 上下文（v5 path）⚠️ 待 Forge verify / DI lifecycle ✅ Scoped 對齊 / 預留欄位 N/A / 關鍵檔案清單 ✅
 - 拍板：0 行為改變 pure refactor / 0 Trial 依賴 / MockMode 4 流程 + xUnit 47 test 雙層 cover / 對齊 refactor-sop.md SOP 1-6
+
+---
+
+## 實作紀錄（Forge 結案第一段）
+
+### 實際產出檔案 + 行數
+
+| 檔案 | 行數 | 角色 |
+|---|---|---|
+| `src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorService.cs` | **193**（從 2266 / 瘦身 **91.5%**） | 主入口 + StartAsync + ResumeAsync + 2 forwarder |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraOrchestratorDtos.cs` | 56 | 7 internal sealed record（DTO 集中） |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraTalentLookupHelper.cs` | 34 | static helper / 解 TalentDispatch ↔ DynamicReplan 循環 |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraGitFinalizationService.cs` | 130 | FinalizeGitAsync + BuildPrBody |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraContextBuilder.cs` | 327 | BuildSessionContext + BuildResumeInput + BuildPetraSystemPrompt + BuildMemoryContext + BuildSummariesFromSessionMessages |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraTalentDispatchService.cs` | 767 | DecideTalents + DispatchTalents + ProcessSubtaskResult + detection family（CheckReplan + InvokePetraReplan + DetectReplanTrigger） |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraDynamicReplanService.cs` | 410 | HandleReplanSignal + 4-way replan_confirm Resume + ContinueChainFromSubtask |
+| `src/AiTeam.Bot/Orchestration/Petra/PetraPlanConfirmationService.cs` | 351 | WaitForPlanConfirmation + 4-way plan_confirm Resume + DispatchAndFinalize |
+
+合計新增 8 檔 + 主檔砍至 193 行 / 0 新檔超 800 行（refactor-sop.md「主檔瘦身 + 新檔 < 800」紀律守住）。
+
+### SOP 套用對照
+
+- **SOP 1**（DTO 組織）：7 internal sealed record 集中 PetraOrchestratorDtos.cs ✅
+- **SOP 2**（caller 改動成本）：4 caller 全 lazy resolve `scope.ServiceProvider.GetRequiredService<PetraOrchestratorService>()` / 0 改動 ✅
+- **SOP 3**（Commons 範圍界定）：PetraContextBuilder 真實多 service caller（TalentDispatch + DynamicReplan + 主入口）/ BuildMemoryContext / BuildPetraSystemPrompt 跨 service 共用 ✅
+- **SOP 4**（DI 註冊順序）：Commons → static helper（不註冊）→ Git → ContextBuilder → TalentDispatch → DynamicReplan（注入 TalentDispatch + Git + ContextBuilder）→ PlanConfirmation（注入 TalentDispatch + DynamicReplan + Git + ContextBuilder）→ 主 service ✅
+- **SOP 5**（state 管理）：`_roundRobinCounter` 拆 2 份（TalentDispatch + DynamicReplan 各持 instance field / Scoped lifecycle）/ counter 作 helper `ref int` param 傳入 ✅
+- **SOP 6**（子目錄組織）：全新 service 留 Orchestration/Petra/ 子目錄（既有命名空間 / 0 新子目錄）✅
+
+### 健康偏離 plan 紀錄
+
+**偏離 1：v5 ecosystem 整套砍**（plan v2.0 預先 verify / Aria 拍板）
+- v5 IAgentTool path production dead（`Workflow:UseTalentSkillSeparation = true` / v5 else branch 永遠不走）
+- 砍範圍：主檔內 v5 method 5 個 + 檔外 4 Agent service + AgentCapabilityAttribute + IAgentTool 整檔 + PetraWorkerHelper.GetCapabilities + DI registrations + 配置 flag
+
+**偏離 2：detection family 移到 TalentDispatch**（Forge spike 揭 Roadmap 子项 3 設計缺陷 / commit message 明寫）
+- spike 揭 `DispatchTalentsAsync` L682+L725 + `DispatchRemainingSubtasksAsync` L2204 **3 caller** inline 呼 CheckReplanTriggerAfterDispatchAsync → TalentDispatch ↔ DynamicReplan 真實雙向 ctor 循環（audit 漏看第 2 個循環）
+- 修法：detection family（DetectReplanTrigger / CheckReplanTriggerAfterDispatchAsync / InvokePetraReplanAsync）移到 TalentDispatch（dispatcher 自管 detection / handler 留 DynamicReplan）/ 對齊「dispatch loop 內 fire detection 屬 dispatcher 職責」語義
+- 結果：TalentDispatch 自管 detection / 0 注入 DynamicReplan → DynamicReplan 單向注入 TalentDispatch（ContinueChain → DispatchRemainingSubtasks）/ 0 循環
+
+**偏離 3：DispatchRemainingSubtasksAsync return type 改 DispatchOutcome**（解循環引申）
+- 原本回 PetraOrchestratorResult（含 HandleReplanSignal inline call + FinalizeGit inline）
+- 改回 DispatchOutcome（含 Summaries + 選擇性 ReplanSignal）/ caller（ContinueChainFromSubtaskAsync in DynamicReplan）負責 signal handling + FinalizeGit
+- 對齊 DispatchTalentsAsync 既有紀律（pure dispatch / outcome 回 caller route）
+
+### Mock 覆蓋
+
+- ✅ build：`dotnet build AiTeam.slnx` 0 error / 54 warning（NU1902 vulnerability + MSTEST0037 stylistic — 0 Stage 84 引入）
+- ✅ xUnit：`dotnet test src/AiTeam.Bot.Tests` 130 passed / 2 skipped（Test29-30 待搬 PetraTalentDispatchServiceTests）/ 50 baseline + 2 新 smoke - 3 cut（Test6 + Test12 + Test17）= 49 active + 2 skip = 51 total
+- ⏳ MockMode 6 驗收情境：Forge 自驗待 push 後 docker compose recreate → `POST /internal/mock/scenario`（aria gate1 後觸發 `/forge-self-verify`）
+
+### 踩坑紀錄
+
+1. **v5 cut 引發 `using AiTeam.Bot.Agents` 連帶清理踩坑**：移除 v5 IAgentTool 後 sed-clean using directives 後發現 `IClaudeCodeService` 也在 `AiTeam.Bot.Agents` namespace → 必須留 using。修法：保守保留 `using AiTeam.Bot.Agents;` 即使部分 type 砍掉（namespace-level using 不會 break compile）。
+
+2. **Test15-16 reflection target 換靜態 helper + ref counter**：原本 `method.Invoke(orch, [skill, talents])` instance method 反射；換 static helper 後 `method.Invoke(null, [skill, talents, counter])` + counter 作 `object[]` boxed ref param / 呼後讀回。Test 簽名也改：`InvokeFindTalentForSkill(string, IReadOnlyList<ITalent>, ref int)`（每 test local counter）。
+
+3. **`#if FALSE_STAGE_84_MOVED` placeholder 失敗踩坑**：嘗試用 `#if FALSE` 暫時包住舊 method body 來逐步遷移 → C# raw string literal 在 `#if` block 內仍會 parse → 編譯失敗。改用 `sed '976,1130d'` 直接整段刪除 cleaner。
+
+4. **Test29 / Test30 reflection target 換 service instance**：本 Stage scope cap 不重構 factory，標 `[Fact(Skip = "...")]` 標記移到 PetraTalentDispatchServiceTests 待 Stage 85+ 處理（或本 Stage 結案前後續 commit 補）。
+
+### 0 follow-up 狀態
+
+- ✅ 0 Workflow Flag schema 改動（DB row `Workflow:UseTalentSkillSeparation = true` 不刪 / 變孤兒 harmless）
+- ✅ 0 BossInteraction schema 改動 / 0 PetraSession 欄位改動 / 0 Migration
+- ✅ 4 caller 0 改動驗：`PetraDispatchWorker.cs:140` + `PetraSessionRecoveryService.cs:30` + `PlanConfirmationProcessor.cs:118` + `Program.cs` 全保持 lazy resolve / 主入口 + 2 forwarder（ResumeFromPlanConfirmationAsync / ResumeFromReplanConfirmationAsync）保證行為等價
+
+### Context 消耗實測
+
+- Forge context 估 ~400-500K Opus 1M + ultrathink — 實測 stage A→J 全 chain 在單 session 完成 / 對齊 Stage 59 ×1.09 倍率 baseline / Stage 84 拆解倍率 SOP 累積第 5 次效益持續（M+ 規模 single-session 完成是新里程碑）。

@@ -3,15 +3,11 @@ using Microsoft.Agents.AI;
 namespace AiTeam.Bot.Orchestration.Petra;
 
 /// <summary>
-/// Stage 67：v5.5 Phase 1 Step 2 — Talent 對 Petra Orchestrator 暴露的介面（演進自 IAgentTool）。
+/// Stage 67：v5.5 Phase 1 Step 2 — Talent 對 Petra Orchestrator 暴露的介面。
 ///
 /// 演進設計（Aria 議題 3 路線 B endorse）：
-/// - `Skills`（rename from IAgentTool.Capabilities） — Talent 擔任的 N Skill 名稱 list（從 DB TalentSkill 一對多載入）
+/// - `Skills` — Talent 擔任的 N Skill 名稱 list（從 DB TalentSkill 一對多載入）
 /// - `CreateAgent(ctx, skill)` 加 `skill` 參數動態傳 — 解 Talent 兼多 Skill 問題（Cody 兼 code_implementation + ui_design + release_publishing 必須 dispatch 時動態傳 skill 決定 ClaudeCodeChatClientAdapter capability）
-///
-/// vs 既有 IAgentTool（守 v5 既有 path fallback 不刪）：
-/// - IAgentTool.Capabilities = class-level [AgentCapability] reflection / 寫死 1-3 capability
-/// - IAgentTool.CreateAgent(ctx) = capability 在 ctor 時已固定，dispatch 時 fixed
 ///
 /// Petra dispatch 流程：
 /// 1. DecideTalentsAsync 回 `(List&lt;string&gt; skills, List&lt;ITalent&gt; talentPicks)` — skills index 對 talentPicks index

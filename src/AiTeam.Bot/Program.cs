@@ -54,25 +54,19 @@ builder.Services.AddSingleton<AppSettingsService>();
 builder.Services.AddSingleton<AgentConfigCache>();
 
 // Agents（v5.5 production active 6 Talent baseline）
-// Stage 78a：v4 path 整套砍 — 3 純 v4 class（Rosa/Demi/Release）砍 + 4 雙路徑 class（Doc/Dev/Reviewer/Qa）砍 v4 IAgentExecutor 實作留 v5.5 IAgentTool
-// Stage 78b：v4 path dead caller 整套砍 — ButtonCallbackRouter v4 routing + OpsAgent IAgentExecutor 實作 + /task slash command + GitHub Issue webhook + CeoAgentService.ProcessAsync
-// Stage 78c：v4 Pipeline framework 整套砍 — WorkflowEngine + Pipeline/Meeting/Appeal/HITL/Queue/Group services + InteractionProcessor + ProposalConfirmationService + ButtonCallbackRouter v4 routing 整套 + SlashCommandRouter + WebhookController + MockScenarioService + IAgentExecutor + AgentExecutionResult + AgentResultType（留 AgentDescriptor v5.5 active）+ Pm folder
+// Stage 84：v5 IAgentTool ecosystem 整套砍 — DevAgentService/QaAgentService/DocAgentService/ReviewerAgentService class + IAgentTool registration 全砍
+// 留 CeoAgentService（v5.5 active）+ OpsAgentService Singleton（HealthCheckJob 相依）
 builder.Services.AddScoped<CeoAgentService>();
-builder.Services.AddScoped<DevAgentService>();
 builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依（class 仍 Singleton 供 Quartz scheduled job 用）
-builder.Services.AddScoped<QaAgentService>();
-builder.Services.AddScoped<DocAgentService>();
-builder.Services.AddScoped<ReviewerAgentService>();
-
-// Stage 63B：Worker IAgentTool multi-registration（v5 動態架構 — Petra Orchestrator 透過 IEnumerable<IAgentTool> DI scan 取所有 Worker）
-// Stage 78a：縮為 4 Worker（Cody/Vera/Quinn/Sage）— 砍 Rosa/Demi/Release（不在 v5.5 6 Talent baseline / Trial_v6-v22 連續 17 次 0 dispatch 累積）
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DevAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<ReviewerAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<QaAgentService>());
-builder.Services.AddScoped<IAgentTool>(sp => sp.GetRequiredService<DocAgentService>());
 
 // Stage 63B：Petra Orchestrator + Recovery hosted service（v5 動態架構 PoC）
 // Stage 83：PetraSessionRepository 移到 AddAiTeamData extension（Bot + Dashboard 共用 Repository pattern / DRY）
+// Stage 84：PetraOrchestratorService 拆 5 sub-service（Scoped lifecycle / 對齊主入口 / Commons → Git → Talent dispatch → Replan → PlanConfirmation → 主）
+builder.Services.AddScoped<PetraContextBuilder>();
+builder.Services.AddScoped<PetraGitFinalizationService>();
+builder.Services.AddScoped<PetraTalentDispatchService>();
+builder.Services.AddScoped<PetraDynamicReplanService>();
+builder.Services.AddScoped<PetraPlanConfirmationService>();
 builder.Services.AddScoped<PetraOrchestratorService>();
 builder.Services.AddHostedService<PetraSessionRecoveryService>();
 

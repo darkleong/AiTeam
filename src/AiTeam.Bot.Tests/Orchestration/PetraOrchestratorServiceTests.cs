@@ -101,21 +101,7 @@ public class PetraOrchestratorServiceTests
         Assert.False(settings.UsePetraOrchestratorV5);
     }
 
-    // ─── Test 6：7 Worker capability dispatch — reflection 取 attribute 命中 ───────
-    [Theory]
-    [InlineData(typeof(DevAgentService),         "code_implementation")]
-    [InlineData(typeof(ReviewerAgentService),    "code_review")]
-    [InlineData(typeof(QaAgentService),          "qa_testing")]
-    [InlineData(typeof(DocAgentService),         "documentation")]
-    // Stage 78a：砍 Rosa/Demi/Release 對應 3 InlineData — v5.5 4 Worker baseline。
-    public void Test6_WorkerCapabilityAttribute_MapsToExpectedTag(Type workerType, string expectedCapability)
-    {
-        var attrs = workerType.GetCustomAttributes(typeof(AgentCapabilityAttribute), inherit: false)
-            .Cast<AgentCapabilityAttribute>().ToList();
-
-        Assert.NotEmpty(attrs);
-        Assert.Contains(attrs, a => a.Capability == expectedCapability);
-    }
+    // Stage 84：Test 6 砍 — v5 IAgentTool ecosystem 整套砍（DevAgentService/QaAgentService/DocAgentService/ReviewerAgentService + AgentCapabilityAttribute 全死）
 
     // ─── Test 7：BuildSequential + ChatClientAgent + Adapter 三層 wrapper 真實生效 ──
     // 路線 A 限制 (b) workaround 驗證 — adapter capability dispatch 7 capability 對應 IClaudeCodeService method
@@ -167,7 +153,7 @@ public class PetraOrchestratorServiceTests
     public void Test9_BuildPetraSystemPrompt_ContainsThreeTriggerCriteriaAndDiscipline()
     {
         // reflection 取 private static method（避免將 helper 公開為 internal 破壞封裝）
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -218,9 +204,10 @@ public class PetraOrchestratorServiceTests
     [Fact]
     public void Test11_BuildSessionContext_MethodExists_FallbackPathReady()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        // Stage 84：BuildSessionContext 搬 PetraContextBuilder + 改 public（service 跨呼叫需求）/ binding flag 改 Public
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildSessionContext",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
 
         var parameters = method!.GetParameters();
@@ -229,87 +216,7 @@ public class PetraOrchestratorServiceTests
         Assert.Equal(typeof(PetraSessionContext), method.ReturnType);
     }
 
-    // ─── Test 12（Stage 66 子項 1+2）：PetraOrchestratorService 自管 chain — worker A output 餵 worker B + tool role 寫入 ─
-    // 修 GitHub #1308 framework BuildSequential edge 不傳 output 根因（Trial_v11 Vera 0 work 對應修法驗證）
-    [Fact]
-    public async Task Test12_DispatchWorkers_PassesPrevWorkerOutputToNext_AndWritesToolRoleMessages()
-    {
-        await using var db = CreateInMemoryDb(nameof(Test12_DispatchWorkers_PassesPrevWorkerOutputToNext_AndWritesToolRoleMessages));
-        await db.Database.EnsureCreatedAsync();
-        var repo = new PetraSessionRepository(db);
-
-        var session = repo.Start(taskGroupId: null);
-        await db.SaveChangesAsync();
-
-        // 兩個 stub IChatClient — worker A 回固定 marker / worker B 對 messages 紀錄
-        var chatA = new RecordingChatClient(returnText: "AAA-MARKER-FROM-WORKER-A");
-        var chatB = new RecordingChatClient(returnText: "BBB-from-worker-B");
-        var agentA = new ChatClientAgent(chatClient: chatA, instructions: null, name: "WorkerA");
-        var agentB = new ChatClientAgent(chatClient: chatB, instructions: null, name: "WorkerB");
-
-        // PetraOrchestratorService 建構：DispatchWorkersAsync 只用 logger / sessionRepo / db，其他 dep 傳 null! / Null logger
-        // Stage 67：ctor 加 ITalentFactory + WorkflowSettingsResolver 兩參數 — Test 12 reflection invoke DispatchWorkersAsync 不走 StartAsync 不 call 此兩 dep / null! 安全
-        // Stage 72：ctor 加 PromptResolver — Test 12 不走 BuildPetraSystemPromptForRuntimeAsync 不 call promptResolver / null! 安全
-        var orch = new PetraOrchestratorService(
-            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
-            talentFactory: null!,
-            workflowResolver: null!,
-            sessionRepo: repo,
-            memoryRepo: null!,
-            db: db,
-            providerFactory: null!,
-            gitHubService: null!,
-            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            promptResolver: null!,
-            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
-            interactionService: null!,   // Stage 80：Test 12 reflection invoke DispatchWorkersAsync 不走 HITL path / null! 安全
-            loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
-            logger: NullLogger<PetraOrchestratorService>.Instance);
-
-        var picks = new List<AiTeam.Bot.Orchestration.Petra.IAgentTool>
-        {
-            new FakeAgentTool("WorkerA", "code_implementation"),
-            new FakeAgentTool("WorkerB", "code_review"),
-        };
-        var caps = new List<string> { "code_implementation", "code_review" };
-        var workerAgents = new AIAgent[] { agentA, agentB };
-
-        // reflection invoke private DispatchWorkersAsync（保 method 為 private — 對齊 Test 9 既有 pattern）
-        var method = typeof(PetraOrchestratorService).GetMethod(
-            "DispatchWorkersAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
-        var task = (Task)method!.Invoke(orch, new object?[]
-        {
-            session.Id, "原始任務 input", caps, picks, workerAgents,
-            null,   // Stage 79：images null（Test 12 不驗 image dispatch / DispatchWorkersAsync 簽名擴 images param 對齊）
-            CancellationToken.None
-        })!;
-        await task;
-
-        // 1. Worker B 收到的 input messages 含 worker A 的 output marker（chain pass-through 真實生效）
-        Assert.NotEmpty(chatB.LastReceivedMessages);
-        var workerBPromptText = string.Join("\n", chatB.LastReceivedMessages.Select(m => m.Text ?? ""));
-        Assert.Contains("AAA-MARKER-FROM-WORKER-A", workerBPromptText);
-        Assert.Contains("原始任務 input", workerBPromptText);
-
-        // 2. Worker A 收到 1 message（原 task input）
-        Assert.Single(chatA.LastReceivedMessages);
-
-        // 3. PetraSessionMessages tool role 寫入 ≥ 2 條 + ToolCallId 非空（議題 2 修法驗證）
-        var toolMessages = await db.PetraSessionMessages
-            .Where(m => m.SessionId == session.Id && m.Role == "tool")
-            .OrderBy(m => m.CreatedAt)
-            .ToListAsync();
-        Assert.Equal(2, toolMessages.Count);
-        Assert.All(toolMessages, m =>
-        {
-            Assert.False(string.IsNullOrWhiteSpace(m.ToolCallId));
-            Assert.NotEqual(Guid.Empty.ToString("N"), m.ToolCallId);
-        });
-        Assert.Contains("WorkerA", toolMessages[0].Content);
-        Assert.Contains("WorkerB", toolMessages[1].Content);
-    }
+    // Stage 84：Test 12 砍 — v5 DispatchWorkersAsync 砍光 / 對應 reflection test 一併砍
 
     // ─── Test 13（Stage 66 子項 3）：Cody 廣範圍指令範圍對照表 enforce — 只對 capability=code_implementation prepend ─
     [Theory]
@@ -365,26 +272,25 @@ public class PetraOrchestratorServiceTests
         Assert.NotNull(registry.GetByName("CODE_IMPLEMENTATION"));
     }
 
-    // ─── Test 15（Stage 67）：Talent pool 找 Talent dispatch — baseline 1 instance + Mock 多 instance round-robin ─
+    // ─── Test 15（Stage 67 / Stage 84 reflection target 換 PetraTalentLookupHelper）：Talent pool 找 Talent dispatch — baseline 1 instance + Mock 多 instance round-robin ─
     [Fact]
     public void Test15_FindTalentForSkill_BaselineAndRoundRobin()
     {
-        var orch = CreateMinimalOrchestratorForReflection();
-
+        var counter = 0;   // per-test local counter（對齊 PetraTalentDispatchService Scoped instance state）
         var cody1 = new FakeTalent("Cody", new[] { "code_implementation", "ui_design" });
         var cody2 = new FakeTalent("Cody-2", new[] { "code_implementation" });
         var vera = new FakeTalent("Vera", new[] { "code_review" });
 
         // baseline 1 instance — pool.Count == 1 直接 return 不走 round-robin
-        var pickedSingle = InvokeFindTalentForSkill(orch, "code_review", new ITalent[] { cody1, vera });
+        var pickedSingle = InvokeFindTalentForSkill("code_review", new ITalent[] { cody1, vera }, ref counter);
         Assert.NotNull(pickedSingle);
         Assert.Equal("Vera", pickedSingle!.Name);
 
         // 多 instance round-robin — code_implementation pool = [Cody, Cody-2]
         var pool = new ITalent[] { cody1, cody2 };
-        var first = InvokeFindTalentForSkill(orch, "code_implementation", pool);
-        var second = InvokeFindTalentForSkill(orch, "code_implementation", pool);
-        var third = InvokeFindTalentForSkill(orch, "code_implementation", pool);
+        var first = InvokeFindTalentForSkill("code_implementation", pool, ref counter);
+        var second = InvokeFindTalentForSkill("code_implementation", pool, ref counter);
+        var third = InvokeFindTalentForSkill("code_implementation", pool, ref counter);
         Assert.NotNull(first);
         Assert.NotNull(second);
         Assert.NotNull(third);
@@ -394,16 +300,15 @@ public class PetraOrchestratorServiceTests
         Assert.Equal("Cody", third!.Name);
 
         // 找不到任何 Talent 擔任的 skill → null
-        var missing = InvokeFindTalentForSkill(orch, "unknown_skill", pool);
+        var missing = InvokeFindTalentForSkill("unknown_skill", pool, ref counter);
         Assert.Null(missing);
     }
 
-    // ─── Test 16（Stage 67）：Petra DecideAsync 回 Skill 序列 lookup Talent 對齊 — picks 順序 + Cody 兼 ui_design 自然分流到主 Skill ─
+    // ─── Test 16（Stage 67 / Stage 84 reflection target 換 PetraTalentLookupHelper）：Petra DecideAsync 回 Skill 序列 lookup Talent 對齊 ─
     [Fact]
     public void Test16_FindTalentForSkill_LookupBySkill_RespectsTalentPool()
     {
-        var orch = CreateMinimalOrchestratorForReflection();
-
+        var counter = 0;
         // Cody 兼 code_implementation + ui_design + release_publishing / Vera code_review / Quinn qa_testing / Sage documentation
         var cody  = new FakeTalent("Cody",  new[] { "code_implementation", "ui_design", "release_publishing" });
         var vera  = new FakeTalent("Vera",  new[] { "code_review" });
@@ -412,32 +317,23 @@ public class PetraOrchestratorServiceTests
         var pool = new ITalent[] { cody, vera, quinn, sage };
 
         // Petra 回「code_implementation|code_review」→ picks Cody → Vera
-        var pick1 = InvokeFindTalentForSkill(orch, "code_implementation", pool);
-        var pick2 = InvokeFindTalentForSkill(orch, "code_review", pool);
+        var pick1 = InvokeFindTalentForSkill("code_implementation", pool, ref counter);
+        var pick2 = InvokeFindTalentForSkill("code_review", pool, ref counter);
         Assert.Equal("Cody", pick1!.Name);
         Assert.Equal("Vera", pick2!.Name);
 
         // Cody 兼 ui_design → pick3 仍 Cody（單一 instance pool）
-        var pick3 = InvokeFindTalentForSkill(orch, "ui_design", pool);
+        var pick3 = InvokeFindTalentForSkill("ui_design", pool, ref counter);
         Assert.Equal("Cody", pick3!.Name);
 
         // qa_testing → Quinn / documentation → Sage
-        var pick4 = InvokeFindTalentForSkill(orch, "qa_testing", pool);
-        var pick5 = InvokeFindTalentForSkill(orch, "documentation", pool);
+        var pick4 = InvokeFindTalentForSkill("qa_testing", pool, ref counter);
+        var pick5 = InvokeFindTalentForSkill("documentation", pool, ref counter);
         Assert.Equal("Quinn", pick4!.Name);
         Assert.Equal("Sage", pick5!.Name);
     }
 
-    // ─── Test 17（Stage 67）：Feature flag UseTalentSkillSeparation default false 守 v5 既有 path 0 regression ─
-    [Fact]
-    public void Test17_WorkflowSettings_UseTalentSkillSeparation_DefaultIsFalse()
-    {
-        var settings = new AiTeam.Bot.Configuration.WorkflowSettings();
-        // Stage 67：v5.5 path 預設 false / Trial_v13 ✅ + Christ 拍板才切 default true
-        Assert.False(settings.UseTalentSkillSeparation);
-        // v5 既有 path flag 維持（v5.5 是 v5 path 上面演進）
-        Assert.False(settings.UsePetraOrchestratorV5);
-    }
+    // Stage 84：Test 17 砍 — UseTalentSkillSeparation flag 死亡（v5 ecosystem 整套砍）
 
     // ─── Test 18（Stage 69）：UseV5Memory default = false 守 v5.5 既有 dispatch path 0 regression ──
     [Fact]
@@ -746,16 +642,15 @@ public class PetraOrchestratorServiceTests
     {
         var settings = new AiTeam.Bot.Configuration.WorkflowSettings();
         Assert.False(settings.UseV5SubtaskPlanning);
-        // 三 flag 連動 baseline（v5 / v5.5 TalentSkillSeparation / v5.5 Step 4 SubtaskPlanning 都 false → 守 v4 既有 path 0 regression）
+        // Stage 84：v5 ecosystem 砍後 — UseTalentSkillSeparation flag 死亡 / 留 UsePetraOrchestratorV5 + UseV5SubtaskPlanning 兩 flag baseline
         Assert.False(settings.UsePetraOrchestratorV5);
-        Assert.False(settings.UseTalentSkillSeparation);
     }
 
     // ─── Test 27（Stage 70）：BuildPetraSystemPrompt(useSubtaskPlanning) 兩 path 段落切換驗 ─
     [Fact]
     public void Test27_BuildPetraSystemPrompt_SubtaskPlanningPath_SwitchesDecompositionAndOutputSections()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -791,7 +686,7 @@ public class PetraOrchestratorServiceTests
     [Fact]
     public void Test28_BuildPetraSystemPrompt_SubtaskPlanningPath_ContainsLinearBundleCounterexampleAndBoundary()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -810,8 +705,8 @@ public class PetraOrchestratorServiceTests
         Assert.Contains("拆解是擴展不是取代", prompt);
     }
 
-    // ─── Test 29（Stage 71）：DispatchTalentsAsync Worker outputLen=0 → skip memory write ──
-    [Fact]
+    // ─── Test 29（Stage 71 / Stage 84 待搬 PetraTalentDispatchServiceTests）──
+    [Fact(Skip = "Stage 84：DispatchTalentsAsync 搬 PetraTalentDispatchService / 此 test 待 Stage I 搬 PetraTalentDispatchServiceTests + 重構 factory")]
     public async Task Test29_DispatchTalentsAsync_WorkerOutputEmpty_SkipsMemoryWrite()
     {
         const string dbName = nameof(Test29_DispatchTalentsAsync_WorkerOutputEmpty_SkipsMemoryWrite);
@@ -829,7 +724,7 @@ public class PetraOrchestratorServiceTests
         var talent = new FakeTalent(talentName, new[] { "code_implementation" });
         IReadOnlyDictionary<string, Guid> talentNameToIdMap = new Dictionary<string, Guid> { [talentName] = talentId };
 
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraTalentDispatchService).GetMethod(
             "DispatchTalentsAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
@@ -851,8 +746,8 @@ public class PetraOrchestratorServiceTests
         Assert.Equal(0, await db.TalentMemories.CountAsync());
     }
 
-    // ─── Test 30（Stage 71）：DispatchTalentsAsync Worker outputLen>0 → upsert 生效（regression 守護）──
-    [Fact]
+    // ─── Test 30（Stage 71 / Stage 84 待搬 PetraTalentDispatchServiceTests）──
+    [Fact(Skip = "Stage 84：DispatchTalentsAsync 搬 PetraTalentDispatchService / 此 test 待 Stage I 搬 PetraTalentDispatchServiceTests + 重構 factory")]
     public async Task Test30_DispatchTalentsAsync_WorkerOutputNonEmpty_WritesMemory()
     {
         const string dbName = nameof(Test30_DispatchTalentsAsync_WorkerOutputNonEmpty_WritesMemory);
@@ -870,7 +765,7 @@ public class PetraOrchestratorServiceTests
         var talent = new FakeTalent(talentName, new[] { "code_implementation" });
         IReadOnlyDictionary<string, Guid> talentNameToIdMap = new Dictionary<string, Guid> { [talentName] = talentId };
 
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraTalentDispatchService).GetMethod(
             "DispatchTalentsAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         Assert.NotNull(method);
@@ -902,19 +797,15 @@ public class PetraOrchestratorServiceTests
     /// <summary>Stage 67 Test 15/16：建一個全 null! dep 的 PetraOrchestratorService 實例 — reflection invoke FindTalentForSkill 只用 _roundRobinCounter 不碰其他 dep。</summary>
     private static PetraOrchestratorService CreateMinimalOrchestratorForReflection()
         => new PetraOrchestratorService(
-            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
             talentFactory: null!,
             workflowResolver: null!,
             sessionRepo: null!,
-            memoryRepo: null!,
             db: null!,
-            providerFactory: null!,
-            gitHubService: null!,
-            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            promptResolver: null!,
-            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
-            interactionService: null!,   // Stage 80：reflection invoke 不走 HITL path
-            loggerFactory: Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            gitFinalization: null!,      // Stage 84：reflection invoke 不走 FinalizeGitAsync path
+            contextBuilder: null!,       // Stage 84
+            talentDispatch: null!,       // Stage 84
+            dynamicReplan: null!,        // Stage 84
+            planConfirmation: null!,     // Stage 84
             logger: NullLogger<PetraOrchestratorService>.Instance);
 
     /// <summary>Stage 71 Test 29/30：建立含真實 WorkflowSettingsResolver 的 test 服務群。
@@ -939,31 +830,32 @@ public class PetraOrchestratorServiceTests
         var sessionRepo = new PetraSessionRepository(db);
         var memoryRepo = new MemoryRepository(db);
         var orch = new PetraOrchestratorService(
-            tools: Array.Empty<AiTeam.Bot.Orchestration.Petra.IAgentTool>(),
             talentFactory: null!,
             workflowResolver: resolver,
             sessionRepo: sessionRepo,
-            memoryRepo: memoryRepo,
             db: db,
-            providerFactory: null!,
-            gitHubService: null!,
-            configuration: new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
-            promptResolver: null!,
-            talentLockService: new AiTeam.Bot.Services.TalentDispatchLockService(),   // Stage 75
-            interactionService: null!,   // Stage 80：memory test 不走 HITL path
-            loggerFactory: NullLoggerFactory.Instance,
+            gitFinalization: null!,      // Stage 84
+            contextBuilder: null!,       // Stage 84
+            talentDispatch: null!,       // Stage 84
+            dynamicReplan: null!,        // Stage 84
+            planConfirmation: null!,     // Stage 84
             logger: NullLogger<PetraOrchestratorService>.Instance);
         return (db, resolver, sessionRepo, memoryRepo, orch);
     }
 
     /// <summary>Stage 67 Test 15/16：reflection invoke private FindTalentForSkill。</summary>
-    private static ITalent? InvokeFindTalentForSkill(PetraOrchestratorService orch, string skill, IReadOnlyList<ITalent> talents)
+    // Stage 84：FindTalentForSkill 抽 PetraTalentLookupHelper static helper — reflection target 換 + counter ref param
+    // counter 由 caller test 管理（per-test local 變數模擬 per-session state）
+    private static ITalent? InvokeFindTalentForSkill(string skill, IReadOnlyList<ITalent> talents, ref int counter)
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraTalentLookupHelper).GetMethod(
             "FindTalentForSkill",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
-        return (ITalent?)method!.Invoke(orch, new object[] { skill, talents });
+        var args = new object?[] { skill, talents, counter };
+        var result = (ITalent?)method!.Invoke(null, args);
+        counter = (int)args[2]!;
+        return result;
     }
 
     private sealed class FakeTalent : ITalent
@@ -1041,26 +933,14 @@ public class PetraOrchestratorServiceTests
         public void Dispose() { }
     }
 
-    // Stage 66 Test 12：IAgentTool stub — DispatchWorkersAsync 只用 Name property，CreateAgent 不會被呼叫到（外部已建好 workerAgents）
-    private sealed class FakeAgentTool : AiTeam.Bot.Orchestration.Petra.IAgentTool
-    {
-        public string Name { get; }
-        public IReadOnlyList<string> Capabilities { get; }
-        public FakeAgentTool(string name, string capability)
-        {
-            Name = name;
-            Capabilities = new[] { capability };
-        }
-        public AIAgent CreateAgent(AiTeam.Bot.Orchestration.Petra.PetraSessionContext ctx)
-            => throw new NotImplementedException("DispatchWorkersAsync 收 workerAgents 不會呼叫 CreateAgent");
-    }
+    // Stage 84：FakeAgentTool 砍 — v5 IAgentTool 整套砍（Test 12 + DispatchWorkersAsync 同步死亡）
 
     // ─── Test 46（Stage 72）：BuildPetraSystemPrompt baseTemplateOverride 非 null 走 DB base path ─
     // 驗 override 機制 — 三 placeholder（capabilityRoster / decompositionSection / outputSection）正確 Replace
     [Fact]
     public void Test46_BuildPetraSystemPrompt_BaseTemplateOverride_ReplacesAllPlaceholders()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -1098,7 +978,7 @@ roster={{capabilityRoster}}
     [Fact]
     public void Test47_BuildPetraSystemPrompt_NullOverride_UsesHardcodedTemplate()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -1172,7 +1052,7 @@ roster={{capabilityRoster}}
     [Fact]
     public void Stage81_BuildPetraSystemPrompt_NeedsImageContext_NegativeExamplePresent()
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraContextBuilder).GetMethod(
             "BuildPetraSystemPrompt",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
@@ -1269,7 +1149,7 @@ roster={{capabilityRoster}}
     // ─── Stage 81 helper：reflection invoke private static DetectReplanTrigger（pure function） ──
     private static (bool ShouldTrigger, string TriggerReason) InvokeDetectReplanTrigger(string skill, string output)
     {
-        var method = typeof(PetraOrchestratorService).GetMethod(
+        var method = typeof(PetraTalentDispatchService).GetMethod(
             "DetectReplanTrigger",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);

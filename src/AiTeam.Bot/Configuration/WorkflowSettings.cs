@@ -69,14 +69,6 @@ public class WorkflowSettings
     /// 與 Stage 49-53A 五 framework flag 完全獨立 — v4 / v5 兩條路線並行（feature/v5-poc branch 開發，Stage 64+ 全量遷移）。</summary>
     public bool UsePetraOrchestratorV5 { get; set; } = false;
 
-    /// <summary>Stage 67：v5.5 Phase 1 Step 2 — 是否啟用 Talent-Skill separation 重構基底（DB-driven Talent pool + Skill registry + GenericAgentTool）。
-    /// 預設 false（保留 v5 既有 path — IAgentTool + 7 worker class fallback），切 true 後 PetraOrchestratorService.StartAsync dispatch
-    /// 走 ITalent + GenericAgentTool path（看 Skill 找 Talent pool / round-robin / Talent 兼多 Skill）。
-    /// AppSettings 表 key = "Workflow:UseTalentSkillSeparation"，DB 優先，appsettings.json fallback。
-    /// 與 Stage 49-63B 六 framework / v5 flag 並存 — 必須 UsePetraOrchestratorV5=true 才有意義（v5.5 是 v5 path 上面的演進）。
-    /// Trial_v13 驗 + Christ 拍板才切 default true。</summary>
-    public bool UseTalentSkillSeparation { get; set; } = false;
-
     /// <summary>Stage 69：v5.5 Phase 2 Step 3 — 是否啟用跨 session 長期持久記憶（TaskMemory + TalentMemory 注入 + 寫回）。
     /// 預設 false（守 v5.5 既有 dispatch path 0 regression — Trial_v15 驗 + Christ 拍板才切 default true）。
     /// 必須 UsePetraOrchestratorV5=true + UseTalentSkillSeparation=true 才有意義（Phase 2 是 Phase 1 之上演進）。
