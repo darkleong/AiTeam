@@ -38,12 +38,12 @@
     @* Tab 1：Workflow Flags — 議題 C1 完整實裝 *@
     <MudTabPanel Text="Workflow Flags" Icon="@Icons.Material.Filled.ToggleOn">
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            21 Workflow:* flag 統一管理。修改後需重啟 Bot 才生效（FF C2 候選 Stage 84+ AppSettingsService 5 分鐘 re-read）。
+            21 Workflow:* flag 統一管理。修改後需重啟 Bot 才生效（settings cache 5 分鐘 re-read）。
         </MudText>
 
         @* Stage 85：v4 Framework 控制（5 flag）panel 整段砍（v4 dead flag / dead UI） *@
 
-        <MudExpansionPanel Text="v5 / v5.5 動態架構（6 flag）" Expanded="true">
+        <MudExpansionPanel Text="動態架構（6 flag）" Expanded="true">
             @foreach (var key in _v5Flags)
             {
                 <div class="d-flex align-center justify-space-between py-2">
@@ -60,6 +60,7 @@
         <MudExpansionPanel Text="數值上限（6 flag）" Expanded="false">
             @foreach (var (key, min, max) in _numericFlags)
             {
+                @* Stage 86 子項 2.1：數值欄位靠右對齊（justify-end 讓 input 黏右） *@
                 <div class="d-flex align-center justify-space-between py-2">
                     <div style="flex:1">
                         <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
@@ -68,7 +69,7 @@
                     <MudNumericField T="int" Value="@GetIntFlag(key)"
                                      ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
                                      Variant="Variant.Outlined" Min="@min" Max="@max"
-                                     Style="max-width:140px" />
+                                     Style="max-width:140px; text-align:right" />
                 </div>
             }
         </MudExpansionPanel>
@@ -114,11 +115,11 @@
 
         @if (_talents.Count == 0)
         {
-            <MudAlert Severity="Severity.Info">尚無 Talent — 對齊 Stage 67 baseline 6 instance（DbSeeder seed Cody / Vera / Quinn / Sage / Petra / Victoria）。</MudAlert>
+            <MudAlert Severity="Severity.Info">尚無 Talent — 預設 6 instance：Cody / Vera / Quinn / Sage / Petra / Victoria。</MudAlert>
         }
         else
         {
-            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentRow">
+            <MudTable Items="_talents" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TalentRow">
                 <HeaderContent>
                     <MudTh>Name</MudTh>
                     <MudTh>DisplayName</MudTh>
@@ -134,13 +135,23 @@
                         <MudText Typo="Typo.caption">@(context.Provider ?? "—") / @(context.Model ?? "—")</MudText>
                     </MudTd>
                     <MudTd>
+                        @* Stage 86 子項 2.2：switch Color 統一 Primary（對齊 WORKFLOW FLAGS） *@
                         <MudSwitch T="bool" Value="@context.IsActive"
-                                   ValueChanged="@((bool v) => ToggleTalentActiveAsync(context, v))" />
+                                   ValueChanged="@((bool v) => ToggleTalentActiveAsync(context, v))"
+                                   Color="Color.Primary" />
                     </MudTd>
                     <MudTd>
-                        <MudText Typo="Typo.caption">
-                            @string.Join(", ", context.Skills.Select(s => s.SkillName + (s.IsPrimary ? "*" : "")))
-                        </MudText>
+                        @* Stage 86 子項 2.3：Petra (dispatcher) / Victoria (CEO) 0 Skill 設計意圖 — 明示 N/A *@
+                        @if (context.Name is "Petra" or "Victoria")
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">N/A（dispatcher / CEO 角色）</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption">
+                                @string.Join(", ", context.Skills.Select(s => s.SkillName + (s.IsPrimary ? "*" : "")))
+                            </MudText>
+                        }
                     </MudTd>
                     <MudTd>
                         <MudButton Size="Size.Small" Variant="Variant.Outlined"
@@ -190,11 +201,11 @@
 
         @if (_skillPromptsActive.Count == 0)
         {
-            <MudAlert Severity="Severity.Info">尚無 SkillPrompt 資料 — 對齊 Stage 72 DbSeeder 6 Skill baseline。</MudAlert>
+            <MudAlert Severity="Severity.Info">尚無 SkillPrompt 資料 — 預設 6 Skill baseline。</MudAlert>
         }
         else
         {
-            <MudTable Items="_skillPromptsActive" Dense="true" Hover="true" T="SkillPromptRow">
+            <MudTable Items="_skillPromptsActive" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="SkillPromptRow">
                 <HeaderContent>
                     <MudTh>SkillName</MudTh>
                     <MudTh>Active Version</MudTh>
@@ -246,7 +257,7 @@
         </MudStack>
 
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-            per-Talent persona body — Phase 3 才補（baseline 0 row）。對齊 Christ 議題 2 拍板「同 Skill 多 Talent 不重複存職責 / Talent 個性風格分開」。
+            per-Talent persona body — 同 Skill 多 Talent 不重複存職責 / Talent 個性風格分開。
         </MudText>
 
         @if (_talents.Count == 0)
@@ -255,10 +266,13 @@
         }
         else
         {
-            <MudTable Items="_talents" Dense="true" Hover="true" T="TalentRow">
+            @* Stage 86 子項 2.4：擴 5 欄統一 SKILLPROMPTS 表（Talent / Active Version / Length / UpdatedAt / 動作） *@
+            <MudTable Items="_talents" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TalentRow">
                 <HeaderContent>
                     <MudTh>Talent</MudTh>
-                    <MudTh>Persona 狀態</MudTh>
+                    <MudTh>Active Version</MudTh>
+                    <MudTh>Length</MudTh>
+                    <MudTh>UpdatedAt</MudTh>
                     <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -273,11 +287,11 @@
                         }
                         else
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
-                                v@(existing.VersionNumber) · @existing.PersonaBody.Length chars
-                            </MudChip>
+                            <MudText>v@(existing.VersionNumber)</MudText>
                         }
                     </MudTd>
+                    <MudTd>@(existing is null ? "—" : $"{existing.PersonaBody.Length} chars")</MudTd>
+                    <MudTd>@(existing is null ? "—" : existing.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm"))</MudTd>
                     <MudTd>
                         <MudButton Size="Size.Small" Variant="Variant.Outlined"
                                    StartIcon="@Icons.Material.Filled.Edit"

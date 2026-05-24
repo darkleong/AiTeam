@@ -40,7 +40,7 @@ else
                             <MudText Typo="Typo.subtitle1"><b>@agent.AgentName</b></MudText>
                             @if (agent.HasEstimated)
                             {
-                                <MudTooltip Text="部分 token 為估算值（非 CLI 直接回傳）— Stage 56 FF 四十三 IsEstimated">
+                                <MudTooltip Text="部分 token 為估算值（非 CLI 直接回傳）">
                                     <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
                                 </MudTooltip>
                             }
@@ -145,6 +145,8 @@ else
               Hover="true"
               SortLabel="排序"
               Elevation="2"
+              Height="600px"
+              FixedHeader="true"
               T="TokenAgentSummaryDto">
         <ToolBarContent>
             <MudText Typo="Typo.h6">詳細用量</MudText>
