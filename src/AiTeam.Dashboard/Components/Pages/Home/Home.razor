@@ -62,18 +62,19 @@
             任務中心
         </MudButton>
     </MudItem>
-    <MudItem xs="12" sm="4">
-        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Settings"
-                   OnClick="@(() => Nav.NavigateTo("/settings"))">
-            設定中心
-        </MudButton>
-    </MudItem>
+    @* follow-up #9：跳轉按鈕順序同步 NavMenu — 監控中心 在 設定中心 前 *@
     <MudItem xs="12" sm="4">
         <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.MonitorHeart"
                    OnClick="@(() => Nav.NavigateTo("/monitoring"))">
             監控中心
+        </MudButton>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudButton FullWidth="true" Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Settings"
+                   OnClick="@(() => Nav.NavigateTo("/settings"))">
+            設定中心
         </MudButton>
     </MudItem>
 </MudGrid>
