@@ -1,11 +1,13 @@
 using System.Net.Http.Json;
 using AiTeam.Data;
 using AiTeam.Data.Hubs;
+using AiTeam.Dashboard.Configuration;
 using AiTeam.Dashboard.Services;
 using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Monitoring;
@@ -30,6 +32,9 @@ public partial class MonitoringHub : IAsyncDisposable
     [Inject] private IConfiguration           Configuration { get; set; } = null!;
     [Inject] private NavigationManager        Navigation    { get; set; } = null!;
     [Inject] private ILogger<MonitoringHub>   Logger        { get; set; } = null!;
+    // Stage 86 子項 4.3：per-agent 90% 警戒用 daily/monthly limit
+    [Inject] private IOptions<AgentTokenLimits> AgentLimitsOptions { get; set; } = null!;
+    private AgentTokenLimits AgentLimits => AgentLimitsOptions.Value;
 
     #endregion
 
@@ -47,6 +52,18 @@ public partial class MonitoringHub : IAsyncDisposable
 
     private int  _todayTotalKtokens;
     private int  _globalMonthlyLimitK;
+
+    // Stage 86 子項 4.1：時間範圍 filter 6 選項（today / week / last7 / month / last30 / all）
+    private string _selectedPeriod = "today";
+    private readonly List<(string Key, string Label)> _periods =
+    [
+        ("today",  "今天"),
+        ("week",   "這一週"),
+        ("last7",  "最近 7 天"),
+        ("month",  "這個月"),
+        ("last30", "最近 30 天"),
+        ("all",    "全部"),
+    ];
 
     private HubConnection? _hubConnection;
     private bool _hubConnected;
@@ -106,10 +123,11 @@ public partial class MonitoringHub : IAsyncDisposable
     {
         try
         {
-            var todayStart = DateTime.UtcNow.Date;
-            _todaySummary  = await TokenService.GetSummaryAsync(todayStart, todayStart.AddDays(1));
+            // Stage 86 子項 4.2：依 _selectedPeriod 算 query 時間範圍（替代既有寫死 today）
+            var (start, end) = ResolvePeriod(_selectedPeriod);
+            _todaySummary  = await TokenService.GetSummaryAsync(start, end);
 
-            // 計算今日 K tokens（警戒線用）
+            // 計算 period K tokens（警戒線用）
             _todayTotalKtokens = (int)(_todaySummary.AgentSummaries
                 .Sum(a => (long)a.TotalInputTokens + a.TotalOutputTokens) / 1000);
 
@@ -120,13 +138,45 @@ public partial class MonitoringHub : IAsyncDisposable
             // 建 MudChart series（per-Talent input + output stacked bar）
             BuildPerTalentChart();
 
-            // per-PetraSession 維度
-            await LoadPerSessionAsync();
+            // per-PetraSession 維度（同 period 範圍）
+            await LoadPerSessionAsync(start, end);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "LoadTokensAsync 失敗");
         }
+    }
+
+    // Stage 86 子項 4.2：6 選項 → (DateTime start, DateTime end) 區間轉換
+    private static (DateTime Start, DateTime End) ResolvePeriod(string period)
+    {
+        var now    = DateTime.UtcNow;
+        var todayUtc = now.Date;
+        return period switch
+        {
+            "today"  => (todayUtc,                                              todayUtc.AddDays(1)),
+            "week"   => (StartOfWeek(now),                                      now.AddMinutes(1)),
+            "last7"  => (now.AddDays(-7),                                       now.AddMinutes(1)),
+            "month"  => (new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc), now.AddMinutes(1)),
+            "last30" => (now.AddDays(-30),                                      now.AddMinutes(1)),
+            "all"    => (DateTime.MinValue.ToUniversalTime(),                   DateTime.MaxValue.ToUniversalTime()),
+            _        => (todayUtc,                                              todayUtc.AddDays(1)),
+        };
+    }
+
+    private static DateTime StartOfWeek(DateTime dt)
+    {
+        // ISO 8601 週一起算 / UTC date
+        var diff = (7 + (dt.DayOfWeek - DayOfWeek.Monday)) % 7;
+        return dt.Date.AddDays(-diff);
+    }
+
+    // Stage 86 子項 4.1：時間範圍 button 切換
+    private async Task SetPeriodAsync(string key)
+    {
+        if (_selectedPeriod == key) return;
+        _selectedPeriod = key;
+        await LoadTokensAsync();
     }
 
     private void BuildPerTalentChart()
@@ -153,15 +203,15 @@ public partial class MonitoringHub : IAsyncDisposable
         ];
     }
 
-    private async Task LoadPerSessionAsync()
+    // Stage 86 子項 4.2：per-Session query 接受 period 範圍（替代既有寫死 today）
+    private async Task LoadPerSessionAsync(DateTime start, DateTime end)
     {
         try
         {
             await using var db = await DbFactory.CreateDbContextAsync();
-            var todayStart = DateTime.UtcNow.Date;
             _perSessionRows = await db.TokenLogs
                 .AsNoTracking()
-                .Where(t => t.CreatedAt >= todayStart && t.PetraSessionId != null)
+                .Where(t => t.CreatedAt >= start && t.CreatedAt < end && t.PetraSessionId != null)
                 .GroupBy(t => t.PetraSessionId!.Value)
                 .Select(g => new PerSessionRow
                 {
@@ -325,6 +375,23 @@ public partial class MonitoringHub : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_hubConnection is not null) await _hubConnection.DisposeAsync();
+    }
+
+    // Stage 86 子項 4.3：per-agent 90% 日限警戒（today period 才算 / 對齊 daily limit 語意）
+    private List<(string AgentName, double Pct, int Total, int LimitTokens)> GetPerAgentDailyAlerts()
+    {
+        if (_selectedPeriod != "today" || _todaySummary is null) return [];
+        var alerts = new List<(string, double, int, int)>();
+        foreach (var agent in _todaySummary.AgentSummaries)
+        {
+            if (!AgentLimits.Agents.TryGetValue(agent.AgentName, out var cfg)) continue;
+            if (cfg.DailyTokenLimitK <= 0) continue;
+            var limitTokens = cfg.DailyTokenLimitK * 1000;
+            var total       = agent.TotalInputTokens + agent.TotalOutputTokens;
+            var pct         = (double)total / limitTokens * 100;
+            if (pct >= 90) alerts.Add((agent.AgentName, pct, total, limitTokens));
+        }
+        return alerts;
     }
 
     public class PerSessionRow
