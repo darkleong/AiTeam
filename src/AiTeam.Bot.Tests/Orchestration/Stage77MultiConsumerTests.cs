@@ -186,8 +186,9 @@ public class Stage77MultiConsumerTests
         var pushService = sp.GetRequiredService<DashboardPushService>();
 
         // Stub resolver — 雖然 ConsumeLoopAsync 不直接讀 N（N 在 ExecuteAsync 讀後傳）/ T3 直接 invoke ConsumeLoopAsync 不過 ExecuteAsync
+        // Stage 85 子項 1：ctor 加 DiscordAlertService 注入（test null!，dead-letter push 不在 T3 ConsumeLoop 路徑）
         var worker = new PetraDispatchWorker(
-            channel, sp, workflowResolver: null!, pushService,
+            channel, sp, workflowResolver: null!, pushService, discordAlert: null!,
             NullLogger<PetraDispatchWorker>.Instance);
 
         // push 3 rowId
@@ -257,7 +258,8 @@ public class Stage77MultiConsumerTests
 
         var channel = sp.GetRequiredService<PetraInboxChannel>();
         var pushService = sp.GetRequiredService<DashboardPushService>();
-        var worker = new PetraDispatchWorker(channel, sp, null!, pushService, NullLogger<PetraDispatchWorker>.Instance);
+        // Stage 85 子項 1：ctor 加 DiscordAlertService 注入（test null!，dead-letter push 不在本 test 路徑）
+        var worker = new PetraDispatchWorker(channel, sp, null!, pushService, discordAlert: null!, NullLogger<PetraDispatchWorker>.Instance);
 
         List<Guid> rowIds;
         using (var listScope = sp.CreateScope())
@@ -351,7 +353,8 @@ public class Stage77MultiConsumerTests
 
         var channel = sp.GetRequiredService<PetraInboxChannel>();
         var pushService = sp.GetRequiredService<DashboardPushService>();
-        var worker = new PetraDispatchWorker(channel, sp, null!, pushService, NullLogger<PetraDispatchWorker>.Instance);
+        // Stage 85 子項 1：ctor 加 DiscordAlertService 注入（test null!，dead-letter push 不在本 test 路徑）
+        var worker = new PetraDispatchWorker(channel, sp, null!, pushService, discordAlert: null!, NullLogger<PetraDispatchWorker>.Instance);
 
         // 整合 invoke DispatchOneAsync 整套（Stage 76 retry path 0 邏輯改變紀律真實 regression test cover）
         using var dispatchCts = new CancellationTokenSource();

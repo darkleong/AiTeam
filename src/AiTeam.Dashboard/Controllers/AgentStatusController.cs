@@ -78,6 +78,14 @@ public class AgentStatusController(
         return Ok();
     }
 
+    /// <summary>Stage 85 子項 1：Bot 呼叫此端點推送系統 alert（TokenGuard / dead-letter / paused timeout 三類） — Dashboard AlertToastSubscriber 訂閱後 MudSnackbar 彈出。</summary>
+    [HttpPost("alert")]
+    public async Task<IActionResult> BroadcastAlertAsync([FromBody] AlertEventDto dto)
+    {
+        await hubContext.Clients.All.SendAsync(AgentStatusHub.ReceiveAlertEvent, dto);
+        return Ok();
+    }
+
     /// <summary>
     /// Stage 28a：Dashboard 前端回覆互動。
     /// 使用樂觀鎖防止先到先贏衝突（另一通道已回覆則回傳 409）。

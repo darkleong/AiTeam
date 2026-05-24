@@ -104,6 +104,9 @@ builder.Services.AddSingleton<ITalentFactory, DefaultTalentFactory>();
 
 // Stage 78c 議題 8：Pm/ folder 整套砍（PmAgentCommons / PmReviewService / ReviewAppealService / DevPlanAppealService / PmRoutingService — 100% v4 path / 0 v5.5 caller）
 
+// Stage 85 子項 1：AlertRateLimiter（per event type per N min 限頻 / Singleton 跨 caller 共用 state）
+builder.Services.AddSingleton<AlertRateLimiter>();
+
 // Discord 警報服務（向 #警報 頻道發送 Token 異常等警報）
 builder.Services.AddSingleton<DiscordAlertService>();
 

@@ -80,4 +80,15 @@ public class WorkflowSettings
     /// 預設 5 USD（達上限升 intervention 卡讓 Christ 拍板介入）。範圍守 > 0。
     /// AppSettings 表 key = "Workflow:ReplanCostCapUsd"。</summary>
     public decimal ReplanCostCapUsd { get; set; } = 5m;
+
+    /// <summary>Stage 85：paused PetraSession timeout cleanup（小時）。
+    /// 超過此值的 paused session 自動 cancel + Discord push 告知。
+    /// 預設 24（HITL 等老闆回應比例上限）/ 範圍守 [1, 168]（1h-7d）。
+    /// AppSettings 表 key = "Workflow:PausedSessionTimeoutHours"，DB 優先。</summary>
+    public int PausedSessionTimeoutHours { get; set; } = 24;
+
+    /// <summary>Stage 85：DiscordAlertService rate-limit window（分鐘）— per event type per window 只發 1 則 + aggregate 描述。
+    /// 預設 5（連續失敗洗版防護）/ 範圍守 [1, 60]。
+    /// AppSettings 表 key = "Workflow:AlertRateLimitMinutes"，DB 優先。</summary>
+    public int AlertRateLimitMinutes { get; set; } = 5;
 }

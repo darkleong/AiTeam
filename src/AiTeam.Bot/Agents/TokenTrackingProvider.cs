@@ -74,7 +74,7 @@ public class TokenTrackingProvider(
                       $"超過上限 {singleLimit:N0}。已拒絕送出。\nPrompt 前 200 字：`{userMessage[..Math.Min(200, userMessage.Length)]}`";
             logger.LogWarning("Token 守門攔截（單次上限）：Agent={Agent}, 估算={Estimated}, 上限={Limit}",
                 agentName, estimatedTokens, singleLimit);
-            await discordAlert.SendAsync(msg);
+            await discordAlert.SendThrottledAsync("token_guard", msg);
             throw new InvalidOperationException($"Token 守門：單次請求估算 {estimatedTokens:N0} tokens 超過上限 {singleLimit:N0}。");
         }
 
@@ -90,7 +90,7 @@ public class TokenTrackingProvider(
                       $"加上本次估算 {estimatedTokens:N0} 將超過日限 {dailyLimit:N0}。已拒絕送出。";
             logger.LogWarning("Token 守門攔截（日限）：Agent={Agent}, 已用={Used}, 估算={Estimated}, 上限={Limit}",
                 agentName, dailyUsed, estimatedTokens, dailyLimit);
-            await discordAlert.SendAsync(msg);
+            await discordAlert.SendThrottledAsync("token_guard", msg);
             throw new InvalidOperationException($"Token 守門：Agent {agentName} 今日用量 {dailyUsed:N0} + 估算 {estimatedTokens:N0} 超過日限 {dailyLimit:N0}。");
         }
 
@@ -106,7 +106,7 @@ public class TokenTrackingProvider(
                       $"加上本次估算 {estimatedTokens:N0} 將超過月限 {agentMonthlyLimit:N0}。已拒絕送出。";
             logger.LogWarning("Token 守門攔截（Agent 月限）：Agent={Agent}, 已用={Used}, 估算={Estimated}, 上限={Limit}",
                 agentName, agentMonthlyUsed, estimatedTokens, agentMonthlyLimit);
-            await discordAlert.SendAsync(msg);
+            await discordAlert.SendThrottledAsync("token_guard", msg);
             throw new InvalidOperationException($"Token 守門：Agent {agentName} 本月用量 {agentMonthlyUsed:N0} + 估算 {estimatedTokens:N0} 超過月限 {agentMonthlyLimit:N0}。");
         }
 
@@ -124,7 +124,7 @@ public class TokenTrackingProvider(
                       $"**所有 LLM 呼叫已暫停。** 請至 Dashboard【系統設定 → Token 守門設定】調整全域月限，5 分鐘內自動生效。";
             logger.LogError("Token 守門攔截（全域月限）：全域已用={Used}, 估算={Estimated}, 上限={Limit}",
                 globalMonthlyUsed, estimatedTokens, globalMonthlyLimit);
-            await discordAlert.SendAsync(msg);
+            await discordAlert.SendThrottledAsync("token_guard", msg);
             throw new InvalidOperationException($"Token 守門：全域本月用量 {globalMonthlyUsed:N0} + 估算 {estimatedTokens:N0} 超過全域月限 {globalMonthlyLimit:N0}。所有 LLM 呼叫已暫停。");
         }
 

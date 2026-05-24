@@ -22,4 +22,7 @@ public class AgentStatusHub : Hub
 
     /// <summary>Stage 28a：Dashboard 訂閱此事件以接收互動狀態變動（新互動進來 / 回覆後即時更新）。</summary>
     public const string ReceiveInteractionUpdate = nameof(ReceiveInteractionUpdate);
+
+    /// <summary>Stage 85 子項 1：Dashboard 訂閱此事件以接收系統 alert（TokenGuard / dead-letter / paused timeout 三類）— AlertToastSubscriber 收到後 MudSnackbar 彈出。</summary>
+    public const string ReceiveAlertEvent = nameof(ReceiveAlertEvent);
 }

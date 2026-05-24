@@ -33,6 +33,7 @@ public class PetraDispatchWorker(
     IServiceProvider serviceProvider,
     WorkflowSettingsResolver workflowResolver,
     DashboardPushService pushService,
+    DiscordAlertService discordAlert,
     ILogger<PetraDispatchWorker> logger) : BackgroundService
 {
     private const int StartupDelaySeconds = 10;
@@ -189,6 +190,9 @@ public class PetraDispatchWorker(
                         logger.LogError(
                             "PetraDispatchWorker consumer={Index} row={Id} exhausted attempts={Attempts} → Dead Letter（等 Dashboard 重跑介入） error={Error}",
                             workerIndex, rowId, currentRow.AttemptCount + 1, errorMessage);
+                        // Stage 85 子項 1：dead-letter 進 Discord push + SignalR toast（rate-limit 共用 wrapper）
+                        await discordAlert.SendThrottledAsync("petra_dead_letter",
+                            $"⚠️ **[Stage 85 dead-letter]** PetraInbox row=`{rowId}` 連續 {currentRow.AttemptCount + 1} 次 transient fail / 進 Dead Letter\n錯誤：{errorMessage}");
                     }
                     else
                     {

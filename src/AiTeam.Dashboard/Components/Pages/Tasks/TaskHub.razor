@@ -100,7 +100,11 @@
                         </MudChip>
                     </MudTd>
                     <MudTd>
-                        <MudChip T="string" Size="Size.Small" Color="@InteractionCenter.GetInboxStatusColor(context.Status)">
+                        @* Stage 85 子項 1：failed/dead status 視覺強化（Variant.Filled 實心 + Icon 警示）— 對齊 Christ 紀律「失敗告知不能讓老闆忽略」*@
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@InteractionCenter.GetInboxStatusColor(context.Status)"
+                                 Variant="@(context.Status is "failed" or "dead" ? Variant.Filled : Variant.Text)"
+                                 Icon="@(context.Status is "failed" or "dead" ? Icons.Material.Filled.ErrorOutline : null)">
                             @context.Status
                         </MudChip>
                     </MudTd>

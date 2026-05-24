@@ -1,0 +1,52 @@
+@*
+    Stage 85 子項 1：跨 circuit 訂閱 SignalR /hubs/agent-status ReceiveAlertEvent → MudSnackbar 彈出 3-5 秒。
+    對齊既有 Home.razor.cs / TaskHub.razor.cs Nav.ToAbsoluteUri pattern（不寫死 IConfiguration）。
+    放在 MudProviders.razor 內 + MainLayout inherit MudProviders / 跨分頁全域 active。
+*@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IAsyncDisposable
+@using AiTeam.Data.Hubs
+@using AiTeam.Shared.Dtos
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject ILogger<AlertToastSubscriber> Logger
+
+@code {
+    private HubConnection? _hub;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var hubUrl = Nav.ToAbsoluteUri("/hubs/agent-status").ToString();
+            _hub = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hub.On<AlertEventDto>(AgentStatusHub.ReceiveAlertEvent, dto =>
+            {
+                var severity = dto.Severity == "error" ? Severity.Error : Severity.Warning;
+                Snackbar.Add(dto.Message, severity, opts =>
+                {
+                    opts.VisibleStateDuration = 5000;
+                    opts.HideTransitionDuration = 300;
+                    opts.ShowTransitionDuration = 300;
+                });
+                return Task.CompletedTask;
+            });
+
+            await _hub.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "AlertToastSubscriber SignalR Hub 連線失敗（非關鍵 / Dashboard 仍可用）");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null) await _hub.DisposeAsync();
+    }
+}

@@ -98,6 +98,14 @@ public class WorkflowSettingsResolver(
     public Task<decimal> GetReplanCostCapUsdAsync(CancellationToken ct = default)
         => GetDecimalAsync("Workflow:ReplanCostCapUsd", Defaults.ReplanCostCapUsd, ct);
 
+    /// <summary>Stage 85：paused PetraSession timeout（小時 / 範圍守 [1, 168] / 超出 fallback default）。</summary>
+    public Task<int> GetPausedSessionTimeoutHoursAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:PausedSessionTimeoutHours", Defaults.PausedSessionTimeoutHours, 1, 168, ct);
+
+    /// <summary>Stage 85：DiscordAlertService rate-limit window（分鐘 / 範圍守 [1, 60] / 超出 fallback default）。</summary>
+    public Task<int> GetAlertRateLimitMinutesAsync(CancellationToken ct = default)
+        => GetIntInRangeAsync("Workflow:AlertRateLimitMinutes", Defaults.AlertRateLimitMinutes, 1, 60, ct);
+
     private async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct)
     {
         var raw = await appSettings.GetAsync(key, ct);

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using AiTeam.Shared.Dtos;
 using AiTeam.Shared.ViewModels;
 
 namespace AiTeam.Bot.Services;
@@ -68,6 +69,23 @@ public class DashboardPushService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "推送互動更新至 Dashboard 失敗（非關鍵錯誤）");
+        }
+    }
+
+    /// <summary>Stage 85 子項 1：推送系統 alert 至 Dashboard（TokenGuard / dead-letter / paused timeout 三類）/ Dashboard MudSnackbar 彈出。</summary>
+    public async Task PushAlertAsync(string eventType, string severity, string message)
+    {
+        try
+        {
+            var dto = new AlertEventDto(eventType, severity, message, DateTime.UtcNow);
+            var client = httpClientFactory.CreateClient("aiteam-dashboard");
+            var response = await client.PostAsJsonAsync("/internal/agent-status/alert", dto);
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("推送 Alert 至 Dashboard 回傳 {StatusCode}", response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "推送 Alert 至 Dashboard 失敗（非關鍵錯誤）");
         }
     }
 

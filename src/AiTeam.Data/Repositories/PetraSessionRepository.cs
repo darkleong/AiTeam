@@ -116,6 +116,13 @@ public class PetraSessionRepository(AppDbContext db)
         session.UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>Stage 85：取 paused 且 UpdatedAt &lt; cutoffUtc 的 session（PetraSessionRecoveryService timeout cleanup 用）。
+    /// caller 負責後續批次 CancelAsync + SaveChangesAsync。</summary>
+    public Task<List<PetraSession>> GetPausedOlderThanAsync(DateTime cutoffUtc, CancellationToken ct = default)
+        => db.PetraSessions
+            .Where(s => s.Status == "paused" && s.UpdatedAt < cutoffUtc)
+            .ToListAsync(ct);
+
     /// <summary>Stage 80：標記 session 被 Christ HITL plan_confirm reject 取消（Status="cancelled"）。
     /// 對齊 4 decision pattern reject 路徑（task_memory 寫 decision/plan-rejected + chain dispatch 0 啟動）。</summary>
     public async Task CancelAsync(Guid sessionId, CancellationToken ct = default)
