@@ -24,33 +24,18 @@ public partial class RuleManagement
 
     private record AgentOption(string Label, string Value);
 
+    // Stage 86 子項 0：砍 8 個 v4 dead 角色（Dev/Ops/Qa/Doc/Requirements/Reviewer/Release/Designer）
+    // + Pm（v5 dispatcher / RulesService 0 caller）— 留全域 + CEO（Stage 85 verify CEO 唯一 caller）/ DB row 變孤兒不刪
     private readonly List<AgentOption> _agentOptions =
     [
         new("全域（所有 Agent）", ""),
-        new("CEO",          AgentNames.Ceo),
-        new("Dev",          AgentNames.Dev),
-        new("Ops",          AgentNames.Ops),
-        new("QA",           AgentNames.Qa),
-        new("Doc",          AgentNames.Doc),
-        new("Requirements", AgentNames.Requirements),
-        new("Reviewer",     AgentNames.Reviewer),
-        new("Release",      AgentNames.Release),
-        new("Designer",     AgentNames.Designer),
+        new("CEO",                AgentNames.Ceo),
     ];
 
     private static Color GetAgentChipColor(string? agentName) => agentName switch
     {
-        AgentNames.Ceo          => Color.Primary,
-        AgentNames.Dev          => Color.Info,
-        AgentNames.Ops          => Color.Tertiary,
-        AgentNames.Qa           => Color.Secondary,
-        AgentNames.Doc          => Color.Secondary,
-        AgentNames.Requirements => Color.Warning,
-        AgentNames.Reviewer     => Color.Error,
-        AgentNames.Release      => Color.Success,
-        AgentNames.Designer     => Color.Warning,
-        AgentNames.Pm           => Color.Info,
-        _                       => Color.Default,  // 全域
+        AgentNames.Ceo => Color.Primary,
+        _              => Color.Default,  // 全域 / 孤兒 row fallback
     };
 
     #endregion
