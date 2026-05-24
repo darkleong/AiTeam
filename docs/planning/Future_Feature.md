@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v12.0
+> 版本：v12.1
 > 建立日期：2026-04-01
-> 最後更新：2026-05-24（Stage 84 PetraOrchestratorService 拆解收口 / #13 移除）
+> 最後更新：2026-05-24（v12.0 Stage 84 拆解收口 / v12.1 加 Dashboard UX 改造候選段 — 左側 nav 階層化改造 / 來源：2026-05-24 Christ 真實業務 dogfood 切換策略後保留）
 > 詳細實作紀錄：[CHANGELOG.md](../../CHANGELOG.md) + [Architecture.md](../Architecture.md)
 
 ---
@@ -63,6 +63,9 @@
 - 🟡 Vera review 紀律升級（system prompt / few-shot 更多 critical 反例）
 - 🟡 Read-only Codebase Explorer agent（獨立 worker / 給 Petra 第二來源訊號）
 - 🟡 SubtaskPlanParser 對 Petra refuse JSON fallback 升級（detect `{"error":"dispatch_rejected"}` → 直接 escalate）
+
+**Dashboard UX 改造候選**（2026-05-24 Christ 真實使用觸發 / 性質：新功能改造而非 Stage 83 phased delivery 留尾）：
+- 🟡 **左側 nav 階層化改造**（規模 L）：左側欄三大區（任務中心、設定中心、監控中心）改為可點擊展開折疊（MudNavGroup），把右側 MudTabs 16 個子分頁改為左側第二層 nav 項目對應 URL 路由。要動 NavMenu + 拆 3 個 Hub.razor 為 16 個 sub-page + URL 路由規劃 + SignalR 訂閱拓撲重對齊。觸發時機：Christ 拍板要做時 / 2026-05-24 第一單真實業務 dogfood 切換策略後保留（暫不走 AiTeam dispatch）
 
 **評估時機**：Christ 真實使用累積痛點觸發後動工 / Aria 不主動推（對齊 v5.5 完整收口 + production 自然累積期路線）。
 
