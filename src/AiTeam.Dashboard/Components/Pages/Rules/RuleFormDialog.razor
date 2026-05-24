@@ -6,11 +6,13 @@
                       Required="true"
                       RequiredError="規則內容不可為空白"
                       Lines="3"
+                      Margin="Margin.Dense"
                       Placeholder="例如：回應使用繁體中文，語氣專業但親切"
                       Class="mb-3" />
 
         <MudSelect T="string" @bind-Value="_agentName"
-                   Label="套用對象" Style="max-width:240px" Class="mb-3">
+                   Label="套用對象" Margin="Margin.Dense" Dense="true"
+                   Style="max-width:240px" Class="mb-3">
             @foreach (var opt in AgentOptions)
             {
                 <MudSelectItem Value="@opt.Value">@opt.Label</MudSelectItem>

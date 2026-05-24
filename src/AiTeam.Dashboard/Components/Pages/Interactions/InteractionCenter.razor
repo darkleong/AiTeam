@@ -102,7 +102,7 @@ else
 <MudPaper Elevation="0" Class="pa-3 mb-3" Style="background: var(--mud-palette-background-grey);">
     <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudSelect T="string" Label="互動類型" Value="_typeFilter" ValueChanged="OnTypeFilterChanged"
-                   Clearable="true" Dense="true" Style="min-width: 160px;">
+                   Clearable="true" Dense="true" Margin="Margin.Dense" Style="min-width: 160px;">
             <MudSelectItem Value="@("ceo_confirm")">CEO 決策確認</MudSelectItem>
             <MudSelectItem Value="@("exec_confirm")">Agent 執行確認</MudSelectItem>
             <MudSelectItem Value="@("proposal")">提案確認</MudSelectItem>

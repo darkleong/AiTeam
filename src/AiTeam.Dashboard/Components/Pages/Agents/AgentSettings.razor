@@ -118,7 +118,7 @@ else
                                    Label="Provider"
                                    Value="@_selectedAgent.Provider"
                                    ValueChanged="@((string v) => OnProviderChangedAsync(_selectedAgent, v))"
-                                   Dense="true"
+                                   Dense="true" Margin="Margin.Dense"
                                    Variant="Variant.Outlined"
                                    Style="max-width:200px"
                                    Disabled="@_isSavingLlm">
@@ -131,7 +131,7 @@ else
                                    Label="Model"
                                    Value="@_selectedAgent.Model"
                                    ValueChanged="@((string v) => OnModelChangedAsync(_selectedAgent, v))"
-                                   Dense="true"
+                                   Dense="true" Margin="Margin.Dense"
                                    Variant="Variant.Outlined"
                                    Style="max-width:280px"
                                    Disabled="@(_isSavingLlm || string.IsNullOrEmpty(_selectedAgent.Provider))">
