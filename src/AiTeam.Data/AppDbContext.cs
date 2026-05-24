@@ -6,7 +6,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Project> Projects => Set<Project>();
-    public DbSet<AgentConfig> AgentConfigs => Set<AgentConfig>();
+    // Stage 87 A4：AgentConfigs DbSet 砍（agent_configs 表 DROP TABLE / Petra LLM 配置 SoT 收回 talents.Name="Petra" row）
     public DbSet<TaskGroup> TaskGroups => Set<TaskGroup>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
     public DbSet<TaskLog> TaskLogs => Set<TaskLog>();
@@ -55,15 +55,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Team).WithMany(t => t.Projects).HasForeignKey(x => x.TeamId);
         });
 
-        modelBuilder.Entity<AgentConfig>(e =>
-        {
-            e.ToTable("agent_configs");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
-            e.HasOne(x => x.Team).WithMany(t => t.Agents).HasForeignKey(x => x.TeamId);
-            // Stage 16：防止競態條件重複 seed（Bot + Dashboard 同時啟動）
-            e.HasIndex(x => x.Name).IsUnique();
-        });
+        // Stage 87 A4：AgentConfig entity 配置砍（agent_configs 表 DROP TABLE）
 
         modelBuilder.Entity<TaskGroup>(e =>
         {

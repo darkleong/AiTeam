@@ -9,7 +9,7 @@ public class Team
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Project> Projects { get; set; } = [];
-    public ICollection<AgentConfig> Agents { get; set; } = [];
+    // Stage 87 A4：Agents navigation 砍（AgentConfig class 砍 / agent_configs 表 DROP TABLE）
     public ICollection<TaskItem> Tasks { get; set; } = [];
 }
 
@@ -27,27 +27,8 @@ public class Project
     public ICollection<TaskItem> Tasks { get; set; } = [];
 }
 
-public class AgentConfig
-{
-    public Guid Id { get; set; }
-    public Guid TeamId { get; set; }
-    public string Name { get; set; } = ""; // CEO / Dev / Ops / QA / Doc / Requirements
-    public string Description { get; set; } = ""; // CEO 系統提示用描述
-    public int TrustLevel { get; set; } = 0;
-    public bool IsActive { get; set; } = true;
-    public string? DiscordChannelId { get; set; } // Discord 頻道 ID（ulong 存為字串）
-    /// <summary>Stage 38：LLM Provider（"Anthropic" / "Gemini"）。null = 啟動時從 appsettings.json 補 seed，Dashboard 改過後由此欄位為準。</summary>
-    public string? Provider { get; set; }
-    /// <summary>Stage 38：Model 名稱（如 "claude-sonnet-4-6" / "gemini-2.5-flash"）。null = 啟動時從 appsettings.json 補 seed。</summary>
-    public string? Model { get; set; }
-    /// <summary>Stage 47：Agent 日 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
-    public int? DailyTokenLimitK { get; set; }
-    /// <summary>Stage 47：Agent 月 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
-    public int? MonthlyTokenLimitK { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    public Team Team { get; set; } = null!;
-}
+// Stage 87 A4：AgentConfig class 砍（agent_configs 表 DROP TABLE / Petra LLM 配置 SoT 唯一性收回 talents.Name="Petra" row）
+// 連帶砍 TrustLevel / DiscordChannelId / IsActive / Description（v4 dead）— Talent.Description 已 cover baseline 6 row seed
 
 public class TaskGroup
 {
