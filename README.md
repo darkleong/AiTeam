@@ -32,17 +32,17 @@ PM Orchestrator（Petra）—— 純 LLM API call 動態拆 SubtaskPlan + 看 Sk
 
 ### 核心工具
 
-| 用途 | 工具 |
-|------|------|
-| 溝通介面 | Discord（Discord.Net）自然語言對話 + Dashboard 操作中心（雙通道） |
-| 規則管理 | PostgreSQL `rules` 資料表（Dashboard CRUD） |
-| 詳細 Log | PostgreSQL（EF Core + Npgsql） |
-| 視覺化 | Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer） |
-| LLM | Anthropic Claude API + Google Gemini API（Provider/Model 經 Dashboard 動態配置） |
-| Petra（PM）| `LlmProviderFactory.Create("PM")` → 純 LLM API call（Anthropic Sonnet 4.6 production active）|
-| Cody / Vera / Quinn / Sage（Worker）| Claude Code CLI subprocess（session-based / workspace 持續）|
-| 排程 | Quartz.NET |
-| 部署 | Docker Compose + GitHub Actions self-hosted runner |
+| 用途                                 | 工具                                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| 溝通介面                             | Discord（Discord.Net）自然語言對話 + Dashboard 操作中心（雙通道）                             |
+| 規則管理                             | PostgreSQL `rules` 資料表（Dashboard CRUD）                                                   |
+| 詳細 Log                             | PostgreSQL（EF Core + Npgsql）                                                                |
+| 視覺化                               | Blazor Web App Dashboard（MudBlazor 8.x，InteractiveServer）                                  |
+| LLM                                  | Anthropic Claude API + Google Gemini API（Provider/Model 經 Dashboard 動態配置）              |
+| Petra（PM）                          | `LlmProviderFactory.Create("PM")` → 純 LLM API call（Anthropic Sonnet 4.6 production active） |
+| Cody / Vera / Quinn / Sage（Worker） | Claude Code CLI subprocess（session-based / workspace 持續）                                  |
+| 排程                                 | Quartz.NET                                                                                    |
+| 部署                                 | Docker Compose + GitHub Actions self-hosted runner                                            |
 
 ---
 
@@ -196,24 +196,24 @@ docker compose --env-file .env up -d
 
 實作前必讀 [`docs/conventions/`](./docs/conventions/) 內所有規範文件：
 
-| 文件 | 內容 |
-|---|---|
-| `csharp.md` | C# 命名、結構、非同步、Primary Constructor、ILogger |
-| `blazor.md` | Blazor 組件規範、@rendermode、SignalR 即時更新 |
-| `mudblazor.md` | MudBlazor 8.x 使用規範、常見陷阱（必讀） |
-| `ef-core.md` | EF Core 查詢優化、PostgreSQL 例外處理、Migration 流程 |
-| `api-design.md` | RESTful API、Internal API、SignalR Hub 設計規範 |
-| `refactor-sop.md` | 服務層大檔案拆解守則（Stage 34-36+59 拆解 SOP 累積） |
+| 文件              | 內容                                                  |
+| ----------------- | ----------------------------------------------------- |
+| `csharp.md`       | C# 命名、結構、非同步、Primary Constructor、ILogger   |
+| `blazor.md`       | Blazor 組件規範、@rendermode、SignalR 即時更新        |
+| `mudblazor.md`    | MudBlazor 8.x 使用規範、常見陷阱（必讀）              |
+| `ef-core.md`      | EF Core 查詢優化、PostgreSQL 例外處理、Migration 流程 |
+| `api-design.md`   | RESTful API、Internal API、SignalR Hub 設計規範       |
+| `refactor-sop.md` | 服務層大檔案拆解守則（Stage 34-36+59 拆解 SOP 累積）  |
 
 ---
 
 ## 文件導覽
 
-| 想看的東西 | 去哪查 |
-|---|---|
-| 完整版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
-| Active 功能候選 + Stage 84+ 候選 | [Future_Feature.md](./docs/planning/Future_Feature.md) |
-| 系統架構全景 | [docs/Architecture.md](./docs/Architecture.md) |
-| 各 Stage 詳細實作 | [docs/planning/Stage_*_Roadmap.md](./docs/planning/) |
-| 6 Talent baseline + Talent-Skill separation | [docs/Architecture.md](./docs/Architecture.md) |
-| Self-implement 試驗紀錄 | [docs/experiments/](./docs/experiments/) |
+| 想看的東西                                  | 去哪查                                                  |
+| ------------------------------------------- | ------------------------------------------------------- |
+| 完整版本變更紀錄                            | [CHANGELOG.md](./CHANGELOG.md)                          |
+| Active 功能候選                             | [Future_Feature.md](./docs/planning/Future_Feature.md)  |
+| 系統架構全景                                | [docs/Architecture.md](./docs/Architecture.md)          |
+| 各 Stage 詳細實作                           | [docs/planning/Stage\_\*\_Roadmap.md](./docs/planning/) |
+| 6 Talent baseline + Talent-Skill separation | [docs/Architecture.md](./docs/Architecture.md)          |
+| Self-implement 試驗紀錄                     | [docs/experiments/](./docs/experiments/)                |
