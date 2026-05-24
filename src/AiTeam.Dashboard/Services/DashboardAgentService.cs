@@ -7,91 +7,52 @@ using Microsoft.EntityFrameworkCore;
 namespace AiTeam.Dashboard.Services;
 
 /// <summary>
-/// Agent 狀態查詢服務，初始狀態從 DB 讀取統計，後續由 SignalR 推送更新。
+/// Stage 87 A3：Agent / Talent 狀態查詢 + Talent 設定編輯服務（v4 collapse 最後殘留收口）。
 ///
-/// Stage 85 子項 0：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern（對齊 Stage 80 既有 DashboardAppSettingsService）。
+/// 砍範圍（agent_configs 表 A4 DROP TABLE）：
+///   - CreateAgentAsync / UpdateIsActiveAsync / UpdateTrustLevelAsync — AgentConfig CRUD 全砍
+///   - UpdateProviderModelAsync / UpdateTokenLimitsAsync — 對應改 UpdateTalentProviderModelAsync / UpdateTalentTokenLimitsAsync 走 talents 表
+///   - GetAgentConfigsAsync — Stage 87 A3 AGENTS 分頁砍 / 對應改 GetTalentsAsync 給 TALENTS 分頁 Provider/Model + Token Limit edit UI 用
+///
+/// 留範圍：
+///   - GetAllAgentStatusesAsync — Monitoring AgentStatus tab + Home 速覽用（Stage 83 已切 talents 表 / v5.5 baseline 6 Talent）
+///
+/// 對齊 Stage 85 既有 IDbContextFactory pattern：每 method 短命 context / 不可走 Scoped DbContext 避免並發 bug。
 /// </summary>
 public class DashboardAgentService(IDbContextFactory<AppDbContext> dbFactory)
 {
-    #region Public Methods
+    #region Talent CRUD（Stage 87 A3 新增 — TALENTS 分頁 Provider/Model + Token Limit edit UI 用）
 
-    /// <summary>新增 Agent 設定，回傳新建的 AgentConfigDto。TeamId 自動使用第一個 Team。</summary>
-    public async Task<AgentConfigDto> CreateAgentAsync(
-        string name,
-        string description,
-        int trustLevel,
-        CancellationToken cancellationToken = default)
+    /// <summary>Stage 87 A3：取得所有 Talent DTO（含 Provider / Model / Token Limit）— TALENTS 分頁載入用。</summary>
+    public async Task<List<TalentDto>> GetTalentsAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var teamId = await db.Teams
+        return await db.Talents
             .AsNoTracking()
-            .Select(t => t.Id)
-            .FirstAsync(cancellationToken);
-
-        var agent = new AgentConfig
-        {
-            Name        = name.Trim(),
-            Description = description.Trim(),
-            TrustLevel  = trustLevel,
-            IsActive    = true,
-            TeamId      = teamId
-        };
-
-        db.AgentConfigs.Add(agent);
-        await db.SaveChangesAsync(cancellationToken);
-
-        var team = await db.Teams.FindAsync([teamId], cancellationToken);
-        return new AgentConfigDto
-        {
-            Id               = agent.Id,
-            Name             = agent.Name,
-            Description      = agent.Description,
-            TrustLevel       = agent.TrustLevel,
-            IsActive         = agent.IsActive,
-            TeamName         = team?.Name ?? "",
-            Provider         = agent.Provider,
-            Model            = agent.Model,
-            DailyTokenLimitK  = agent.DailyTokenLimitK,
-            MonthlyTokenLimitK = agent.MonthlyTokenLimitK
-        };
-    }
-
-    /// <summary>切換 Agent 的啟用狀態，回傳更新後的 IsActive 值。</summary>
-    public async Task<bool> UpdateIsActiveAsync(
-        Guid agentId,
-        bool isActive,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return isActive;
-
-        agent.IsActive = isActive;
-        await db.SaveChangesAsync(cancellationToken);
-        return agent.IsActive;
-    }
-
-    /// <summary>更新 Agent 信任等級（寫入 PostgreSQL）。</summary>
-    public async Task UpdateTrustLevelAsync(
-        Guid agentId,
-        int trustLevel,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return;
-        agent.TrustLevel = trustLevel;
-        await db.SaveChangesAsync(cancellationToken);
+            .OrderBy(t => t.Name)
+            .Select(t => new TalentDto
+            {
+                Id                 = t.Id,
+                Name               = t.Name,
+                DisplayName        = t.DisplayName,
+                Description        = t.Description,
+                Provider           = t.Provider,
+                Model              = t.Model,
+                DailyTokenLimitK   = t.DailyTokenLimitK,
+                MonthlyTokenLimitK = t.MonthlyTokenLimitK,
+                IsActive           = t.IsActive
+            })
+            .ToListAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Stage 38：更新 Agent 的 Provider / Model（Dashboard UI 存檔呼叫）。
+    /// Stage 87 A3：更新 Talent 的 Provider / Model（取代 Stage 38 UpdateProviderModelAsync）。
     /// Server-side 白名單驗證：防 stale 瀏覽器 tab 繞過 MudSelect 約束寫入 garbage 值，
     /// 造成 LlmProviderFactory 在下次任務 runtime 拋 NotSupportedException。
-    /// 呼叫方需額外呼叫 DashboardBotService.ReloadCacheAsync("agent-config") 讓 Bot 端快取失效。
+    /// 呼叫方需額外呼叫 DashboardBotService.ReloadCacheAsync("agent-config") 讓 Bot 端 TalentMetaCache 失效。
     /// </summary>
-    public async Task<bool> UpdateProviderModelAsync(
-        Guid agentId,
+    public async Task<bool> UpdateTalentProviderModelAsync(
+        Guid talentId,
         string provider,
         string model,
         CancellationToken cancellationToken = default)
@@ -102,55 +63,40 @@ public class DashboardAgentService(IDbContextFactory<AppDbContext> dbFactory)
             throw new ArgumentException($"Provider {provider} 不支援 Model：{model}", nameof(model));
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return false;
+        var talent = await db.Talents.FindAsync([talentId], cancellationToken);
+        if (talent is null) return false;
 
-        agent.Provider = provider;
-        agent.Model    = model;
+        talent.Provider  = provider;
+        talent.Model     = model;
+        talent.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    /// <summary>Stage 47：更新 Agent 的 Daily / Monthly Token Limit（0 或負數 → 清為 null，回到 appsettings fallback）。</summary>
-    public async Task<bool> UpdateTokenLimitsAsync(
-        Guid agentId,
+    /// <summary>
+    /// Stage 87 A3：更新 Talent 的 Daily / Monthly Token Limit（0 或負數 → 清為 null，回到 appsettings fallback）。
+    /// 對齊 Stage 47 既有 AgentConfig.UpdateTokenLimitsAsync 行為。
+    /// </summary>
+    public async Task<bool> UpdateTalentTokenLimitsAsync(
+        Guid talentId,
         int? dailyTokenLimitK,
         int? monthlyTokenLimitK,
         CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
-        if (agent is null) return false;
+        var talent = await db.Talents.FindAsync([talentId], cancellationToken);
+        if (talent is null) return false;
 
-        agent.DailyTokenLimitK   = dailyTokenLimitK > 0   ? dailyTokenLimitK   : null;
-        agent.MonthlyTokenLimitK = monthlyTokenLimitK > 0 ? monthlyTokenLimitK : null;
+        talent.DailyTokenLimitK   = dailyTokenLimitK > 0   ? dailyTokenLimitK   : null;
+        talent.MonthlyTokenLimitK = monthlyTokenLimitK > 0 ? monthlyTokenLimitK : null;
+        talent.UpdatedAt          = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
-    public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.AgentConfigs
-            .AsNoTracking()
-            .Include(a => a.Team)
-            .Select(a => new AgentConfigDto
-            {
-                Id               = a.Id,
-                Name             = a.Name,
-                Description      = a.Description,
-                TrustLevel       = a.TrustLevel,
-                IsActive         = a.IsActive,
-                TeamName         = a.Team.Name,
-                Provider         = a.Provider,
-                Model            = a.Model,
-                DailyTokenLimitK  = a.DailyTokenLimitK,
-                MonthlyTokenLimitK = a.MonthlyTokenLimitK
-            })
-            .ToListAsync(cancellationToken);
-    }
+    #endregion
+
+    #region Agent Status（保留 — Stage 83 已切 talents 表）
 
     /// <summary>
     /// 取得所有 Agent 的初始狀態 ViewModel（Monitoring AgentStatus tab + Home 速覽用）。

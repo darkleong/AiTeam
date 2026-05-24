@@ -2,8 +2,9 @@
 @attribute [Authorize]
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using AiTeam.Data
+@using AiTeam.Shared.Constants
 @using AiTeam.Shared.Dtos
-@using AiTeam.Dashboard.Components.Pages.Agents
+@* Stage 87 A3：Agents namespace 砍（AGENTS 分頁砍 / agent_configs 表 A4 DROP TABLE）*@
 @using AiTeam.Dashboard.Components.Pages.Projects
 @using AiTeam.Dashboard.Components.Pages.Rules
 @using AiTeam.Dashboard.Components.Pages.Settings
@@ -81,12 +82,9 @@
         <SystemSettings />
     </MudTabPanel>
 
-    @* Tab 3：Agents CRUD — reuse 既有 AgentSettings page component（inline 整合） *@
-    <MudTabPanel Text="Agents" Icon="@Icons.Material.Filled.SmartToy">
-        <AgentSettings />
-    </MudTabPanel>
+    @* Stage 87 A3：Tab 3 Agents 整個 MudTabPanel 砍（AGENTS 分頁 + AgentConfig 表 + AgentRepository 全砍 / Provider/Model + Token Limit 編輯改走 TALENTS tab Stage 87 擴的 UI）*@
 
-    @* Tab 4：Talents full CRUD — Stage 67 v5.5 Phase 1 Talent + TalentSkill 多對多 *@
+    @* Tab 4 → Tab 3：Talents full CRUD — Stage 67 v5.5 Phase 1 Talent + TalentSkill 多對多 / Stage 87 A3 擴 Provider/Model + Token Limit 編輯 *@
     <MudTabPanel Text="Talents" Icon="@Icons.Material.Filled.People">
         <MudStack Row="true" Spacing="2" Class="mb-3">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
@@ -156,14 +154,86 @@
                     </MudTd>
                     <MudTd>
                         @* follow-up #13：統一改 MudIconButton + MudTooltip 對齊 RULES 表 *@
-                        <MudTooltip Text="管理 Skills">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
-                                           Size="Size.Small"
-                                           OnClick="@(() => OpenTalentSkillsAsync(context))" />
-                        </MudTooltip>
+                        <MudStack Row="true" Spacing="1">
+                            <MudTooltip Text="管理 Skills">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                               Size="Size.Small"
+                                               OnClick="@(() => OpenTalentSkillsAsync(context))" />
+                            </MudTooltip>
+                            @* Stage 87 A3：LLM 設定編輯（Provider/Model + Token Limit / 取代 AGENTS 分頁能力）*@
+                            <MudTooltip Text="LLM 設定（Provider/Model + Token Limit）">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Tune"
+                                               Size="Size.Small"
+                                               OnClick="@(() => OpenTalentLlmEdit(context))" />
+                            </MudTooltip>
+                        </MudStack>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+        }
+
+        @* Stage 87 A3：Talent LLM 設定 edit panel（Provider/Model + Token Limit / 對齊 AgentSettings.razor:115-183 UI 樣式）*@
+        @if (_editingTalentLlm is not null)
+        {
+            <MudPaper Elevation="2" Class="pa-3 mt-3">
+                <MudText Typo="Typo.h6" Class="mb-2">@_editingTalentLlm.Name — LLM 設定</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                    Provider / Model 修改後立即刷新 Bot TalentMetaCache（5 分鐘內生效）。
+                    Token Limit 留空（0）= 未設定，runtime fallback appsettings.json 預設值。
+                </MudText>
+                <MudStack Row="true" Spacing="2" Class="mb-2">
+                    <MudSelect T="string"
+                               Label="Provider"
+                               Value="@_llmEditProvider"
+                               ValueChanged="@((string v) => OnLlmProviderChanged(v))"
+                               Dense="true" Margin="Margin.Dense"
+                               Variant="Variant.Outlined"
+                               Style="max-width:200px"
+                               Disabled="@_isSavingLlm">
+                        @foreach (var p in LlmModels.AvailableProviders)
+                        {
+                            <MudSelectItem Value="@p">@p</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSelect T="string"
+                               Label="Model"
+                               @bind-Value="_llmEditModel"
+                               Dense="true" Margin="Margin.Dense"
+                               Variant="Variant.Outlined"
+                               Style="max-width:280px"
+                               Disabled="@(_isSavingLlm || string.IsNullOrEmpty(_llmEditProvider))">
+                        @foreach (var m in LlmModels.GetModelsForProvider(_llmEditProvider ?? ""))
+                        {
+                            <MudSelectItem Value="@m">@m</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+                <MudStack Row="true" Spacing="2" Class="mb-2">
+                    <MudNumericField T="int?"
+                                     Label="日 Token 上限（千）"
+                                     @bind-Value="_llmEditDailyK"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Min="0" Max="100000"
+                                     Style="max-width:200px"
+                                     Disabled="@_isSavingLlm" />
+                    <MudNumericField T="int?"
+                                     Label="月 Token 上限（千）"
+                                     @bind-Value="_llmEditMonthlyK"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Min="0" Max="1000000"
+                                     Style="max-width:200px"
+                                     Disabled="@_isSavingLlm" />
+                </MudStack>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               OnClick="SaveTalentLlmAsync"
+                               Disabled="@_isSavingLlm">
+                        @(_isSavingLlm ? "儲存中..." : "儲存 LLM 設定")
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                               OnClick="CloseTalentLlmEdit">取消</MudButton>
+                </MudStack>
+            </MudPaper>
         }
 
         @if (_editingTalent is not null)

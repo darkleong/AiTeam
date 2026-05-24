@@ -1,5 +1,6 @@
 using AiTeam.Data;
 using AiTeam.Dashboard.Services;
+using AiTeam.Shared.Constants;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor;
 
@@ -29,6 +30,7 @@ public partial class SettingsHub
     [Inject] private IDbContextFactory<AppDbContext> DbFactory   { get; set; } = null!;
     [Inject] private DashboardAppSettingsService     SettingsSvc { get; set; } = null!;
     [Inject] private DashboardBotService             BotSvc      { get; set; } = null!;
+    [Inject] private DashboardAgentService           AgentSvc    { get; set; } = null!;
     [Inject] private ISnackbar                       Snackbar    { get; set; } = null!;
     [Inject] private NavigationManager               Nav         { get; set; } = null!;
     [Inject] private ILogger<SettingsHub>            Logger      { get; set; } = null!;
@@ -88,6 +90,14 @@ public partial class SettingsHub
     private string _newTalentDisplayName = "";
     private string _newTalentDescription = "";
     private TalentRow? _editingTalent;
+
+    // Stage 87 A3：Talent LLM 設定 edit state（Provider / Model + Token Limit / 取代 AGENTS 分頁 LLM 編輯）
+    private TalentRow? _editingTalentLlm;
+    private string?    _llmEditProvider;
+    private string?    _llmEditModel;
+    private int?       _llmEditDailyK;
+    private int?       _llmEditMonthlyK;
+    private bool       _isSavingLlm;
 
     // SkillPrompt edit state
     private SkillPromptRow? _editingSkillPrompt;
@@ -220,13 +230,16 @@ public partial class SettingsHub
                 .OrderBy(t => t.Name)
                 .Select(t => new TalentRow
                 {
-                    Id          = t.Id,
-                    Name        = t.Name,
-                    DisplayName = t.DisplayName,
-                    Description = t.Description,
-                    Provider    = t.Provider,
-                    Model       = t.Model,
-                    IsActive    = t.IsActive,
+                    Id                 = t.Id,
+                    Name               = t.Name,
+                    DisplayName        = t.DisplayName,
+                    Description        = t.Description,
+                    Provider           = t.Provider,
+                    Model              = t.Model,
+                    // Stage 87 A3：Talent 加 Token Limit 兩欄位（取代 AgentConfig 既有 Stage 47 schema）
+                    DailyTokenLimitK   = t.DailyTokenLimitK,
+                    MonthlyTokenLimitK = t.MonthlyTokenLimitK,
+                    IsActive           = t.IsActive,
                     Skills = db.TalentSkills
                         .Where(ts => ts.TalentId == t.Id)
                         .Select(ts => new TalentSkillRow
@@ -298,6 +311,105 @@ public partial class SettingsHub
     {
         _editingTalent = row;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Stage 87 A3：開啟 Talent LLM 設定 edit panel（Provider / Model + Token Limit）。
+    /// 取代既有 AGENTS 分頁編輯能力 / 對齊 AgentSettings.razor:115-183 UI 樣式。
+    /// </summary>
+    private void OpenTalentLlmEdit(TalentRow row)
+    {
+        _editingTalentLlm = row;
+        _llmEditProvider  = row.Provider;
+        _llmEditModel     = row.Model;
+        _llmEditDailyK    = row.DailyTokenLimitK;
+        _llmEditMonthlyK  = row.MonthlyTokenLimitK;
+    }
+
+    private void CloseTalentLlmEdit()
+    {
+        _editingTalentLlm = null;
+        _llmEditProvider  = null;
+        _llmEditModel     = null;
+        _llmEditDailyK    = null;
+        _llmEditMonthlyK  = null;
+    }
+
+    /// <summary>
+    /// Stage 87 A3：Provider 變更時：若目前 Model 不在新 Provider 清單 → 清空 Model + 提示重選。
+    /// 對齊 AgentSettings.razor.cs:OnProviderChangedAsync pattern。
+    /// </summary>
+    private void OnLlmProviderChanged(string newProvider)
+    {
+        _llmEditProvider = newProvider;
+        var validModels = LlmModels.GetModelsForProvider(newProvider);
+        if (string.IsNullOrEmpty(_llmEditModel) || !validModels.Contains(_llmEditModel))
+        {
+            _llmEditModel = null;
+            Snackbar.Add($"Provider 已改為 {newProvider}，請選擇對應的 Model。", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Stage 87 A3：儲存 Talent LLM 設定（Provider/Model + Token Limit 兩段一次落地 / Bot Cache 刷新）。
+    /// 對齊 Stage 85 IDbContextFactory pattern（透過 DashboardAgentService 走）。
+    /// </summary>
+    private async Task SaveTalentLlmAsync()
+    {
+        if (_editingTalentLlm is null || _isSavingLlm) return;
+        if (string.IsNullOrEmpty(_llmEditProvider) || string.IsNullOrEmpty(_llmEditModel))
+        {
+            Snackbar.Add("Provider / Model 不能為空", Severity.Warning);
+            return;
+        }
+
+        _isSavingLlm = true;
+        try
+        {
+            // 兩段落地：Provider/Model 改完後 Token Limit 改完
+            var ok1 = await AgentSvc.UpdateTalentProviderModelAsync(
+                _editingTalentLlm.Id, _llmEditProvider, _llmEditModel);
+            if (!ok1)
+            {
+                Snackbar.Add($"{_editingTalentLlm.Name} Provider/Model 儲存失敗：查無 Talent", Severity.Error);
+                return;
+            }
+
+            var ok2 = await AgentSvc.UpdateTalentTokenLimitsAsync(
+                _editingTalentLlm.Id, _llmEditDailyK, _llmEditMonthlyK);
+            if (!ok2)
+            {
+                Snackbar.Add($"{_editingTalentLlm.Name} Token Limit 儲存失敗", Severity.Error);
+                return;
+            }
+
+            // Bot Cache 刷新（TalentMetaCache 5 分鐘內生效 → 立即 invalidate）
+            await BotSvc.ReloadCacheAsync("agent-config");
+
+            // 更新本地 row 狀態
+            _editingTalentLlm.Provider           = _llmEditProvider;
+            _editingTalentLlm.Model              = _llmEditModel;
+            _editingTalentLlm.DailyTokenLimitK   = _llmEditDailyK   > 0 ? _llmEditDailyK   : null;
+            _editingTalentLlm.MonthlyTokenLimitK = _llmEditMonthlyK > 0 ? _llmEditMonthlyK : null;
+
+            Snackbar.Add(
+                $"{_editingTalentLlm.Name}：Provider={_llmEditProvider} / Model={_llmEditModel} / 日限={(_llmEditDailyK > 0 ? $"{_llmEditDailyK}K" : "未設定")} / 月限={(_llmEditMonthlyK > 0 ? $"{_llmEditMonthlyK}K" : "未設定")} 已更新，Bot Cache 已刷新。",
+                Severity.Success);
+
+            CloseTalentLlmEdit();
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"儲存失敗：{ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingLlm = false;
+        }
     }
 
     private async Task ToggleSkillAssignmentAsync(TalentRow talent, string skillName, bool assign)
@@ -516,6 +628,9 @@ public partial class SettingsHub
         public string  Description { get; set; } = "";
         public string? Provider    { get; set; }
         public string? Model       { get; set; }
+        /// <summary>Stage 87 A3：對齊 talents 表新加欄位（取代 AgentConfig）。</summary>
+        public int?    DailyTokenLimitK   { get; set; }
+        public int?    MonthlyTokenLimitK { get; set; }
         public bool    IsActive    { get; set; }
         public List<TalentSkillRow> Skills { get; set; } = [];
     }
