@@ -527,6 +527,11 @@ html[data-theme="dark"] {
     color: var(--mud-palette-primary) !important;
 }
 
+/* Stage 86 follow-up #6：MudTooltip popup max-width 限 280px（Inline="false" 後 popup 繼承 anchor width 變超寬 / 限上限避免超出 viewport） */
+.mud-tooltip {
+    max-width: 280px !important;
+}
+
 /* ========================================
    Form Controls
    ======================================== */
