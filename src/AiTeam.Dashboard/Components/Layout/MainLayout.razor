@@ -14,8 +14,8 @@
     <MudDrawer Open="true" id="main-sidebar" Variant="DrawerVariant.Persistent"
                Elevation="2" ClipMode="DrawerClipMode.Never">
         @* Stage 86 子項 5：AI Team logo 從 AppBar 移到 Drawer 頂部 *@
-        @* follow-up #5：左 padding 56px 避開 hamburger float 區（top:8px left:8px + icon ~48px） *@
-        <div class="drawer-logo pa-3" style="padding-left:56px">
+        @* follow-up #5 v2：拿掉 pa-3（MudBlazor utility class 帶 !important 覆寫 inline style）/ 改全 inline padding *@
+        <div class="drawer-logo" style="padding:12px 12px 12px 56px">
             <MudText Typo="Typo.h6">AI Team</MudText>
         </div>
         <NavMenu />
