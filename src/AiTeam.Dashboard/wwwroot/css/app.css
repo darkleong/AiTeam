@@ -517,6 +517,11 @@ html[data-theme="dark"] {
     height: 100vh !important;
 }
 
+/* Stage 86 子項 5 follow-up #4：MudMainContent 從 viewport top 0 延伸（砍 AppBar 後 padding-top 不留 AppBar 高度空白） */
+.mud-main-content {
+    padding-top: 0 !important;
+}
+
 /* Stage 86 follow-up #2：NavMenu active link icon 跟字一致套 primary color（MudNavLink 預設只 highlight text） */
 .mud-nav-link.active .mud-nav-link-icon {
     color: var(--mud-palette-primary) !important;
