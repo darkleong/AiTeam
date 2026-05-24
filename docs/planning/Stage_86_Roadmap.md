@@ -300,11 +300,59 @@ NavMenu 既有 4 條 link（首頁 / 任務中心 / 設定中心 / 監控中心�
 - ✅ 維度 3 entry（per-Talent / per-PetraSession / per-Skill）/ per-Skill stub MudAlert 顯示「待 SkillName column 補完」
 - ✅ PetraInbox 點「📎 1 張」開 AttachmentPreviewDialog / base64 圖片正常渲染
 
-**Christ 線下視覺驗收待跑**：
-- ⏳ Theme palette 微調反饋（深灰色 baseline 是否合預期 / 如需調整提供 hex）
-- ⏳ Sidebar 操作體驗（hover overlay + click pin 流暢度 / overlay 自動縮 300ms 是否舒服）
-- ⏳ 各分頁整體視覺風格（dark / light 兩 Mode）
-
 #### H. 0 真實 Trial 依賴 / 0 LLM call
 
 純前端 + 1 後端 query 改造 / 0 燒 AiTeam 餘額 / 對齊 plan 「走 Aria + Forge subscription」紀律。
+
+#### I. Christ 視覺驗收期 follow-up（15 議題 / 18 commit）
+
+Christ 視覺驗收期逐張截圖反饋 / Forge 即時自修 + push / Chrome MCP 重 verify cycle 累積 follow-up 全紀錄：
+
+| # | commit | 議題 | 修法 |
+|---|---|---|---|
+| 1 v1 | `0ac1c1a` | 首頁 4 卡 width 偏窄（Active 任務縮 80px / 右側空格）| MudTooltip 加 `Style="display:block; width:100%"` |
+| 2+3 | `c504978` | NavMenu active icon 沒套 primary color + Drawer 沒延伸到 viewport top | CSS `.mud-nav-link.active .mud-nav-link-icon { color: primary }` + MudDrawer ClipMode.Always → Never + CSS `top:0 height:100vh` |
+| 4 | `51bed95` | 主內容上方 ~64px 空白（AppBar 預留位）| CSS `.mud-main-content { padding-top:0 }` |
+| 5 v1 | `588dd32` | AI Team logo 跟 hamburger 重疊 | drawer-logo class + `Style="padding-left:56px"` |
+| 1 v2 | `ec8c23d` | 首頁卡 width v1 沒生效 | MudTooltip Style 改 `Inline="false"` prop（MudBlazor 8.x API）|
+| 6 | `3ffb300` | MudTooltip popup 超寬出 viewport | CSS `.mud-tooltip { max-width: 280px }` |
+| 5 v2 | `071372d` | logo padding v1 沒生效 — `pa-3` utility class `!important` 覆寫 inline style | 拿掉 pa-3 / 改全 inline `style="padding:12px 12px 12px 56px"` |
+| 7 v1 | `3eb2702` | 監控中心時間範圍 active button highlight 不明顯 | 每 button 加 `Variant="@(active ? Filled : Outlined)"` |
+| 8 | `6f2232f` | 監控中心維度 MudSelect 高度比旁邊小按鈕高 | MudSelect 加 `Margin.Dense + Dense=true` |
+| 9 | `49b7f9e` | NavMenu 順序：監控中心 應在 設定中心 前 | NavMenu + Home 跳轉按鈕同步交換順序 |
+| 10 | `30d61de` | 全 Dashboard MudNumericField 高度太高 | 8 個 MudNumericField 統一加 `Margin.Dense` |
+| 7 v2 | `b6447fa` | 時間範圍 v1 button Variant 沒生效 — MudButtonGroup `OverrideStyles=true` 覆寫 child | MudButtonGroup 加 `OverrideStyles="false"` 讓 child 自己控 Variant |
+| 11 v1 | `7a00273` | 監控中心表數字欄位 + 設定中心數值 input 右對齊 | MudTh/MudTd 加 `Style="text-align:right"` + 數值 input 改 flex 結構 |
+| 12 | `c4dce70` | MudTextField + MudSelect 全 Dashboard 縮高度 | 10+ 處加 `Margin.Dense`（textarea Lines>=4 不動 / 視覺空間保留）|
+| 13 | `35733d5` | TALENTS / SKILLPROMPTS / TALENTPROMPTS 編輯按鈕統一 | 3 處 MudButton + 文字 → MudTooltip + MudIconButton + Outlined.Edit icon |
+| 11 v2 | `a510664` | 數值 input v1 沒貼右 — d-flex utility class 在 MudExpansionPanel 環境失效 | 純 inline `display:flex width:100%` + input `margin-left:auto` 雙保險 |
+| 14 | `c6a1238` | PetraInbox 重跑按鈕統一 MudIconButton | TaskHub + InteractionCenter 2 處 MudButton → MudTooltip + MudIconButton + Outlined.Replay |
+| 15 | `866054f` | RuleFormDialog 編輯排版混亂（dialog 太窄 / 元素孤立）| DialogOptions MaxWidth.Small + FullWidth / textarea Lines 3→4 Outlined / 套用對象+排序 inline flex 同行 |
+
+#### J. SOP 升級候選（Aria 第二段 evaluate）
+
+本 Stage 累積的 SOP 升級候選 — 4 條：
+
+1. **refactor-sop v1.6 候選**：「砍 UI 文字 grep 範圍含 razor.cs C# return string 模式」
+   - 觸發：F1 踩坑（子項 1 用 `--include="*.razor"` 漏抓 GetFlagDescription 12 case `=> "..."` description）
+   - 紀律：UI 文字砍時 grep `*.razor + *.razor.cs + *.cs`（特別 `method() => "..."` chip text / tooltip text / select label 模式）
+
+2. **mudblazor.md 候選**：「MudDrawer overlay-mode 自製 CSS 必明設 width」
+   - 觸發：F2 踩坑（mud-drawer--overlay-mode 加 `position: fixed` 後 MudDrawer width CSS variable 失效 / 露 80px）
+   - 紀律：MudDrawer 自製 mode class 必 explicit `width: Npx !important; max-width: Npx !important`（不能依賴 layout class 帶 width variable）
+
+3. **mudblazor.md 候選**：「MudButtonGroup `OverrideStyles=false` 才能 child 自控 Variant」
+   - 觸發：#7 v2 議題（Group 預設 true 覆寫所有 child Variant / 個別設定無效）
+   - 紀律：MudButtonGroup 需 child 自決 Variant 時必加 `OverrideStyles="false"`（active/inactive 視覺區分 case）
+
+4. **mudblazor.md 候選**：「`pa-N/m-N` utility class 帶 `!important` / inline style 無法 override」
+   - 觸發：#5 v2 議題（drawer-logo `class="pa-3" + style="padding-left:56px"` v1 沒生效）
+   - 紀律：要 override MudBlazor utility class padding/margin 時必拿掉 utility class / 改全 inline style（不能混搭依賴 inline 贏 utility）
+
+5. **mudblazor.md 候選**：「MudTooltip `Inline="false"` + popup `max-width` 紀律」
+   - 觸發：#1 v2 + #6 議題（MudTooltip wrap card 需 `Inline="false"` 撐 100% width / 但 popup 跟著繼承 anchor width 超出 viewport / 需 CSS limit `.mud-tooltip max-width`）
+   - 紀律：MudTooltip 包大型 block element 時 `Inline="false"` 配 `.mud-tooltip max-width` CSS limit 雙紀律
+
+5 條 SOP 升級候選交 Aria 第二段（`/aria-stage-summary`）evaluate 採納哪幾條 / 寫進 mudblazor.md + refactor-sop.md 對應紀律段。
+
+**Christ 線下視覺驗收**：✅ 完成（Christ 第一段確認「完美 / 可結案」/ 視覺對齊預期）。
