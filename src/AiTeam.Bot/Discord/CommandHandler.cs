@@ -24,7 +24,6 @@ namespace AiTeam.Bot.Discord;
 /// 砍範圍（Stage 78b + 78c 累積）：
 ///   - SlashCommand 註冊段（Discord slash command list 整套清空 / Stage 78c 議題 4 拍板）
 ///   - Agent 頻道直接訊息 path（HandleDirectAgentChannelMessageAsync + BuildChannelAgentMap + TruncateTitle / W8 議題拍板）
-///   - SkipCeoConfirm path（v4 Discord ShowDirectAgentConfirmAsync 唯一 caller 砍後）
 ///   - Cancel selection / Kickoff modify / HITL mid interrupt / Design modify / 提案調整輸入 path（v4 only）
 ///   - Register* helper：RegisterDevPlanEscalation / RegisterKickoffConfirmation / RegisterDesignConfirmation / RegisterProposalConfirmation
 ///     （0 v5.5 caller / TaskGroupService + MockScenarioService 砍後 0 caller）

@@ -86,7 +86,7 @@ public static class DbSeeder
         }
 
         // Seed 初始動態設定（逐一確認，缺少才新增，方便版本升級補 key）
-        await EnsureSettingAsync(db, "SkipCeoConfirm",                "false",  "跳過 CEO 派工確認，直接進入 Agent 執行確認（true/false）");
+        // Stage 85：SkipCeoConfirm seed 砍（v4 dead flag / CommandHandler caller 已砍）
         await EnsureSettingAsync(db, "TokenPricing:InputPer1kUsd",    "0.003",  "每千個 Input Token 費用（USD），預設 Sonnet 費率");
         await EnsureSettingAsync(db, "TokenPricing:OutputPer1kUsd",   "0.015",  "每千個 Output Token 費用（USD），預設 Sonnet 費率");
         await db.SaveChangesAsync();

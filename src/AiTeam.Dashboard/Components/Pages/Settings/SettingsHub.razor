@@ -41,21 +41,9 @@
             21 Workflow:* flag 統一管理。修改後需重啟 Bot 才生效（FF C2 候選 Stage 84+ AppSettingsService 5 分鐘 re-read）。
         </MudText>
 
-        <MudExpansionPanel Text="v4 Framework 控制（5 flag）" Expanded="false">
-            @foreach (var key in _v4FrameworkFlags)
-            {
-                <div class="d-flex align-center justify-space-between py-2">
-                    <div>
-                        <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
-                    </div>
-                    <MudSwitch T="bool" Value="@GetBoolFlag(key)"
-                               ValueChanged="@((bool v) => SetBoolFlagAsync(key, v))" Color="Color.Warning" />
-                </div>
-            }
-        </MudExpansionPanel>
+        @* Stage 85：v4 Framework 控制（5 flag）panel 整段砍（v4 dead flag / dead UI） *@
 
-        <MudExpansionPanel Text="v5 / v5.5 動態架構（7 flag）" Expanded="true">
+        <MudExpansionPanel Text="v5 / v5.5 動態架構（6 flag）" Expanded="true">
             @foreach (var key in _v5Flags)
             {
                 <div class="d-flex align-center justify-space-between py-2">
@@ -69,7 +57,7 @@
             }
         </MudExpansionPanel>
 
-        <MudExpansionPanel Text="數值上限（11 flag）" Expanded="false">
+        <MudExpansionPanel Text="數值上限（6 flag）" Expanded="false">
             @foreach (var (key, min, max) in _numericFlags)
             {
                 <div class="d-flex align-center justify-space-between py-2">

@@ -2,6 +2,9 @@ using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Settings;
 
+/// <summary>
+/// Stage 85：v4 dead flag 11 個整套砍（5 framework toggle / 5 round / SkipCeoConfirm）— 對齊 refactor-sop v1.3 Dangling reference 清理紀律。
+/// </summary>
 public partial class SystemSettings
 {
     #region Dependencies
@@ -19,30 +22,18 @@ public partial class SystemSettings
 
     #region Private Variables
 
-    private bool    _skipCeoConfirm;
     private bool    _mockMode;
     private string  _ceoChannelId  = "";
     private string  _christUserId  = "";
     private int     _mockDelayMin  = 30000;
     private int     _mockDelayMax  = 60000;
-    private int     _reviewAppealMaxRounds  = 3;
-    private int     _qaFixMaxRounds         = 3;
-    private int     _devPlanAppealMaxRounds = 3;
-    private int     _kickoffMaxRounds       = 3;
-    private int     _designMeetingMaxRounds = 3;
     private int     _globalMonthlyLimitK = 0;   // 0 = DB 無設定，fallback appsettings
     private int     _singleRequestLimitK = 0;   // 0 = DB 無設定，fallback appsettings
-    private bool    _useFrameworkAppealLoop;        // Stage 49：v4 漸進遷移 feature flag
-    private bool    _useFrameworkKickoff;           // Stage 50：v4 漸進遷移第二步 feature flag
-    private bool    _useFrameworkKickoffMidInterrupt; // Stage 51：v4 漸進遷移第三步 HITL 試點 feature flag
-    private bool    _useFrameworkDesign;             // Stage 52：v4 漸進遷移第四步 Design Meeting feature flag
-    private bool    _useFrameworkPipeline;           // Stage 53A：v4 漸進遷移第五步 macro Pipeline feature flag（三 flag 連動：UseFrameworkKickoff + UseFrameworkDesign 都 true 才有意義）
     private bool    _isSavingTokenLimits;
     private bool    _isReloading;
     private bool    _isSavingChannel;
     private bool    _isSavingUserId;
     private bool    _isSavingMockDelay;
-    private bool    _isSavingWorkflow;
     private string? _saveMessage;
 
     #endregion
@@ -51,9 +42,6 @@ public partial class SystemSettings
 
     protected override async Task OnInitializedAsync()
     {
-        var skipSetting = await AppSettingsService.GetAsync("SkipCeoConfirm");
-        _skipCeoConfirm = bool.TryParse(skipSetting?.Value, out var v) && v;
-
         var mockSetting = await AppSettingsService.GetAsync("MockMode");
         _mockMode = bool.TryParse(mockSetting?.Value, out var mv) && mv;
 
@@ -71,39 +59,8 @@ public partial class SystemSettings
         if (int.TryParse(delayMaxSetting?.Value, out var delayMax) && delayMax > 0)
             _mockDelayMax = delayMax;
 
-        _reviewAppealMaxRounds  = await LoadWorkflowRoundsAsync("Workflow:ReviewAppealMaxRounds", 3);
-        _qaFixMaxRounds         = await LoadWorkflowRoundsAsync("Workflow:QaFixMaxRounds", 3);
-        _devPlanAppealMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DevPlanAppealMaxRounds", 3);
-        _kickoffMaxRounds       = await LoadWorkflowRoundsAsync("Workflow:KickoffMaxRounds", 3);
-        _designMeetingMaxRounds = await LoadWorkflowRoundsAsync("Workflow:DesignMeetingMaxRounds", 3);
-
         _globalMonthlyLimitK = await LoadTokenLimitAsync("Token:GlobalMonthlyLimitK");
         _singleRequestLimitK = await LoadTokenLimitAsync("Token:SingleRequestLimitK");
-
-        // Stage 49：v4 漸進遷移 feature flag
-        var frameworkAppealSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkAppealLoop");
-        _useFrameworkAppealLoop = bool.TryParse(frameworkAppealSetting?.Value, out var fav) && fav;
-
-        // Stage 50：v4 漸進遷移第二步 feature flag
-        var frameworkKickoffSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkKickoff");
-        _useFrameworkKickoff = bool.TryParse(frameworkKickoffSetting?.Value, out var fkv) && fkv;
-
-        // Stage 51：v4 漸進遷移第三步 HITL 試點 feature flag
-        var frameworkKickoffMidInterruptSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkKickoffMidInterrupt");
-        _useFrameworkKickoffMidInterrupt = bool.TryParse(frameworkKickoffMidInterruptSetting?.Value, out var fkmi) && fkmi;
-
-        // Stage 52：v4 漸進遷移第四步 Design Meeting feature flag
-        var frameworkDesignSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkDesign");
-        _useFrameworkDesign = bool.TryParse(frameworkDesignSetting?.Value, out var fdv) && fdv;
-
-        var frameworkPipelineSetting = await AppSettingsService.GetAsync("Workflow:UseFrameworkPipeline");
-        _useFrameworkPipeline = bool.TryParse(frameworkPipelineSetting?.Value, out var fpv) && fpv;
-    }
-
-    private async Task<int> LoadWorkflowRoundsAsync(string key, int fallback)
-    {
-        var setting = await AppSettingsService.GetAsync(key);
-        return int.TryParse(setting?.Value, out var v) && v > 0 ? v : fallback;
     }
 
     private async Task<int> LoadTokenLimitAsync(string key)
@@ -116,53 +73,11 @@ public partial class SystemSettings
 
     #region Private Methods
 
-    private async Task OnSkipCeoConfirmChanged(bool newValue)
-    {
-        _skipCeoConfirm = newValue;
-        await AppSettingsService.UpsertAsync("SkipCeoConfirm", _skipCeoConfirm.ToString().ToLower());
-        _saveMessage = $"「跳過 CEO 派工確認」已{(_skipCeoConfirm ? "啟用" : "停用")}，5 分鐘內自動生效";
-    }
-
     private async Task OnMockModeChanged(bool newValue)
     {
         _mockMode = newValue;
         await AppSettingsService.UpsertAsync("MockMode", _mockMode.ToString().ToLower());
         _saveMessage = $"「Mock Mode」已{(_mockMode ? "啟用" : "停用")}，5 分鐘內自動生效";
-    }
-
-    private async Task OnUseFrameworkAppealLoopChanged(bool newValue)
-    {
-        _useFrameworkAppealLoop = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkAppealLoop", _useFrameworkAppealLoop.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Appeal Loop」已{(_useFrameworkAppealLoop ? "啟用" : "停用")}（v4 漸進遷移 Stage 49 首發），5 分鐘內自動生效";
-    }
-
-    private async Task OnUseFrameworkKickoffChanged(bool newValue)
-    {
-        _useFrameworkKickoff = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoff", _useFrameworkKickoff.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Kickoff Meeting」已{(_useFrameworkKickoff ? "啟用" : "停用")}（v4 漸進遷移 Stage 50 第二步），5 分鐘內自動生效";
-    }
-
-    private async Task OnUseFrameworkKickoffMidInterruptChanged(bool newValue)
-    {
-        _useFrameworkKickoffMidInterrupt = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkKickoffMidInterrupt", _useFrameworkKickoffMidInterrupt.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework HITL（Kickoff 中途介入試點）」已{(_useFrameworkKickoffMidInterrupt ? "啟用" : "停用")}（v4 漸進遷移 Stage 51 第三步試點），5 分鐘內自動生效";
-    }
-
-    private async Task OnUseFrameworkDesignChanged(bool newValue)
-    {
-        _useFrameworkDesign = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkDesign", _useFrameworkDesign.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Design Meeting」已{(_useFrameworkDesign ? "啟用" : "停用")}（v4 漸進遷移 Stage 52 第四步），5 分鐘內自動生效";
-    }
-
-    private async Task OnUseFrameworkPipelineChanged(bool newValue)
-    {
-        _useFrameworkPipeline = newValue;
-        await AppSettingsService.UpsertAsync("Workflow:UseFrameworkPipeline", _useFrameworkPipeline.ToString().ToLower());
-        _saveMessage = $"「MS Agent Framework Pipeline」已{(_useFrameworkPipeline ? "啟用" : "停用")}（v4 漸進遷移 Stage 53A 第五步 macro-orchestration），5 分鐘內自動生效";
     }
 
     private async Task SaveCeoChannelIdAsync()
@@ -215,18 +130,6 @@ public partial class SystemSettings
         await AppSettingsService.UpsertAsync("Mock:DelayMaxMs", _mockDelayMax.ToString());
         _isSavingMockDelay = false;
         _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
-    }
-
-    private async Task SaveWorkflowRoundsAsync()
-    {
-        _isSavingWorkflow = true;
-        await AppSettingsService.UpsertAsync("Workflow:ReviewAppealMaxRounds",  _reviewAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:QaFixMaxRounds",         _qaFixMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DevPlanAppealMaxRounds", _devPlanAppealMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:KickoffMaxRounds",       _kickoffMaxRounds.ToString());
-        await AppSettingsService.UpsertAsync("Workflow:DesignMeetingMaxRounds", _designMeetingMaxRounds.ToString());
-        _isSavingWorkflow = false;
-        _saveMessage = $"流程輪次上限已更新（Review={_reviewAppealMaxRounds} / QA={_qaFixMaxRounds} / DevPlan={_devPlanAppealMaxRounds} / Kickoff={_kickoffMaxRounds} / Design={_designMeetingMaxRounds}），5 分鐘內自動生效";
     }
 
     private async Task SaveTokenLimitsAsync()

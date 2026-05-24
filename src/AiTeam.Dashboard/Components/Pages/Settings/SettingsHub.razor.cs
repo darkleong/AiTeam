@@ -42,14 +42,7 @@ public partial class SettingsHub
     private bool   _isRestarting;
     private string? _saveMessage;
 
-    private static readonly string[] _v4FrameworkFlags =
-    [
-        "Workflow:UseFrameworkAppealLoop",
-        "Workflow:UseFrameworkKickoff",
-        "Workflow:UseFrameworkKickoffMidInterrupt",
-        "Workflow:UseFrameworkDesign",
-        "Workflow:UseFrameworkPipeline",
-    ];
+    // Stage 85：_v4FrameworkFlags 5 個整段砍（v4 dead / Stage 78b-c 砍 v4 path 後 dead flag 殘留）
 
     private static readonly string[] _v5Flags =
     [
@@ -63,11 +56,7 @@ public partial class SettingsHub
 
     private static readonly (string Key, int Min, int Max)[] _numericFlags =
     [
-        ("Workflow:ReviewAppealMaxRounds",          1, 10),
-        ("Workflow:QaFixMaxRounds",                 1, 10),
-        ("Workflow:DevPlanAppealMaxRounds",         1, 10),
-        ("Workflow:KickoffMaxRounds",               1, 10),
-        ("Workflow:DesignMeetingMaxRounds",         1, 10),
+        // Stage 85：5 個 v4 round flag 砍（ReviewAppealMaxRounds / QaFixMaxRounds / DevPlanAppealMaxRounds / KickoffMaxRounds / DesignMeetingMaxRounds — v4 dead caller 砍後）
         ("Workflow:V5MemoryCompactThresholdPercent", 30, 95),
         ("Workflow:V5MemoryCompactKeepCount",       10, 200),
         ("Workflow:MaxConcurrentPetra",             1, 10),
@@ -123,7 +112,7 @@ public partial class SettingsHub
     {
         try
         {
-            var allKeys = _v4FrameworkFlags.Concat(_v5Flags).Concat(_numericFlags.Select(n => n.Key)).ToArray();
+            var allKeys = _v5Flags.Concat(_numericFlags.Select(n => n.Key)).ToArray();
             _flagValues = new Dictionary<string, string?>();
             foreach (var k in allKeys)
             {
@@ -199,24 +188,15 @@ public partial class SettingsHub
 
     #region Flag 描述
 
+    // Stage 85：v4 dead flag 10 case 砍（UseFramework* 5 + 5 v4 round / dead caller 砍後 dangling description）
     private static string GetFlagDescription(string key) => key switch
     {
-        "Workflow:UseFrameworkAppealLoop"          => "v4 Cody-Vera-Petra Appeal Loop 走 MS Agent Framework（Stage 49 首發）",
-        "Workflow:UseFrameworkKickoff"             => "v4 Kickoff 5 Agent 並行會議走 Framework（Stage 50）",
-        "Workflow:UseFrameworkKickoffMidInterrupt" => "v4 Kickoff HITL 中途介入試點（依賴 UseFrameworkKickoff）",
-        "Workflow:UseFrameworkDesign"              => "v4 Design Meeting fan-out/fan-in 走 Framework（Stage 52）",
-        "Workflow:UseFrameworkPipeline"            => "v4 macro-orchestration Pipeline 走 Framework（Stage 53A）",
         "Workflow:UsePetraOrchestratorV5"          => "v5 PoC 動態 orchestrator 上線（Stage 63B）",
         "Workflow:UseV5Memory"                     => "v5.5 Phase 2 跨 Session 長期記憶（Stage 69）",
         "Workflow:UseV5SubtaskPlanning"            => "v5.5 Phase 2 動態 SubtaskPlan 拆解",
         "Workflow:UseV5PromptDb"                   => "v5.5 Phase 2 Prompt DB 化（Stage 72）",
         "Workflow:UseHITLPlanConfirmation"         => "Stage 80 plan_confirm HITL gate",
         "Workflow:UseDynamicReplanning"            => "Stage 81 動態 replan + replan_confirm HITL retry gate",
-        "Workflow:ReviewAppealMaxRounds"           => "Cody 反駁 Vera Review 最大輪次（escalate Petra 仲裁前）",
-        "Workflow:QaFixMaxRounds"                  => "Petra 判 code_bug → Dev_fix + QA 重跑最大輪次",
-        "Workflow:DevPlanAppealMaxRounds"          => "Cody 反駁 Petra Dev_plan 初審最大輪次",
-        "Workflow:KickoffMaxRounds"                => "Kickoff 多 Agent 會議最大輪次",
-        "Workflow:DesignMeetingMaxRounds"          => "Design 會議最大輪次",
         "Workflow:V5MemoryCompactThresholdPercent" => "v5 記憶 compact 觸發 % 閾值",
         "Workflow:V5MemoryCompactKeepCount"        => "v5 記憶 compact 保留筆數",
         "Workflow:MaxConcurrentPetra"              => "v5.5 並行 Petra 消費者數",
