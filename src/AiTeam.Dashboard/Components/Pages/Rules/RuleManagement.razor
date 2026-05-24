@@ -46,14 +46,9 @@ else if (_rules.Count > 0)
         <RowTemplate>
             <MudTd style="flex:1; font-size:0.9rem">@context.Content</MudTd>
             <MudTd>
-                @* Stage 86 子項 0：v4 殘留 row（既有 AgentName 不在 _agentOptions value set 內 / 砍 8 角色後產生）顯示「全域（v4 殘留）」fallback chip *@
-                @{
-                    var isLegacy = !string.IsNullOrEmpty(context.AgentName)
-                        && !_agentOptions.Any(o => o.Value == context.AgentName);
-                }
-                <MudChip T="string" Size="Size.Small"
-                         Color="@(isLegacy ? Color.Default : GetAgentChipColor(context.AgentName))">
-                    @(isLegacy ? $"全域（v4 殘留：{context.AgentName}）" : (context.AgentName ?? "全域"))
+                @* Stage 87 子項 C0：Stage 86 isLegacy fallback 砍（Stage 87 Migration 已 DELETE 9 個 v4 row / Rules 表 0 殘留 / fallback 邏輯整段不再需要） *@
+                <MudChip T="string" Size="Size.Small" Color="@GetAgentChipColor(context.AgentName)">
+                    @(context.AgentName ?? "全域")
                 </MudChip>
             </MudTd>
             <MudTd>
