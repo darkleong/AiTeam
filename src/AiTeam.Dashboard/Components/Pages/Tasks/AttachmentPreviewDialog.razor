@@ -1,0 +1,80 @@
+@* Stage 86 子項 3：PetraInbox 附檔預覽 MudDialog — base64 內嵌直接顯示（Stage 79 Attachments jsonb schema） *@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<MudDialog>
+    <DialogContent>
+        @if (_attachments.Count == 0)
+        {
+            <MudText Color="Color.Secondary">無附檔（或 JSON 解析失敗）</MudText>
+        }
+        else if (_attachments.Count == 1)
+        {
+            @RenderAttachment(_attachments[0])
+        }
+        else
+        {
+            @* 多附檔 MudCarousel 切換 *@
+            <MudCarousel TData="object" Style="height:600px" AutoCycle="false" ShowArrows="true" ShowBullets="true">
+                @foreach (var att in _attachments)
+                {
+                    <MudCarouselItem>
+                        <div style="display:flex; justify-content:center; align-items:center; height:600px">
+                            @RenderAttachment(att)
+                        </div>
+                    </MudCarouselItem>
+                }
+            </MudCarousel>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">關閉</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string? AttachmentsJson { get; set; }
+
+    private record AttachmentItem(
+        [property: JsonPropertyName("type")]       string? Type,
+        [property: JsonPropertyName("base64Data")] string? Base64Data,
+        [property: JsonPropertyName("mediaType")]  string? MediaType);
+
+    private List<AttachmentItem> _attachments = [];
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrWhiteSpace(AttachmentsJson)) return;
+        try
+        {
+            _attachments = JsonSerializer.Deserialize<List<AttachmentItem>>(
+                AttachmentsJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch
+        {
+            // invalid JSON / 顯示 0 附檔（DialogContent 內 fallback「無附檔（或 JSON 解析失敗）」）
+            _attachments = [];
+        }
+    }
+
+    private RenderFragment RenderAttachment(AttachmentItem att) => __builder =>
+    {
+        if (att.Type != "image" || string.IsNullOrEmpty(att.Base64Data) || string.IsNullOrEmpty(att.MediaType))
+        {
+            <MudAlert Severity="Severity.Warning">
+                不支援的附檔類型：@(att.Type ?? "—")（baseline 只支援 image）
+            </MudAlert>
+        }
+        else
+        {
+            <img src="@($"data:{att.MediaType};base64,{att.Base64Data}")"
+                 style="max-width:100%; max-height:600px; object-fit:contain"
+                 alt="附檔預覽" />
+        }
+    };
+
+    private void Close() => MudDialog.Close();
+}

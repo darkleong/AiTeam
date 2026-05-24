@@ -52,6 +52,7 @@
         else
         {
             <MudTable Items="_activeSessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+                      Height="600px" FixedHeader="true"
                       OnRowClick="OnSessionRowClick" T="PetraSession" RowClass="cursor-pointer">
                 <HeaderContent>
                     <MudTh>SessionId</MudTh>
@@ -83,7 +84,7 @@
         }
         else
         {
-            <MudTable Items="_inboxRows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" T="PetraInbox">
+            <MudTable Items="_inboxRows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Height="600px" FixedHeader="true" T="PetraInbox">
                 <HeaderContent>
                     <MudTh>UserInput</MudTh>
                     <MudTh>Source</MudTh>
@@ -109,11 +110,14 @@
                         </MudChip>
                     </MudTd>
                     <MudTd>
+                        @* Stage 86 子項 3：MudChip 改 MudButton OnClick 開 AttachmentPreviewDialog *@
                         @if (CountAttachments(context.Attachments) > 0)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.AttachFile">
+                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Info"
+                                       StartIcon="@Icons.Material.Filled.AttachFile"
+                                       OnClick="@(() => OpenAttachmentDialogAsync(context.Attachments))">
                                 @CountAttachments(context.Attachments) 張
-                            </MudChip>
+                            </MudButton>
                         }
                         else
                         {
@@ -144,7 +148,7 @@
         }
         else
         {
-            <MudTable Items="_historySessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" T="PetraSession">
+            <MudTable Items="_historySessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Height="600px" FixedHeader="true" T="PetraSession">
                 <HeaderContent>
                     <MudTh>SessionId</MudTh>
                     <MudTh>Status</MudTh>

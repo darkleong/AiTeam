@@ -34,6 +34,8 @@ public partial class TaskHub : IAsyncDisposable
     [Inject] private NavigationManager         Navigation      { get; set; } = null!;
     [Inject] private IConfiguration            Configuration   { get; set; } = null!;
     [Inject] private ILogger<TaskHub>          Logger          { get; set; } = null!;
+    // Stage 86 子項 3：PetraInbox 附檔預覽 MudDialog 開啟用
+    [Inject] private IDialogService            DialogService   { get; set; } = null!;
 
     #endregion
 
@@ -234,5 +236,16 @@ public partial class TaskHub : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_hubConnection is not null) await _hubConnection.DisposeAsync();
+    }
+
+    // Stage 86 子項 3：開 PetraInbox 附檔預覽 MudDialog（AttachmentPreviewDialog component / base64 內嵌直接顯示）
+    private async Task OpenAttachmentDialogAsync(string? attachmentsJson)
+    {
+        var parameters = new DialogParameters<AttachmentPreviewDialog>
+        {
+            { d => d.AttachmentsJson, attachmentsJson },
+        };
+        await DialogService.ShowAsync<AttachmentPreviewDialog>("附檔預覽", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 }

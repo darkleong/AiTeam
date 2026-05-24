@@ -13,39 +13,43 @@
     </MudStack>
 </div>
 
-@* Stage 83 子項 1：4 metric 速覽卡 — Active session / Pending inbox / Pending HITL / 今日 Token *@
+@* Stage 86 子項 2.5：4 metric 速覽卡乾淨化（icon + 標題 + 數字 / 紅字描述移 MudTooltip hover） *@
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Primary" />
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Active 任務</MudText>
-            <MudText Typo="Typo.h4">@_activeSessionCount</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">PetraSession running + paused</MudText>
-        </MudPaper>
+        <MudTooltip Text="PetraSession running + paused">
+            <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Active 任務</MudText>
+                <MudText Typo="Typo.h4">@_activeSessionCount</MudText>
+            </MudPaper>
+        </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-            <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Secondary" />
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Pending 收件</MudText>
-            <MudText Typo="Typo.h4">@_pendingInboxCount</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">PetraInbox 待 dispatch</MudText>
-        </MudPaper>
+        <MudTooltip Text="PetraInbox 待 dispatch">
+            <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Pending 收件</MudText>
+                <MudText Typo="Typo.h4">@_pendingInboxCount</MudText>
+            </MudPaper>
+        </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-            <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Large" Color="Color.Warning" />
-            <MudText Typo="Typo.subtitle2" Class="mt-2">待處理確認卡</MudText>
-            <MudText Typo="Typo.h4">@_pendingHitlCount</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">BossInteraction pending</MudText>
-        </MudPaper>
+        <MudTooltip Text="BossInteraction pending">
+            <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Large" Color="Color.Warning" />
+                <MudText Typo="Typo.subtitle2" Class="mt-2">待處理確認卡</MudText>
+                <MudText Typo="Typo.h4">@_pendingHitlCount</MudText>
+            </MudPaper>
+        </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-            <MudIcon Icon="@Icons.Material.Filled.Token" Size="Size.Large" Color="Color.Info" />
-            <MudText Typo="Typo.subtitle2" Class="mt-2">今日 Token</MudText>
-            <MudText Typo="Typo.h4">@_todayTokenTotal.ToString("N0")</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">Input + Output 合計</MudText>
-        </MudPaper>
+        <MudTooltip Text="Input + Output 合計">
+            <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+                <MudIcon Icon="@Icons.Material.Filled.Token" Size="Size.Large" Color="Color.Info" />
+                <MudText Typo="Typo.subtitle2" Class="mt-2">今日 Token</MudText>
+                <MudText Typo="Typo.h4">@_todayTokenTotal.ToString("N0")</MudText>
+            </MudPaper>
+        </MudTooltip>
     </MudItem>
 </MudGrid>
 
