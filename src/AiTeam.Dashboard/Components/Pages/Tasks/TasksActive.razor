@@ -1,0 +1,94 @@
+@page "/tasks/active"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data
+
+<PageTitle>進行中 Session - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>進行中 Session（@_activeSessions.Count）</h2>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+    </MudStack>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (_activeSessions.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">目前無進行中 Session。</MudAlert>
+}
+else
+{
+    <MudTable Items="_activeSessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+              Height="600px" FixedHeader="true"
+              OnRowClick="OnSessionRowClick" T="PetraSession" RowClass="cursor-pointer">
+        <HeaderContent>
+            <MudTh>SessionId</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Replan</MudTh>
+            <MudTh>Cost (USD)</MudTh>
+            <MudTh>Updated</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Id.ToString()[..8]</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@GetSessionStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd>@context.ReplanIteration</MudTd>
+            <MudTd>@context.SessionCostUsd.ToString("F4")</MudTd>
+            <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@* Session detail drawer — 點 Active session row 開 *@
+<MudDrawer @bind-Open="_isSessionDrawerOpen" Anchor="Anchor.End" Elevation="3" Width="600px" Variant="DrawerVariant.Temporary">
+    <MudDrawerHeader>
+        <MudText Typo="Typo.h6">Session 詳情</MudText>
+    </MudDrawerHeader>
+    <div class="pa-4" style="overflow-y:auto">
+        @if (_selectedSession is not null)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Session @_selectedSession.Id</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@GetSessionStatusColor(_selectedSession.Status)" Class="mb-2">
+                @_selectedSession.Status
+            </MudChip>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Replan #@_selectedSession.ReplanIteration · Cost @_selectedSession.SessionCostUsd.ToString("F4") USD ·
+                Updated @_selectedSession.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")
+            </MudText>
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Session Messages（最後 20 筆）</MudText>
+            @if (_selectedSession.Messages.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">無 message</MudText>
+            }
+            else
+            {
+                @foreach (var msg in _selectedSession.Messages.TakeLast(20))
+                {
+                    <MudCard Outlined="true" Class="my-2">
+                        <MudCardContent Class="py-2">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @msg.Role · @msg.CreatedAt.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
+                            <MudText Typo="Typo.body2" Style="white-space:pre-wrap; word-break:break-word; max-height:150px; overflow:auto">
+                                @(msg.Content.Length > 500 ? msg.Content[..500] + "..." : msg.Content)
+                            </MudText>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            }
+        }
+    </div>
+</MudDrawer>

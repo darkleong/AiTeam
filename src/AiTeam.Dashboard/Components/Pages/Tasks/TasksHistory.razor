@@ -1,0 +1,63 @@
+@page "/tasks/history"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data
+
+<PageTitle>歷史 Session - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>歷史 Session</h2>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+    </MudStack>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (_historySessions.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">目前無歷史 Session。</MudAlert>
+}
+else
+{
+    <MudTable Items="_historySessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Height="600px" FixedHeader="true" T="PetraSession">
+        <HeaderContent>
+            <MudTh>SessionId</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Replan</MudTh>
+            <MudTh>Cost (USD)</MudTh>
+            <MudTh Style="white-space:nowrap; min-width:80px">PR</MudTh>
+            <MudTh>Duration</MudTh>
+            <MudTh>Completed</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Id.ToString()[..8]</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@GetSessionStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd>@context.ReplanIteration</MudTd>
+            <MudTd>@context.SessionCostUsd.ToString("F4")</MudTd>
+            <MudTd>
+                @if (!string.IsNullOrEmpty(context.ResultPrUrl))
+                {
+                    <MudLink Href="@context.ResultPrUrl" Target="_blank" rel="noopener" aria-label="@($"Open {ExtractPrNumber(context.ResultPrUrl)} on GitHub")">
+                        @ExtractPrNumber(context.ResultPrUrl)
+                    </MudLink>
+                }
+                else
+                {
+                    <span>—</span>
+                }
+            </MudTd>
+            <MudTd>@FormatDuration(context.UpdatedAt - context.CreatedAt)</MudTd>
+            <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}

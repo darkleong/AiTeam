@@ -1,0 +1,40 @@
+@page "/monitoring/deployments"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Shared.Dtos
+
+<PageTitle>部署紀錄 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>部署紀錄</h2>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+    </MudStack>
+</div>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+    最近 10 筆部署紀錄（TaskItem WHERE AssignedAgent='Ops'）。
+</MudText>
+@if (_recentDeployments.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">尚無部署紀錄。</MudAlert>
+}
+else
+{
+    <MudTable Items="_recentDeployments" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TaskItemDto">
+        <HeaderContent>
+            <MudTh>Status</MudTh>
+            <MudTh>Title</MudTh>
+            <MudTh>CreatedAt</MudTh>
+            <MudTh>CompletedAt</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+            <MudTd>@context.Title</MudTd>
+            <MudTd>@context.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
+            <MudTd>@(context.CompletedAt?.ToLocalTime().ToString("MM/dd HH:mm") ?? "—")</MudTd>
+        </RowTemplate>
+    </MudTable>
+}

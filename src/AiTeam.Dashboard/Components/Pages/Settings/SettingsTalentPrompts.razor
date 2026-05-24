@@ -1,0 +1,80 @@
+@page "/settings/talent-prompts"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>TalentPrompts - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>TalentPrompts</h2>
+</div>
+
+<MudStack Row="true" Spacing="2" Class="mb-3">
+    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="LoadAllAsync">重新載入</MudButton>
+</MudStack>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+    per-Talent persona body — 同 Skill 多 Talent 不重複存職責 / Talent 個性風格分開。
+</MudText>
+
+@if (_talents.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">尚無 Talent — 先到 Talents tab 確認 baseline。</MudAlert>
+}
+else
+{
+    <MudTable Items="_talents" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TalentInfoRow">
+        <HeaderContent>
+            <MudTh>Talent</MudTh>
+            <MudTh>Active Version</MudTh>
+            <MudTh>Length</MudTh>
+            <MudTh>UpdatedAt</MudTh>
+            <MudTh>動作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            @{
+                var existing = _talentPromptsActive.FirstOrDefault(p => p.TalentId == context.Id);
+            }
+            <MudTd>@context.Name</MudTd>
+            <MudTd>
+                @if (existing is null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">未設定</MudChip>
+                }
+                else
+                {
+                    <MudText>v@(existing.VersionNumber)</MudText>
+                }
+            </MudTd>
+            <MudTd>@(existing is null ? "—" : $"{existing.PersonaBody.Length} chars")</MudTd>
+            <MudTd>@(existing is null ? "—" : existing.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm"))</MudTd>
+            <MudTd>
+                <MudTooltip Text="編輯 persona">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                   Size="Size.Small"
+                                   OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))" />
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@if (_editingTalentPromptTalentId is not null)
+{
+    <MudPaper Elevation="2" Class="pa-3 mt-3">
+        <MudText Typo="Typo.h6" Class="mb-2">@_editingTalentPromptTalentName — Persona 編輯</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+            存檔後自動 VersionNumber +1 + IsActive=true / 舊版 IsActive=false（partial unique index 守同 TalentId 只一條 active）。
+        </MudText>
+        <MudTextField T="string" @bind-Value="_editingPersonaBody"
+                      Variant="Variant.Outlined" Lines="10" Class="mb-2"
+                      Placeholder="風格 / 個性 / 語氣等" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                       OnClick="SaveNewTalentPromptVersionAsync">儲存新版本</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       OnClick="@(() => { _editingTalentPromptTalentId = null; _editingPersonaBody = string.Empty; })">取消</MudButton>
+        </MudStack>
+    </MudPaper>
+}

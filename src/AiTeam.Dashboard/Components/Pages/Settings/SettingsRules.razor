@@ -1,0 +1,20 @@
+@page "/settings/rules"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Dashboard.Components.Pages.Projects
+@using AiTeam.Dashboard.Components.Pages.Rules
+
+@* Stage 87 B0：Settings 拆 6 sub-page 之 Rules + Projects（取代 SettingsHub.razor Tab 7）/ 純 reuse RuleManagement + ProjectManagement components *@
+
+<PageTitle>Rules + Projects - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>Rules + Projects</h2>
+</div>
+
+<MudExpansionPanel Text="Rules（規則管理）" Expanded="true">
+    <RuleManagement />
+</MudExpansionPanel>
+<MudExpansionPanel Text="Projects（專案管理）" Expanded="false">
+    <ProjectManagement />
+</MudExpansionPanel>

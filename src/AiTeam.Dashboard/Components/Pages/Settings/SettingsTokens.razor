@@ -1,0 +1,13 @@
+@page "/settings/tokens"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+@* Stage 87 B0：Settings 拆 6 sub-page 之 Token 守門 + 系統設定（取代 SettingsHub.razor Tab 2）/ 純 reuse SystemSettings component *@
+
+<PageTitle>Token 守門 + 系統設定 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>Token 守門 + 系統設定</h2>
+</div>
+
+<SystemSettings />

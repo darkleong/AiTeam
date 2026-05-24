@@ -1,0 +1,42 @@
+@page "/monitoring/health"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<PageTitle>系統健康 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>系統健康</h2>
+</div>
+
+<MudGrid Spacing="3">
+    @* Stage 85 子項 3：Discord placeholder 卡砍（FF #7 未實作不該佔位誤導 / 真實 check 做完再加回） *@
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="@(_botHealthy ? Color.Success : Color.Error)" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Bot 容器</MudText>
+            <MudText Typo="Typo.body2">@(_botHealthy ? "✅ Healthy" : "❌ Unreachable")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_botStatusDetail</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="@(_dbHealthy ? Color.Success : Color.Error)" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">PostgreSQL</MudText>
+            <MudText Typo="Typo.body2">@(_dbHealthy ? "✅ Connected" : "❌ Disconnected")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_dbStatusDetail</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
+            <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">SignalR Hub</MudText>
+            <MudText Typo="Typo.body2">N/A（本頁無 SignalR 訂閱 — 純 health check）</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">/hubs/agent-status</MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+<MudStack Row="true" Spacing="2" Class="mt-4">
+    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.Refresh"
+               OnClick="RefreshHealthAsync">重新檢測（/internal/health）</MudButton>
+</MudStack>

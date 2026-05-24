@@ -1,0 +1,8 @@
+@* Stage 87 B0：/tasks 入口 redirect 到 /tasks/hitl（對齊既有 AgentsRedirect / RulesRedirect pattern）*@
+@page "/tasks"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized() => Nav.NavigateTo("/tasks/hitl", forceLoad: false);
+}

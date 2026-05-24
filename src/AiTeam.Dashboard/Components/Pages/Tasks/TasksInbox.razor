@@ -1,0 +1,81 @@
+@page "/tasks/inbox"
+@attribute [Authorize]
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data
+@using AiTeam.Dashboard.Components.Pages.Interactions
+
+<PageTitle>PetraInbox 收件 - AI Team Dashboard</PageTitle>
+
+<div class="page-header">
+    <h2>PetraInbox 收件（@_inboxRows.Count）</h2>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <span style="font-size:0.85rem; color: @(_hubConnected ? "var(--color-status-done)" : "var(--color-status-failed)")">
+            ● SignalR @(_hubConnected ? "已連線" : "未連線")
+        </span>
+    </MudStack>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (_inboxRows.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">目前無 PetraInbox 收件。</MudAlert>
+}
+else
+{
+    <MudTable Items="_inboxRows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Height="600px" FixedHeader="true" T="PetraInbox">
+        <HeaderContent>
+            <MudTh>UserInput</MudTh>
+            <MudTh>Source</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Attachments</MudTh>
+            <MudTh>EnqueuedAt</MudTh>
+            <MudTh Style="white-space:nowrap; min-width:80px">動作</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@(context.UserInput.Length > 80 ? context.UserInput[..80] + "..." : context.UserInput)</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@(context.Source == "dashboard" ? Color.Info : Color.Default)">
+                    @context.Source
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small"
+                         Color="@InteractionCenter.GetInboxStatusColor(context.Status)"
+                         Variant="@(context.Status is "failed" or "dead" ? Variant.Filled : Variant.Text)"
+                         Icon="@(context.Status is "failed" or "dead" ? Icons.Material.Filled.ErrorOutline : null)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                @if (CountAttachments(context.Attachments) > 0)
+                {
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Info"
+                               StartIcon="@Icons.Material.Filled.AttachFile"
+                               OnClick="@(() => OpenAttachmentDialogAsync(context.Attachments))">
+                        @CountAttachments(context.Attachments) 張
+                    </MudButton>
+                }
+                else
+                {
+                    <span>—</span>
+                }
+            </MudTd>
+            <MudTd>@context.EnqueuedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudTd>
+            <MudTd>
+                @if (context.Status is "failed" or "dead")
+                {
+                    <MudTooltip Text="重跑">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Replay"
+                                       Size="Size.Small"
+                                       Color="Color.Warning"
+                                       OnClick="@(() => HandleRequeueInboxAsync(context.Id))" />
+                    </MudTooltip>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
