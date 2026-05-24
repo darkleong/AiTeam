@@ -1,27 +1,30 @@
-@* 規則新增 / 編輯對話框 *@
+@* 規則新增 / 編輯對話框 — follow-up #15：拓寬 textarea + 套用對象 / 排序同行排（撐滿 dialog width）*@
 <MudDialog>
     <DialogContent>
         <MudTextField @bind-Value="_content"
                       Label="規則內容"
                       Required="true"
                       RequiredError="規則內容不可為空白"
-                      Lines="3"
+                      Lines="4"
+                      Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       Placeholder="例如：回應使用繁體中文，語氣專業但親切"
                       Class="mb-3" />
 
-        <MudSelect T="string" @bind-Value="_agentName"
-                   Label="套用對象" Margin="Margin.Dense" Dense="true"
-                   Style="max-width:240px" Class="mb-3">
-            @foreach (var opt in AgentOptions)
-            {
-                <MudSelectItem Value="@opt.Value">@opt.Label</MudSelectItem>
-            }
-        </MudSelect>
-
-        <MudNumericField T="int" @bind-Value="_sortOrder"
-                         Label="排序" Margin="Margin.Dense"
-                         Style="max-width:120px" Class="mb-2" />
+        <div style="display:flex; gap:12px; align-items:flex-start" class="mb-3">
+            <MudSelect T="string" @bind-Value="_agentName"
+                       Label="套用對象" Margin="Margin.Dense" Dense="true"
+                       Variant="Variant.Outlined" Style="flex:1; min-width:0">
+                @foreach (var opt in AgentOptions)
+                {
+                    <MudSelectItem Value="@opt.Value">@opt.Label</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField T="int" @bind-Value="_sortOrder"
+                             Label="排序" Margin="Margin.Dense"
+                             Variant="Variant.Outlined"
+                             Style="width:120px; flex-shrink:0" />
+        </div>
 
         @if (_error is not null)
         {

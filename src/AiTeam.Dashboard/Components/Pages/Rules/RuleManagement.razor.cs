@@ -78,7 +78,9 @@ public partial class RuleManagement
             { d => d.NextSortOrder,  nextSortOrder }
         };
 
-        var dialog = await DialogService.ShowAsync<RuleFormDialog>("新增規則", parameters);
+        // follow-up #15：DialogOptions MaxWidth.Small + FullWidth 讓 dialog 撐到合理寬度（預設 ExtraSmall 太窄擠）
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<RuleFormDialog>("新增規則", parameters, options);
         var result = await dialog.Result;
 
         if (result is { Canceled: false } && result.Data is Rule created)
@@ -96,7 +98,9 @@ public partial class RuleManagement
             { d => d.AgentOptions, GetDialogAgentOptions() }
         };
 
-        var dialog = await DialogService.ShowAsync<RuleFormDialog>("編輯規則", parameters);
+        // follow-up #15：DialogOptions MaxWidth.Small + FullWidth 對齊新增規則 dialog 寬度
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<RuleFormDialog>("編輯規則", parameters, options);
         var result = await dialog.Result;
 
         if (result is { Canceled: false })
