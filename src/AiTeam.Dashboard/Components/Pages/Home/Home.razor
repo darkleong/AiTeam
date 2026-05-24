@@ -16,7 +16,7 @@
 @* Stage 86 子項 2.5：4 metric 速覽卡乾淨化（icon + 標題 + 數字 / 紅字描述移 MudTooltip hover） *@
 <MudGrid Spacing="3" Class="mb-4">
     <MudItem xs="12" sm="6" md="3">
-        <MudTooltip Text="PetraSession running + paused" Style="display:block; width:100%">
+        <MudTooltip Text="PetraSession running + paused" Inline="false">
             <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                 <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Active 任務</MudText>
@@ -25,7 +25,7 @@
         </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudTooltip Text="PetraInbox 待 dispatch" Style="display:block; width:100%">
+        <MudTooltip Text="PetraInbox 待 dispatch" Inline="false">
             <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                 <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Secondary" />
                 <MudText Typo="Typo.subtitle2" Class="mt-2">Pending 收件</MudText>
@@ -34,7 +34,7 @@
         </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudTooltip Text="BossInteraction pending" Style="display:block; width:100%">
+        <MudTooltip Text="BossInteraction pending" Inline="false">
             <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                 <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Large" Color="Color.Warning" />
                 <MudText Typo="Typo.subtitle2" Class="mt-2">待處理確認卡</MudText>
@@ -43,7 +43,7 @@
         </MudTooltip>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
-        <MudTooltip Text="Input + Output 合計" Style="display:block; width:100%">
+        <MudTooltip Text="Input + Output 合計" Inline="false">
             <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                 <MudIcon Icon="@Icons.Material.Filled.Token" Size="Size.Large" Color="Color.Info" />
                 <MudText Typo="Typo.subtitle2" Class="mt-2">今日 Token</MudText>
