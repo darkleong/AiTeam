@@ -19,8 +19,14 @@
 
 ## [Unreleased]
 
-- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口**）
-- **下個動作候選**：Stage 85 — Stage 83 phased delivery 留的 12 條 Mock 友善候選（見 [Future_Feature.md](docs/planning/Future_Feature.md) Stage 84+ 候選段）+ 議題 2 minor dangling doc comment patch（`WorkflowSettings.cs` + `Resolver.cs` 6 處 XML doc 失準）
+- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火**）
+- **Dashboard 改造 3 Stage 規劃中**（2026-05-24 Christ 痛點盤點 11 條拆 B 折衷版）：✅ Stage 85 救火 → ⏳ Stage 86 Dashboard 改造（sidebar 改造 + 視覺/UX 一致性 + Theme 機制 + 附檔預覽 + Monitoring 改善）→ ⏳ Stage 87 `agent_configs` vs `talents` 架構 audit
+
+---
+
+## [3.77.0] — 2026-05-24 — [Stage 85](docs/planning/Stage_85_Roadmap.md) Dashboard 救火（修 bug + 系統 alert + dead code 清理）
+
+5 子項全 deliver：5 DashboardServices 切 IDbContextFactory（終結並發 bug 同類根因第 3 次累積）+ 三層 alert 機制（Discord push + SignalR + MudSnackbar toast + AlertRateLimiter rate-limit）+ v4 dead flag 11 個整套清（9 檔 / grep 0 業務 match）+ 砍 MOCKMODE tab dup + Discord placeholder 卡 + 3 筆 Stage 80 殘留 paused session 清 + 24h timeout cleanup loop。Forge 4 commit + Chrome MCP UI 視覺驗 5 條 + 3 條留 Christ 真實 fire。升 refactor-sop v1.4 + v1.5（Test session cleanup + Razor 大檔砍工具選擇）。0 Migration / xUnit 130 全綠 / 0 新 warning。
 
 ---
 

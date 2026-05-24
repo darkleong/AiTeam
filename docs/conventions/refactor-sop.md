@@ -148,12 +148,27 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 - **Entity / DTO 層級重構**（通常是補欄位、改命名，不是職責拆分）
 - **跨 Bot / Dashboard 的跨層 refactor**（需要 Spike，本 SOP 不適用）
 
+### Razor / 大檔砍多處段工具選擇紀律（Stage 85 踩坑 F1）
+
+砍 Razor 元件大段（如 > 100 行 collapsed panel + 中文混 HTML/CSS attributes）時，**直接 Write 重寫整檔比連續 Edit 安全**：
+
+- Edit `old_string` exact match 對 unicode 半形 vs 全形敏感（`,` vs `，` / `(` vs `（` 等中文標點微差 1 char 即 match 失敗）
+- Razor 大段砍失敗常見後果：砍中間留前後對不齊（如 `<div>` 沒對應 `</div>`）/ 後續 build 才抓到結構錯
+- Stage 85 SystemSettings.razor 砍 v4 漸進遷移段（5 卡 ~110 行）+ 流程輪次上限段時實證 — 第一次 Edit 只砍中間留壞掉 Kickoff 卡 → 改 Write 整檔重寫一次過
+
+**判斷準則**：
+- ✅ 小段 Edit（< 30 行 / 純 ASCII / 結構封閉）
+- ✅ Write 整檔（大段 Razor / 含中文混排 / 跨多 nested element / 多處同檔砍）
+
+對應 Forge 工作流程紀律已寫進 `workflow_forge.md` 第三節「實作中」+ 第六節「不該做的事」（memory user-local），本紀律是跨 Stage 對齊 git 版本。
+
 ---
 
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.5 | 2026-05-24 | Stage 85 結案升級補強（Aria 結案第二段 step 1 第 5 次實踐）— 「不適合套用本 SOP 的情況」段加「Razor / 大檔砍多處段工具選擇紀律」（Stage 85 踩坑 F1 — SystemSettings.razor 砍 v4 段 + 流程輪次上限段時 Edit `old_string` 對 unicode 半全形敏感失敗 / 改 Write 整檔重寫一次過 / 判斷準則 ✅ 小段 Edit ✅ 大段 Razor 含中文混排 Write 重寫）|
 | v1.4 | 2026-05-24 | Stage 85 結案升級（Aria 結案第二段 step 1 第 4 次實踐）— 結案必做清單第 8 條「Test session cleanup」（Stage 85 踩坑 — Stage 80 self-verify 殘留 3 筆 paused PetraSession 卡 4-5 天 / 對齊 Stage 85 PetraSessionRecoveryService timeout 機制升級紀律 / 屬「閘門外漏網」第 4 次累積）|
 | v1.3 | 2026-05-24 | Stage 84 結案升級（Aria 結案第二段 step 1 第 3 次實踐）— ① SOP 5 加「state field 拆解 caller 對應 owning service verify」（Stage 84 `_roundRobinCounter` 4 caller 跨 3 service 拆 3 份 vs plan 寫 2 份 = 預先 grep 不足）② 結案必做清單第 6 條「Dangling reference 清理」（防 dead flag dangling doc comment 殘留）③ 結案必做清單第 7 條「Warning baseline 比對」（防 CS9113 unused parameter 新 warning 漏網 + commit message warning 數對齊實測紀律）④ 實戰數據加 Stage 84 row（主檔 2266 → 193 / 瘦身 91.5% / SOP 累積第 5 次 + single-session 完成 M+ 規模新里程碑）|
 | v1.2 | 2026-05-22 | 加紀律「拆解完檔案大小不一定都變小」— 拆解時評估「搬去哪」是否也超閾值 / 避免創造新怪物（典型反例：Stage 36 CommandHandler 2172 → 瘦身 556 行 / 但搬去的 ButtonCallbackRouter 變 1091 行 = 沒真拆是搬家）|

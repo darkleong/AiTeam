@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v12.1
+> 版本：v13.0
 > 建立日期：2026-04-01
-> 最後更新：2026-05-24（v12.0 Stage 84 拆解收口 / v12.1 加 Dashboard UX 改造候選段 — 左側 nav 階層化改造 / 來源：2026-05-24 Christ 真實業務 dogfood 切換策略後保留）
+> 最後更新：2026-05-24（v12.1 加 Dashboard UX 改造候選段 / v13.0 Stage 85 Dashboard 救火結案 + Stage 85+ → Stage 86+ 重命名 + 加 xunit 並發 race FF 候選）
 > 詳細實作紀錄：[CHANGELOG.md](../../CHANGELOG.md) + [Architecture.md](../Architecture.md)
 
 ---
@@ -11,7 +11,7 @@
 
 | # | 標題 | 狀態 |
 |---|---|---|
-| 一 | v5.5 完整收口 + Stage 85+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 / production 自然累積期 / Stage 85+ 候選真實業務痛點觸發評估 |
+| 一 | v5.5 完整收口 + Stage 86+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 + Stage 85 Dashboard 救火 / Stage 86 Dashboard 改造 + Stage 87 agent_configs audit 規劃中（B 折衷版 / 2026-05-24 Christ 痛點盤點） |
 | 二 | 客戶專案交付流程與驗收閘門 | 🟡 中優先級（AiTeam 開始承接客戶專案時前置必要） |
 
 ---
@@ -37,9 +37,9 @@
 | [Trial_v26](../experiments/Trial_v26_Plan.md) | 🟢 | 82 雙修法 + 業界 supervisor pattern 對齊驗證 |
 | [Trial_v27](../experiments/Trial_v27_Plan.md) | 🟡 戰略性結案 | LLM alignment 雙重 safety net 實證 / 跳出 Trial→Fix 迴圈 |
 
-### Stage 85+ 候選
+### Stage 86+ 候選
 
-從 Stage 83 phased delivery 留的 12 條（#13 已由 [Stage 84](Stage_84_Roadmap.md) deliver / 2026-05-24 移除）：
+從 Stage 83 phased delivery 留的 12 條（#13 已由 [Stage 84](Stage_84_Roadmap.md) deliver / 2026-05-24 移除）。Stage 85 救火 cover 範圍跟既有 12 條 0 重疊（Stage 85 是 Christ 2026-05-24 真實 Dashboard 痛點盤點 5 條新需求）：
 
 | # | 候選 | 規模 |
 |---|---|---|
@@ -56,8 +56,11 @@
 | 11 | AppSettingsService 5 分鐘 re-read（21 Workflow:* flag 動態 reload 不需重啟 Bot）| M |
 | 12 | DashboardService 進一步重組（Home / TaskHub PetraSession query 直接走 Repository）| S |
 
-**Stage 84 follow-up minor 候選**：
+**Stage 84 follow-up minor 候選**（Stage 85 sweep dangling comment 但**未**順手清這 6 處 / 仍待處理）：
 - 🟢 `WorkflowSettings.cs` + `WorkflowSettingsResolver.cs` 6 處 XML doc 改寫「必須 `UseTalentSkillSeparation=true` 才有意義」失準 dangling comment 清理（flag 已 Stage 84 砍 / doc 殘留）/ Test29-30 真實搬 PetraTalentDispatchServiceTests（Stage 84 Skip 標記）
+
+**Stage 85 follow-up minor 候選**（Aria gate1 audit 揭 / Stage 86+ 真實業務痛點觸發再處理）：
+- 🟢 xunit collection-fixture seq lock 修 `ClaudeCodeChatClientAdapterTests` 並發 file lock race（Stage 85 build 自驗首跑 1 fail / 單跑 9/9 pass / 既有 test infra 並發問題跟 Stage 85 0 關係 / commit message 數對齊紀律對未來 Stage 仍有用）
 
 **追加候選**（Trial_v26 戰略 finding）：
 - 🟡 Vera review 紀律升級（system prompt / few-shot 更多 critical 反例）
@@ -145,3 +148,5 @@ AiTeam 定位不只開發自身系統 / 未來也會替客戶開發。目前流�
 | v10.0 | 2026-05-21 | Stage 83 結案 / v3.75.0 — v5.5 完整收口進 production 自然累積期 |
 | **v11.0** | **2026-05-22** | **v5.5 子檔合進主檔** — Future_Feature_v5.5.md（239 行）整檔砍 / Phase 1-4 audit + Stage 84+ 候選 12+3 條 + 不確定性 3 條合進本檔一、v5.5 完整收口段 / 二、客戶交付段修 Maya（Stage 78a 砍）+ WorkflowEngine（Stage 78c 砍）漂移為「Talent / 分支策略」/ 結構從 95 + 239 = 334 → ~140 行 / 對齊「對冗餘不容忍 / single source of truth / v5.5 已收口不再是規劃 reference」精神 |
 | **v12.0** | **2026-05-24** | **Stage 84 結案** — #13 PetraOrchestratorService 拆解 deliver（v3.76.0 / 2266 → 193 行 / 瘦身 91.5%）/ Stage 84+ → Stage 85+ 重命名（12 條留下）/ 加「Stage 84 follow-up minor 候選」段（dangling doc comment 6 處 + Test29-30 真實搬遷）|
+| **v12.1** | **2026-05-24** | **加 Dashboard UX 改造候選段** — 左側 nav 階層化改造（規模 L）/ 來源：2026-05-24 Christ 真實業務 dogfood 第一單 AiTeam dispatch 撞 TokenGuard 月限 fire 切換策略後保留 |
+| **v13.0** | **2026-05-24** | **Stage 85 結案** — Dashboard 救火 5 子項全 deliver（v3.77.0 / DbContext bug 修 + 三層 alert + v4 dead flag 11 個 + 分頁結構 dup + paused session timeout）/ Stage 85+ → Stage 86+ 重命名 / Active 清單表「Phase 1-4 + Stage 84 + Stage 85」+ Stage 86/87 規劃中描述 / 加「Stage 85 follow-up minor 候選」段（xunit 並發 race）|
