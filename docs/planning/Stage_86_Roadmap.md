@@ -184,6 +184,127 @@ NavMenu 既有 4 條 link（首頁 / 任務中心 / 設定中心 / 監控中心�
 - 6 維度 ultrathink 自審：① 架構 ✅（MudBlazor 8.x 既有元件 + IDbContextFactory 對齊 Stage 85）② 邏輯 ✅（6 子項獨立可分階段 commit）③ 競態 ✅（client-side state / 0 後端競態）④ 上下文 ⚠️ Attachments jsonb 結構待 Forge verify ⑤ 預留欄位 N/A（0 schema 改）⑥ 關鍵檔案清單 ✅
 - 拍板：改造性質 trade-off 容忍高（vs Stage 85 救火低）/ 0 Migration / 0 LLM call / 走 Aria + Forge
 
-### v2.0 — TBD（Forge 結案補實作紀錄）
+### v2.0 — 2026-05-24（Forge 結案）
 
-實作紀錄段（v1.0 不寫，Forge 結案時補）：實際產出檔案 + 行數、SOP 套用對照、踩坑紀錄、健康偏離 plan 紀錄、Mock 覆蓋情況、Attachments jsonb 結構 verify 結論落地、Theme palette 真實 hex 色碼落地。
+#### A. commit 清單（7 commit / plan 預期 7 / 實際對齊）
+
+| commit | 範圍 |
+|---|---|
+| `6ad2cbb` | 子項 0：Rules dropdown 砍 8 個 v4 dead 角色（全域 + CEO 留 / DB row 變孤兒）|
+| `06810ca` | 子項 1：全 Dashboard UI 顯示文字砍版本/Stage 編號（含 SettingsHub 視覺一致性合併）|
+| `c18f7d2` | 子項 2 剩餘 + 子項 3：視覺一致性 + PetraInbox 附檔預覽 MudDialog |
+| `eba5b0e` | 子項 4：Monitoring Tab 1 時間範圍 filter（6 選項）+ 90% per-agent 警戒擴 + per-Skill 維度 |
+| `9e344cd` | 子項 5 + 子項 6：Sidebar 兩態切換 + Theme 機制根因修 + mudblazor.md 紀律落地 |
+| `96618b6` | chore：version bump 3.77.0 → 3.78.0 |
+| `304d077` | fix：視覺驗收 follow-up 2 處（GetFlagDescription UI 文字砍 + sidebar overlay width 修） |
+
+#### B. 實際產出檔（3 新 + 12 修 + 1 docs）
+
+**新增 3 檔**：
+- `src/AiTeam.Dashboard/Services/IThemeService.cs`（36 行 / Scoped DI）
+- `src/AiTeam.Dashboard/Components/Layout/ThemeToggleButton.razor`（32 行 / Interactive Island）
+- `src/AiTeam.Dashboard/Components/Pages/Tasks/AttachmentPreviewDialog.razor`（80 行 / base64 圖片渲染 + MudCarousel 多附檔）
+
+**修改 12 檔**：
+- `MainLayout.razor`（砍 AppBar / logo 移 Drawer 頂 / hamburger 浮 / ThemeToggleButton 接入）
+- `MudProviders.razor`（IThemeService subscribe + IDisposable + MudTheme palette 重設計）
+- `App.razor`（inline script 砍 aiteamToggleSidebar + 改寫 window.aiteamSidebar 兩態 API）
+- `RuleManagement.razor` + `.cs`（_agentOptions 砍 8 entry + GetAgentChipColor + isLegacy fallback chip）
+- `SettingsHub.razor` + `.cs`（UI 文字砍 5+ 處 / TALENTS Skills N/A / TALENTPROMPTS 擴 5 欄 / GetFlagDescription 12 case 砍版本編號 / switch Color 統一 / 數值靠右）
+- `Home.razor`（4 卡 tooltip 包裝 / 紅字描述移 hover）
+- `MonitoringHub.razor` + `.cs`（時間範圍 6 selector + per-Skill 維度 stub + 90% per-agent 警戒 + UI 文字砍 3 處）
+- `TaskHub.razor` + `.cs`（MudChip 改 MudButton OpenAttachmentDialogAsync + IDialogService 注入 + FixedHeader 3 表）
+- `InteractionCenter.razor`（歷史回覆表 FixedHeader）
+- `TokenMonitoring.razor`（FixedHeader + UI 文字砍 Stage 56）
+- `Program.cs`（AddScoped<IThemeService, ThemeService>）
+- `wwwroot/css/app.css`（hamburger 浮 + overlay 模式 + dark hex 對齊 PaletteDark + 砍 dead .theme-btn-dark/light）
+
+**docs 修改**：
+- `docs/conventions/mudblazor.md`（第五節 Dark Mode 完整重寫 / IsDarkMode binding 紀律落地 + ThemeToggleButton Interactive component pattern + IThemeService Scoped event + 兩 layer 對齊 CSS 變數）
+- `src/Directory.Build.props`（v3.77.0 → v3.78.0）
+
+#### C. 5 議題 verify 結論落地
+
+| 議題 | 結論 |
+|---|---|
+| PetraInbox.Attachments 結構 | **base64 內嵌**（Stage 79 schema `[{"type":"image","base64Data":"...","mediaType":"..."}]`）→ 子項 3 0 新 Internal API endpoint / MudDialog 直接 `<img src="data:...">` 渲染（驗收實證圖片正常顯示）|
+| 全 Dashboard 砍版本/Stage 編號 grep baseline | 63 處 across 25 files → 10+ 處 UI 文字砍 / razor `@*` comment + C# `//` comment + XML doc 保留 / **子項 1 漏抓 razor.cs GetFlagDescription 12 case**（follow-up commit `304d077` 修）|
+| Theme 機制衝突 | Aria Roadmap 子項 6「MainLayout setDark 改 C# event」跟 mudblazor.md 第一節 MainLayout Static SSR 紀律衝突 → 改 ThemeToggleButton 抽 Interactive component + IThemeService Scoped event（即時切色 0 reload ✓ Chrome MCP 視覺實證）|
+| Rules dropdown 砍範圍 | Christ 拍板「全域 + CEO 留」/ 砍 8 v4 + Pm 共 9 entry → 留 2 entry / DB v4 殘留 row 顯示「全域（v4 殘留：xxx）」fallback chip（驗收實證 row 15「Dev」row 25「Doc」正確顯示）|
+| NavMenu 結構 | 0 動 / 對齊 Roadmap 設計決策 #7 |
+
+#### D. SOP 套用對照
+
+- ✅ **mudblazor.md 第一節「MainLayout Static SSR」紀律**：plan mode 揭跟 Aria Roadmap 子項 6 設計衝突 / 走 Interactive Island + Scoped service event 修法（healthy 偏離 / Aria 採納率高）
+- ✅ **mudblazor.md 第三節「MudTable FixedHeader」紀律**：子項 2.7 全 Dashboard 11 個 MudTable 補 FixedHeader + Height（既有 RuleManagement / ProjectManagement / DeploymentHistory 已對齊）
+- ✅ **Stage 85 IDbContextFactory pattern**：子項 4 後端 query 改對齊（DashboardTokenService 已切 Stage 85）
+- ✅ **refactor-sop v1.5「Razor 大檔砍多處段工具選擇」**：本 Stage 0 大段 Razor 砍 / 全用小段 Edit / 0 踩 unicode typo 坑
+- ✅ **IsDarkMode binding 紀律**：mudblazor.md 第五節重寫落地（IThemeService Scoped + Interactive component + 兩 layer 對齊 CSS 變數）
+
+#### E. Healthy 偏離 plan 紀錄
+
+1. **commit 7 → 7（含 follow-up 1）+ 子項合併**：
+   - 子項 0 / 1 各獨立 commit ✓
+   - 子項 2 跟子項 3 因 TaskHub.razor 同檔重疊 → 合 commit `c18f7d2`
+   - 子項 5 跟子項 6 因 MainLayout.razor / App.razor / app.css 三檔重疊 → 合 commit `9e344cd`
+   - SettingsHub.razor 視覺一致性 5 處改動跟 UI 文字砍 5 處改動同檔 → 合進子項 1 commit `06810ca`（commit message 沒明寫 / healthy 偏離）
+   - 子項 4 獨立 commit ✓
+   - 視覺驗收 follow-up 修 1 commit `304d077`（GetFlagDescription + sidebar overlay width）
+
+2. **子項 3 路線簡化**：Plan 寫「如 file path → 可能需新 Internal API endpoint」/ plan mode verify Attachments 是 base64 內嵌 → 0 新 API / 直接 MudDialog 渲染（Aria gate0 verify 結論）
+
+3. **子項 4.3 MudChart ReferenceLine 退路**：MudBlazor 8.x MudChart `ChartOptions` 不直接支援 ReferenceLine API → 走既有 MudAlert path 擴（80% 全域月限 + 90% per-agent 日限 / `GetPerAgentDailyAlerts` helper / today period 才算）
+
+4. **子項 4.4 per-Skill 維度 stub**：TokenLog **0 SkillName column** verify → MudAlert stub「per-Skill 維度待 SkillName column 補完才有資料」+ Stage 86+ FF 候選紀錄
+
+5. **Theme palette 真實 hex 落地**：plan 預設 VS Code Dark+ baseline → Chrome MCP 視覺驗收 Christ 看了 ✓ 接受（待 Christ 反饋是否需微調）
+   - PaletteDark：`#1e1e1e` background / `#2d2d2d` BackgroundGray + Drawer/Appbar / `#252525` Surface / rgba(255,255,255,0.87) TextPrimary / `#818cf8` Primary（沿用）
+   - app.css `html[data-theme="dark"]` `--mud-palette-*` 完整對齊（兩 layer 不再對不齊）
+
+#### F. 踩坑紀錄
+
+**F1：子項 1 grep filter 漏抓 razor.cs C# return string**
+
+- 砍前 grep 用 `--include="*.razor"` / 只抓 razor 檔
+- razor.cs C# code 內 method return string 也含 UI 顯示文字（`GetFlagDescription` 12 case 每個 description 都會 render 到 Dashboard）
+- Chrome MCP 視覺驗收訪 SettingsHub 第一眼揪「v5 PoC 動態 orchestrator 上線（Stage 63B）」等 12 處殘留
+- 修法：follow-up commit `304d077` 砍 12 case description 開發歷史 reference
+- **SOP 升級候選**：砍 UI 文字時 grep 範圍應含 `*.razor` + `*.razor.cs` + `*.cs`（特別 method return string 模式 `=> "..."` / chip text / tooltip text）
+
+**F2：子項 5 Sidebar overlay 模式 width 截斷**
+
+- 加 `mud-drawer--overlay-mode` class 含 `position: fixed !important` / 但未明設 width
+- MudDrawer 預設 width 透過 layout class `mud-drawer-open-persistent-left` 帶 CSS variable / overlay 模式不加 layout class（避免擠 main）→ width 變數沒套用 → 露出 ~80px
+- 修法：follow-up commit `304d077` 加 `width: 260px !important` + `max-width: 260px !important` 對齊 MudDrawer 預設
+- **SOP 升級候選**：MudDrawer overlay-mode 自製 CSS 必明設 width（不能依賴既有 layout class）
+
+#### G. 自驗結果
+
+**結構驗（Forge 自驗）**：
+- ✅ A1：UI 顯示文字砍版本/Stage 編號 — grep filter razor comment + C# comment 後 0 match（除 RuleManagement.razor:56 `(v4 殘留)` 功能性 fallback 文字）
+- ✅ A2：Rules dropdown 2 entry（全域 + CEO）verify
+- ✅ A3：`dotnet build AiTeam.slnx` 0 Error / 25 Warning（NuGet vulnerability + 1 既有 CS0649 / 0 新增）
+- ✅ A4：`dotnet test src/AiTeam.Bot.Tests` 130 passed / 0 failed / 2 skipped（Stage 85 baseline 不動）
+
+**Chrome MCP UI 視覺驗（Forge 自驗）**：
+- ✅ 首頁 4 卡乾淨（icon + 標題 + 數字 / MudTooltip hover 顯示描述）
+- ✅ Sidebar 兩態：click hamburger pin 模式（擠壓 main）/ hover overlay 模式（不擠 main / 修 width 前露 80px / 修後完整）
+- ✅ AI Team logo 在 Drawer 頂部 / hamburger 半透明浮左上 / v3.78.0 顯示
+- ✅ Theme 切換即時生效（0 reload / dark↔light 切換 MudPaper / MudCard / 整體背景 + 按鈕變色全套）
+- ✅ Dark Mode palette = Christ 深灰色 baseline（#1e1e1e 主背景 / #252525 卡片 / #2d2d2d sidebar+appbar）
+- ✅ 設定中心 WORKFLOW FLAGS tab「動態架構（6 flag）」+「數值上限（6 flag）」/ UI 文字乾淨
+- ✅ TALENTS Petra / Victoria Skills column = 「N/A（dispatcher / CEO 角色）」/ 其他 4 個顯示真實 Skill
+- ✅ TALENTPROMPTS 5 欄統一（Talent / Active Version / Length / UpdatedAt / 動作）
+- ✅ Rules tab：既有 row「全域」+ v4 殘留 row「全域（v4 殘留：Dev/Doc 等）」fallback chip
+- ✅ 監控中心時間範圍 6 button（今天/這一週/最近 7 天/這個月/最近 30 天/全部）
+- ✅ 維度 3 entry（per-Talent / per-PetraSession / per-Skill）/ per-Skill stub MudAlert 顯示「待 SkillName column 補完」
+- ✅ PetraInbox 點「📎 1 張」開 AttachmentPreviewDialog / base64 圖片正常渲染
+
+**Christ 線下視覺驗收待跑**：
+- ⏳ Theme palette 微調反饋（深灰色 baseline 是否合預期 / 如需調整提供 hex）
+- ⏳ Sidebar 操作體驗（hover overlay + click pin 流暢度 / overlay 自動縮 300ms 是否舒服）
+- ⏳ 各分頁整體視覺風格（dark / light 兩 Mode）
+
+#### H. 0 真實 Trial 依賴 / 0 LLM call
+
+純前端 + 1 後端 query 改造 / 0 燒 AiTeam 餘額 / 對齊 plan 「走 Aria + Forge subscription」紀律。
