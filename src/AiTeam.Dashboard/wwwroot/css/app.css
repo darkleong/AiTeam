@@ -502,11 +502,13 @@ html[data-theme="dark"] {
 }
 .sidebar-hamburger-float:hover { opacity: 1; }
 
-/* Overlay 模式：drawer 浮在內容上 不擠壓 main content */
+/* Overlay 模式：drawer 浮在內容上 不擠壓 main content（width 對齊 MudDrawer 預設 / 既有 pinned 模式 width） */
 .mud-drawer-persistent.mud-drawer--overlay-mode {
     position: fixed !important;
     z-index: 1200;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    width: 260px !important;
+    max-width: 260px !important;
 }
 
 /* ========================================

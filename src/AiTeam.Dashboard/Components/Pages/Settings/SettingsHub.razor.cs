@@ -188,21 +188,21 @@ public partial class SettingsHub
 
     #region Flag 描述
 
-    // Stage 85：v4 dead flag 10 case 砍（UseFramework* 5 + 5 v4 round / dead caller 砍後 dangling description）
+    // Stage 86 子項 1 follow-up：UI 顯示文字砍 v5/v5.5/Stage 編號（純功能描述 / 對齊使用者文檔不該帶開發歷史脈絡紀律）
     private static string GetFlagDescription(string key) => key switch
     {
-        "Workflow:UsePetraOrchestratorV5"          => "v5 PoC 動態 orchestrator 上線（Stage 63B）",
-        "Workflow:UseV5Memory"                     => "v5.5 Phase 2 跨 Session 長期記憶（Stage 69）",
-        "Workflow:UseV5SubtaskPlanning"            => "v5.5 Phase 2 動態 SubtaskPlan 拆解",
-        "Workflow:UseV5PromptDb"                   => "v5.5 Phase 2 Prompt DB 化（Stage 72）",
-        "Workflow:UseHITLPlanConfirmation"         => "Stage 80 plan_confirm HITL gate",
-        "Workflow:UseDynamicReplanning"            => "Stage 81 動態 replan + replan_confirm HITL retry gate",
-        "Workflow:V5MemoryCompactThresholdPercent" => "v5 記憶 compact 觸發 % 閾值",
-        "Workflow:V5MemoryCompactKeepCount"        => "v5 記憶 compact 保留筆數",
-        "Workflow:MaxConcurrentPetra"              => "v5.5 並行 Petra 消費者數",
-        "Workflow:MaxAttachmentsPerTask"           => "per task 附件上限（Stage 79）",
-        "Workflow:MaxAttachmentSizeMB"             => "per 附件 MB 上限（Stage 79）",
-        "Workflow:MaxReplanIterations"             => "動態 replan 最大 iteration 輪次（Stage 81 cap）",
+        "Workflow:UsePetraOrchestratorV5"          => "動態 orchestrator（Petra 拆 SubtaskPlan + 派工）",
+        "Workflow:UseV5Memory"                     => "跨 Session 長期記憶",
+        "Workflow:UseV5SubtaskPlanning"            => "動態 SubtaskPlan 拆解",
+        "Workflow:UseV5PromptDb"                   => "Prompt DB 化（SkillPrompt / TalentPrompt 動態管理）",
+        "Workflow:UseHITLPlanConfirmation"         => "plan_confirm HITL gate（老闆審 SubtaskPlan 才執行）",
+        "Workflow:UseDynamicReplanning"            => "動態 replan + replan_confirm HITL retry gate",
+        "Workflow:V5MemoryCompactThresholdPercent" => "記憶 compact 觸發 % 閾值",
+        "Workflow:V5MemoryCompactKeepCount"        => "記憶 compact 保留筆數",
+        "Workflow:MaxConcurrentPetra"              => "並行 Petra 消費者數",
+        "Workflow:MaxAttachmentsPerTask"           => "per task 附件上限",
+        "Workflow:MaxAttachmentSizeMB"             => "per 附件 MB 上限",
+        "Workflow:MaxReplanIterations"             => "動態 replan 最大 iteration 輪次",
         _                                          => "（無描述）",
     };
 
