@@ -1,7 +1,27 @@
+@* Stage 87 B2：NavMenu MudNavGroup 二層階層（3 Hub 一級節點 + 14 sub-page 二級節點 / 對齊 Stage 86 follow-up #9 順序：任務→監控→設定）*@
 <MudNavMenu>
     <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">首頁</MudNavLink>
-    <MudNavLink Href="/tasks" Icon="@Icons.Material.Filled.Assignment">任務中心</MudNavLink>
-    @* Stage 86 follow-up #9：監控中心 移到設定中心前（對齊 Christ 使用習慣 / 日常監控頻率高於改設定） *@
-    <MudNavLink Href="/monitoring" Icon="@Icons.Material.Filled.MonitorHeart">監控中心</MudNavLink>
-    <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">設定中心</MudNavLink>
+
+    <MudNavGroup Title="任務中心" Icon="@Icons.Material.Filled.Assignment" Expanded="true">
+        <MudNavLink Href="/tasks/hitl"    Icon="@Icons.Material.Filled.NotificationsActive">HITL 確認</MudNavLink>
+        <MudNavLink Href="/tasks/active"  Icon="@Icons.Material.Filled.PlayCircle">進行中 Session</MudNavLink>
+        <MudNavLink Href="/tasks/inbox"   Icon="@Icons.Material.Filled.Inbox">PetraInbox 收件</MudNavLink>
+        <MudNavLink Href="/tasks/history" Icon="@Icons.Material.Filled.History">歷史</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="監控中心" Icon="@Icons.Material.Filled.MonitorHeart" Expanded="true">
+        <MudNavLink Href="/monitoring/tokens"      Icon="@Icons.Material.Filled.BarChart">Token 統計</MudNavLink>
+        <MudNavLink Href="/monitoring/agents"      Icon="@Icons.Material.Filled.SmartToy">Agent 狀態</MudNavLink>
+        <MudNavLink Href="/monitoring/deployments" Icon="@Icons.Material.Filled.RocketLaunch">部署紀錄</MudNavLink>
+        <MudNavLink Href="/monitoring/health"      Icon="@Icons.Material.Filled.HealthAndSafety">系統健康</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="設定中心" Icon="@Icons.Material.Filled.Settings" Expanded="false">
+        <MudNavLink Href="/settings/workflow"        Icon="@Icons.Material.Filled.ToggleOn">Workflow Flags</MudNavLink>
+        <MudNavLink Href="/settings/tokens"          Icon="@Icons.Material.Filled.Shield">Token 守門 + 系統設定</MudNavLink>
+        <MudNavLink Href="/settings/talents"         Icon="@Icons.Material.Filled.People">Talents</MudNavLink>
+        <MudNavLink Href="/settings/skill-prompts"   Icon="@Icons.Material.Filled.Article">SkillPrompts</MudNavLink>
+        <MudNavLink Href="/settings/talent-prompts"  Icon="@Icons.Material.Filled.Description">TalentPrompts</MudNavLink>
+        <MudNavLink Href="/settings/rules"           Icon="@Icons.Material.Filled.Folder">Rules + Projects</MudNavLink>
+    </MudNavGroup>
 </MudNavMenu>
