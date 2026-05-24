@@ -113,6 +113,21 @@ private async Task CloseAsync() => await IsOpenChanged.InvokeAsync(false);
 
 ⚠️ **原因**：`@bind-Open="IsOpen"` 展開為 `OpenChanged="(v) => IsOpen = v"`，只直接賦值參數，不呼叫 `IsOpenChanged` EventCallback → 父元件狀態不同步。
 
+### MudDrawer 自製 overlay-mode 必明設 width（Stage 86 踩坑 F2）
+
+自製 `mud-drawer--overlay-mode` class（hover overlay 不擠壓 main content 用）時，**`position: fixed` 會讓既有 MudDrawer width CSS variable 失效**（露出 80px 預設 mini width）。
+
+✅ 正確 — 明設 width + max-width 不依賴 layout class：
+```css
+.mud-drawer-pos-left.mud-drawer--overlay-mode {
+    position: fixed !important;
+    width: 240px !important;
+    max-width: 240px !important;
+}
+```
+
+❌ 錯誤 — 依賴 `mud-drawer-open-persistent-left` 帶 width variable（overlay-mode 已脫離 layout context，width var 不會 apply）。
+
 ---
 
 ## 三、MudTable
@@ -466,6 +481,21 @@ MudBlazor 內部 class（`.mud-icon-button` / `.mud-button-root` 等）可能隨
 :deep(.mud-table-container) { border-radius: 8px; }
 ```
 
+### MudBlazor utility class 跟 inline style 不能混搭（Stage 86 踩坑 #5 v2）
+
+MudBlazor utility class（`pa-N` / `m-N` / `d-flex` 等）內部帶 `!important`，**inline `style="..."` 無法 override**。
+
+✅ 正確 — 要 override utility class 的 padding/margin 時，**拿掉 utility class、改全 inline style**：
+```razor
+<!-- ❌ 不生效（inline 輸給 utility !important） -->
+<div class="pa-3" style="padding-left: 56px">...</div>
+
+<!-- ✅ 生效（純 inline 全控） -->
+<div style="padding: 12px 12px 12px 56px">...</div>
+```
+
+❌ 錯誤 — 混搭依賴「inline 贏 utility」（cascading 邏輯不適用 `!important`）。
+
 ---
 
 ## 十二、Empty State
@@ -494,3 +524,63 @@ MudBlazor 內部 class（`.mud-icon-button` / `.mud-button-root` 等）可能隨
 - [ ] MudTable 有 `FixedHeader` + `Height`，Scrollbar 在元件內
 - [ ] MudTable 中的 MudSwitch 有 `stopPropagation`（若有 OnRowClick）
 - [ ] Dark Mode 下目視確認顯示正常
+- [ ] MudDrawer 自製 overlay-mode 明設 `width !important` + `max-width !important`
+- [ ] MudBlazor utility class 不跟 inline style 混搭（要 override 拿掉 utility class）
+- [ ] MudButtonGroup 子按鈕需自控 Variant 時加 `OverrideStyles="false"`
+- [ ] MudTooltip 包大型 block element 用 `Inline="false"` + CSS `.mud-tooltip max-width` limit
+
+---
+
+## 十四、MudButtonGroup
+
+### `OverrideStyles="false"` 才能 child 自控 Variant（Stage 86 踩坑 #7 v2）
+
+`MudButtonGroup` 預設 `OverrideStyles="true"`，會覆寫所有 child MudButton 的 Variant — child 個別設定 `Variant="Variant.Filled"` 不生效。
+
+✅ 正確 — child 自控 Variant（active/inactive 視覺區分 case）必加 `OverrideStyles="false"`：
+```razor
+<MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" OverrideStyles="false">
+    @foreach (var period in _periods)
+    {
+        <MudButton Variant="@(_selected == period.Key ? Variant.Filled : Variant.Outlined)"
+                   Color="@(_selected == period.Key ? Color.Primary : Color.Default)"
+                   OnClick="@(() => Select(period.Key))">@period.Label</MudButton>
+    }
+</MudButtonGroup>
+```
+
+❌ 錯誤 — 預設 `true` 會把 child 的 `Variant.Filled` 全 override 成 group 層級的 `Variant.Outlined`。
+
+---
+
+## 十五、MudTooltip
+
+### 包大型 block element 用 `Inline="false"` + popup max-width（Stage 86 踩坑 #1 v2 + #6）
+
+MudTooltip 預設 `Inline="true"` 渲染為 `<span>` — wrap 大型 block element（如 MudPaper 整張卡片）會塌成 inline 寬度，破壞 layout。
+
+✅ 正確雙紀律：
+1. **wrap 大型 block** 用 `Inline="false"`（渲染為 `<div>` 撐 100% width）
+2. **popup CSS 限寬**（不然 popup 跟 anchor 等寬會超出 viewport）：
+```css
+.mud-tooltip { max-width: 280px !important; }
+```
+
+```razor
+<MudTooltip Text="說明文字" Inline="false">
+    <MudPaper Elevation="2" Class="pa-4">
+        <!-- 大型卡片內容 -->
+    </MudPaper>
+</MudTooltip>
+```
+
+❌ 錯誤 — 預設 `Inline="true"` 包 MudPaper 會塌寬度 / 不設 popup max-width 會超出 viewport。
+
+---
+
+## 版本歷史
+
+| 版本 | 日期 | 變更 |
+|---|---|---|
+| v1.6 | 2026-05-24 | Stage 86 結案升級 — 5 條紀律補強：① 五 Dark Mode 段重寫（MudThemeProvider IsDarkMode 必 binding + IThemeService Scoped event 跨 Interactive Island 同步 / Stage 83 v4 Bug 9 修根因）② MudDrawer 自製 overlay-mode 必明設 width（F2 踩坑）③ utility class 不跟 inline style 混搭（#5 v2 踩坑）④ 新十四節 MudButtonGroup OverrideStyles=false 紀律（#7 v2 踩坑）⑤ 新十五節 MudTooltip Inline=false + popup max-width 雙紀律（#1 v2 + #6 踩坑）|
+| v1.0-v1.5 | 早期累積 | 既有 13 節紀律（架構前提 / MudLayout+Drawer / MudTable / MudSelect / Dark Mode / MudDialog / MudList / MudSwitch / MudChip / MudStack+MudGrid / CSS 規範 / Empty State / 提交前檢查）|

@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v13.0
+> 版本：v14.0
 > 建立日期：2026-04-01
-> 最後更新：2026-05-24（v12.1 加 Dashboard UX 改造候選段 / v13.0 Stage 85 Dashboard 救火結案 + Stage 85+ → Stage 86+ 重命名 + 加 xunit 並發 race FF 候選）
+> 最後更新：2026-05-24（v13.0 Stage 85 Dashboard 救火結案 / v14.0 Stage 86 Dashboard 改造結案 + Stage 86+ → Stage 87+ 重命名 + Dashboard UX 改造候選整合進 Stage 87 範疇）
 > 詳細實作紀錄：[CHANGELOG.md](../../CHANGELOG.md) + [Architecture.md](../Architecture.md)
 
 ---
@@ -11,7 +11,7 @@
 
 | # | 標題 | 狀態 |
 |---|---|---|
-| 一 | v5.5 完整收口 + Stage 86+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 + Stage 85 Dashboard 救火 / Stage 86 Dashboard 改造 + Stage 87 agent_configs audit 規劃中（B 折衷版 / 2026-05-24 Christ 痛點盤點） |
+| 一 | v5.5 完整收口 + Stage 87+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 + Stage 85 Dashboard 救火 + Stage 86 Dashboard 改造 / Stage 87+ agent_configs audit + nav 階層化改造（從 v12.1 候選整合） |
 | 二 | 客戶專案交付流程與驗收閘門 | 🟡 中優先級（AiTeam 開始承接客戶專案時前置必要） |
 
 ---
@@ -37,9 +37,9 @@
 | [Trial_v26](../experiments/Trial_v26_Plan.md) | 🟢 | 82 雙修法 + 業界 supervisor pattern 對齊驗證 |
 | [Trial_v27](../experiments/Trial_v27_Plan.md) | 🟡 戰略性結案 | LLM alignment 雙重 safety net 實證 / 跳出 Trial→Fix 迴圈 |
 
-### Stage 86+ 候選
+### Stage 87+ 候選
 
-從 Stage 83 phased delivery 留的 12 條（#13 已由 [Stage 84](Stage_84_Roadmap.md) deliver / 2026-05-24 移除）。Stage 85 救火 cover 範圍跟既有 12 條 0 重疊（Stage 85 是 Christ 2026-05-24 真實 Dashboard 痛點盤點 5 條新需求）：
+從 Stage 83 phased delivery 留的 12 條（#13 已由 [Stage 84](Stage_84_Roadmap.md) deliver / 2026-05-24 移除）。Stage 85 救火 + Stage 86 改造 cover Christ 2026-05-24 痛點盤點 11 條，跟既有 12 條 0 重疊（既有 12 條是 Stage 83 phased delivery 留尾、跟使用者 UX 痛點性質不同）：
 
 | # | 候選 | 規模 |
 |---|---|---|
@@ -150,3 +150,4 @@ AiTeam 定位不只開發自身系統 / 未來也會替客戶開發。目前流�
 | **v12.0** | **2026-05-24** | **Stage 84 結案** — #13 PetraOrchestratorService 拆解 deliver（v3.76.0 / 2266 → 193 行 / 瘦身 91.5%）/ Stage 84+ → Stage 85+ 重命名（12 條留下）/ 加「Stage 84 follow-up minor 候選」段（dangling doc comment 6 處 + Test29-30 真實搬遷）|
 | **v12.1** | **2026-05-24** | **加 Dashboard UX 改造候選段** — 左側 nav 階層化改造（規模 L）/ 來源：2026-05-24 Christ 真實業務 dogfood 第一單 AiTeam dispatch 撞 TokenGuard 月限 fire 切換策略後保留 |
 | **v13.0** | **2026-05-24** | **Stage 85 結案** — Dashboard 救火 5 子項全 deliver（v3.77.0 / DbContext bug 修 + 三層 alert + v4 dead flag 11 個 + 分頁結構 dup + paused session timeout）/ Stage 85+ → Stage 86+ 重命名 / Active 清單表「Phase 1-4 + Stage 84 + Stage 85」+ Stage 86/87 規劃中描述 / 加「Stage 85 follow-up minor 候選」段（xunit 並發 race）|
+| **v14.0** | **2026-05-24** | **Stage 86 結案** — Dashboard 改造 7 子項全 deliver（v3.78.0 / Rules dead config + 砍版本/Stage 編號 + 視覺一致性 catch-all 7 項 + 附檔預覽 + Monitoring 改善 + Sidebar hover/pin + Theme 機制根因修）/ Forge 7 commit + Christ 視覺驗收 22 commit follow-up / Stage 86+ → Stage 87+ 重命名 / Active 清單表「+ Stage 86」 + Dashboard UX 改造候選（nav 階層化）整合進 Stage 87+ 範疇 / 升 refactor-sop v1.6 + mudblazor.md v1.6（5 條紀律補強）|

@@ -139,6 +139,9 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 8. **Test session cleanup**（Stage 85 踩坑 — Stage 80 self-verify 殘留 3 筆 paused PetraSession 卡 4-5 天才被 Christ Dashboard 揪 / 屬「閘門外漏網」第 4 次累積）：Stage 結案 self-verify 跑完，手動或自動清掉測試 PetraSession（pause / running / 任何試驗殘留）。
    - 手動清：`docker exec aiteam-postgres-1 psql -U aiteam -d aiteam -c "UPDATE petra_sessions SET \"Status\"='cancelled', \"UpdatedAt\"=NOW() WHERE \"Id\" IN (...)"`
    - 自動清：Stage 85 起 PetraSessionRecoveryService 已加 timeout 機制（paused > 24h 自動 cancel + Discord push）— 但 self-verify 跑完當下不該等 24h，手動清比較負責
+9. **UI 文字砍 grep 範圍含 `.razor.cs` C# return string 模式**（Stage 86 踩坑 F1）：砍 Dashboard UI 文字時 grep 範圍不能只 `*.razor` / 必含 `*.razor.cs` + `*.cs` — 特別 `method() => "..."` chip text / tooltip text / select label / GetXxxDescription switch case 模式（這些是 C# code return string 但渲染為 UI 文字）。
+   - 反例（Stage 86 F1）：子項 1「全 Dashboard 砍版本/Stage 編號」用 `Select-String -Path "*.razor"` 漏抓 `SettingsHub.razor.cs:GetFlagDescription` 12 case `=> "Stage NN ..."` description / Christ 視覺驗收期才揪 / 第 2 commit follow-up 補。
+   - 紀律：grep pattern 含 `*.razor + *.razor.cs + *.cs` 全鏈 / pattern 內含 `=>\s*"` 或 `return\s+"` 抓 method return string
 
 ---
 
@@ -168,6 +171,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.6 | 2026-05-24 | Stage 86 結案升級（Aria 結案第二段 step 1 第 6 次實踐）— 結案必做清單第 9 條「UI 文字砍 grep 範圍含 `.razor.cs` C# return string 模式」（Stage 86 踩坑 F1 — 子項 1 全 Dashboard 砍 v4/v5/Stage 編號用 `Select-String -Path "*.razor"` 漏抓 GetFlagDescription 12 case `=> "Stage NN ..."` description / Christ 視覺驗收期才揪 / 紀律延伸 grep pattern 含 `*.razor + *.razor.cs + *.cs` + pattern 內含 `=>\s*"` 或 `return\s+"` 抓 method return string）|
 | v1.5 | 2026-05-24 | Stage 85 結案升級補強（Aria 結案第二段 step 1 第 5 次實踐）— 「不適合套用本 SOP 的情況」段加「Razor / 大檔砍多處段工具選擇紀律」（Stage 85 踩坑 F1 — SystemSettings.razor 砍 v4 段 + 流程輪次上限段時 Edit `old_string` 對 unicode 半全形敏感失敗 / 改 Write 整檔重寫一次過 / 判斷準則 ✅ 小段 Edit ✅ 大段 Razor 含中文混排 Write 重寫）|
 | v1.4 | 2026-05-24 | Stage 85 結案升級（Aria 結案第二段 step 1 第 4 次實踐）— 結案必做清單第 8 條「Test session cleanup」（Stage 85 踩坑 — Stage 80 self-verify 殘留 3 筆 paused PetraSession 卡 4-5 天 / 對齊 Stage 85 PetraSessionRecoveryService timeout 機制升級紀律 / 屬「閘門外漏網」第 4 次累積）|
 | v1.3 | 2026-05-24 | Stage 84 結案升級（Aria 結案第二段 step 1 第 3 次實踐）— ① SOP 5 加「state field 拆解 caller 對應 owning service verify」（Stage 84 `_roundRobinCounter` 4 caller 跨 3 service 拆 3 份 vs plan 寫 2 份 = 預先 grep 不足）② 結案必做清單第 6 條「Dangling reference 清理」（防 dead flag dangling doc comment 殘留）③ 結案必做清單第 7 條「Warning baseline 比對」（防 CS9113 unused parameter 新 warning 漏網 + commit message warning 數對齊實測紀律）④ 實戰數據加 Stage 84 row（主檔 2266 → 193 / 瘦身 91.5% / SOP 累積第 5 次 + single-session 完成 M+ 規模新里程碑）|

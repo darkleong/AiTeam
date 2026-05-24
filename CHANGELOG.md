@@ -19,8 +19,14 @@
 
 ## [Unreleased]
 
-- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火**）
-- **Dashboard 改造 3 Stage 規劃中**（2026-05-24 Christ 痛點盤點 11 條拆 B 折衷版）：✅ Stage 85 救火 → ⏳ Stage 86 Dashboard 改造（sidebar 改造 + 視覺/UX 一致性 + Theme 機制 + 附檔預覽 + Monitoring 改善）→ ⏳ Stage 87 `agent_configs` vs `talents` 架構 audit
+- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火** → **Stage 86 ✅ Dashboard 改造**）
+- **Dashboard 改造 3 Stage 進度**：✅ Stage 85 救火 → ✅ Stage 86 改造 → ⏳ Stage 87 `agent_configs` vs `talents` 架構 audit + nav 階層化改造（FF v12.1 候選）
+
+---
+
+## [3.78.0] — 2026-05-24 — [Stage 86](docs/planning/Stage_86_Roadmap.md) Dashboard 改造（sidebar + 視覺/UX 一致性 + Theme 機制 + 附檔預覽 + Monitoring + Rules 清理）
+
+7 子項全 deliver：Rules dropdown 砍 8 個 v4 dead 角色 + 全 Dashboard UI 顯示文字砍版本/Stage 編號 + 視覺一致性 catch-all 7 項 + PetraInbox 附檔 MudDialog base64 預覽 + Monitoring 時間範圍 filter（6 選項）+ Sidebar hamburger hover overlay + click pin + Theme palette 重設計（深灰色 baseline + IThemeService Scoped event 修 Stage 83 v4 Bug 9 根因）。Forge 7 commit + Christ 視覺驗收 22 commit follow-up（細節見 Stage Roadmap）。0 Migration / xUnit 130 全綠 / 0 新 warning。升 refactor-sop v1.6 + mudblazor.md v1.6（5 條紀律補強）。
 
 ---
 
