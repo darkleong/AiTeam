@@ -163,7 +163,7 @@ else
                                          Label="日 Token 上限（千）"
                                          Value="@_selectedAgent.DailyTokenLimitK"
                                          ValueChanged="@((int? v) => _selectedAgent.DailyTokenLimitK = v)"
-                                         Variant="Variant.Outlined"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
                                          Min="0" Max="100000"
                                          Style="max-width:200px"
                                          Disabled="@_isSavingLlm" />
@@ -171,7 +171,7 @@ else
                                          Label="月 Token 上限（千）"
                                          Value="@_selectedAgent.MonthlyTokenLimitK"
                                          ValueChanged="@((int? v) => _selectedAgent.MonthlyTokenLimitK = v)"
-                                         Variant="Variant.Outlined"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
                                          Min="0" Max="1000000"
                                          Style="max-width:200px"
                                          Disabled="@_isSavingLlm" />

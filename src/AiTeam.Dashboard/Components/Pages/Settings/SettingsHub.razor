@@ -68,7 +68,8 @@
                     </div>
                     <MudNumericField T="int" Value="@GetIntFlag(key)"
                                      ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
-                                     Variant="Variant.Outlined" Min="@min" Max="@max"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Min="@min" Max="@max"
                                      Style="max-width:140px; text-align:right" />
                 </div>
             }
