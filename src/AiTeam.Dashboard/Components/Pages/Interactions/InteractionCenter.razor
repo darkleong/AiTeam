@@ -51,14 +51,15 @@
                     </MudTd>
                     <MudTd>@context.EnqueuedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudTd>
                     <MudTd>
-                        @* Stage 76：v5.5 Phase 3 補強 — 重跑 failed/dead row（PetraInboxProcessor 下次 polling tick 接） *@
+                        @* follow-up #14：統一改 MudIconButton + MudTooltip 對齊 RULES 表紀律 *@
                         @if (context.Status == "failed" || context.Status == "dead")
                         {
-                            <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
-                                       StartIcon="@Icons.Material.Filled.Replay"
-                                       OnClick="@(() => HandleRequeueAsync(context.Id))">
-                                重跑
-                            </MudButton>
+                            <MudTooltip Text="重跑">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Replay"
+                                               Size="Size.Small"
+                                               Color="Color.Warning"
+                                               OnClick="@(() => HandleRequeueAsync(context.Id))" />
+                            </MudTooltip>
                         }
                     </MudTd>
                 </RowTemplate>
