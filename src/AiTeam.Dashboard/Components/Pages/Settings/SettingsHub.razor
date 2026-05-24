@@ -60,8 +60,8 @@
         <MudExpansionPanel Text="數值上限（6 flag）" Expanded="false">
             @foreach (var (key, min, max) in _numericFlags)
             {
-                @* Stage 86 子項 2.1 / follow-up #11：數值 input 真實貼容器右 — 用 ml-auto + 固定 width:160px *@
-                <div class="d-flex align-center py-2">
+                @* Stage 86 子項 2.1 / follow-up #11 v2：用 inline flex + margin-left:auto 強推 input 到 container 右 *@
+                <div style="display:flex; align-items:center; width:100%; padding:8px 0">
                     <div style="flex:1; min-width:0">
                         <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
@@ -70,7 +70,7 @@
                                      ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
                                      Variant="Variant.Outlined" Margin="Margin.Dense"
                                      Min="@min" Max="@max"
-                                     Style="width:160px; flex-shrink:0; text-align:right" />
+                                     Style="width:160px; flex-shrink:0; margin-left:auto; text-align:right" />
                 </div>
             }
         </MudExpansionPanel>
