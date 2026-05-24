@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Dashboard.Services;
 
-/// <summary>Token 用量查詢服務，供 Dashboard Token 監控頁使用。</summary>
-public class DashboardTokenService(AppDbContext db)
+/// <summary>Token 用量查詢服務，供 Dashboard Token 監控頁使用。
+///
+/// Stage 85 子項 0：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern（對齊 Stage 80 既有 DashboardAppSettingsService）。
+/// </summary>
+public class DashboardTokenService(IDbContextFactory<AppDbContext> dbFactory)
 {
     #region Public Methods
 
@@ -20,6 +23,7 @@ public class DashboardTokenService(AppDbContext db)
         decimal outputRatePer1k = 0.015m,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var logs = await db.TokenLogs
             .AsNoTracking()
             .Where(t => t.CreatedAt >= from && t.CreatedAt <= to)

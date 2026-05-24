@@ -3,18 +3,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Dashboard.Services;
 
-/// <summary>規則 CRUD 服務。</summary>
-public class DashboardRuleService(AppDbContext db)
+/// <summary>規則 CRUD 服務。
+///
+/// Stage 85 子項 0：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern（對齊 Stage 80 既有 DashboardAppSettingsService）。
+/// </summary>
+public class DashboardRuleService(IDbContextFactory<AppDbContext> dbFactory)
 {
     #region Public Methods
 
     /// <summary>取得所有規則（依 SortOrder, CreatedAt 排序）。</summary>
     public async Task<List<Rule>> GetAllRulesAsync(CancellationToken cancellationToken = default)
-        => await db.Rules
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Rules
             .AsNoTracking()
             .OrderBy(r => r.SortOrder)
             .ThenBy(r => r.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
 
     /// <summary>新增規則。</summary>
     public async Task<Rule> CreateRuleAsync(
@@ -23,6 +29,7 @@ public class DashboardRuleService(AppDbContext db)
         int sortOrder = 0,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var team = await db.Teams.FirstAsync(cancellationToken);
         var rule = new Rule
         {
@@ -45,6 +52,7 @@ public class DashboardRuleService(AppDbContext db)
         int sortOrder,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rule = await db.Rules.FindAsync([id], cancellationToken);
         if (rule is null) return;
         rule.Content   = content.Trim();
@@ -59,6 +67,7 @@ public class DashboardRuleService(AppDbContext db)
         bool isActive,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rule = await db.Rules.FindAsync([id], cancellationToken);
         if (rule is null) return;
         rule.IsActive = isActive;
@@ -68,6 +77,7 @@ public class DashboardRuleService(AppDbContext db)
     /// <summary>刪除規則。</summary>
     public async Task DeleteRuleAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var rule = await db.Rules.FindAsync([id], cancellationToken);
         if (rule is null) return;
         db.Rules.Remove(rule);

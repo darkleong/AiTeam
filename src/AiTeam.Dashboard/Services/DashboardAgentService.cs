@@ -8,8 +8,10 @@ namespace AiTeam.Dashboard.Services;
 
 /// <summary>
 /// Agent 狀態查詢服務，初始狀態從 DB 讀取統計，後續由 SignalR 推送更新。
+///
+/// Stage 85 子項 0：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern（對齊 Stage 80 既有 DashboardAppSettingsService）。
 /// </summary>
-public class DashboardAgentService(AppDbContext db)
+public class DashboardAgentService(IDbContextFactory<AppDbContext> dbFactory)
 {
     #region Public Methods
 
@@ -20,6 +22,7 @@ public class DashboardAgentService(AppDbContext db)
         int trustLevel,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var teamId = await db.Teams
             .AsNoTracking()
             .Select(t => t.Id)
@@ -59,6 +62,7 @@ public class DashboardAgentService(AppDbContext db)
         bool isActive,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
         if (agent is null) return isActive;
 
@@ -73,6 +77,7 @@ public class DashboardAgentService(AppDbContext db)
         int trustLevel,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
         if (agent is null) return;
         agent.TrustLevel = trustLevel;
@@ -96,6 +101,7 @@ public class DashboardAgentService(AppDbContext db)
         if (!LlmModels.GetModelsForProvider(provider).Contains(model))
             throw new ArgumentException($"Provider {provider} 不支援 Model：{model}", nameof(model));
 
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
         if (agent is null) return false;
 
@@ -112,6 +118,7 @@ public class DashboardAgentService(AppDbContext db)
         int? monthlyTokenLimitK,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.AgentConfigs.FindAsync([agentId], cancellationToken);
         if (agent is null) return false;
 
@@ -124,7 +131,9 @@ public class DashboardAgentService(AppDbContext db)
     /// <summary>取得所有 Agent 設定 DTO（含信任等級）。</summary>
     public async Task<List<AgentConfigDto>> GetAgentConfigsAsync(
         CancellationToken cancellationToken = default)
-        => await db.AgentConfigs
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.AgentConfigs
             .AsNoTracking()
             .Include(a => a.Team)
             .Select(a => new AgentConfigDto
@@ -141,6 +150,7 @@ public class DashboardAgentService(AppDbContext db)
                 MonthlyTokenLimitK = a.MonthlyTokenLimitK
             })
             .ToListAsync(cancellationToken);
+    }
 
     /// <summary>
     /// 取得所有 Agent 的初始狀態 ViewModel（Monitoring AgentStatus tab + Home 速覽用）。
@@ -153,6 +163,7 @@ public class DashboardAgentService(AppDbContext db)
     public async Task<List<AgentStatusViewModel>> GetAllAgentStatusesAsync(
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var talents = await db.Talents
             .AsNoTracking()
             .Where(t => t.IsActive)

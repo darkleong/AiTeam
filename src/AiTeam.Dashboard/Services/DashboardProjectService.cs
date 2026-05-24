@@ -4,15 +4,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Dashboard.Services;
 
-/// <summary>專案查詢服務。</summary>
-public class DashboardProjectService(AppDbContext db)
+/// <summary>專案查詢服務。
+///
+/// Stage 85 子項 0（🔴 root cause fix）：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern — 修 Blazor InteractiveServer
+/// 多元件並行 OnInitializedAsync 撞同 Scoped DbContext 引發「A second operation was started on this context instance」→
+/// Circuit terminated 根因（每個 method 開新 short-lived DbContext / await using 自動 dispose）。
+/// 對齊 Stage 80 既有 DashboardAppSettingsService / Stage 83 議題 F3 既有 pattern。
+/// </summary>
+public class DashboardProjectService(IDbContextFactory<AppDbContext> dbFactory)
 {
     #region Public Methods
 
     /// <summary>取得所有專案列表（含任務數量）。</summary>
     public async Task<List<ProjectDto>> GetAllProjectsAsync(
         CancellationToken cancellationToken = default)
-        => await db.Projects
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Projects
             .AsNoTracking()
             .Include(p => p.Team)
             .OrderBy(p => p.Name)
@@ -28,6 +36,7 @@ public class DashboardProjectService(AppDbContext db)
                 TaskCount = p.Tasks.Count
             })
             .ToListAsync(cancellationToken);
+    }
 
     /// <summary>新增專案。</summary>
     public async Task<ProjectDto> CreateProjectAsync(
@@ -36,6 +45,7 @@ public class DashboardProjectService(AppDbContext db)
         string? techStack,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var team = await db.Teams.FirstAsync(cancellationToken);
         var project = new Project
         {
@@ -67,6 +77,7 @@ public class DashboardProjectService(AppDbContext db)
         bool isActive,
         CancellationToken cancellationToken = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var project = await db.Projects.FindAsync([projectId], cancellationToken);
         if (project is null) return;
         project.IsActive = isActive;

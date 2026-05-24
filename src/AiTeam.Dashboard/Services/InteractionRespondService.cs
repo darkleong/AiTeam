@@ -7,10 +7,13 @@ namespace AiTeam.Dashboard.Services;
 
 /// <summary>
 /// Stage 28a：Dashboard 側的互動回覆服務。
-/// Scoped — 注入 AppDbContext，執行樂觀鎖回覆並廣播 SignalR 更新。
+///
+/// Stage 85 子項 0：ctor 改 IDbContextFactory&lt;AppDbContext&gt; pattern — 修 Blazor InteractiveServer
+/// 多元件並行撞同 Scoped DbContext 並發 bug（對齊 Stage 80 既有 DashboardAppSettingsService）。
+/// IHubContext&lt;AgentStatusHub&gt; 第二注入保留（Singleton / 無 lifecycle 衝突）。
 /// </summary>
 public class InteractionRespondService(
-    AppDbContext db,
+    IDbContextFactory<AppDbContext> dbFactory,
     IHubContext<AgentStatusHub> hubContext,
     ILogger<InteractionRespondService> logger)
 {
@@ -26,6 +29,7 @@ public class InteractionRespondService(
     /// </summary>
     public async Task<bool> RespondAsync(Guid id, string action, string? content, CancellationToken ct = default)
     {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
         var affected = await db.BossInteractions
             .Where(x => x.Id == id && x.Status == "pending")
             .ExecuteUpdateAsync(s => s
