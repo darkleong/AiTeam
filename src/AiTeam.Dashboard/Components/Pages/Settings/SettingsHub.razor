@@ -155,11 +155,12 @@
                         }
                     </MudTd>
                     <MudTd>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                                   StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="@(() => OpenTalentSkillsAsync(context))">
-                            管理 Skills
-                        </MudButton>
+                        @* follow-up #13：統一改 MudIconButton + MudTooltip 對齊 RULES 表 *@
+                        <MudTooltip Text="管理 Skills">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => OpenTalentSkillsAsync(context))" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -220,11 +221,12 @@
                     <MudTd>@(context.PromptBody.Length) chars</MudTd>
                     <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
                     <MudTd>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                                   StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="@(() => OpenSkillPromptEditAsync(context))">
-                            編輯（新版本）
-                        </MudButton>
+                        @* follow-up #13：統一改 MudIconButton + MudTooltip 對齊 RULES 表 *@
+                        <MudTooltip Text="編輯（新版本）">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => OpenSkillPromptEditAsync(context))" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -294,11 +296,12 @@
                     <MudTd>@(existing is null ? "—" : $"{existing.PersonaBody.Length} chars")</MudTd>
                     <MudTd>@(existing is null ? "—" : existing.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm"))</MudTd>
                     <MudTd>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
-                                   StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))">
-                            編輯 persona
-                        </MudButton>
+                        @* follow-up #13：統一改 MudIconButton + MudTooltip 對齊 RULES 表 *@
+                        <MudTooltip Text="編輯 persona">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
