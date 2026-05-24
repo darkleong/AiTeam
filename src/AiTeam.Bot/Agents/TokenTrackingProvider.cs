@@ -15,6 +15,7 @@ namespace AiTeam.Bot.Agents;
 /// 避免假的 Token 統計資料污染 Dashboard 監控頁）。
 /// Stage 47：4 個 Check 改讀 DB（AppSettings + AgentConfigCache），
 /// appsettings.json 保留作 fallback 安全網（DB 無值時生效）。
+/// Stage 87 A2：v4 collapse 最後殘留收口 — agentConfigCache 切 TalentMetaCache / agentName 參數對應 talents.Name baseline（"Petra" 等）。
 /// </summary>
 public class TokenTrackingProvider(
     ILlmProvider inner,
@@ -24,7 +25,7 @@ public class TokenTrackingProvider(
     BotAgentSettings agentSettings,
     BotAgentConfig agentConfig,
     AppSettingsService appSettings,
-    AgentConfigCache agentConfigCache,
+    TalentMetaCache talentMetaCache,
     TokenCostEstimator costEstimator,
     ILogger<TokenTrackingProvider> logger,
     string agentName,
@@ -55,7 +56,8 @@ public class TokenTrackingProvider(
         IReadOnlyList<ImageAttachment>? images = null)
     {
         // Stage 47：讀 per-agent DB 設定（null = DB 未設定，runtime fallback appsettings）
-        var (_, _, dbDailyK, dbMonthlyK) = agentConfigCache.Get(agentName);
+        // Stage 87 A2：agentConfigCache → talentMetaCache（agentName 此時對應 Talent.Name baseline："Petra" 等）
+        var (_, _, dbDailyK, dbMonthlyK) = talentMetaCache.Get(agentName);
 
         // ── Token 守門：呼叫 LLM 之前執行 ────────────────────────────
         // Stage 44：守門用 long 比較，避免高用量月份 overflow（DailyTokenLimitK × 1000 仍是 int 範圍，

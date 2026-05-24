@@ -5,6 +5,7 @@ using AiTeam.Bot.Discord;
 using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -130,12 +131,17 @@ public class CeoCommandController(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var ceoService    = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-            var agentRepo     = scope.ServiceProvider.GetRequiredService<AgentRepository>();
             var taskRepo      = scope.ServiceProvider.GetRequiredService<TaskRepository>();
             var db            = scope.ServiceProvider.GetRequiredService<Data.AppDbContext>();
 
             var rules             = await rulesService.GetRulesAsync("CEO");
-            var activeAgents      = await agentRepo.GetActiveExecutorAgentsAsync();
+            // Stage 87 A2：AgentRepository.GetActiveExecutorAgentsAsync 砍 → 改 inline talents 表 query（對齊 DashboardAgentService.GetAllAgentStatusesAsync Stage 83 修法 / Name != "Victoria" 排除 CEO 自身）
+            var activeAgents      = await db.Talents
+                .AsNoTracking()
+                .Where(t => t.IsActive && t.Name != "Victoria")
+                .OrderBy(t => t.Name)
+                .Select(t => new { t.Name, t.Description })
+                .ToListAsync();
             var agentList         = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
             var availableProjects = await taskRepo.GetActiveProjectNamesAsync();
 

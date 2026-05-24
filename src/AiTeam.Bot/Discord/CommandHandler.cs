@@ -8,6 +8,7 @@ using AiTeam.Shared.Constants;
 using AiTeam.Shared.ViewModels;
 using Discord;
 using Discord.WebSocket;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -224,10 +225,16 @@ public class CommandHandler(
 
         await using var scope = serviceProvider.CreateAsyncScope();
         var ceoService = scope.ServiceProvider.GetRequiredService<CeoAgentService>();
-        var agentRepo  = scope.ServiceProvider.GetRequiredService<AgentRepository>();
+        var db         = scope.ServiceProvider.GetRequiredService<Data.AppDbContext>();
 
         var rules        = await rulesService.GetRulesAsync(AgentNames.Ceo);
-        var activeAgents = await agentRepo.GetActiveExecutorAgentsAsync();
+        // Stage 87 A2：AgentRepository.GetActiveExecutorAgentsAsync 砍 → 改 inline talents 表 query（對齊 CeoCommandController 同步修法）
+        var activeAgents = await db.Talents
+            .AsNoTracking()
+            .Where(t => t.IsActive && t.Name != "Victoria")
+            .OrderBy(t => t.Name)
+            .Select(t => new { t.Name, t.Description })
+            .ToListAsync();
         var agentList    = activeAgents.Select(a => new AgentDescriptor(a.Name, a.Description)).ToList();
 
         var projectName       = ExtractProjectFromHistory(history, msg.CleanContent);

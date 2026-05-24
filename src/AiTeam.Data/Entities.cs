@@ -327,6 +327,10 @@ public class Talent
     public string? Provider { get; set; }
     /// <summary>Stage 67：Talent 預設 LLM Model（null = runtime fallback Agents:Dev:Model）。</summary>
     public string? Model { get; set; }
+    /// <summary>Stage 87：Talent 日 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。對齊 Stage 47 AgentConfig 既有 schema / 對齊 Stage 74 三層 fallback chain（TalentSkill → Talent → appsettings）延伸 Token 守門。</summary>
+    public int? DailyTokenLimitK { get; set; }
+    /// <summary>Stage 87：Talent 月 Token 上限（千 token）。null = DB 未設定，runtime fallback appsettings。</summary>
+    public int? MonthlyTokenLimitK { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

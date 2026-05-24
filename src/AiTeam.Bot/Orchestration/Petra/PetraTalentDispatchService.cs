@@ -40,7 +40,8 @@ public class PetraTalentDispatchService(
     PetraContextBuilder contextBuilder,
     ILogger<PetraTalentDispatchService> logger)
 {
-    private const string PetraAgentName = "PM";
+    // Stage 87 A2：v4 collapse 最後殘留收口 — PetraAgentName 從 "PM"（agent_configs 表 row）改 "Petra"（talents 表 baseline row）/ LlmProviderFactory.Create("Petra") 走 TalentMetaCache lookup
+    private const string PetraAgentName = "Petra";
 
     // Stage 67：v5.5 path round-robin counter（Scoped — session 級無需 thread-safe）
     private int _roundRobinCounter;

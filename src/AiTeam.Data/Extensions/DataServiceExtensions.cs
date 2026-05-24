@@ -16,7 +16,7 @@ public static class DataServiceExtensions
     {
         builder.AddNpgsqlDbContext<AppDbContext>(connectionName);
         builder.Services.AddScoped<TaskRepository>();
-        builder.Services.AddScoped<AgentRepository>();
+        // Stage 87 A2：AgentRepository 砍（agent_configs 表 A4 DROP TABLE / 2 caller 已遷 inline talents query）
         builder.Services.AddScoped<TokenRepository>();
         builder.Services.AddScoped<CeoConversationRepository>();
         builder.Services.AddScoped<CeoMemoryRepository>();

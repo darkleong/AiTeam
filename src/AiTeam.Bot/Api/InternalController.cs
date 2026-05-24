@@ -35,7 +35,7 @@ public class InternalController(
     IHostApplicationLifetime appLifetime,
     AppSettingsService appSettings,
     RulesService rulesService,
-    AgentConfigCache agentConfigCache,
+    TalentMetaCache talentMetaCache,
     PromptResolver promptResolver,
     TalentSkillModelResolver talentSkillModelResolver,    // Stage 74
     ILogger<InternalController> logger) : ControllerBase
@@ -46,7 +46,7 @@ public class InternalController(
     /// 清除 Bot 端 Cache，下次存取時自動從 DB 重新載入。
     /// scope: rules | agents | agent-config | all（預設 all）
     /// - agents       = AppSettings 資料表快取（AppSettingsService；legacy 命名，對應 app_settings 資料表）
-    /// - agent-config = Stage 38 新增：AgentConfig 資料表的 Provider/Model 快取（AgentConfigCache）
+    /// - agent-config = Stage 87 A2：talents 資料表的 Provider/Model/TokenLimit 快取（TalentMetaCache / 取代 Stage 38 AgentConfigCache / scope 名稱保留對齊 Dashboard 既有 ReloadCacheAsync("agent-config") caller）
     /// - all          = Stage 72 新增：含 PromptResolver（skill_prompts / talent_prompts 快取 — production rollback SQL UPDATE + reload-cache `all` 5 分鐘內生效）
     /// </summary>
     [HttpPost("reload-cache")]
@@ -61,9 +61,9 @@ public class InternalController(
         if (scope is "agents" or "all")
             appSettings.InvalidateCache();
 
-        // Stage 38：清 AgentConfig 資料表的 Provider/Model 快取（Dashboard 改完 Agent 設定頁呼叫）
+        // Stage 87 A2：清 talents 資料表的 Provider/Model/TokenLimit 快取（Dashboard TALENTS 頁改完呼叫 / scope 名稱沿用「agent-config」對齊既有 Dashboard caller）
         if (scope is "agent-config" or "all")
-            agentConfigCache.InvalidateCache();
+            talentMetaCache.InvalidateCache();
 
         // Stage 72：清 SkillPrompt / TalentPrompt cache（議題 2 路線 A — 不加新 `prompts` scope / Phase 3 WebUI 直接 CRUD 後此整合多餘）
         // Stage 74：清 TalentSkill Provider/Model resolver cache（per-Skill Model 三層 fallback chain）— 對齊既有 `all` scope 整合 pattern

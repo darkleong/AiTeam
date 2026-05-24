@@ -11,7 +11,6 @@ using AiTeam.Bot.Services;
 using AiTeam.Data.Repositories;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Quartz;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,7 +50,8 @@ builder.Services.AddSingleton<RulesService>();
 // 動態系統設定（TTL cache，免重啟生效）
 builder.Services.AddSingleton<AppSettingsService>();
 // Stage 38：Agent Provider/Model 動態設定快取（DB 權威，Dashboard 可改，TTL 5 分）
-builder.Services.AddSingleton<AgentConfigCache>();
+// Stage 87 A2：AgentConfigCache → TalentMetaCache（v4 collapse 最後殘留收口 / DbSet talents 表 / cache key Talent.Name）
+builder.Services.AddSingleton<TalentMetaCache>();
 
 // Agents（v5.5 production active 6 Talent baseline）
 // Stage 84：v5 IAgentTool ecosystem 整套砍 — DevAgentService/QaAgentService/DocAgentService/ReviewerAgentService class + IAgentTool registration 全砍
@@ -174,31 +174,16 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 app.MapControllers();
 
-// 啟動時自動套用 EF Core Migrations，並 Seed 初始 AgentConfig 資料
+// 啟動時自動套用 EF Core Migrations，並 Seed 初始資料
+// Stage 87 A2：Stage 38 AgentConfig 補 seed 段砍（agent_configs 表 Stage 87 A4 DROP TABLE / Talent baseline 6 row 已由 DbSeeder.EnsureTalentsAsync seed Provider/Model）
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db);
 
-    // Stage 38：AgentConfig 的 Provider/Model null 欄位從 appsettings 補 seed（已有值不覆蓋）
-    // Guard：只當兩欄位同時為 null 才補（避免半途被 Dashboard 改過的列被 appsettings 回補覆蓋另一半）
-    // Runtime 仍允許 per-field null fallback（dbOverride ?? configConfig），保留未來擴充空間
-    var agentOpts = scope.ServiceProvider.GetRequiredService<IOptions<AgentSettings>>().Value;
-    var agentRows = await db.AgentConfigs.ToListAsync();
-    foreach (var row in agentRows)
-    {
-        if (row.Provider is null && row.Model is null
-            && agentOpts.Agents.TryGetValue(row.Name, out var src))
-        {
-            row.Provider = src.Provider;
-            row.Model    = src.Model;
-        }
-    }
-    await db.SaveChangesAsync();
-
-    // Stage 38：預熱 AgentConfigCache，避免第一筆任務觸發 sync DB 載入 block 執行緒
-    await scope.ServiceProvider.GetRequiredService<AgentConfigCache>().WarmupAsync();
+    // Stage 87 A2：預熱 TalentMetaCache（取代 Stage 38 AgentConfigCache.WarmupAsync）
+    await scope.ServiceProvider.GetRequiredService<TalentMetaCache>().WarmupAsync();
 }
 
 app.Run();
