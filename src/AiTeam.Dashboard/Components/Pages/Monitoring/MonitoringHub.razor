@@ -165,7 +165,8 @@
     @* Tab 4：System Health — query /internal/health endpoint *@
     <MudTabPanel Text="系統健康" Icon="@Icons.Material.Filled.HealthAndSafety">
         <MudGrid Spacing="3">
-            <MudItem xs="12" md="3">
+            @* Stage 85 子項 3：Discord placeholder 卡砍（FF #7「Bot /internal/health Discord 真實 check」未實作不該佔位誤導 / 真實 check 做完再加回）*@
+            <MudItem xs="12" md="4">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="@(_botHealthy ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">Bot 容器</MudText>
@@ -173,7 +174,7 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@_botStatusDetail</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" md="4">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="@(_dbHealthy ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">PostgreSQL</MudText>
@@ -181,15 +182,7 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@_dbStatusDetail</MudText>
                 </MudPaper>
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-                    <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Large" Color="@(_discordHealthy ? Color.Success : Color.Default)" />
-                    <MudText Typo="Typo.subtitle2" Class="mt-2">Discord</MudText>
-                    <MudText Typo="Typo.body2">@(_discordHealthy ? "✅ Connected" : "— Stage 84+")</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_discordStatusDetail</MudText>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" md="4">
                 <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
                     <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="@(_hubConnected ? Color.Success : Color.Error)" />
                     <MudText Typo="Typo.subtitle2" Class="mt-2">SignalR Hub</MudText>

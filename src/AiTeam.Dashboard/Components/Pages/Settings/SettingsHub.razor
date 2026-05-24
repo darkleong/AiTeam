@@ -331,11 +331,6 @@
         </MudExpansionPanel>
     </MudTabPanel>
 
-    @* Tab 8：MockMode — reuse SystemSettings 內含 MockMode toggle + Delay 範圍（同 Tab 2） *@
-    <MudTabPanel Text="MockMode" Icon="@Icons.Material.Filled.BugReport">
-        <MudAlert Severity="Severity.Info" Class="mb-3">
-            Mock Mode toggle + Mock Delay 範圍同 Tab 2「Token 守門 + 系統設定」（既有 SystemSettings page 整套 reuse）— 或在此 tab 同 component reuse 一次。
-        </MudAlert>
-        <SystemSettings />
-    </MudTabPanel>
+    @* Stage 85 子項 3：Tab 8 MockMode 砍（Tab 2「Token 守門 + 系統設定」已 cover 完整 Mock Mode toggle + Delay 範圍 / 純 dup 清理）*@
+
 </MudTabs>

@@ -55,8 +55,7 @@ public partial class MonitoringHub : IAsyncDisposable
     private string _botStatusDetail = "未檢測";
     private bool _dbHealthy;
     private string _dbStatusDetail = "未檢測";
-    private bool _discordHealthy;
-    private string _discordStatusDetail = "未檢測";
+    // Stage 85 子項 3：Discord status field 砍（placeholder 卡砍 / FF #7 真實 check 做完再加回）
 
     // MudChart data
     private List<ChartSeries> _perTalentChartSeries = [];
@@ -243,8 +242,7 @@ public partial class MonitoringHub : IAsyncDisposable
                     _botStatusDetail = health.BotProcessDetail;
                     _dbHealthy = health.DbConnected;
                     _dbStatusDetail = health.DbDetail;
-                    _discordHealthy = health.DiscordConnected;
-                    _discordStatusDetail = health.DiscordDetail;
+                    // Stage 85 子項 3：Discord status 寫入砍（placeholder 卡砍 / record schema 保留對齊 InternalController deserialization）
                     return;
                 }
             }
