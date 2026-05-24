@@ -77,6 +77,8 @@ builder.Services.AddScoped<DashboardAppSettingsService>();
 builder.Services.AddScoped<DashboardTokenService>();
 builder.Services.AddScoped<InteractionRespondService>();
 builder.Services.AddScoped<DashboardCeoCommandService>();
+// Stage 86 子項 6：Theme 切換 Scoped service（per Blazor circuit / 跨 component instance 共享 state + event）
+builder.Services.AddScoped<IThemeService, ThemeService>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();

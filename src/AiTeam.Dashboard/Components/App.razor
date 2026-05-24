@@ -27,48 +27,82 @@
             }
         };
 
-        // aiteamToggleSidebar：透過 CSS class 切換 MudDrawer Persistent 收合狀態
-        // MudBlazor Persistent Drawer 使用兩組 class 控制：
-        //   1. drawer 本身：mud-drawer--open / mud-drawer--closed（雙 hyphen）
-        //   2. .mud-layout：mud-drawer-open-persistent-left（控制 .mud-main-content margin-left）
-        window.aiteamToggleSidebar = function () {
-            var drawer = document.querySelector('.mud-drawer-persistent');
-            var layout = document.querySelector('.mud-layout');
-            if (!drawer || !layout) return;
-            var isOpen = drawer.classList.contains('mud-drawer--open');
-            // 移除 initial class 以啟用動畫
-            drawer.classList.remove('mud-drawer--initial');
-            if (isOpen) {
-                drawer.classList.remove('mud-drawer--open');
-                drawer.classList.add('mud-drawer--closed');
-                layout.classList.remove('mud-drawer-open-persistent-left');
-                localStorage.setItem('sidebarOpen', '0');
-            } else {
-                drawer.classList.remove('mud-drawer--closed');
-                drawer.classList.add('mud-drawer--open');
-                layout.classList.add('mud-drawer-open-persistent-left');
-                localStorage.setItem('sidebarOpen', '1');
+        // Stage 86 子項 5：Sidebar 兩態切換（hover overlay + click pin）
+        //   - hover hamburger → mud-drawer--overlay-mode + mud-drawer--open（drawer 浮出不擠壓 main）
+        //   - mouseleave drawer → 300ms 後縮回（hover 緩衝避免閃爍）
+        //   - click hamburger → toggle pinned state（pin 模式擠壓 main / 對齊既有 Persistent drawer 行為）
+        //   - pinned state 持久化 localStorage `sidebarPinned`
+        window.aiteamSidebar = {
+            pinned: false,
+            hoverTimer: null,
+
+            _getDrawer: function () { return document.querySelector('#main-sidebar'); },
+            _getLayout: function () { return document.querySelector('.mud-layout'); },
+
+            init: function () {
+                var hamburger = document.querySelector('#sidebar-hamburger');
+                var drawer    = window.aiteamSidebar._getDrawer();
+                var layout    = window.aiteamSidebar._getLayout();
+                if (!hamburger || !drawer || !layout) {
+                    requestAnimationFrame(window.aiteamSidebar.init);
+                    return;
+                }
+                // 還原初始 pin state（localStorage / default 不 pinned）
+                window.aiteamSidebar.setPinned(localStorage.getItem('sidebarPinned') === '1');
+
+                // hover hamburger → overlay 展開
+                hamburger.addEventListener('mouseenter', function () {
+                    if (window.aiteamSidebar.pinned) return;
+                    clearTimeout(window.aiteamSidebar.hoverTimer);
+                    drawer.classList.remove('mud-drawer--initial');
+                    drawer.classList.add('mud-drawer--overlay-mode');
+                    drawer.classList.add('mud-drawer--open');
+                    drawer.classList.remove('mud-drawer--closed');
+                });
+                // mouseleave drawer → 300ms 後縮
+                drawer.addEventListener('mouseleave', function () {
+                    if (window.aiteamSidebar.pinned) return;
+                    window.aiteamSidebar.hoverTimer = setTimeout(function () {
+                        drawer.classList.remove('mud-drawer--open');
+                        drawer.classList.add('mud-drawer--closed');
+                        drawer.classList.remove('mud-drawer--overlay-mode');
+                    }, 300);
+                });
+                // hover drawer 自己時不縮（取消縮計時器）
+                drawer.addEventListener('mouseenter', function () {
+                    if (window.aiteamSidebar.pinned) return;
+                    clearTimeout(window.aiteamSidebar.hoverTimer);
+                });
+            },
+
+            toggle: function () {
+                window.aiteamSidebar.setPinned(!window.aiteamSidebar.pinned);
+            },
+
+            setPinned: function (pinned) {
+                var drawer = window.aiteamSidebar._getDrawer();
+                var layout = window.aiteamSidebar._getLayout();
+                if (!drawer || !layout) return;
+
+                window.aiteamSidebar.pinned = pinned;
+                drawer.classList.remove('mud-drawer--initial');
+                if (pinned) {
+                    drawer.classList.add('mud-drawer--open');
+                    drawer.classList.remove('mud-drawer--closed');
+                    drawer.classList.remove('mud-drawer--overlay-mode');
+                    layout.classList.add('mud-drawer-open-persistent-left');
+                } else {
+                    drawer.classList.remove('mud-drawer--open');
+                    drawer.classList.add('mud-drawer--closed');
+                    drawer.classList.remove('mud-drawer--overlay-mode');
+                    layout.classList.remove('mud-drawer-open-persistent-left');
+                }
+                localStorage.setItem('sidebarPinned', pinned ? '1' : '0');
             }
         };
 
-        // 側邊欄初始化：讀取 localStorage 決定初始收合狀態
-        // 使用 rAF 輪詢，等 Blazor 渲染 MudDrawer 後再套用（DOMContentLoaded 太早，元素尚未存在）
-        (function () {
-            if (localStorage.getItem('sidebarOpen') !== '0') return;
-            function applySidebarClosed() {
-                var drawer = document.querySelector('.mud-drawer-persistent');
-                var layout = document.querySelector('.mud-layout');
-                if (!drawer || !layout) {
-                    requestAnimationFrame(applySidebarClosed);
-                    return;
-                }
-                drawer.classList.remove('mud-drawer--initial');
-                drawer.classList.remove('mud-drawer--open');
-                drawer.classList.add('mud-drawer--closed');
-                layout.classList.remove('mud-drawer-open-persistent-left');
-            }
-            requestAnimationFrame(applySidebarClosed);
-        })();
+        // 頁面載入後 init（rAF 輪詢等 Blazor 渲染 MudDrawer + hamburger DOM）
+        requestAnimationFrame(window.aiteamSidebar.init);
     </script>
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />

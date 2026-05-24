@@ -31,13 +31,14 @@
 }
 
 html[data-theme="dark"] {
-    --color-bg-primary:    #1a1a2e;
-    --color-bg-secondary:  #16213e;
-    --color-bg-card:       #0f3460;
-    --color-text-primary:  #e9ecef;
-    --color-text-secondary:#adb5bd;
+    /* Stage 86 子項 6：Dark Mode baseline = Christ 喜歡的深灰色（取代既有藍紫色 #1a1a2e/#16213e/#0f3460 / VS Code Dark+ 對齊 MudTheme PaletteDark） */
+    --color-bg-primary:    #1e1e1e;
+    --color-bg-secondary:  #2d2d2d;
+    --color-bg-card:       #252525;
+    --color-text-primary:  rgba(255, 255, 255, 0.87);
+    --color-text-secondary:rgba(255, 255, 255, 0.60);
     --color-accent:        #818cf8;
-    --color-border:        #495057;
+    --color-border:        rgba(255, 255, 255, 0.15);
     --shadow-card:    0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
@@ -449,57 +450,63 @@ body {
    ======================================== */
 
 html[data-theme="dark"] {
+    /* Stage 86 子項 6：對齊 MudTheme PaletteDark 重設計 hex（深灰色系取代藍紫色 / 兩 layer 對齊） */
+
     /* 文字 */
-    --mud-palette-text-primary:    rgba(233, 236, 239, 0.87);
-    --mud-palette-text-secondary:  rgba(173, 181, 189, 0.60);
-    --mud-palette-text-disabled:   rgba(173, 181, 189, 0.38);
+    --mud-palette-text-primary:    rgba(255, 255, 255, 0.87);
+    --mud-palette-text-secondary:  rgba(255, 255, 255, 0.60);
+    --mud-palette-text-disabled:   rgba(255, 255, 255, 0.38);
 
     /* 背景與表面 */
-    --mud-palette-background:      #1a1a2e;
-    --mud-palette-background-grey: #16213e;
-    --mud-palette-surface:         #0f3460;
+    --mud-palette-background:      #1e1e1e;
+    --mud-palette-background-grey: #2d2d2d;
+    --mud-palette-surface:         #252525;
 
     /* 分隔線 */
-    --mud-palette-divider:         rgba(73, 80, 87, 1);
-    --mud-palette-divider-light:   rgba(73, 80, 87, 0.4);
+    --mud-palette-divider:         rgba(255, 255, 255, 0.15);
+    --mud-palette-divider-light:   rgba(255, 255, 255, 0.10);
 
     /* 表格 */
     --mud-palette-table-hover:     rgba(255, 255, 255, 0.08);
     --mud-palette-table-striped:   rgba(255, 255, 255, 0.04);
-    --mud-palette-table-lines:     rgba(73, 80, 87, 1);
+    --mud-palette-table-lines:     rgba(255, 255, 255, 0.10);
 
     /* 動作按鈕 */
-    --mud-palette-action-default:  rgba(173, 181, 189, 0.54);
-    --mud-palette-action-disabled: rgba(173, 181, 189, 0.26);
+    --mud-palette-action-default:  rgba(255, 255, 255, 0.54);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.26);
 
     /* Overlay */
-    --mud-palette-overlay-dark:    rgba(33, 33, 33, 0.5);
+    --mud-palette-overlay-dark:    rgba(0, 0, 0, 0.5);
     --mud-palette-overlay-light:   rgba(255, 255, 255, 0.06);
 
     /* Drawer / AppBar */
-    --mud-palette-drawer-background: #16213e;
-    --mud-palette-drawer-text:       rgba(233, 236, 239, 0.87);
-    --mud-palette-drawer-icon:       rgba(173, 181, 189, 0.54);
-    --mud-palette-appbar-background: #16213e;
-    --mud-palette-appbar-text:       rgba(233, 236, 239, 0.87);
+    --mud-palette-drawer-background: #2d2d2d;
+    --mud-palette-drawer-text:       rgba(255, 255, 255, 0.87);
+    --mud-palette-drawer-icon:       rgba(255, 255, 255, 0.54);
+    --mud-palette-appbar-background: #2d2d2d;
+    --mud-palette-appbar-text:       rgba(255, 255, 255, 0.87);
 }
 
 /* ========================================
-   主題切換雙圖示 — CSS 控制顯示/隱藏
-   Light mode: 顯示「切換深色」圖示；Dark mode: 顯示「切換淺色」圖示
+   Stage 86 子項 5：Sidebar hamburger 半透明浮左上 + drawer overlay 模式
    ======================================== */
 
-/* Light mode：隱藏淺色按鈕（已是淺色，不需切換到淺色） */
-html:not([data-theme="dark"]) .theme-btn-light { display: none; }
+.sidebar-hamburger-float {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 1300;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    cursor: pointer;
+}
+.sidebar-hamburger-float:hover { opacity: 1; }
 
-/* Dark mode：隱藏深色按鈕（已是深色，不需切換到深色） */
-html[data-theme="dark"] .theme-btn-dark { display: none; }
-
-/* 主題切換按鈕 hover 效果（不依賴 MudBlazor 內部 class） */
-.theme-btn-dark:hover,
-.theme-btn-light:hover {
-    opacity: 0.8;
-    border-radius: 50%;
+/* Overlay 模式：drawer 浮在內容上 不擠壓 main content */
+.mud-drawer-persistent.mud-drawer--overlay-mode {
+    position: fixed !important;
+    z-index: 1200;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 /* ========================================

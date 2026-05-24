@@ -1,7 +1,8 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-@inject IJSRuntime JS
+@inject IThemeService Theme
+@implements IDisposable
 
-<MudThemeProvider IsDarkMode="_isDarkMode" />
+<MudThemeProvider IsDarkMode="@Theme.IsDarkMode" Theme="_customTheme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
@@ -10,31 +11,72 @@
 <AlertToastSubscriber />
 
 @code {
-    private bool _isDarkMode;
-
     /// <summary>
-    /// Stage 83 v4 Bug 9 修根因：MudThemeProvider IsDarkMode sync localStorage（既有 App.razor head JS `window.appTheme.init()` 設 data-theme + return bool）。
+    /// Stage 86 子項 6：Theme 機制根因修（取代 Stage 83 v4 Bug 9 一半修法）。
     ///
-    /// Root cause（Aria v3 揭）：MudProviders 既有 `<MudThemeProvider />` 0 binding IsDarkMode（default false / 一直 light theme）
-    /// → MudBlazor component（MudPaper / MudCard / MudTabs）一直 light vs wwwroot/css/app.css data-theme 變數 dark → 兩套主題不同步
-    /// → redirect navigate 觸發 MudProviders re-render 視覺被注意「dark→light switch」（既有 Pipeline redirect 也踩同 bug / 既有路徑使用率低沒人 notice）
+    /// 既有 trade-off（Stage 83 留 Stage 84+）：「Christ 切換 theme 後即時切換 UX 留 Stage 84+（需 MainLayout setDark JS 改 C# event + MudProviders subscribe）」
+    /// 真實阻塞：MainLayout 是 Static SSR（mudblazor.md 第一節）→ 無法持 C# event。
     ///
-    /// 修法：OnAfterRenderAsync firstRender 讀 localStorage `theme` 設 _isDarkMode（用既有 `window.appTheme.init()` 純讀不副作用）。
-    /// trade-off：Christ 切換 theme 後即時切換 UX 留 Stage 84+（需 MainLayout setDark JS 改 C# event + MudProviders subscribe / 範圍 +S）。
+    /// 修法：抽 ThemeToggleButton.razor @rendermode Interactive + 共享 Scoped IThemeService event。
+    /// ThemeToggleButton click → IThemeService.SetDarkMode → OnChanged event → MudProviders subscribe → StateHasChanged → MudPaper / MudCard / MudTabs 即時切色（不 reload）。
+    ///
+    /// MudTheme PaletteDark = Christ 喜歡的深灰色 baseline（VS Code Dark+ 對齊 / 取代既有藍紫色系 #1a1a2e / #16213e / #0f3460）/
+    /// PaletteLight = 既有白系沿用。實作驗收期 Christ Chrome MCP 視覺微調 hex / plan v2 結案紀錄段落地。
     /// </summary>
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private readonly MudTheme _customTheme = new()
     {
-        if (firstRender)
+        PaletteLight = new PaletteLight
         {
-            try
-            {
-                _isDarkMode = await JS.InvokeAsync<bool>("appTheme.init");
-                StateHasChanged();
-            }
-            catch
-            {
-                // JS 未 init / OK — IsDarkMode 保持 false（既有行為）
-            }
-        }
+            Background     = "#ffffff",
+            BackgroundGray = "#f8f9fa",
+            Surface        = "#ffffff",
+            DrawerBackground = "#ffffff",
+            AppbarBackground = "#ffffff",
+            TextPrimary    = "#212529",
+            TextSecondary  = "#6c757d",
+            DrawerText     = "#212529",
+            AppbarText     = "#212529",
+            Primary        = "#6366f1",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Black            = "#0a0a0a",
+            Background       = "#1e1e1e",  // 主背景 — VS Code Dark+ baseline
+            BackgroundGray   = "#2d2d2d",  // 次背景
+            Surface          = "#252525",  // card / paper layer
+            DrawerBackground = "#2d2d2d",
+            AppbarBackground = "#2d2d2d",
+            TextPrimary      = "rgba(255,255,255,0.87)",
+            TextSecondary    = "rgba(255,255,255,0.60)",
+            DrawerText       = "rgba(255,255,255,0.87)",
+            DrawerIcon       = "rgba(255,255,255,0.54)",
+            AppbarText       = "rgba(255,255,255,0.87)",
+            Primary          = "#818cf8",  // 既有 dark accent 沿用
+            ActionDefault    = "rgba(255,255,255,0.54)",
+            ActionDisabled   = "rgba(255,255,255,0.26)",
+            DividerLight     = "rgba(255,255,255,0.10)",
+            Divider          = "rgba(255,255,255,0.15)",
+            LinesDefault     = "rgba(255,255,255,0.15)",
+            LinesInputs      = "rgba(255,255,255,0.30)",
+            TableLines       = "rgba(255,255,255,0.10)",
+            TableStriped     = "rgba(255,255,255,0.04)",
+            TableHover       = "rgba(255,255,255,0.08)",
+        },
+    };
+
+    protected override void OnInitialized()
+    {
+        Theme.OnChanged += OnThemeChanged;
+    }
+
+    private async void OnThemeChanged()
+    {
+        // OnChanged event fire → MudThemeProvider re-render IsDarkMode binding → MudPaper / MudCard 即時切色
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Theme.OnChanged -= OnThemeChanged;
     }
 }

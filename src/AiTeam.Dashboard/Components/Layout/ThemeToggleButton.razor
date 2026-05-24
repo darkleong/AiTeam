@@ -1,0 +1,32 @@
+@* Stage 86 子項 6：Theme 切換 button — Interactive Island（注入 IThemeService Scoped / 跨 component event 共享） *@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IThemeService Theme
+@inject IJSRuntime JS
+
+<MudIconButton Icon="@(Theme.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+               title="@(Theme.IsDarkMode ? "切換淺色模式" : "切換深色模式")"
+               OnClick="ToggleAsync" />
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // 還原 localStorage state（reload 後 sync / 對齊既有 appTheme.init JS 純讀 return bool）
+        try
+        {
+            var initialDark = await JS.InvokeAsync<bool>("appTheme.init");
+            Theme.SetDarkMode(initialDark);
+        }
+        catch
+        {
+            // JS 未 init / OK — IsDarkMode 保持 false（既有行為）
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        var newDark = !Theme.IsDarkMode;
+        Theme.SetDarkMode(newDark);
+        // 同步 JS / localStorage / html[data-theme]（既有 wwwroot/css/app.css `html[data-theme="dark"]` 變數 cascade 切色）
+        await JS.InvokeVoidAsync("appTheme.setDark", newDark);
+    }
+}

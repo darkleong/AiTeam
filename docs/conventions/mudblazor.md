@@ -189,11 +189,90 @@ private IEnumerable<string> _statusFilters = [];
 
 ---
 
-## 五、Dark Mode
+## 五、Dark Mode（Stage 86 重寫）
 
-本專案 Dark Mode 使用 **CSS 變數 + JS 方案**（因 Layout Static SSR 限制無法用 `@bind-IsDarkMode`）。
+### 紀律：MudThemeProvider IsDarkMode 必 binding + 跨 component event 同步
 
-### 運作方式
+```razor
+@* MudProviders.razor *@
+<MudThemeProvider IsDarkMode="@Theme.IsDarkMode" Theme="_customTheme" />
+```
+
+**禁忌寫法**：
+```razor
+@* ❌ Stage 83 v4 Bug 9 + Stage 86 修根因 — MudThemeProvider 0 binding default light *@
+<MudThemeProvider />
+@* → MudPaper / MudCard / MudTabs 一直 light / reload 才從 wwwroot/css/app.css `html[data-theme]` 抓 / 兩 layer 永遠對不齊 *@
+```
+
+### Theme 切換 button 必走 Interactive component + Scoped Service
+
+`MainLayout` 是 Static SSR（第一節紀律）→ **不可** 用 `@onclick` C# handler / **不可** 持 `_isDarkMode` C# field。Theme toggle button 必抽 Interactive Island + 透過 DI Scoped service 跨 component 共享 state + event。
+
+```csharp
+// Services/IThemeService.cs
+public interface IThemeService
+{
+    bool IsDarkMode { get; }
+    event Action? OnChanged;
+    void SetDarkMode(bool isDark);
+}
+// Program.cs: builder.Services.AddScoped<IThemeService, ThemeService>();
+```
+
+```razor
+@* Components/Layout/ThemeToggleButton.razor — Interactive Island *@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IThemeService Theme
+@inject IJSRuntime JS
+
+<MudIconButton Icon="@(Theme.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+               OnClick="ToggleAsync" />
+
+@code {
+    protected override async Task OnInitializedAsync()
+        => Theme.SetDarkMode(await JS.InvokeAsync<bool>("appTheme.init"));
+
+    private async Task ToggleAsync()
+    {
+        var newDark = !Theme.IsDarkMode;
+        Theme.SetDarkMode(newDark);
+        await JS.InvokeVoidAsync("appTheme.setDark", newDark);  // 同步 JS / localStorage / html[data-theme]
+    }
+}
+```
+
+```razor
+@* MudProviders.razor — Interactive Island / subscribe event 觸發 StateHasChanged *@
+@inject IThemeService Theme
+@implements IDisposable
+
+<MudThemeProvider IsDarkMode="@Theme.IsDarkMode" Theme="_customTheme" />
+
+@code {
+    protected override void OnInitialized() => Theme.OnChanged += OnThemeChanged;
+    private async void OnThemeChanged() => await InvokeAsync(StateHasChanged);
+    public void Dispose() => Theme.OnChanged -= OnThemeChanged;
+}
+```
+
+→ ThemeToggleButton click → IThemeService.SetDarkMode → OnChanged event → MudProviders subscribe → StateHasChanged → MudThemeProvider 重新繪 → MudPaper / MudCard / MudTabs **即時切色（不 reload）**。
+
+### CSS 變數 layer（兩 layer 對齊）
+
+JS `appTheme.setDark` 切 `html[data-theme]` → `wwwroot/css/app.css` `--mud-palette-*` 變數覆寫 → MudBlazor 元件底層 CSS layer 切色。**兩 layer 對齊必要**（MudTheme PaletteDark hex == app.css `html[data-theme="dark"]` 內 `--mud-palette-*` hex）/ Stage 86 對齊深灰色 baseline。
+
+```css
+/* app.css — Dark Mode 兩 layer 對齊 MudTheme PaletteDark hex */
+html[data-theme="dark"] {
+    --mud-palette-background:      #1e1e1e;
+    --mud-palette-background-grey: #2d2d2d;
+    --mud-palette-surface:         #252525;
+    /* ... 其他變數對齊 PaletteDark 完整 hex */
+}
+```
+
+### JS appTheme API（保留 reload-safe init）
 
 ```js
 // App.razor inline script（頁面載入前執行避免閃白）
@@ -203,40 +282,17 @@ private IEnumerable<string> _statusFilters = [];
 })();
 
 window.appTheme = {
+    init: function () {
+        var t = localStorage.getItem('theme') || 'light';
+        document.documentElement.dataset.theme = t;
+        return t === 'dark';
+    },
     setDark: function (isDark) {
         var t = isDark ? 'dark' : 'light';
         localStorage.setItem('theme', t);
         document.documentElement.dataset.theme = t;
     }
 };
-```
-
-```css
-/* app.css — 覆寫 MudBlazor CSS 變數 */
-html[data-theme="dark"] {
-    --mud-palette-background: #121212;
-    --mud-palette-surface: #1e1e1e;
-    --color-bg-primary: #1e1e1e;
-}
-```
-
-### 切換按鈕
-
-因 Layout Static SSR，按鈕用 `onclick` JS 呼叫（不用 `@onclick` C# handler）：
-
-```razor
-<span class="theme-btn-dark" onclick="window.appTheme.setDark(true)">
-    <MudIconButton Icon="@Icons.Material.Filled.DarkMode" title="切換深色模式" />
-</span>
-<span class="theme-btn-light" onclick="window.appTheme.setDark(false)">
-    <MudIconButton Icon="@Icons.Material.Filled.LightMode" title="切換淺色模式" />
-</span>
-```
-
-```css
-/* 根據當前 theme 只顯示對應按鈕 */
-html[data-theme="dark"]  .theme-btn-dark  { display: none; }
-html[data-theme="light"] .theme-btn-light { display: none; }
 ```
 
 ---
