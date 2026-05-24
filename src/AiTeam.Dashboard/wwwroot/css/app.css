@@ -511,6 +511,17 @@ html[data-theme="dark"] {
     max-width: 260px !important;
 }
 
+/* Stage 86 子項 5 follow-up #3：MudDrawer 從 viewport top 0 延伸到底（砍 AppBar 後不留空白） */
+.mud-drawer-persistent {
+    top: 0 !important;
+    height: 100vh !important;
+}
+
+/* Stage 86 follow-up #2：NavMenu active link icon 跟字一致套 primary color（MudNavLink 預設只 highlight text） */
+.mud-nav-link.active .mud-nav-link-icon {
+    color: var(--mud-palette-primary) !important;
+}
+
 /* ========================================
    Form Controls
    ======================================== */
