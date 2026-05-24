@@ -60,9 +60,9 @@
         <MudExpansionPanel Text="數值上限（6 flag）" Expanded="false">
             @foreach (var (key, min, max) in _numericFlags)
             {
-                @* Stage 86 子項 2.1：數值欄位靠右對齊（justify-end 讓 input 黏右） *@
-                <div class="d-flex align-center justify-space-between py-2">
-                    <div style="flex:1">
+                @* Stage 86 子項 2.1 / follow-up #11：數值 input 真實貼容器右 — 用 ml-auto + 固定 width:160px *@
+                <div class="d-flex align-center py-2">
+                    <div style="flex:1; min-width:0">
                         <MudText Typo="Typo.body2"><strong>@key</strong></MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@GetFlagDescription(key)</MudText>
                     </div>
@@ -70,7 +70,7 @@
                                      ValueChanged="@((int v) => SetIntFlagAsync(key, v))"
                                      Variant="Variant.Outlined" Margin="Margin.Dense"
                                      Min="@min" Max="@max"
-                                     Style="max-width:140px; text-align:right" />
+                                     Style="width:160px; flex-shrink:0; text-align:right" />
                 </div>
             }
         </MudExpansionPanel>

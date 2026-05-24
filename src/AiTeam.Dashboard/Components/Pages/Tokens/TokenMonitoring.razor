@@ -151,12 +151,13 @@ else
         <ToolBarContent>
             <MudText Typo="Typo.h6">詳細用量</MudText>
         </ToolBarContent>
+        @* follow-up #11：數字欄位右對齊 *@
         <HeaderContent>
             <MudTh><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.AgentName)">Agent</MudTableSortLabel></MudTh>
             <MudTh>模型</MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.TotalInputTokens)">Input Tokens</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.TotalOutputTokens)">Output Tokens</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.EstimatedCostUsd)">預估費用 (USD)</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right"><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.TotalInputTokens)">Input Tokens</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right"><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.TotalOutputTokens)">Output Tokens</MudTableSortLabel></MudTh>
+            <MudTh Style="text-align:right"><MudTableSortLabel SortBy="new Func<TokenAgentSummaryDto, object>(x => x.EstimatedCostUsd)">預估費用 (USD)</MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd>
@@ -169,9 +170,9 @@ else
                 }
             </MudTd>
             <MudTd><MudChip Size="Size.Small" T="string">@context.Model</MudChip></MudTd>
-            <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
-            <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
-            <MudTd>@(context.HasEstimated ? "~" : "")$@context.EstimatedCostUsd.ToString("F4")</MudTd>
+            <MudTd Style="text-align:right">@context.TotalInputTokens.ToString("N0")</MudTd>
+            <MudTd Style="text-align:right">@context.TotalOutputTokens.ToString("N0")</MudTd>
+            <MudTd Style="text-align:right">@(context.HasEstimated ? "~" : "")$@context.EstimatedCostUsd.ToString("F4")</MudTd>
         </RowTemplate>
     </MudTable>
 }

@@ -85,20 +85,21 @@
 
                 <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TokenAgentSummaryDto"
                           OnRowClick="OnAgentRowClick" RowClass="cursor-pointer">
+                    @* follow-up #11：數字欄位 Input / Output / Cost (USD) 右對齊 *@
                     <HeaderContent>
                         <MudTh>Agent</MudTh>
                         <MudTh>Model</MudTh>
-                        <MudTh>Input</MudTh>
-                        <MudTh>Output</MudTh>
-                        <MudTh>Cost (USD)</MudTh>
+                        <MudTh Style="text-align:right">Input</MudTh>
+                        <MudTh Style="text-align:right">Output</MudTh>
+                        <MudTh Style="text-align:right">Cost (USD)</MudTh>
                         <MudTh>Estimated</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.AgentName</MudTd>
                         <MudTd>@context.Model</MudTd>
-                        <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
-                        <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
-                        <MudTd>@context.EstimatedCostUsd.ToString("F4")</MudTd>
+                        <MudTd Style="text-align:right">@context.TotalInputTokens.ToString("N0")</MudTd>
+                        <MudTd Style="text-align:right">@context.TotalOutputTokens.ToString("N0")</MudTd>
+                        <MudTd Style="text-align:right">@context.EstimatedCostUsd.ToString("F4")</MudTd>
                         <MudTd>
                             @if (context.HasEstimated)
                             {
@@ -127,19 +128,20 @@
             else
             {
                 <MudTable Items="_perSessionRows" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="PerSessionRow">
+                    @* follow-up #11：數字欄位右對齊 *@
                     <HeaderContent>
                         <MudTh>PetraSessionId</MudTh>
-                        <MudTh>Row Count</MudTh>
-                        <MudTh>Input</MudTh>
-                        <MudTh>Output</MudTh>
-                        <MudTh>Cost (USD)</MudTh>
+                        <MudTh Style="text-align:right">Row Count</MudTh>
+                        <MudTh Style="text-align:right">Input</MudTh>
+                        <MudTh Style="text-align:right">Output</MudTh>
+                        <MudTh Style="text-align:right">Cost (USD)</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.PetraSessionId.ToString()[..8]</MudTd>
-                        <MudTd>@context.RowCount</MudTd>
-                        <MudTd>@context.TotalInputTokens.ToString("N0")</MudTd>
-                        <MudTd>@context.TotalOutputTokens.ToString("N0")</MudTd>
-                        <MudTd>@context.TotalCostUsd.ToString("F4")</MudTd>
+                        <MudTd Style="text-align:right">@context.RowCount</MudTd>
+                        <MudTd Style="text-align:right">@context.TotalInputTokens.ToString("N0")</MudTd>
+                        <MudTd Style="text-align:right">@context.TotalOutputTokens.ToString("N0")</MudTd>
+                        <MudTd Style="text-align:right">@context.TotalCostUsd.ToString("F4")</MudTd>
                     </RowTemplate>
                 </MudTable>
             }
