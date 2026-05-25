@@ -12,14 +12,12 @@
 
 <div class="page-body">
 <MudStack Row="true" Spacing="2" Class="mb-3">
+    @* Stage 87 follow-up #10：砍「重新載入」button / 改 SignalR ReceiveTaskUpdate 訂閱自動更新 *@
     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                StartIcon="@Icons.Material.Filled.Add"
                OnClick="@(() => _newTalentOpen = !_newTalentOpen)">
         @(_newTalentOpen ? "取消新增" : "新增 Talent")
     </MudButton>
-    <MudButton Variant="Variant.Outlined" Size="Size.Small"
-               StartIcon="@Icons.Material.Filled.Refresh"
-               OnClick="LoadTalentsAsync">重新載入</MudButton>
 </MudStack>
 
 @if (_newTalentOpen)

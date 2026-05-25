@@ -1,4 +1,6 @@
 using AiTeam.Data;
+using AiTeam.Data.Hubs;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor;
 
@@ -6,15 +8,19 @@ namespace AiTeam.Dashboard.Components.Pages.Settings;
 
 /// <summary>
 /// Stage 87 B0：Settings 拆 6 sub-page 之 TalentPrompts（取代 SettingsHub.razor Tab 6）。
-/// 無 SignalR 訂閱（純 DB 操作）/ Stage 72 v5.5 Phase 2 per-Talent persona / baseline 0 row。
+/// Stage 87 follow-up #10：砍「重新載入」button / 改 SignalR ReceiveTaskUpdate 訂閱自動更新。
 /// </summary>
-public partial class SettingsTalentPrompts
+public partial class SettingsTalentPrompts : IAsyncDisposable
 {
     #region Dependencies
 
-    [Inject] private IDbContextFactory<AppDbContext> DbFactory   { get; set; } = null!;
-    [Inject] private ISnackbar                       Snackbar    { get; set; } = null!;
-    [Inject] private ILogger<SettingsTalentPrompts>  Logger      { get; set; } = null!;
+    [Inject] private IDbContextFactory<AppDbContext> DbFactory     { get; set; } = null!;
+    [Inject] private ISnackbar                       Snackbar      { get; set; } = null!;
+    [Inject] private NavigationManager               Navigation    { get; set; } = null!;
+    [Inject] private IConfiguration                  Configuration { get; set; } = null!;
+    [Inject] private ILogger<SettingsTalentPrompts>  Logger        { get; set; } = null!;
+
+    private HubConnection? _hubConnection;
 
     #endregion
 
@@ -25,7 +31,38 @@ public partial class SettingsTalentPrompts
     private string _editingTalentPromptTalentName = "";
     private string _editingPersonaBody = "";
 
-    protected override async Task OnInitializedAsync() => await LoadAllAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllAsync();
+        await ConnectSignalRAsync();
+    }
+
+    private async Task ConnectSignalRAsync()
+    {
+        var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
+        var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
+            ? Navigation.ToAbsoluteUri("/hubs/agent-status").ToString()
+            : $"{hubBaseUrl.TrimEnd('/')}/hubs/agent-status";
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<object>(AgentStatusHub.ReceiveTaskUpdate, async _ =>
+        {
+            await LoadAllAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        try { await _hubConnection.StartAsync(); }
+        catch (Exception ex) { Logger.LogError(ex, "SettingsTalentPrompts SignalR Hub 連線失敗"); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null) await _hubConnection.DisposeAsync();
+    }
 
     private async Task LoadAllAsync()
     {
