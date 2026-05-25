@@ -1,23 +1,19 @@
 @* Stage 83 子項 5：拿 @page directive 變純 component（被 SettingsHub Rules + Projects tab reuse）— /rules route 改 RulesRedirect.razor *@
+@* Stage 87 follow-up #13：砍 inner .page-header「規則管理」h2（跟 outer SettingsRules.razor page-header「Rules」重複）/ button 改 inline action bar 靠右 *@
 
-<PageTitle>規則管理 - AI Team Dashboard</PageTitle>
-
-<div class="page-header">
-    <h2>規則管理</h2>
-    <MudStack Row="true" Spacing="2">
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="OpenCreateRuleDialogAsync">
-            新增規則
-        </MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   StartIcon="@Icons.Material.Filled.CloudSync"
-                   OnClick="ReloadCacheAsync"
-                   Disabled="@_isReloading">
-            @(_isReloading ? "套用中..." : "套用變更")
-        </MudButton>
-    </MudStack>
-</div>
+<MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Class="mb-3">
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenCreateRuleDialogAsync">
+        新增規則
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+               StartIcon="@Icons.Material.Filled.CloudSync"
+               OnClick="ReloadCacheAsync"
+               Disabled="@_isReloading">
+        @(_isReloading ? "套用中..." : "套用變更")
+    </MudButton>
+</MudStack>
 
 @if (_rules.Count == 0)
 {
@@ -32,7 +28,7 @@ else if (_rules.Count > 0)
     <MudTable Items="@_rules"
               Dense="true"
               Hover="true"
-              Height="calc(100vh - 100px)"
+              Height="calc(100vh - 170px)"
               FixedHeader="true"
               RowsPerPage="10"
               T="Rule">

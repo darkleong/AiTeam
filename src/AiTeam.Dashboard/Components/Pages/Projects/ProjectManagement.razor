@@ -1,20 +1,18 @@
 @* Stage 83 子項 5：拿 @page directive 變純 component（被 SettingsHub Rules + Projects tab reuse）— /projects route 改 ProjectsRedirect.razor *@
+@* Stage 87 follow-up #13：砍 inner .page-header「專案管理」h2（跟 outer SettingsProjects.razor page-header「Projects」重複）/ button 改 inline action bar 靠右 *@
 
-<PageTitle>專案管理 - AI Team Dashboard</PageTitle>
-
-<div class="page-header">
-    <h2>專案管理</h2>
+<MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
     <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
                StartIcon="@Icons.Material.Filled.Add"
                OnClick="OpenCreateProjectDialogAsync">
         新增專案
     </MudButton>
-</div>
+</MudStack>
 
 <MudTable Items="@_projects"
           Dense="true"
           Hover="true"
-          Height="calc(100vh - 100px)"
+          Height="calc(100vh - 170px)"
           FixedHeader="true"
           RowsPerPage="10"
           T="ProjectDto"
