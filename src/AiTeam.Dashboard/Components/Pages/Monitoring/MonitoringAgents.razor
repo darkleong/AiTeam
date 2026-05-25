@@ -16,6 +16,7 @@
     </MudStack>
 </div>
 
+<div class="page-body">
 @if (_agentStatuses.Count == 0)
 {
     <MudAlert Severity="Severity.Info">尚未載入 Agent 資料 — 請確認 Bot 啟動。</MudAlert>
@@ -32,3 +33,4 @@ else
         }
     </MudGrid>
 }
+</div>
