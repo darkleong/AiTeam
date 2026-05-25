@@ -61,7 +61,17 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
+    /* Stage 87 follow-up #2：主內容 scroll 時 page-header（標題 + SignalR）固定不跟著 scroll */
+    /* sticky scope = viewport（.pa-4 wrapper 非 overflow:auto / scope 往上找到 html）/ 視覺：scroll 後緊貼 viewport top */
+    position: sticky;
+    top: 0;
+    /* z-index 蓋過 MudTable FixedHeader sticky（既有 Stage 86 加的表格 header）避免重疊穿透 */
+    z-index: 10;
+    /* sticky 時下方內容會穿透 — 必加 background 對齊 Light/Dark Mode */
+    background: var(--mud-palette-background);
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
 }
 
 .page-header h2 {
