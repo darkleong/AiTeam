@@ -170,6 +170,110 @@ UI 程式碼砍：
   - ⑤ 預留欄位 ✅ — talents 表加 TokenLimit 兩欄位採 nullable / 對齊 Stage 74 三層 fallback chain（TalentSkill → Talent → appsettings）後續可往 TalentSkill 層延伸
   - ⑥ 關鍵檔案 ✅ — 已列 `AgentConfigCache.cs` / `LlmProviderFactory.cs` / `TokenTrackingProvider.cs` / `PetraTalentDispatchService.cs:90,144,609` / `Bot/Program.cs:184,188` / `DbSeeder.cs:42-50` / `DashboardAgentService.cs` / `Components/Pages/Agents/` / `Components/Pages/Rules/RuleManagement.razor:49-57` / `Entities.cs:30-50,318-336` / `AppDbContext.cs` / `AgentStatusHub.cs` / `NavMenu.razor` / 3 Hub.razor
 
-### v2.0 — YYYY-MM-DD（Forge 結案 / 結案後補）
+### v2.0 — 2026-05-25（Forge 結案）
 
-實作紀錄段（v1.0 不寫 / Forge 結案時補）：總覽 + 實作項目 + 關鍵設計決策 + 驗收後修正輪次 + 踩坑紀錄 + Mock 覆蓋情況。
+#### A. 結案 commit 清單（21 commit / 一次性 push main / CI/CD self-hosted runner 自動 recreate + Migration 套用）
+
+實作期 7 commit（plan 拍 8 / B0+B1 合 1 commit healthy 偏離）：
+- `5336410` C0：Rules UI fallback「全域（v4 殘留）」段砍（Stage 86 過渡用）
+- `5acc69d` A2：Bot 端切 TalentMetaCache + 兩 caller 遷 inline Talents query + Petra agentName "PM" → "Petra"
+- `180740e` A3：砍 AGENTS 分頁 + AgentConfigDto + TALENTS 擴 LLM 設定 UI
+- `72b7a10` A4+A0+A1：talents 加 TokenLimit 兩欄位 + Petra 配置遷移 + Rules v4 9 row DELETE + agent_configs 表 drop（單一 Migration 含 raw SQL idempotent）
+- `2d4c7b3` B0+B1：3 Hub 拆 14 sub-page + URL 階層 routing + SignalR 細粒度訂閱（合 commit healthy 偏離 / 同 sub-page 拆分時順手做 SignalR 訂閱）
+- `5a91500` B2：NavMenu MudNavGroup 二層階層
+- `7ce3ccc` 版本 bump v3.78.0 → v3.79.0
+
+Christ 視覺驗收期 follow-up 14 commit（見 I 段詳細表）：`e7a8811` / `2f7f7d9` / `b72f291` / `837fc83` / `04f119b` / `98915a9` / `f356bf2` / `d5223be` / `50eaea6` / `a132ac9` / `2ce743c` / `1276494` / `fa67a47`
+
+#### B. 產出檔總覽
+
+**新增**：
+- `src/AiTeam.Data/Migrations/20260524162847_Stage87TalentTokenLimitsAndAgentConfigDrop.cs`（手動補 raw SQL UPDATE + DELETE rules 段）+ Designer + Snapshot
+- `src/AiTeam.Bot/Services/TalentMetaCache.cs`（取代 AgentConfigCache.cs / cache key Talent.Name baseline）
+- `src/AiTeam.Shared/Dtos/TalentDto.cs`
+- 16 sub-page razor + 13 對應 razor.cs（Monitoring 4 + Tasks 4 + Settings 8 含拆 Rules→Rules+Projects/Tokens→Tokens+System 共 8 / Home 1 含 wrap）
+- 3 redirect razor（Monitoring / Tasks / Settings）
+
+**修改**：
+- Bot 端：Entities.cs（Talent 加 2 欄位 / AgentConfig class 砍）/ AppDbContext.cs（DbSet 砍）/ DbSeeder.cs（AgentSeeds 砍）/ DataServiceExtensions.cs（AddScoped<AgentRepository> 砍）/ LlmProviderFactory.cs（talentMetaCache）/ TokenTrackingProvider.cs（talentMetaCache）/ PetraTalentDispatchService.cs:43（PetraAgentName=Petra）/ Bot/Program.cs（砍 Stage 38 補 seed + WarmupAsync 改 TalentMetaCache + 砍 using Options）/ InternalController.cs（talentMetaCache）/ CeoCommandController.cs（inline Talents query）/ CommandHandler.cs（同上）/ appsettings.json（Agents:PM → Agents:Petra / 砍 v4 dead Agent key）
+- Dashboard 端：DashboardAgentService.cs（砍多 method 留 GetAllAgentStatusesAsync + 加 UpdateTalentXxx）/ NavMenu.razor（MudNavGroup 二層）/ RuleManagement.razor（C0 fallback 砍 + #13 inner page-header 砍 + 動作欄移最左 + Height 240）/ ProjectManagement.razor（#13 inner page-header 砍 + Height 240）/ MainLayout.razor（drawer 三段 flex column）/ 多檔 wrap .page-body / 6 sub-page 動作欄移最左 / Token 統計頁砍重新載入 button
+- 配置 + 版本：Directory.Build.props v3.78.0 → v3.79.0
+- CSS：app.css 加 .page-body flex 結構 + .mud-main-content overflow 限制 + 砍 .page-header sticky 改 flex-shrink
+
+**砍除**：
+- `src/AiTeam.Shared/Dtos/AgentConfigDto.cs` / `src/AiTeam.Data/Repositories/AgentRepository.cs` / `src/AiTeam.Bot/Services/AgentConfigCache.cs`
+- `src/AiTeam.Dashboard/Components/Pages/Agents/` 整資料夾（AgentSettings.razor + .razor.cs + AgentsRedirect.razor + Dialogs/AgentCreateDialog.razor）
+- `src/AiTeam.Dashboard/Components/Pages/Monitoring/MonitoringHub.razor` + `.razor.cs`
+- `src/AiTeam.Dashboard/Components/Pages/Tasks/TaskHub.razor` + `.razor.cs`
+- `src/AiTeam.Dashboard/Components/Pages/Settings/SettingsHub.razor` + `.razor.cs`
+- `src/AiTeam.Dashboard/Components/Pages/Settings/SystemSettings.razor` + `.razor.cs` + `SystemSettingsRedirect.razor`（拆兩頁後 dead）
+
+#### C. 5 議題 verify 結論落地
+
+1. `LlmProviderFactory.Create()` Petra 真實 3 caller only（PetraTalentDispatchService 三 LLM call site）/ 既有 AgentConfigCache 註解「12 callers」舊資訊 ✅
+2. **Aria gate0 漏抓的 caller** — `AgentRepository.GetActiveExecutorAgentsAsync` 兩處（CeoCommandController.cs:133 + CommandHandler.cs:227 CEO prompt 取 active executor list）/ Stage 87 一併遷 inline `db.Talents.Where(IsActive && Name != "Victoria")` query / 砍 AgentRepository.cs 整檔 ✅
+3. `talents` 表加 DailyTokenLimitK + MonthlyTokenLimitK（nullable int / 對齊 Stage 47 schema + Stage 74 三層 fallback chain Talent 層） ✅
+4. AgentConfig 連帶欄位 TrustLevel / DiscordChannelId / IsActive / Description 全 v4 dead / 隨表 DROP TABLE 一次處理 ✅
+5. nav 階層化路線：3 Hub 整個砍 + NavMenu MudNavGroup deep link（不走「layout shell with MudTabs + child route」混合方案） ✅
+6. appsettings `Agents:PM` key 對齊紀律：appsettings.json `Agents:PM` 整段改 `Agents:Petra` / 砍其他 v4 dead Agent key（CEO/Dev/QA/Doc/Reviewer 等）/ docker-compose.prod.yml grep verify 0 env override 安全 ✅
+
+#### D. SOP 套用對照
+
+- IDbContextFactory pattern：A3 新加 `UpdateTalentProviderModelAsync` / `UpdateTalentTokenLimitsAsync` 對齊 Stage 85 既有 5 個 DashboardServices pattern（每 method 短命 context / 不可走 Scoped DbContext）✅
+- mudblazor.md v1.6 紀律：MudNavGroup 二層 + IThemeService Scoped pattern 不衝突 ✅
+- refactor-sop v1.6 結案必做清單 9 條：UI 文字砍 grep 範圍含 `.razor.cs` ✅ / dotnet build + test baseline 全綠 ✅ / Migration 對齊既有 race-safe seed pattern ✅
+- forge-self-verify 結構驗 A1-A7：全綠 ✅
+
+#### E. Healthy 偏離 plan 紀錄
+
+1. **commit 數 8 → 7**：B0 sub-page 拆分跟 B1 SignalR 細粒度訂閱合 commit（同 sub-page 拆分時順手做 SignalR 訂閱 / 拆兩 commit 反而 noise 且 build 中間態 sub-page 不 connect SignalR）
+2. **commit 4 範圍合 A4+A0+A1**：plan 寫 A0/A1 跟 A4 分 commit / 實際 type-level 砍 AgentConfig class 需 caller 全切完 build 才過 → 合一 commit 含 Migration / DbSeeder / Entity 三段一起做避免中間 build break
+
+#### F. 踩坑紀錄
+
+1. **EF Migration 順序**：EF 自動 scaffold Up() = DropTable 第一步 / 但實際需先 UPDATE 資料遷移後才 DROP source table → 手動調整 Up() 順序為 AddColumn → UPDATE COALESCE → DELETE rules → DropTable agent_configs。SOP 升級候選：raw SQL UPDATE 跨 source/target table 時 Migration 順序必手動 reorder
+2. **build break vs Migration 順序**：Entities.cs 砍 AgentConfig type 必先把所有 caller 切完才 build 過 / 不能單獨 commit Migration 後再切 caller。實作策略：A2 caller 切（保留 type）→ A3 Dashboard 切（保留 type）→ A4 合一 commit 砍 type + 跑 Migration。SOP 升級候選：「砍 type-level entity」commit 必確認 0 caller 後才動 + Migration 合 commit
+
+#### G. 自驗結果（forge-self-verify Phase 2 A1-A7）
+
+| # | 驗證 | 結果 |
+|---|---|---|
+| A1 | agent_configs 表 drop | ✅ `Did not find any relation` |
+| A2 | talents 表含 DailyTokenLimitK + MonthlyTokenLimitK | ✅ 2 integer nullable 欄位 |
+| A3 | Petra Talent row 配置遷移 | ✅ Provider=Anthropic / Model=claude-sonnet-4-6（從原 agent_configs.PM 搬來） |
+| A4 | Rules v4 9 row DELETE | ✅ count=0 |
+| A5 | dotnet build 0 error 0 新 warning | ✅ |
+| A6 | dotnet test 130 passed 對齊 Stage 86 baseline | ✅ |
+| A7 | grep AgentConfigCache 剩 0 業務 code（全 comment ref） | ✅ |
+| Bonus | TalentMetaCache 已從 DB 載入 6 個 Talent（docker logs verify） | ✅ |
+
+#### H. 0 LLM call
+
+純 schema + Bot 配置 + Dashboard nav 改造 / 0 燒 AiTeam 餘額。
+
+#### I. Christ 視覺驗收期 follow-up 表（14 議題 / 13 commit）
+
+| Commit | 議題 | 修法 |
+|---|---|---|
+| `e7a8811` | #1 Drawer 三段 flex | logo + footer 固定 / 中間 NavMenu 段 scroll（對齊 drawer 三段紀律） |
+| `2f7f7d9` | #2 page-header sticky | sticky top:0 + background var(--mud-palette-background) + z-index 10 |
+| `b72f291` | #3 表格 Height 自適應 viewport + SignalR Hub 真實 check | MudTable Height 600 → calc(100vh - 220) + MonitoringHealth 加 HubConnection 純驗連線 |
+| `837fc83` | #4 主內容 scrollbar 限主內容區內 | .mud-main-content height:100vh + overflow-y:auto |
+| `04f119b` | #5 表格下方留白 | 13 sub-page MudTable offset 220 → 100 |
+| `98915a9` | #6 scrollbar 真該只在 page-body 段 | CSS flex 結構（.mud-main-content overflow:hidden + .pa-4 flex column）+ 14 sub-page wrap .page-body PowerShell script |
+| `f356bf2` | #7 動作欄移最左 | 6 個表格（PetraInbox / Rules / Talents / SkillPrompts / TalentPrompts / Petra 接收狀態）HeaderContent + RowTemplate 動作欄移到第一 |
+| `d5223be` | #8 4 頁表格上方有 bar offset 不足 | MonitoringDeployments / Talents / SkillPrompts / TalentPrompts 表格 offset 100 → 170 |
+| `50eaea6` | #9 Token 守門 + 系統設定 拆兩頁 | 新建 SettingsSystem.razor + .cs / 重寫 SettingsTokens 自帶 razor.cs / 砍 SystemSettings 3 檔 |
+| `a132ac9` | #10 + #11 Rules + Projects 拆兩頁 + 3 頁砍重新載入 button | 新建 SettingsProjects.razor / Talents+SkillPrompts+TalentPrompts 砍 button + 加 HubConnection 訂閱 ReceiveTaskUpdate |
+| `2ce743c` | #12 Token 統計頁砍重新載入 button | SignalR ReceiveTokenUpdate 已即時接 Bot 端 push / button 為 dead noise |
+| `1276494` | #13 RuleManagement + ProjectManagement 砍 inner page-header | inner h2 標題跟 outer 重複 / button 改 MudStack FlexEnd 靠右 + 表格 Height 100 → 170 |
+| `fa67a47` | #14 Rules + Projects Pager offset 不足 | 兩表格有 MudTablePager 額外 50px / offset 170 → 240 |
+
+#### J. SOP 升級候選交 Aria 第二段 evaluate
+
+1. **EF Migration 跨 table 資料遷移順序紀律**（refactor-sop 候選 / F1 踩坑）— EF scaffold Up() = DropTable 第一步 / 但跨 source/target table UPDATE 必先做後才能 DROP source → Migration 必手動 reorder Up() 順序：AddColumn → UPDATE COALESCE → DELETE old row → DropTable
+2. **砍 type-level entity commit 紀律**（refactor-sop 候選 / F2 踩坑）— Entities.cs 砍 class 必確認 0 caller 後才動 + Migration 合 commit / 不可單獨 commit Migration 後再切 caller（build 中間態 break）
+3. **mudblazor.md 紀律候選**：MudMainContent + .pa-4 flex column + .page-body overflow 三段 layout 紀律（drawer 三段對齊精神 / Stage 87 follow-up #6 落地）
+4. **mudblazor.md 紀律候選**：MudTable Height offset 分級表 — 無 action bar 100 / 有 action bar 170 / 有 action bar + Pager 240（Stage 87 follow-up #5/#8/#14 三段對齊）
+5. **mudblazor.md 紀律候選**：reuse component inner page-header 砍紀律（拆 sub-page 後 outer page-header 已有 h2 / inner reuse 必砍 inner page-header 避免雙重複 + offset 計算 break）
+6. **SignalR 訂閱框架預留紀律候選**：Dashboard CRUD save 後加 IHubContext.SendAsync 跨 tab 即時同步 — 當前 SettingsTalents / SkillPrompts / TalentPrompts SignalR 訂閱框架已加 / 但 Dashboard / Bot 端 0 push 對應 event（屬範圍外 / Stage 87+ FF 候選）
