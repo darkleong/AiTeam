@@ -528,8 +528,12 @@ html[data-theme="dark"] {
 }
 
 /* Stage 86 子項 5 follow-up #4：MudMainContent 從 viewport top 0 延伸（砍 AppBar 後 padding-top 不留 AppBar 高度空白） */
+/* Stage 87 follow-up #4：主內容 scrollbar 限 .mud-main-content 內（紅框）/ 不出在 viewport — 對齊 drawer 三段 layout 紀律 */
+/* height:100vh 強制 + overflow-y:auto 接 scroll / .page-header sticky scope 自動對齊新 scroll container（top:0 stick 到 .mud-main-content 頂） */
 .mud-main-content {
     padding-top: 0 !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
 }
 
 /* Stage 86 follow-up #2：NavMenu active link icon 跟字一致套 primary color（MudNavLink 預設只 highlight text） */
