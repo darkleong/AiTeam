@@ -6,7 +6,7 @@ AI 團隊執行軟體開發（老闆 + AI Talent 協作）：
 
 - **v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員（完整描述見 [docs/Architecture.md](docs/Architecture.md)）
 - **核心工具**：Discord（Discord.Net）+ PostgreSQL + Blazor Dashboard（MudBlazor 8.x / InteractiveServer）
-- **LLM 配置**：Petra 走 `LlmProviderFactory.Create("PM")` → Anthropic Sonnet 4.6 production active default（DB SoT `agent_configs.Provider/Model` Dashboard 動態調）/ Cody/Vera/Quinn/Sage 走 Claude Code CLI subprocess / Victoria flag forward only
+- **LLM 配置**：Petra 走 `LlmProviderFactory.Create("Petra")` → Anthropic Sonnet 4.6 production active default（DB SoT `talents.Provider/Model` Dashboard 動態調 / Stage 87 從 `agent_configs` 遷入）/ Cody/Vera/Quinn/Sage 走 Claude Code CLI subprocess / Victoria flag forward only
 - **部署**：Windows 11 本機 Docker Compose（非雲端）
 
 ---
@@ -93,7 +93,7 @@ Windows 11 本機 Docker Compose（非雲端）：
 
 | 設定 | SoT | fallback |
 |---|---|---|
-| Token limit（全域 / per-agent）| DB（`app_settings` + `agent_configs`）| appsettings.json |
+| Token limit（全域 / per-agent）| DB（`app_settings` + `talents`）| appsettings.json |
 | 其他 AgentSettings（RulesCacheTtlMinutes 等）| docker-compose.prod.yml env | appsettings.json |
 | Discord / GitHub / DB 連線 | docker-compose.prod.yml env | 無 fallback |
 

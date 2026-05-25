@@ -1,6 +1,6 @@
 # 系統架構全景
 
-> 對應系統版本：**v3.75.0**（Stage 83 結案後）
+> 對應系統版本：**v3.79.0**（Stage 87 結案後）
 > 最新狀態以 [`/CHANGELOG.md`](../CHANGELOG.md) 為準 / 本檔記錄當前 v5.5 系統架構 + 流程設計 / 後續每幾個 Stage 補一次
 > 真實 Talent 設定 SoT：DB `talents` + `talent_prompts` + `skill_prompts` 表（Stage 67 Talent-Skill separation 起 / Stage 72 SkillPrompt DB 化）
 
@@ -43,7 +43,7 @@
 | **Cody / Vera / Quinn / Sage**（執行手）| Claude Code CLI subprocess | 在 workspace 跑 / 讀寫檔 / 跑 test / commit + PR |
 | **Christ**（拍板者）| Dashboard 4 button | 看 Petra 建議 / 拍板 approve / edit / reject / respond |
 
-**業界共識 — 業界共識 supervisor 不該動 codebase**（context overflow + hallucination 風險）/ AiTeam Petra 純 LLM API call 設計對齊。
+**業界共識 — supervisor 不該動 codebase**（context overflow + hallucination 風險）/ AiTeam Petra 純 LLM API call 設計對齊。
 
 ---
 
