@@ -29,14 +29,26 @@ else
 {
     <MudTable Items="_inboxRows" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Height="calc(100vh - 100px)" FixedHeader="true" T="PetraInbox">
         <HeaderContent>
+            @* Stage 87 follow-up #7：動作 column 移最左（對齊 Christ 紀律：操作優先 / scan 表時先看 action）*@
+            <MudTh Style="white-space:nowrap; min-width:80px">動作</MudTh>
             <MudTh>UserInput</MudTh>
             <MudTh>Source</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Attachments</MudTh>
             <MudTh>EnqueuedAt</MudTh>
-            <MudTh Style="white-space:nowrap; min-width:80px">動作</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd>
+                @if (context.Status is "failed" or "dead")
+                {
+                    <MudTooltip Text="重跑">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Replay"
+                                       Size="Size.Small"
+                                       Color="Color.Warning"
+                                       OnClick="@(() => HandleRequeueInboxAsync(context.Id))" />
+                    </MudTooltip>
+                }
+            </MudTd>
             <MudTd>@(context.UserInput.Length > 80 ? context.UserInput[..80] + "..." : context.UserInput)</MudTd>
             <MudTd>
                 <MudChip T="string" Size="Size.Small" Color="@(context.Source == "dashboard" ? Color.Info : Color.Default)">
@@ -66,17 +78,6 @@ else
                 }
             </MudTd>
             <MudTd>@context.EnqueuedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudTd>
-            <MudTd>
-                @if (context.Status is "failed" or "dead")
-                {
-                    <MudTooltip Text="重跑">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Replay"
-                                       Size="Size.Small"
-                                       Color="Color.Warning"
-                                       OnClick="@(() => HandleRequeueInboxAsync(context.Id))" />
-                    </MudTooltip>
-                }
-            </MudTd>
         </RowTemplate>
     </MudTable>
 }

@@ -23,17 +23,14 @@ else
 {
     <MudTable Items="_skillPromptsActive" Dense="true" Hover="true" Height="calc(100vh - 100px)" FixedHeader="true" T="SkillPromptRow">
         <HeaderContent>
+            @* Stage 87 follow-up #7：動作 column 移最左 *@
+            <MudTh>動作</MudTh>
             <MudTh>SkillName</MudTh>
             <MudTh>Active Version</MudTh>
             <MudTh>Length</MudTh>
             <MudTh>UpdatedAt</MudTh>
-            <MudTh>動作</MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd>@context.SkillName</MudTd>
-            <MudTd>v@(context.VersionNumber)</MudTd>
-            <MudTd>@(context.PromptBody.Length) chars</MudTd>
-            <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
             <MudTd>
                 <MudTooltip Text="編輯（新版本）">
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit"
@@ -41,6 +38,10 @@ else
                                    OnClick="@(() => OpenSkillPromptEditAsync(context))" />
                 </MudTooltip>
             </MudTd>
+            <MudTd>@context.SkillName</MudTd>
+            <MudTd>v@(context.VersionNumber)</MudTd>
+            <MudTd>@(context.PromptBody.Length) chars</MudTd>
+            <MudTd>@context.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm")</MudTd>
         </RowTemplate>
     </MudTable>
 }

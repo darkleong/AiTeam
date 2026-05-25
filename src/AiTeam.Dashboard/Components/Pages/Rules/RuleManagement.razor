@@ -37,13 +37,29 @@ else if (_rules.Count > 0)
               RowsPerPage="10"
               T="Rule">
         <HeaderContent>
+            @* Stage 87 follow-up #7：操作 column 移最左 *@
+            <MudTh>操作</MudTh>
             <MudTh>規則內容</MudTh>
             <MudTh>套用對象</MudTh>
             <MudTh>排序</MudTh>
             <MudTh>狀態</MudTh>
-            <MudTh>操作</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd>
+                <MudStack Row="true" Spacing="1">
+                    <MudTooltip Text="編輯">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                       Size="Size.Small"
+                                       OnClick="@(() => OpenEditRuleDialogAsync(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="刪除">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => DeleteRuleAsync(context.Id))" />
+                    </MudTooltip>
+                </MudStack>
+            </MudTd>
             <MudTd style="flex:1; font-size:0.9rem">@context.Content</MudTd>
             <MudTd>
                 @* Stage 87 子項 C0：Stage 86 isLegacy fallback 砍（Stage 87 Migration 已 DELETE 9 個 v4 row / Rules 表 0 殘留 / fallback 邏輯整段不再需要） *@
@@ -60,21 +76,6 @@ else if (_rules.Count > 0)
                            ValueChanged="@((bool v) => ToggleActiveAsync(context, v))"
                            Color="Color.Primary"
                            aria-label="@(context.IsActive ? "已啟用，點擊停用" : "已停用，點擊啟用")" />
-            </MudTd>
-            <MudTd>
-                <MudStack Row="true" Spacing="1">
-                    <MudTooltip Text="編輯">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
-                                       Size="Size.Small"
-                                       OnClick="@(() => OpenEditRuleDialogAsync(context))" />
-                    </MudTooltip>
-                    <MudTooltip Text="刪除">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Delete"
-                                       Size="Size.Small"
-                                       Color="Color.Error"
-                                       OnClick="@(() => DeleteRuleAsync(context.Id))" />
-                    </MudTooltip>
-                </MudStack>
             </MudTd>
         </RowTemplate>
         <PagerContent>

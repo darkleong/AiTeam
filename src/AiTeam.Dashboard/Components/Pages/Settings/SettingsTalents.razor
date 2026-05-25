@@ -45,14 +45,29 @@ else
 {
     <MudTable Items="_talents" Dense="true" Hover="true" Height="calc(100vh - 100px)" FixedHeader="true" T="TalentRow">
         <HeaderContent>
+            @* Stage 87 follow-up #7：動作 column 移最左 *@
+            <MudTh>動作</MudTh>
             <MudTh>Name</MudTh>
             <MudTh>DisplayName</MudTh>
             <MudTh>Provider / Model</MudTh>
             <MudTh>Active</MudTh>
             <MudTh>Skills</MudTh>
-            <MudTh>動作</MudTh>
         </HeaderContent>
         <RowTemplate>
+            <MudTd>
+                <MudStack Row="true" Spacing="1">
+                    <MudTooltip Text="管理 Skills">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                       Size="Size.Small"
+                                       OnClick="@(() => OpenTalentSkillsAsync(context))" />
+                    </MudTooltip>
+                    <MudTooltip Text="LLM 設定（Provider/Model + Token Limit）">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Tune"
+                                       Size="Size.Small"
+                                       OnClick="@(() => OpenTalentLlmEdit(context))" />
+                    </MudTooltip>
+                </MudStack>
+            </MudTd>
             <MudTd>@context.Name</MudTd>
             <MudTd>@context.DisplayName</MudTd>
             <MudTd>
@@ -74,20 +89,6 @@ else
                         @string.Join(", ", context.Skills.Select(s => s.SkillName + (s.IsPrimary ? "*" : "")))
                     </MudText>
                 }
-            </MudTd>
-            <MudTd>
-                <MudStack Row="true" Spacing="1">
-                    <MudTooltip Text="管理 Skills">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
-                                       Size="Size.Small"
-                                       OnClick="@(() => OpenTalentSkillsAsync(context))" />
-                    </MudTooltip>
-                    <MudTooltip Text="LLM 設定（Provider/Model + Token Limit）">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Tune"
-                                       Size="Size.Small"
-                                       OnClick="@(() => OpenTalentLlmEdit(context))" />
-                    </MudTooltip>
-                </MudStack>
             </MudTd>
         </RowTemplate>
     </MudTable>

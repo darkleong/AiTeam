@@ -27,16 +27,24 @@ else
 {
     <MudTable Items="_talents" Dense="true" Hover="true" Height="calc(100vh - 100px)" FixedHeader="true" T="TalentInfoRow">
         <HeaderContent>
+            @* Stage 87 follow-up #7：動作 column 移最左 *@
+            <MudTh>動作</MudTh>
             <MudTh>Talent</MudTh>
             <MudTh>Active Version</MudTh>
             <MudTh>Length</MudTh>
             <MudTh>UpdatedAt</MudTh>
-            <MudTh>動作</MudTh>
         </HeaderContent>
         <RowTemplate>
             @{
                 var existing = _talentPromptsActive.FirstOrDefault(p => p.TalentId == context.Id);
             }
+            <MudTd>
+                <MudTooltip Text="編輯 persona">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                   Size="Size.Small"
+                                   OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))" />
+                </MudTooltip>
+            </MudTd>
             <MudTd>@context.Name</MudTd>
             <MudTd>
                 @if (existing is null)
@@ -50,13 +58,6 @@ else
             </MudTd>
             <MudTd>@(existing is null ? "—" : $"{existing.PersonaBody.Length} chars")</MudTd>
             <MudTd>@(existing is null ? "—" : existing.UpdatedAt.ToLocalTime().ToString("MM/dd HH:mm"))</MudTd>
-            <MudTd>
-                <MudTooltip Text="編輯 persona">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Edit"
-                                   Size="Size.Small"
-                                   OnClick="@(() => OpenTalentPromptEditAsync(context.Id, context.Name, existing))" />
-                </MudTooltip>
-            </MudTd>
         </RowTemplate>
     </MudTable>
 }

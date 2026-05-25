@@ -27,13 +27,26 @@
         <MudCardContent>
             <MudTable Items="_recentInbox" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
                 <HeaderContent>
+                    @* Stage 87 follow-up #7：動作 column 移最左 *@
+                    <MudTh>動作</MudTh>
                     <MudTh>UserInput</MudTh>
                     <MudTh>來源</MudTh>
                     <MudTh>狀態</MudTh>
                     <MudTh>EnqueuedAt</MudTh>
-                    <MudTh>動作</MudTh>
                 </HeaderContent>
                 <RowTemplate>
+                    <MudTd>
+                        @* follow-up #14：統一改 MudIconButton + MudTooltip 對齊 RULES 表紀律 *@
+                        @if (context.Status == "failed" || context.Status == "dead")
+                        {
+                            <MudTooltip Text="重跑">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Replay"
+                                               Size="Size.Small"
+                                               Color="Color.Warning"
+                                               OnClick="@(() => HandleRequeueAsync(context.Id))" />
+                            </MudTooltip>
+                        }
+                    </MudTd>
                     <MudTd>@(context.UserInput.Length > 80 ? context.UserInput[..80] + "..." : context.UserInput)</MudTd>
                     <MudTd>
                         <MudChip T="string" Size="Size.Small" Color="@(context.Source == "dashboard" ? Color.Info : Color.Default)">
@@ -50,18 +63,6 @@
                         </MudChip>
                     </MudTd>
                     <MudTd>@context.EnqueuedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")</MudTd>
-                    <MudTd>
-                        @* follow-up #14：統一改 MudIconButton + MudTooltip 對齊 RULES 表紀律 *@
-                        @if (context.Status == "failed" || context.Status == "dead")
-                        {
-                            <MudTooltip Text="重跑">
-                                <MudIconButton Icon="@Icons.Material.Outlined.Replay"
-                                               Size="Size.Small"
-                                               Color="Color.Warning"
-                                               OnClick="@(() => HandleRequeueAsync(context.Id))" />
-                            </MudTooltip>
-                        }
-                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </MudCardContent>
