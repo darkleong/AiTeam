@@ -39,8 +39,7 @@
         @* Stage 86 子項 4.4：per-Skill 維度 — TokenLog 0 SkillName column / 顯 stub MudAlert *@
         <MudSelectItem Value="@("per-Skill")">per-Skill</MudSelectItem>
     </MudSelect>
-    <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh"
-               OnClick="LoadTokensAsync">重新載入</MudButton>
+    @* Stage 87 follow-up #12：砍「重新載入」button — SignalR ReceiveTokenUpdate 已自動接 Bot 端 push（TokenTrackingProvider.CompleteAsync 結尾 dashboardPush.PushTokenUpdateAsync）*@
 </MudStack>
 
 @* 警戒線 alert — 80% 全域月限 / 90% per-agent 日限（Stage 86 子項 4.3）*@
