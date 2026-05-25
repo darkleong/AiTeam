@@ -1,35 +1,30 @@
+using AiTeam.Dashboard.Services;
 using MudBlazor;
 
 namespace AiTeam.Dashboard.Components.Pages.Settings;
 
 /// <summary>
-/// Stage 85：v4 dead flag 11 個整套砍（5 framework toggle / 5 round / SkipCeoConfirm）— 對齊 refactor-sop v1.3 Dangling reference 清理紀律。
+/// Stage 87 follow-up #9：系統設定 sub-page（從既有 SystemSettings reuse component 拆出 Mock + CEO 通道段）。
+/// 對應 NavMenu「設定中心 → 系統設定」/ 取代之前 reuse SystemSettings.razor 整檔。
+/// 無 SignalR 訂閱（純 DB 操作 + Bot Cache reload 走「套用變更」button）。
 /// </summary>
-public partial class SystemSettings
+public partial class SettingsSystem
 {
     #region Dependencies
 
-    [Inject]
-    private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
-
-    [Inject]
-    private DashboardBotService BotService { get; set; } = null!;
-
-    [Inject]
-    private ISnackbar Snackbar { get; set; } = null!;
+    [Inject] private DashboardAppSettingsService AppSettingsService { get; set; } = null!;
+    [Inject] private DashboardBotService         BotService         { get; set; } = null!;
+    [Inject] private ISnackbar                   Snackbar           { get; set; } = null!;
 
     #endregion
 
-    #region Private Variables
+    #region Private State
 
     private bool    _mockMode;
-    private string  _ceoChannelId  = "";
-    private string  _christUserId  = "";
-    private int     _mockDelayMin  = 30000;
-    private int     _mockDelayMax  = 60000;
-    private int     _globalMonthlyLimitK = 0;   // 0 = DB 無設定，fallback appsettings
-    private int     _singleRequestLimitK = 0;   // 0 = DB 無設定，fallback appsettings
-    private bool    _isSavingTokenLimits;
+    private string  _ceoChannelId      = "";
+    private string  _christUserId      = "";
+    private int     _mockDelayMin      = 30000;
+    private int     _mockDelayMax      = 60000;
     private bool    _isReloading;
     private bool    _isSavingChannel;
     private bool    _isSavingUserId;
@@ -37,8 +32,6 @@ public partial class SystemSettings
     private string? _saveMessage;
 
     #endregion
-
-    #region Lifecycle
 
     protected override async Task OnInitializedAsync()
     {
@@ -58,20 +51,7 @@ public partial class SystemSettings
         var delayMaxSetting = await AppSettingsService.GetAsync("Mock:DelayMaxMs");
         if (int.TryParse(delayMaxSetting?.Value, out var delayMax) && delayMax > 0)
             _mockDelayMax = delayMax;
-
-        _globalMonthlyLimitK = await LoadTokenLimitAsync("Token:GlobalMonthlyLimitK");
-        _singleRequestLimitK = await LoadTokenLimitAsync("Token:SingleRequestLimitK");
     }
-
-    private async Task<int> LoadTokenLimitAsync(string key)
-    {
-        var setting = await AppSettingsService.GetAsync(key);
-        return int.TryParse(setting?.Value, out var v) && v > 0 ? v : 0;
-    }
-
-    #endregion
-
-    #region Private Methods
 
     private async Task OnMockModeChanged(bool newValue)
     {
@@ -132,30 +112,12 @@ public partial class SystemSettings
         _saveMessage = $"Mock Mode 延遲範圍已更新：{_mockDelayMin}–{_mockDelayMax} ms（5 分鐘內自動生效）";
     }
 
-    private async Task SaveTokenLimitsAsync()
-    {
-        if (_globalMonthlyLimitK <= 0 || _singleRequestLimitK <= 0)
-        {
-            _saveMessage = "格式錯誤：Token 上限必須大於 0";
-            return;
-        }
-        _isSavingTokenLimits = true;
-        await AppSettingsService.UpsertAsync("Token:GlobalMonthlyLimitK", _globalMonthlyLimitK.ToString());
-        await AppSettingsService.UpsertAsync("Token:SingleRequestLimitK", _singleRequestLimitK.ToString());
-        // 立即刷新 Bot Cache，不需等 5 分鐘 TTL
-        await BotService.ReloadCacheAsync("all");
-        _isSavingTokenLimits = false;
-        _saveMessage = $"Token 守門設定已儲存（全域月限={_globalMonthlyLimitK}K / 單次上限={_singleRequestLimitK}K），Bot Cache 已立即刷新。";
-    }
-
     private async Task ReloadCacheAsync()
     {
         _isReloading = true;
         var ok = await BotService.ReloadCacheAsync("all");
         _isReloading = false;
-        Snackbar.Add(ok ? "已套用變更（規則與系統設定快取已更新）" : "套用失敗，請確認 Bot 服務正常",
+        Snackbar.Add(ok ? "已套用變更（系統設定快取已更新）" : "套用失敗，請確認 Bot 服務正常",
             ok ? Severity.Success : Severity.Error);
     }
-
-    #endregion
 }

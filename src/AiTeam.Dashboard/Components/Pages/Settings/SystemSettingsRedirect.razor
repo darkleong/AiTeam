@@ -1,8 +1,0 @@
-@page "/system-settings"
-@attribute [Authorize]
-@inject NavigationManager Nav
-
-@* Stage 83 子項 5：/system-settings redirect → /settings（SettingsHub TokenGuard + MockMode tab reuse SystemSettings component） *@
-@code {
-    protected override void OnInitialized() => Nav.NavigateTo("/settings", forceLoad: false);
-}
