@@ -528,6 +528,9 @@ MudBlazor utility class（`pa-N` / `m-N` / `d-flex` 等）內部帶 `!important`
 - [ ] MudBlazor utility class 不跟 inline style 混搭（要 override 拿掉 utility class）
 - [ ] MudButtonGroup 子按鈕需自控 Variant 時加 `OverrideStyles="false"`
 - [ ] MudTooltip 包大型 block element 用 `Inline="false"` + CSS `.mud-tooltip max-width` limit
+- [ ] Sub-page 內容 wrap `<div class="page-body">` 對齊三段 flex 結構（scrollbar 限 page-body 段內）
+- [ ] MudTable Height 用 `calc(100vh - {offset}px)` 分級（純 100 / 有 action bar 170 / +Pager 240）
+- [ ] Sub-page reuse component 必砍 inner page-header（outer 已有 h2 / 避免雙重標題 + offset 多算）
 
 ---
 
@@ -578,9 +581,48 @@ MudTooltip 預設 `Inline="true"` 渲染為 `<span>` — wrap 大型 block eleme
 
 ---
 
+## 十六、Sub-page Layout（Stage 87 拆 14 sub-page 累積）
+
+### MudMainContent + .pa-4 + .page-body 三段 flex 紀律
+
+拆 sub-page（每頁獨立 `@page` directive）後，scrollbar 限縮在「page-body 段」紀律 — 對齊 Stage 86 MudDrawer 三段 flex column 精神（logo + footer 固定 / 中間 NavMenu 段 scroll）。
+
+**三段結構**：
+- 最外層 `MudMainContent`：`height: 100vh` + `overflow: hidden`（不 scroll）
+- 中層 `<div class="pa-4">` Padding 容器：`flex column` + `overflow: hidden`
+- 內層 `<div class="page-body">`：實際內容區 / `flex: 1` + `overflow-y: auto`（唯一 scroll 點）
+
+**規則**：
+- 每 sub-page 內容 wrap `<div class="page-body">` / 不允許 scrollbar 出現在外層
+- `page-header`（含 h2 標題 + action button）放 `.page-body` 外或內首 / 對齊 `flex-shrink: 0` 不被擠壓
+- 對齊 Stage 87 follow-up #4 + #6（CSS flex 結構 + 14 sub-page wrap `.page-body`）
+
+### MudTable Height offset 分級表（Stage 87 follow-up #5/#8/#14 對齊）
+
+`MudTable Height` 用 `calc(100vh - {offset}px)` 動態計算 / offset 依「上方有多少額外空間」分級：
+
+| 場景 | offset | 對應 |
+|---|---|---|
+| 表格直接在 page-body 頂 | **100px** | 純 page-header + 邊距 |
+| 表格上方有 action bar（filter / 按鈕列）| **170px** | 加 ~70px action bar |
+| 表格 + 表格下有 MudTablePager | **240px** | 加 ~50px Pager + 上方 bar |
+
+**反例**（Stage 87 F #5/#8/#14）：MudTable 用 fixed `Height="600px"` → viewport 變小時表格超出 / 用 `calc(100vh - 220px)` 預設值不分級 → 有 action bar 的表格 offset 不足。
+
+### Reuse component inner page-header 砍紀律（Stage 87 follow-up #13）
+
+拆 sub-page 後，outer page 已有 `<h2>` 標題 + action button row → reuse 進來的 child component（如 `RuleManagement.razor` / `ProjectManagement.razor`）**必砍 inner `page-header`** 避免雙重 h2 + offset 計算 break。
+
+**反例**（Stage 87 F #13）：`/settings/rules` 拆 sub-page reuse `RuleManagement` + `ProjectManagement` component / 兩個 component 內各自有 `<h2>` 標題 + action bar = 跟 outer page-header 重複 / 上方雙重標題 + offset 多算 70px。
+
+**修法**：inner component 砍 page-header section / action button 改 `MudStack Justify="FlexEnd"` 靠右 inline 放 / MudTable Height offset 從 100 → 170（補 action bar）。
+
+---
+
 ## 版本歷史
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.7 | 2026-05-25 | Stage 87 結案升級 — 新十六節「Sub-page Layout」3 條紀律：① MudMainContent + .pa-4 + .page-body 三段 flex（scrollbar 限 page-body 段內 / 對齊 Stage 86 Drawer 三段 flex column 精神 / Stage 87 follow-up #4+#6 落地）② MudTable Height offset 分級表（純 100 / 有 action bar 170 / +Pager 240 / Stage 87 follow-up #5/#8/#14 對齊）③ Reuse component inner page-header 砍紀律（outer 已有 h2 / inner reuse 必砍避免雙重標題 + offset 多算 / Stage 87 follow-up #13 落地）。提交前檢查補 3 條。|
 | v1.6 | 2026-05-24 | Stage 86 結案升級 — 5 條紀律補強：① 五 Dark Mode 段重寫（MudThemeProvider IsDarkMode 必 binding + IThemeService Scoped event 跨 Interactive Island 同步 / Stage 83 v4 Bug 9 修根因）② MudDrawer 自製 overlay-mode 必明設 width（F2 踩坑）③ utility class 不跟 inline style 混搭（#5 v2 踩坑）④ 新十四節 MudButtonGroup OverrideStyles=false 紀律（#7 v2 踩坑）⑤ 新十五節 MudTooltip Inline=false + popup max-width 雙紀律（#1 v2 + #6 踩坑）|
 | v1.0-v1.5 | 早期累積 | 既有 13 節紀律（架構前提 / MudLayout+Drawer / MudTable / MudSelect / Dark Mode / MudDialog / MudList / MudSwitch / MudChip / MudStack+MudGrid / CSS 規範 / Empty State / 提交前檢查）|

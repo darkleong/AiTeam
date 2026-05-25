@@ -19,8 +19,14 @@
 
 ## [Unreleased]
 
-- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火** → **Stage 86 ✅ Dashboard 改造**）
-- **Dashboard 改造 3 Stage 進度**：✅ Stage 85 救火 → ✅ Stage 86 改造 → ⏳ Stage 87 `agent_configs` vs `talents` 架構 audit + nav 階層化改造（FF v12.1 候選）
+- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火** → **Stage 86 ✅ Dashboard 改造** → **Stage 87 ✅ Dashboard 改造收口 + v4 LLM 配置 SoT 統一**）
+- **Dashboard 改造 3 Stage 完整收口**：✅ Stage 85 救火 → ✅ Stage 86 改造 → ✅ Stage 87 收口（nav 階層化 + v4 collapse 最後殘留 + Rules v4 row 收乾）
+
+---
+
+## [3.79.0] — 2026-05-25 — [Stage 87](docs/planning/Stage_87_Roadmap.md) Dashboard 改造收口 + v4 LLM 配置 SoT 統一
+
+三軸合併 catch-all L+：A 軸 v4 LLM 配置 SoT 統一（`agent_configs` 表 drop + Petra 配置遷 `talents.Name="Petra"` row + Bot 端 `AgentConfigCache` 砍 → `TalentMetaCache` 取代 + AGENTS 分頁砍 + TALENTS 擴 Provider/Model + Token Limit UI）+ B 軸 nav 階層化（3 Hub 拆 14 sub-page + URL 階層 routing + NavMenu MudNavGroup 二層 + SignalR 細粒度訂閱）+ C 軸 Rules v4 9 row DELETE + UI fallback 程式碼砍。1 Migration（raw SQL idempotent UPDATE COALESCE + DELETE rules + DROP TABLE）+ 0 LLM call / 0 燒餘額。Forge 7 commit + Christ 視覺驗收 13 commit follow-up（14 議題 / 細節見 Stage Roadmap）。xUnit 130 全綠 / 0 新 warning。升 refactor-sop v1.7 + mudblazor.md v1.7（5 條紀律補強）。
 
 ---
 

@@ -142,6 +142,12 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 9. **UI 文字砍 grep 範圍含 `.razor.cs` C# return string 模式**（Stage 86 踩坑 F1）：砍 Dashboard UI 文字時 grep 範圍不能只 `*.razor` / 必含 `*.razor.cs` + `*.cs` — 特別 `method() => "..."` chip text / tooltip text / select label / GetXxxDescription switch case 模式（這些是 C# code return string 但渲染為 UI 文字）。
    - 反例（Stage 86 F1）：子項 1「全 Dashboard 砍版本/Stage 編號」用 `Select-String -Path "*.razor"` 漏抓 `SettingsHub.razor.cs:GetFlagDescription` 12 case `=> "Stage NN ..."` description / Christ 視覺驗收期才揪 / 第 2 commit follow-up 補。
    - 紀律：grep pattern 含 `*.razor + *.razor.cs + *.cs` 全鏈 / pattern 內含 `=>\s*"` 或 `return\s+"` 抓 method return string
+10. **EF Migration 跨 table 資料遷移順序紀律**（Stage 87 踩坑 F1）：EF scaffold `Up()` 預設 `DropTable` 在第一步 / 但跨 source/target table 的 `UPDATE ... FROM source` 必須先做完才能 DROP source table → Migration 必手動 reorder `Up()` 順序：`AddColumn → UPDATE COALESCE → DELETE old row → DropTable`。
+   - 反例（Stage 87 F1）：`Stage87TalentTokenLimitsAndAgentConfigDrop` EF 自動產 `DropTable agent_configs` 在 `AddColumn talents.TokenLimit` 之後 / 跑 Migration 會在 `UPDATE talents FROM agent_configs` 時撞「source table 不存在」/ Forge 手動 reorder 才過。
+   - 紀律：raw SQL 跨 source/target table 的 Migration scaffold 後**必 review `Up()` 順序** / 對齊 source-must-survive-until-data-migrated 原則
+11. **砍 type-level entity commit 順序紀律**（Stage 87 踩坑 F2）：`Entities.cs` 砍 class 必確認 0 caller 後才動 + Migration **合 commit**（同 commit 內砍 type + 跑 Migration + 砍對應 DbSet）/ 不可單獨 commit Migration 後再切 caller，會 build 中間態 break。
+   - Stage 87 實作策略：A2 caller 切（保留 type）→ A3 Dashboard 切（保留 type）→ **A4 合一 commit 砍 type + 跑 Migration + 砍 DbSet**（避免中間 build break）
+   - 紀律：「砍 type-level entity」必 grep 全 src 0 caller 後動 / Migration + Entities + DbSet 三段同 commit
 
 ---
 
@@ -171,6 +177,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 
 | 版本 | 日期 | 變更 |
 |---|---|---|
+| v1.7 | 2026-05-25 | Stage 87 結案升級（Aria 結案第二段 step 1 第 7 次實踐）— 結案必做清單第 10 條「EF Migration 跨 table 資料遷移順序紀律」（Stage 87 F1 踩坑 — EF scaffold `Up()` DropTable 在 AddColumn 之後 / 但 raw SQL `UPDATE talents FROM agent_configs` 需 source table 存在 / Forge 手動 reorder 順序 `AddColumn → UPDATE → DELETE → DropTable` 才過 / 紀律：raw SQL 跨 source/target table 的 Migration scaffold 後必 review `Up()` 順序）+ 結案必做清單第 11 條「砍 type-level entity commit 順序紀律」（Stage 87 F2 踩坑 — `Entities.cs` 砍 class 必 0 caller 後 + Migration + DbSet 三段同 commit / 不可單獨 commit Migration 後再切 caller / 對齊 Stage 87 A2/A3 caller 切 → A4 合一 commit 砍 type 實作策略）|
 | v1.6 | 2026-05-24 | Stage 86 結案升級（Aria 結案第二段 step 1 第 6 次實踐）— 結案必做清單第 9 條「UI 文字砍 grep 範圍含 `.razor.cs` C# return string 模式」（Stage 86 踩坑 F1 — 子項 1 全 Dashboard 砍 v4/v5/Stage 編號用 `Select-String -Path "*.razor"` 漏抓 GetFlagDescription 12 case `=> "Stage NN ..."` description / Christ 視覺驗收期才揪 / 紀律延伸 grep pattern 含 `*.razor + *.razor.cs + *.cs` + pattern 內含 `=>\s*"` 或 `return\s+"` 抓 method return string）|
 | v1.5 | 2026-05-24 | Stage 85 結案升級補強（Aria 結案第二段 step 1 第 5 次實踐）— 「不適合套用本 SOP 的情況」段加「Razor / 大檔砍多處段工具選擇紀律」（Stage 85 踩坑 F1 — SystemSettings.razor 砍 v4 段 + 流程輪次上限段時 Edit `old_string` 對 unicode 半全形敏感失敗 / 改 Write 整檔重寫一次過 / 判斷準則 ✅ 小段 Edit ✅ 大段 Razor 含中文混排 Write 重寫）|
 | v1.4 | 2026-05-24 | Stage 85 結案升級（Aria 結案第二段 step 1 第 4 次實踐）— 結案必做清單第 8 條「Test session cleanup」（Stage 85 踩坑 — Stage 80 self-verify 殘留 3 筆 paused PetraSession 卡 4-5 天 / 對齊 Stage 85 PetraSessionRecoveryService timeout 機制升級紀律 / 屬「閘門外漏網」第 4 次累積）|
