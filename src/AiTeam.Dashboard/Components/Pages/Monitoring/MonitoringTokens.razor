@@ -75,7 +75,7 @@
                       Width="100%" Height="320px" />
         </MudPaper>
 
-        <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="TokenAgentSummaryDto"
+        <MudTable Items="_todaySummary.AgentSummaries" Dense="true" Hover="true" Height="calc(100vh - 220px)" FixedHeader="true" T="TokenAgentSummaryDto"
                   OnRowClick="OnAgentRowClick" RowClass="cursor-pointer">
             <HeaderContent>
                 <MudTh>Agent</MudTh>
@@ -117,7 +117,7 @@ else if (_selectedDimension == "per-PetraSession")
     }
     else
     {
-        <MudTable Items="_perSessionRows" Dense="true" Hover="true" Height="600px" FixedHeader="true" T="PerSessionRow">
+        <MudTable Items="_perSessionRows" Dense="true" Hover="true" Height="calc(100vh - 220px)" FixedHeader="true" T="PerSessionRow">
             <HeaderContent>
                 <MudTh>PetraSessionId</MudTh>
                 <MudTh Style="text-align:right">Row Count</MudTh>

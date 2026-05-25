@@ -28,9 +28,9 @@
     </MudItem>
     <MudItem xs="12" md="4">
         <MudPaper Elevation="2" Class="pa-4" Style="text-align:center; min-height:130px">
-            <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="Color.Default" />
+            <MudIcon Icon="@Icons.Material.Filled.SignalCellularAlt" Size="Size.Large" Color="@(_hubConnected ? Color.Success : Color.Error)" />
             <MudText Typo="Typo.subtitle2" Class="mt-2">SignalR Hub</MudText>
-            <MudText Typo="Typo.body2">N/A（本頁無 SignalR 訂閱 — 純 health check）</MudText>
+            <MudText Typo="Typo.body2">@(_hubConnected ? "✅ Connected" : "❌ Disconnected")</MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary">/hubs/agent-status</MudText>
         </MudPaper>
     </MudItem>
