@@ -66,6 +66,123 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ---
 
+### F10：Dashboard / Bot container timezone 設定（Asia/Taipei）
+
+**範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
+
+Dashboard MCP Records 表格顯示時間全是 UTC、Christ 在 UTC+8、看 timestamp 需心算 +8。
+
+**根因**：Razor 端 5 張 MudTable 全部已用 `ToLocalTime()` render（`src/AiTeam.Dashboard/Components/Pages/Records/Records.razor` 第 25/26/46/47/67/68/87/112 行）/ 寫法正確。問題在 Docker container 沒設 `TZ` 環境變數、container OS local time = UTC、`.ToLocalTime()` 結果 = UTC。
+
+**修法**：`docker-compose.prod.yml` + `docker-compose.yml` 對 Dashboard 服務加：
+
+```yaml
+environment:
+  - TZ=Asia/Taipei
+```
+
+建議同步給 Bot 服務加（Discord push timestamp / Bot log timestamp 同樣受影響、Christ 觀察各種 timeline 體驗一致）。
+
+**涉及檔**：
+- `docker-compose.prod.yml`
+- `docker-compose.yml`
+
+**不動**：Razor code（已正確）/ entity timestamp 欄位（DB 仍存 UTC、正確紀律）。
+
+**為何延後**：UX 改善 / 不影響資料正確性 / Christ 已確認暫不影響閱讀。
+
+---
+
+### F11：移除 `mcp_token_usage` 的 CacheRead / CostUSD 欄位
+
+**範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板「暫時用不到」處理）：
+
+`AgentTokenUsage` entity 有 3 個欄位 Christ 確認暫時不用：
+- `CacheCreationTokens` (int?)
+- `CacheReadTokens` (int?)
+- `EstimatedCostUsd` (decimal?)
+
+**修法**：entity + Migration + MCP tool + Dashboard + 文件全砍。
+
+**涉及檔**：
+- `src/AiTeam.Data/Records/RecordEntities.cs`（第 83-86 行 / `AgentTokenUsage` 3 個 property drop）
+- `src/AiTeam.Data/Migrations/{stamp}_RemoveCacheAndCostFromTokenUsage.cs`（drop column × 3）
+- `src/AiTeam.Bot/McpTools/RecordTools.cs`（`RecordTokenUsage` method 移除 3 個 optional 參數 `cacheCreationTokens` / `cacheReadTokens` / `estimatedCostUsd` + Description 文案修）
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor`（第 100-101 / 110-111 行 / 砍 CacheRead + Cost USD 兩欄）
+- `agents/petra-pm.md`（step 9 文案 / 移除 cache / cost 提示）
+- `CLAUDE.md` / `docs/Architecture.md`（token usage tool 描述 / DB schema 段更新）
+
+**不動**：
+- 舊 TokenLog 系統（不同 table `token_logs` / 6 Talent 時代 / 已是 dead 但不在本 follow-up scope）
+- `record_token_usage` 主參數 `inputTokens` / `outputTokens` / `model`（保留）
+
+**為何延後**：scope 小 / 但動 Migration / 仍走正規 Stage commit。
+
+---
+
+### F12：Tasks 表加 Description 顯示
+
+**範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
+
+Dashboard MCP Records / Tasks 表只顯示 TeamId / TeammateId / Title / Status / CreatedAt / CompletedAt、看不到 `record_task(action="create")` 寫入的 `description`（已落 DB 但 UI 沒 render）。
+
+對齊：Teams 表已有 Description 欄（`Records.razor` 第 16/23 行）/ Tasks 表沒有 / 行為不一致。
+
+**修法**：`Records.razor` 第 52-71 行 Tasks MudTable 加：
+
+```razor
+<MudTh>Description</MudTh>
+...
+<MudTd>@(context.Description ?? "—")</MudTd>
+```
+
+（位置：Title 之後或表尾 / 對齊 Teams 表樣式 / 或 truncate 顯示前 N 字避免列高暴衝）
+
+**涉及檔**：
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor`
+
+**為何延後**：純 UI 加欄 / Christ 已確認 description 有正確寫 DB / 不影響資料正確性。
+
+---
+
+### F13：MCP Records 5 分頁拆到 NavMenu 子項
+
+**範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
+
+現狀：左側 NavMenu「MCP Records」是單一 `MudNavLink Href="/records"`、頁內用 `MudTabs` 切 5 個 panel（Teams / Teammates / Tasks / Messages / Token Usage）。
+
+目標：5 個分頁變成左側 NavMenu「MCP Records」展開後的子項目、對齊「監控中心」/「設定中心」既有 `MudNavGroup` + 子 `MudNavLink` pattern（`NavMenu.razor` 第 6-10 行 / 12-18 行）。
+
+**修法**（推薦 route param 折衷方案 / 改動最小）：
+
+NavMenu（`NavMenu.razor` 第 4 行 NavLink 改 MudNavGroup）：
+```razor
+<MudNavGroup Title="MCP Records" Icon="@Icons.Material.Filled.TableChart" Expanded="true">
+    <MudNavLink Href="/records/teams"        Match="NavLinkMatch.All">Teams</MudNavLink>
+    <MudNavLink Href="/records/teammates"    Match="NavLinkMatch.All">Teammates</MudNavLink>
+    <MudNavLink Href="/records/tasks"        Match="NavLinkMatch.All">Tasks</MudNavLink>
+    <MudNavLink Href="/records/messages"     Match="NavLinkMatch.All">Messages</MudNavLink>
+    <MudNavLink Href="/records/token-usage"  Match="NavLinkMatch.All">Token Usage</MudNavLink>
+</MudNavGroup>
+```
+
+Records.razor：
+- 加 route：`@page "/records"` + `@page "/records/{Section}"` / default Section="teams"
+- 拿掉 `MudTabs` + 5 個 `MudTabPanel`、改成依 `Section` 參數條件 render 對應 MudTable
+- 載資料 logic 不動（一次撈 5 類 / 切頁不重撈）
+
+替代方案：拆 5 個 Razor 檔 + 共用 layout / service 撈資料 / 對齊更乾淨但檔數翻倍、看 Christ 偏好。
+
+**涉及檔**：
+- `src/AiTeam.Dashboard/Components/Layout/NavMenu.razor`（第 4 行 NavLink → MudNavGroup + 5 個 NavLink）
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor` + 對應 `.razor.cs`（如有 / route param + 條件 render）
+
+**不動**：後端 / Repository / Records 資料載入 logic。
+
+**為何延後**：UX 改善 / 不影響資料正確性 / 跟 F10 / F11 / F12 同屬 Records 系列改動、建議合併到同一個 v4.0.3 patch Stage 處理。
+
+---
+
 ### F4：Channels / docker-compose env 整理
 
 **範圍**：v4-rewrite 後 dead env / config：
