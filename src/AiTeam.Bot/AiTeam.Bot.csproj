@@ -8,27 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
     <PackageReference Include="Discord.Net" Version="3.17.4" />
     <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
     <PackageReference Include="MailKit" Version="4.15.1" />
     <PackageReference Include="Octokit" Version="14.0.0" />
     <PackageReference Include="Quartz.Extensions.Hosting" Version="3.16.1" />
-  </ItemGroup>
-
-  <!-- Stage 49：MS Agent Framework — v4 漸進遷移首發。Cody-Vera-Petra Appeal loop 改走 framework Workflow Builder + Checkpointing。
-       - Microsoft.Agents.AI 1.3.0 stable
-       - Microsoft.Agents.AI.Workflows 1.3.0 stable
-       - Microsoft.Agents.AI.Workflows.Generators 1.3.0：[MessageHandler] partial class 必須的 source generator（doc gap，spike Phase 3 揭露）
-       Stage 78a：Microsoft.Agents.AI.Anthropic 1.3.0-preview 砍（src/ 0 import 真實 dead / v5.5 production active path 從未使用）。
-       Petra Executor 仍透過既有 LlmProviderFactory（保留 TokenTrackingProvider 守門 + 紀錄）— 對齊 PetraOrchestratorService 3 call sites 真實 active。 -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.3.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.3.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.3.0"
-                      PrivateAssets="all"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,18 +21,8 @@
     <ProjectReference Include="..\AiTeam.Shared\AiTeam.Shared.csproj" />
   </ItemGroup>
 
-  <!-- Stage 56：開放 internal type 給 AiTeam.Bot.Tests（unit test 用） -->
   <ItemGroup>
     <InternalsVisibleTo Include="AiTeam.Bot.Tests" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- 各 Agent 專用 CLAUDE.md 模板（FF 二十四：glob 一次涵蓋，避免新增 template 時漏改 csproj）。
-         6 個 Agent service 都從 AppContext.BaseDirectory/Resources/CLAUDE_*.md 讀取：
-         CeoAgentService / DevAgentService / ReviewerAgentService / QaAgentService /
-         DocAgentService / PmReviewService（Stage 78a：砍 Designer/Requirements/Release v4 path） -->
-    <Content Include="Resources\CLAUDE_*.md">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 </Project>

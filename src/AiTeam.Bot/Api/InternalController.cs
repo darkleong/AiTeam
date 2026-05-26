@@ -35,9 +35,6 @@ public class InternalController(
     IHostApplicationLifetime appLifetime,
     AppSettingsService appSettings,
     RulesService rulesService,
-    TalentMetaCache talentMetaCache,
-    PromptResolver promptResolver,
-    TalentSkillModelResolver talentSkillModelResolver,    // Stage 74
     ILogger<InternalController> logger) : ControllerBase
 {
     private readonly string _apiKey = agentSettings.Value.InternalApiKey;
@@ -54,24 +51,11 @@ public class InternalController(
     {
         if (!IsAuthorized()) return Unauthorized();
 
+        // v4-rewrite：talents / SkillPrompt / TalentPrompt cache 整套砍（6 Talent / v5.5 Prompt DB 全砍）
         if (scope is "rules" or "all")
             rulesService.InvalidateCache();
-
-        // legacy：清 app_settings 資料表快取（系統設定）
         if (scope is "agents" or "all")
             appSettings.InvalidateCache();
-
-        // Stage 87 A2：清 talents 資料表的 Provider/Model/TokenLimit 快取（Dashboard TALENTS 頁改完呼叫 / scope 名稱沿用「agent-config」對齊既有 Dashboard caller）
-        if (scope is "agent-config" or "all")
-            talentMetaCache.InvalidateCache();
-
-        // Stage 72：清 SkillPrompt / TalentPrompt cache（議題 2 路線 A — 不加新 `prompts` scope / Phase 3 WebUI 直接 CRUD 後此整合多餘）
-        // Stage 74：清 TalentSkill Provider/Model resolver cache（per-Skill Model 三層 fallback chain）— 對齊既有 `all` scope 整合 pattern
-        if (scope is "all")
-        {
-            promptResolver.InvalidateCache();
-            talentSkillModelResolver.InvalidateCache();
-        }
 
         logger.LogInformation("Bot Cache 已清除（scope={Scope}）", scope);
         return Ok(new { message = "已套用變更", scope });

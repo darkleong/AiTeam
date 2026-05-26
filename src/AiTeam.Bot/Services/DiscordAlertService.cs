@@ -17,11 +17,12 @@ public class DiscordAlertService(
     DiscordSocketClient client,
     AlertRateLimiter rateLimiter,
     DashboardPushService dashboardPush,
-    WorkflowSettingsResolver workflowResolver,
+    IOptions<WorkflowSettings> workflowSettings,
     IOptions<DiscordSettings> settings,
     ILogger<DiscordAlertService> logger)
 {
     private readonly DiscordSettings _settings = settings.Value;
+    private readonly WorkflowSettings _workflow = workflowSettings.Value;
 
     /// <summary>發送訊息至 #警報 頻道（既有 API / 0 rate-limit / 0 SignalR push — 對齊既有 caller 行為）。</summary>
     public async Task SendAsync(string message)
@@ -48,10 +49,10 @@ public class DiscordAlertService(
     }
 
     /// <summary>Stage 85 子項 1：throttled send — per event type per N min 限頻 + aggregate 文案 + 同步 SignalR push 給 Dashboard toast。
-    /// rate-limit window 從 WorkflowSettingsResolver 讀（default 5 min / range [1, 60]）。</summary>
+    /// v4-rewrite：直接從 IOptions&lt;WorkflowSettings&gt; 讀 AlertRateLimitMinutes（WorkflowSettingsResolver 砍 / DB 動態調整需求 v4-rewrite 後重評）。</summary>
     public async Task SendThrottledAsync(string eventType, string message)
     {
-        var windowMin = await workflowResolver.GetAlertRateLimitMinutesAsync();
+        var windowMin = _workflow.AlertRateLimitMinutes;
         var window = TimeSpan.FromMinutes(windowMin);
 
         if (!rateLimiter.TryAcquire(eventType, window, out var suppressed))

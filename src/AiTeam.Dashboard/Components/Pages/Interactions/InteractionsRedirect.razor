@@ -1,8 +1,0 @@
-@page "/interactions"
-@attribute [Authorize]
-@inject NavigationManager Nav
-
-@* Stage 83 子項 5：/interactions redirect → /tasks（TaskHub HitlCardCenter tab cover BossInteraction pending / responded） *@
-@code {
-    protected override void OnInitialized() => Nav.NavigateTo("/tasks", forceLoad: false);
-}

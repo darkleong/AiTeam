@@ -96,6 +96,83 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："spike(stage88): C# MCP SDK + Claude Code remote MCP 相容性驗證通過"
+`3fb091b` — spike(stage88): C# MCP SDK + Claude Code remote MCP 相容性驗證通過
+
+---
+
+## Stage 89 — 砍舊架構
+
+**開始**：2026-05-26（接 Stage 88 同日）
+
+**範圍**：砍 Bot 6 Talent worker / LlmProviderFactory / HITL / Dashboard HITL/Talent 頁 / 對應 DI 註冊。DB schema entity 砍延後到 Stage 91（自決）。
+
+### 砍範圍（74 檔）
+
+**Bot 端（46 檔）**：
+- `src/AiTeam.Bot/Orchestration/Petra/` 整個 directory（27 檔 / Petra orchestrator + sub-services + Skills + spike）
+- `src/AiTeam.Bot/Agents/` 17 檔（LlmProviderFactory / AnthropicProvider / GeminiProvider / MockLlmProvider / TokenTrackingProvider / ClaudeCodeProxy / ClaudeCodeService / MockClaudeCodeService / IClaudeCodeService / CeoAgentService / CeoResponse / QaReport / AgentDescriptor / ILlmProvider / MeetingSubprocessFailureException / LlmApiFailureException）
+- 保留：`TokenUsage.cs` + `TokenCostEstimator.cs`（Stage 91 重用）
+- `src/AiTeam.Bot/Services/`：TalentMetaCache + PromptResolver + TalentDispatchLockService + TalentSkillModelResolver + InteractionService（5 檔）
+- `src/AiTeam.Bot/Discord/Routing/`：ButtonCallbackRouter + RoutingTypes + PendingConfirmationStore（3 檔）
+- `src/AiTeam.Bot/Discord/CommandHandler.cs`
+- `src/AiTeam.Bot/Api/CeoCommandController.cs`
+- `src/AiTeam.Bot/Configuration/WorkflowSettingsResolver.cs`
+- `src/AiTeam.Bot/Resources/CLAUDE_{Victoria,Petra,Cody,Vera,Quinn,Sage}.md`（6 檔 / 6 Talent persona template）
+
+**Dashboard 端（13 檔）**：
+- `Pages/Tasks/` 全 6 檔（TasksHitl / TasksRedirect / TasksActive / TasksHistory / TasksInbox + .razor.cs）
+- `Pages/Settings/SettingsTalents.razor` + `.razor.cs`
+- `Pages/Settings/SettingsSkillPrompts.razor` + `.razor.cs`
+- `Pages/Settings/SettingsTalentPrompts.razor` + `.razor.cs`
+- `Pages/Interactions/` 全 3 檔（InteractionCard / TextInputDialog / InteractionsRedirect）
+- `Pages/Monitoring/MonitoringAgents.razor` + `.razor.cs`
+- `Pages/Home/` 全 6 檔（Home / AgentStatusCard / QuickCommandCard + 對應 .razor.cs）
+- `Services/DashboardInteractionQueryService.cs`
+
+**Data 層（6 檔）**：
+- `Repositories/PetraInboxRepository.cs` + `PetraSessionRepository.cs` + `MemoryRepository.cs` + `PromptRepository.cs`
+- `SeedContent/PetraPersonaSeed.cs` + `PetraPromptTemplate.cs`
+
+**Tests（14 檔）**：
+- `Bot.Tests/Spike/PetraSpikePrototypeTests.cs`
+- `Bot.Tests/Orchestration/` 11 檔（Petra* / Stage7X* / SubtaskPlan / ClaudeCodeChatClient / PromptRepository）
+- `Bot.Tests/Agents/ClaudeCodeServiceParseJsonOutputTests.cs` + `TokenTrackingProviderTests.cs`
+
+### 改檔（7 檔）
+
+- `Bot/Program.cs` — DI 註冊大砍（CeoAgentService / Petra orchestrator 6 service / PetraInboxChannel + Processor + DispatchWorker / PlanConfirmationProcessor / MemoryRepository / PromptRepository / PromptResolver / TalentSkillModelResolver / TalentDispatchLockService / Skill+Talent factory / ClaudeCodeService / MockClaudeCodeService / ClaudeCodeProxy / IClaudeCodeService / CommandHandler / InteractionService / ButtonCallbackRouter / PendingConfirmationStore / TalentMetaCache / Anthropic SDK / Gemini HttpClient / LlmProviderFactory）+ DbSeeder.WarmupAsync 砍
+- `Bot/AiTeam.Bot.csproj` — 砍 Anthropic.SDK 5.10.0 / Microsoft.Agents.AI 1.3.0 × 3 package / Resources Content glob 砍
+- `Bot/Configuration/WorkflowSettings.cs` — 砍 14 個 v4/v5 flag、只留 AlertRateLimitMinutes
+- `Bot/Services/DiscordAlertService.cs` — 砍 WorkflowSettingsResolver dep、改 IOptions&lt;WorkflowSettings&gt; 直接讀
+- `Bot/Discord/DiscordBotService.cs` — 砍 CommandHandler dep + RegisterCommandsAsync call + 6 Talent 專屬頻道 ensure（CEO/PM/Dev/Reviewer/Qa/Doc）
+- `Bot/Api/InternalController.cs` — 砍 TalentMetaCache + PromptResolver + TalentSkillModelResolver ctor + reload-cache 內對應段
+- `Data/DbSeeder.cs` — 整檔重寫（砍 Stage 67 EnsureTalentsAsync / Stage 72 EnsureSkillPromptsAsync / Stage 73 UpgradeSkillPromptsToV2Async + EnsurePetraTalentPromptAsync / 只留 Team default + Rules baseline + AppSettings TokenPricing）
+- `Data/Extensions/DataServiceExtensions.cs` — 砍 PetraInbox + PetraSession repository 註冊
+- `Dashboard/Program.cs` — 砍 DashboardInteractionQueryService 註冊
+- `Dashboard/Components/Layout/NavMenu.razor` — 砍任務中心整 group + 首頁 link + /settings/talents / skill-prompts / talent-prompts / /monitoring/agents（Stage 92 補 Records 頁時重整全 NavMenu）
+
+### 自決紀錄
+
+1. **DB schema entity drop 延後到 Stage 91**：talents / SkillPrompt / TalentPrompt / PetraSession / PetraInbox / Memory / BossInteraction 等 entity 暫留（避免雙重 schema 改動 / 隨 Stage 91 新表設計一起做 Migration）
+2. **NavMenu 暫精簡**（Stage 92 重整）：留下會通的 link 5 個（Tokens / Deployments / Health / Workflow / Tokens 守門 / System / Rules / Projects）、其他全砍
+3. **InteractionService 整檔砍**（不是改造）：原 caller（CommandHandler / CeoCommandController）都砍 / Bot 端 0 caller / 不留 service。Stage 91 真的要寫 BossInteraction 時新造一個 record-focused service
+4. **TokenLogService 留**（Stage 91 重用 token record 邏輯）
+5. **GitHubService 留**（PR / Issue 操作 / 後續 phase 評估）
+6. **OpsAgentService 留**（HealthCheckJob 依賴）
+
+### Build / Test 結果
+
+- `dotnet build AiTeam.slnx`：**Build succeeded** / 0 warnings
+- 接續 Stage 90 起點是純 record system base，無 v4/v5 6 Talent / HITL 殘留
+
+### 影響後續 Stage
+
+- Stage 90：MCP server endpoint 在已 clean base 上加 — 不會有 reference 衝突
+- Stage 91：DB schema 新表設計時、順帶 drop talents / SkillPrompt / TalentPrompt / PetraSession / PetraInbox / Memory entity + Migration
+- Stage 92：Dashboard 重整 NavMenu + 補 Records 頁 + 首頁 placeholder
+
+### Commit
+
+待 commit："chore(stage89): 砍舊架構 — Bot 6 Talent worker + Petra orchestrator + HITL + Dashboard HITL/Talent 頁 + 對應 DI 整套砍（74 檔砍 / 9 檔改）"
 
 ---
