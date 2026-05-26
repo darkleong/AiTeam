@@ -373,6 +373,42 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："feat(stage93): Discord notification 改造 — RecordNotificationService push TaskUpdates channel + RecordTools 3 個 fire-and-forget hook（register_team / task complete / task fail）"
+`28c48e8` — feat(stage93): Discord notification 改造 — RecordNotificationService + RecordTools 3 fire-and-forget hook
+
+---
+
+## Stage 94 — 端到端驗證
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：寫 Petra-pm subagent definition + `.mcp.json` 範例 + 端到端驗證指南。Christ 本機跑驗證。
+
+### 新檔（3 檔）
+
+- `agents/petra-pm.md` — Petra subagent definition（YAML frontmatter / model=opus / 完整 11 步工作流程 / MCP tool 命名規則 / 對 Christ register / 不做的事 / 觀察異常紀律）
+- `agents/.mcp.json.example` — `.mcp.json` 範例（HTTP type / Bearer auth / env var 展開 / alwaysLoad）
+- `docs/planning/Phase_v4_Stage94_E2E_Guide.md` — 端到端驗證完整指南（0 前置 → 1 啟 Bot → 2 配 Claude Code → 3 啟 Petra → 4 hello-world task → 5 Dashboard + Discord 驗 → 6 Troubleshooting → 7 通過判定 → 8 自動 curl 自驗）
+
+### 自決紀錄
+
+1. **本機自驗 skip**：原 task 提「Petra 自己用 curl 模擬 MCP tool call 驗 endpoint」/ 但本機跑 curl 要先啟 PostgreSQL + Bot（涉及 Docker desktop + Aspire AppHost 啟動 / 環境 setup overhead 不小）。Petra session 工作環境是 main session 自決 lean — **skip 本機自驗、寫 curl 指令到 Stage94 E2E Guide 第 8 節給 Christ / 自驗環節推給 Christ 本機跑**。對齊 Stage 94 task description「Christ 本機端跑要他自己跑（Stage 94 文件講清楚步驟）」
+2. **petra-pm.md model=opus**：lead persona 用最大 model（對齊既有 Petra Opus 配置 / opus 4.7 lead）
+3. **petra-pm.md 不限 tools**：lead 需 all default tools（spawn teammate、SendMessage、TaskCreate 等都要）+ MCP tools 自動繼承（teammate 也自動繼承 / `.mcp.json` 配 project scope）
+4. **agents/ 目錄放 git repo root**：對齊 Stage 88 spike 拍板 #5 git repo 版本控管 / Christ copy 到 `~/.claude/agents/`
+
+### 通過判定（Christ 本機驗）
+
+依 E2E Guide 第 7 節：
+- [ ] Dashboard `/records` 5 個 tab 各有 row
+- [ ] Discord TaskUpdates channel 收到 4 則通知（1 team + 3 task）
+- [ ] curl `http://localhost:5050/health` 200 OK
+
+### 影響後續 Stage
+
+- Stage 95：merge `v4-rewrite` → main、CI/CD 自動部署、整理舊資料、文件全面更新
+
+### Commit
+
+待 commit："docs(stage94): 端到端驗證指南 + agents/petra-pm.md + .mcp.json.example"
 
 ---
