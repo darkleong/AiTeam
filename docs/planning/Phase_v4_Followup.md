@@ -97,6 +97,34 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ---
 
+### F9：Claude Code MCP client tool list 不 hot reload — upstream blocker
+
+**範圍**（open / 2026-05-26 v4.0.1 + v4.0.2 升 tool 過程觀察 / 2026-05-27 完整實測確認根因）：
+
+每次 AiTeam Bot 升級 MCP tool（加 / rename / 移除）後、**現有 Claude Code Petra session 拉不到新 tool list / tool schema 凍結在 session 啟動時 snapshot**。Christ 必須關掉舊 session 重開 `claude --agent petra-pm` 才能拿到新 tool。
+
+**根因確認**（非 AiTeam server 端 bug / 是 Claude Code MCP client 端已知 issue）：
+
+| 三方對照 | 狀態 |
+|---|---|
+| MCP spec | ✅ 規範清楚：server declare `listChanged: true` capability + 變更時 emit `notifications/tools/list_changed` / client 收到後 re-call `tools/list` |
+| AiTeam Bot v4.0.2（ModelContextProtocol.AspNetCore 1.3.0）| ✅ 實測：`initialize` response 回 `capabilities.tools.listChanged=true` / `tools/list` 回完整 8 tool 含新加 close_team/finish_teammate/rename 後 record_message |
+| Claude Code MCP client | ❌ 已知 bug [#13646](https://github.com/anthropics/claude-code/issues/13646)：定義了 Zod schema 但 **沒 register `setNotificationHandler` for `notifications/tools/list_changed`** / `listTools` 只在 connection setup 時 call 一次 / session 內永遠不 refresh |
+
+**短期 workaround**（v4.0.x 開發期落地）：每次 push 含 MCP tool 變更的 commit 後 / Christ 必須關掉現有 Petra session 重開、新 session 才能用新 tool。AiTeam 文件已記錄：
+
+- `agents/petra-pm.md` PM 工作流程不需改（teammate spawn 模式與此無關）
+- `CLAUDE.md` MCP server 段已列 8 tool（妳的 reference 不變）
+- 升 tool 的 CHANGELOG entry 可加註「Petra session 需重開才生效」（未強制紀律 / 視真實使用痛點再加）
+
+**長期解**（等 upstream）：Anthropic 修 issue #13646 → Christ 升 Claude Code 版本（v2.1.32+ 開始的 experimental Agent Team 仍在 active dev）→ 之後 tool 變更可 hot reload / 不必重開 session。
+
+**為何不在 AiTeam server 端 workaround**：tool list 是 client 控的快取 / server 無權 invalidate client cache。能做的只剩 Discord push「請重開 session」alarm、但 Christ 已經透過 Dashboard / push 看得到變化、紀律上 push alarm 增加噪音不抵價值（未來真有痛點再加）。
+
+**追蹤**：每次升 Claude Code 主版本後重測一次（call v4.0.2 tool 看新 session 行為 / 觀察 issue #13646 是否 closed）。
+
+---
+
 ### ~~F8：Team / Teammate lifecycle 收尾方法缺~~（v4.0.2 處理）
 
 **範圍**（已處理 / 2026-05-26 / hello-world smoke test 觀察到 Dashboard team 一直 active）：
