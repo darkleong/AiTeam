@@ -173,6 +173,56 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："chore(stage89): 砍舊架構 — Bot 6 Talent worker + Petra orchestrator + HITL + Dashboard HITL/Talent 頁 + 對應 DI 整套砍（74 檔砍 / 9 檔改）"
+`b7b83b8` — chore(stage89): 砍舊架構（17,142 行刪 / 105 行新）+ push v4-rewrite branch
+
+---
+
+## Stage 90 — MCP server endpoint
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：Bot 容器內嵌 MCP server endpoint、HTTP transport、Bearer auth、minimal HealthCheckTool 驗接通。
+
+### 新檔（4 檔）
+
+- `src/AiTeam.Bot/McpTools/HealthCheckTool.cs` — `[McpServerToolType]` class + `[McpServerTool]` HealthCheck method（DI 自動注入 AppDbContext / 驗 DB.CanConnectAsync + Bot uptime + UTC time）
+- `src/AiTeam.Bot/McpAuth/McpBearerAuthMiddleware.cs` — 對 `/mcp*` path 強制 `Authorization: Bearer {InternalApiKey}` / 通過 → 入 MCP pipeline / 失敗 → 401（API key 未配 → 503）
+- `Phase_v4_Execution_Log.md` Stage 90 段（本檔）
+
+### 改檔（5 檔）
+
+- `src/AiTeam.Bot/AiTeam.Bot.csproj` — 加 `ModelContextProtocol.AspNetCore` 1.3.0
+- `src/AiTeam.Bot/Program.cs` — 加 using McpAuth + McpTools + `builder.Services.AddMcpServer().WithHttpTransport().WithTools<HealthCheckTool>()` + `app.UseMiddleware<McpBearerAuthMiddleware>()` + `app.MapMcp("/mcp")`
+- `src/AiTeam.Bot/appsettings.json` — 砍 6 Talent specific Discord.Channels（CeoChannel/PmChannel/DevChannel/ReviewerChannel/QaChannel/DocChannel）+ 整 Gemini section + Agents.Petra section + WorkflowSettings v4/v5 dead flag（TargetVersion / UseV5Memory / V5MemoryCompact* / UseV5SubtaskPlanning / UseV5PromptDb / PausedSessionTimeoutHours）
+- `docker-compose.prod.yml` — 同樣砍 6 Talent channel env / Anthropic__ApiKey / Gemini__* / AgentSettings__SkipCeoConfirm
+
+### 設計拍板
+
+| 項 | 決策 | 理由 |
+|---|---|---|
+| API key | 重用 `AgentSettings.InternalApiKey` | Dashboard / GitHub Actions / docker-compose 已配 / 不另開新 env var / lean |
+| Port | 不另開 / 用 Bot 既有 ASP.NET Core port | Aspire dev 5050 / Docker prod 5052→8080 / MCP route `/mcp` 同 port |
+| Route prefix | `/mcp` | 標準 / 對齊 sample |
+| Tool 註冊 | `[McpServerToolType] + [McpServerTool]` attribute | 官方 sample pattern / DI 自動處理 / 0 樣板碼 |
+
+### 自決紀錄
+
+1. **curl 自驗延後**：Stage 90 build 通即過、curl 自驗合併到 Stage 94 端到端驗證（避免 Stage 90 卡本機 PG 啟動）
+2. **MCP server `Stateless`**：用 default（無 explicit `Stateless = false`）— Stage 91 record tool 不需 server-to-client sampling / 簡化
+3. **CORS**：未配置（不開放 browser direct access / MCP client 是 Claude Code CLI / 無 CORS 需求）
+4. **MCP_TOOL_TIMEOUT**：未設 / 用 default
+
+### Build 結果
+
+- `dotnet build AiTeam.slnx`：**0 Error / 54 Warning**（warning 全為 OpenTelemetry/MailKit 既有 NU1902 vulnerability / 不關 Stage 90）
+
+### 影響後續 Stage
+
+- Stage 91：在 `/mcp` 上加 4 個 record tool（register_team / record_task / record_conversation / record_token_usage）+ DB schema 新表 + entity drop
+- Stage 94：用 curl + Bearer 驗 `/mcp` endpoint 通 / 同時測完整 health_check tool call
+
+### Commit
+
+待 commit："feat(stage90): MCP server endpoint — ModelContextProtocol.AspNetCore 1.3.0 + Bearer auth + /mcp route + HealthCheckTool"
 
 ---
