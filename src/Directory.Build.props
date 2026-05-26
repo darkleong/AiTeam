@@ -2,9 +2,10 @@
   <PropertyGroup>
     <!-- 集中版本號管理（Future Feature 十五）。改版只需修改此檔案。 -->
     <!-- v4.0.0：v4-rewrite Phase 完成（執行端搬到 Claude Code Agent Team / AiTeam 變純記錄 MCP server / 砍 6 Talent + HITL + Aria-Forge 工作模式 / Stage 88-95）。 -->
-    <Version>4.0.0</Version>
-    <AssemblyVersion>4.0.0</AssemblyVersion>
-    <FileVersion>4.0.0</FileVersion>
+    <!-- v4.0.1：MCP tool 名 record_conversation → record_message rename / 對齊 AgentMessage entity + mcp_messages table 命名（Phase_v4_Followup F7）。 -->
+    <Version>4.0.1</Version>
+    <AssemblyVersion>4.0.1</AssemblyVersion>
+    <FileVersion>4.0.1</FileVersion>
     <!-- 明確設定 InformationalVersion，避免 SDK 附加 commit hash 後綴 -->
     <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>

@@ -42,7 +42,7 @@ AiTeam 從「執行 + 記錄」雙重身份系統、轉成「純記錄 MCP serve
 | **88** | Spike：C# MCP SDK 驗證、Claude Code remote MCP 相容性驗、開 `v4-rewrite` 分支 | 無 | in_progress |
 | **89** | 砍舊架構：Bot 內 6 Talent worker / LlmProviderFactory / HITL / Talent 配置頁 / Dashboard 操作中心。DB schema 改造（drop 舊 table） | 88 | pending |
 | **90** | MCP server endpoint：Bot 容器內嵌、C# 寫、HTTP transport、API key auth、minimal health check tool 驗接通 | 88、89 | pending |
-| **91** | MCP record tools：`register_team` / `record_task` / `record_conversation` / `record_token_usage`、DB schema 新表 | 90 | pending |
+| **91** | MCP record tools：`register_team` / `record_task` / `record_message` / `record_token_usage`、DB schema 新表 | 90 | pending |
 | **92** | Dashboard 表格頁（minimal、MudTable × 4） | 91 | pending |
 | **93** | Discord notification 改造：HITL 雙向 → 純被動 push | 91 | pending |
 | **94** | 端到端驗證：寫 `agents/petra-pm.md`、本機跑 `claude --agent petra-pm`、natural language spawn teammate、驗 MCP tool call 寫入 AiTeam | 92、93 | pending |
@@ -82,7 +82,7 @@ AiTeam 從「執行 + 記錄」雙重身份系統、轉成「純記錄 MCP serve
 │  │  ├─ MCP server endpoint (HTTP, API key auth)         │    │
 │  │  │   ├─ register_team                                 │    │
 │  │  │   ├─ record_task                                   │    │
-│  │  │   ├─ record_conversation                           │    │
+│  │  │   ├─ record_message                                │    │
 │  │  │   └─ record_token_usage                            │    │
 │  │  ├─ Discord notification (純被動 push)                │    │
 │  │  └─ DB layer + EF Migration                          │    │

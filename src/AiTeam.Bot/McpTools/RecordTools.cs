@@ -14,7 +14,7 @@ namespace AiTeam.Bot.McpTools;
 ///   - register_team           — Claude Code lead 開 team 時 call、回 team_id
 ///   - register_teammate       — Lead spawn teammate 時 call、回 teammate_id（Stage 91 自決加 / 對齊運作流程）
 ///   - record_task             — Task lifecycle 事件（action: create / claim / complete / fail）
-///   - record_conversation     — Teammate 對話 message 單筆寫入
+///   - record_message          — Teammate 對話 message 單筆寫入（v4.0.1 由 record_conversation rename / 對齊 AgentMessage entity + mcp_messages table）
 ///   - record_token_usage      — LLM call 後 token 消耗單筆寫入
 ///
 /// 設計紀律：static method 用 DI inject AppDbContext（EF Core scoped）/ MCP server 自動 scope 處理。
@@ -139,8 +139,8 @@ public sealed class RecordTools
         }
     }
 
-    [McpServerTool, Description("Record a single conversation message from a teammate (user / assistant / tool message).")]
-    public static async Task<string> RecordConversation(
+    [McpServerTool, Description("Record a single message from a teammate (user / assistant / tool).")]
+    public static async Task<string> RecordMessage(
         AppDbContext db,
         [Description("Teammate ID (Guid string)")] string teammateId,
         [Description("Role: user | assistant | tool")] string role,

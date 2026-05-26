@@ -47,7 +47,7 @@ builder.Services.AddControllers();
 
 // Stage 90：MCP server（v4-rewrite 核心）— ModelContextProtocol.AspNetCore 1.3.0
 // HTTP transport / Bearer auth middleware（重用 AgentSettings.InternalApiKey）/ /mcp route
-// Stage 91 補 register_team / record_task / record_conversation / record_token_usage 4 個 record tool
+// Stage 91 補 register_team / record_task / record_message / record_token_usage 4 個 record tool（record_message v4.0.1 由 record_conversation rename）
 builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithTools<HealthCheckTool>()

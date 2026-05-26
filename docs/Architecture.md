@@ -146,7 +146,7 @@ Petra 不用 subagent definition file spawn / 用 natural language 描述：
 | `register_team` | name, description? | Petra lead 開新 team |
 | `register_teammate` | teamId, name, model?, role? | Lead 或 member spawn 時 |
 | `record_task` | action(create/claim/complete/fail), teamId/taskId, ... | Task lifecycle 每個狀態變化 |
-| `record_conversation` | teammateId, role, content, taskId?, toolCallJson? | Teammate 每個 message turn |
+| `record_message` | teammateId, role, content, taskId?, toolCallJson? | Teammate 每個 message turn（v4.0.1 由 `record_conversation` rename / 對齊 `AgentMessage` entity + `mcp_messages` table）|
 | `record_token_usage` | teammateId, inputTokens, outputTokens, taskId?, cacheCreation?, cacheRead?, model?, estimatedCostUsd? | 每次 LLM call 後 |
 
 ### Tool 註冊（attribute pattern）
@@ -175,7 +175,7 @@ DI 自動 inject AppDbContext / RecordNotificationService / 對 LLM 隱藏。
   - `RecordTask` complete → ✅ Task 完成
   - `RecordTask` fail → ❌ Task 失敗 + errorMessage
 - Fire-and-forget（`_ = Task.Run(...)` / Discord 失敗不影響 record 寫入）
-- 不 push：register_teammate、record_task claim、record_conversation、record_token_usage（避免洗版 / Phase_v4_Followup F2 評估 token milestone push）
+- 不 push：register_teammate、record_task claim、record_message、record_token_usage（避免洗版 / Phase_v4_Followup F2 評估 token milestone push）
 
 ---
 

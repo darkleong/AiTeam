@@ -81,7 +81,7 @@ AiTeam.slnx         ← 解決方案檔（注意 .slnx 不是 .sln）
   - `register_team` — Claude Code Agent Team session 註冊
   - `register_teammate` — Lead 或 member spawn 時註冊
   - `record_task` — Task lifecycle（action: create / claim / complete / fail）
-  - `record_conversation` — Teammate 對話 message
+  - `record_message` — Teammate 對話 message（v4.0.1 由 `record_conversation` rename / 對齊 `AgentMessage` entity + `mcp_messages` table）
   - `record_token_usage` — LLM call token 消耗
 - **Tech**：`ModelContextProtocol.AspNetCore` 1.3.0（Microsoft + Anthropic 官方合作 SDK）
 

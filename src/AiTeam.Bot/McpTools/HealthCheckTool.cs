@@ -8,7 +8,7 @@ namespace AiTeam.Bot.McpTools;
 /// <summary>
 /// Stage 90：MCP server endpoint 基本健康檢查 tool。
 /// 確認 AiTeam MCP server reachable + DB 可連 + Bot 運行時長。
-/// 後續 Stage 91 加 register_team / record_task / record_conversation / record_token_usage 4 個 record tool。
+/// 後續 Stage 91 加 register_team / record_task / record_message / record_token_usage 4 個 record tool（record_message v4.0.1 由 record_conversation rename）。
 /// </summary>
 [McpServerToolType]
 public sealed class HealthCheckTool

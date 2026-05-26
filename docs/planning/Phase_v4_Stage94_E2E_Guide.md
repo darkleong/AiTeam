@@ -111,7 +111,7 @@ Petra 應該（依 petra-pm.md 第 1-11 步）：
 4. natural language spawn 3 個 teammate
 5. 各 teammate `register_teammate`（member）
 6. 各 teammate `record_task` claim + 工作 + complete
-7. 期間 `record_conversation` 記對話
+7. 期間 `record_message` 記對話
 8. 期間 `record_token_usage` 記 token
 
 ---

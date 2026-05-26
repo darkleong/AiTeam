@@ -91,9 +91,29 @@ cascading reference 修（grep 顯示至少 8 檔）：
 **範圍**：`agents/petra-pm.md` 第一版完成。Christ 真實使用後可能需要：
 - 工作流程細節調整
 - spawn teammate 命名規範
-- record_conversation 寫入頻率（每 turn vs 每 N turn）
+- record_message 寫入頻率（每 turn vs 每 N turn）
 
 **處理**：Christ 用 1-2 個 task 後反饋、Petra 自己修 `agents/petra-pm.md`。
+
+---
+
+### ~~F7：MCP tool 名 `record_conversation` 與 entity / table 命名不一致~~（v4.0.1 處理）
+
+**範圍**（已處理 / 2026-05-26 / hello-world smoke test 觀察到）：
+
+MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_messages` 命名不一致。entity / table 命名正確（record 單位是 **一則 message**、不是整段 conversation）/ tool 名是 outlier。
+
+修法：rename MCP tool `record_conversation` → `record_message`。
+
+涉及檔：
+- `src/AiTeam.Bot/McpTools/RecordTools.cs`（method `RecordConversation` → `RecordMessage` + Description 文案修）
+- `src/AiTeam.Bot/McpTools/HealthCheckTool.cs` + `src/AiTeam.Bot/Program.cs`（註解）
+- `agents/petra-pm.md`（Petra 工作流程指引 step 8）
+- `CLAUDE.md` + `docs/Architecture.md` + `docs/planning/Phase_v4_Roadmap.md` + `docs/planning/Phase_v4_Stage94_E2E_Guide.md`（doc 字串）
+
+不動：
+- `AgentMessage` entity / `mcp_messages` table / `AgentMessages` DbSet（已對齊、不需 Migration）
+- `Phase_v4_Execution_Log.md` 歷史執行紀錄 + `CHANGELOG.md` v4.0.0 entry（保留時間戳記真實感）
 
 ---
 
