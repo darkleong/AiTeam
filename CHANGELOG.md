@@ -23,6 +23,12 @@
 
 ---
 
+## [4.0.2] — 2026-05-26 — [Phase_v4_Followup F8](docs/planning/Phase_v4_Followup.md) Team / Teammate lifecycle 收尾方法補 + Petra SOP 邊界
+
+**PATCH — design gap 補洞**：v4.0.0 漏設計、`AgentTeam` / `AgentTeammate` 欄位有 `ClosedAt` / `FinishedAt` 但無 MCP tool 寫入、team 完成後永遠 active / teammate 永遠未 finished（hello-world smoke test 觀察到）。加 2 個 standalone MCP tool：`close_team`（Status='closed' + ClosedAt + Discord 🏁 push）、`finish_teammate`（FinishedAt / 不 push 避免洗版）/ 都 idempotent / 純 additive 無 Migration。Petra `agents/petra-pm.md` 工作流程 step 11/12 加 lifecycle close、補「PM 可直接動手邊界」B 選項 SOP（規模小 + 零設計決策 + post-deliver polish 三條件同時成立才適用 / Christ 拍板）。共 8 個 MCP tool（HealthCheck + RecordTools 7 method）。
+
+---
+
 ## [4.0.1] — 2026-05-26 — [Phase_v4_Followup F7](docs/planning/Phase_v4_Followup.md) MCP tool 命名一致性修
 
 **PATCH — polish refactor**：MCP tool `record_conversation` → `record_message` rename / 對齊 `AgentMessage` entity + `mcp_messages` table。hello-world smoke test 觀察到 outlier 命名（record 單位是「一則 message」/ 不是整段 conversation）。改 1 個 C# method 名 + 4 個 doc 檔字串、無 schema 變動、無 Migration。Petra 本機跑時 tool list 會自動帶新名上線、`.mcp.json` 配置不變。

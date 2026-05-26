@@ -76,10 +76,12 @@ AiTeam.slnx         ← 解決方案檔（注意 .slnx 不是 .sln）
 - **Route**：`/mcp`（Bot 容器內嵌、port 8080）
 - **Transport**：HTTP（不是 stdio）
 - **Auth**：Bearer token / `Authorization: Bearer {AgentSettings.InternalApiKey}`
-- **Tools**：6 個
+- **Tools**：8 個
   - `HealthCheck` — Bot 連線 + DB ready 確認
   - `register_team` — Claude Code Agent Team session 註冊
+  - `close_team` — Team 收尾（Status='closed' + ClosedAt）（v4.0.2 補）
   - `register_teammate` — Lead 或 member spawn 時註冊
+  - `finish_teammate` — Teammate 結束（FinishedAt）（v4.0.2 補）
   - `record_task` — Task lifecycle（action: create / claim / complete / fail）
   - `record_message` — Teammate 對話 message（v4.0.1 由 `record_conversation` rename / 對齊 `AgentMessage` entity + `mcp_messages` table）
   - `record_token_usage` — LLM call token 消耗

@@ -138,13 +138,15 @@ Petra 不用 subagent definition file spawn / 用 natural language 描述：
 
 ## MCP record tool 流程
 
-6 個 tool（`HealthCheckTool` + `RecordTools` 5 method）：
+8 個 tool（`HealthCheckTool` + `RecordTools` 7 method）：
 
 | Tool | Args | 觸發時機 |
 |---|---|---|
 | `HealthCheck` | （無 tool args / 自動 inject DbContext） | Christ / Petra 確認 server reachable |
 | `register_team` | name, description? | Petra lead 開新 team |
+| `close_team` | teamId | Team 收尾（v4.0.2 補 / 寫 Status='closed' + ClosedAt / idempotent）|
 | `register_teammate` | teamId, name, model?, role? | Lead 或 member spawn 時 |
+| `finish_teammate` | teammateId | Teammate 結束（v4.0.2 補 / 寫 FinishedAt / idempotent）|
 | `record_task` | action(create/claim/complete/fail), teamId/taskId, ... | Task lifecycle 每個狀態變化 |
 | `record_message` | teammateId, role, content, taskId?, toolCallJson? | Teammate 每個 message turn（v4.0.1 由 `record_conversation` rename / 對齊 `AgentMessage` entity + `mcp_messages` table）|
 | `record_token_usage` | teammateId, inputTokens, outputTokens, taskId?, cacheCreation?, cacheRead?, model?, estimatedCostUsd? | 每次 LLM call 後 |
@@ -170,12 +172,13 @@ DI 自動 inject AppDbContext / RecordNotificationService / 對 LLM 隱藏。
 ## Discord notification
 
 `RecordNotificationService`（Singleton / push TaskUpdates channel「任務動態」）：
-- 觸發點 3 個：
+- 觸發點 4 個：
   - `RegisterTeam` end → 📋 新 Agent Team 開始
+  - `CloseTeam` end → 🏁 Agent Team 收尾（v4.0.2 補）
   - `RecordTask` complete → ✅ Task 完成
   - `RecordTask` fail → ❌ Task 失敗 + errorMessage
 - Fire-and-forget（`_ = Task.Run(...)` / Discord 失敗不影響 record 寫入）
-- 不 push：register_teammate、record_task claim、record_message、record_token_usage（避免洗版 / Phase_v4_Followup F2 評估 token milestone push）
+- 不 push：register_teammate、finish_teammate、record_task claim、record_message、record_token_usage（避免洗版 / Phase_v4_Followup F2 評估 token milestone push）
 
 ---
 

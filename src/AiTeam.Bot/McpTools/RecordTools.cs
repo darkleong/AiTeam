@@ -12,7 +12,9 @@ namespace AiTeam.Bot.McpTools;
 ///
 /// Tool 清單：
 ///   - register_team           — Claude Code lead 開 team 時 call、回 team_id
+///   - close_team              — Lead 收尾整個 team 時 call（v4.0.2 補 / 寫 Team.Status='closed' + ClosedAt）
 ///   - register_teammate       — Lead spawn teammate 時 call、回 teammate_id（Stage 91 自決加 / 對齊運作流程）
+///   - finish_teammate         — Teammate 完成退出時 call（v4.0.2 補 / 寫 Teammate.FinishedAt）
 ///   - record_task             — Task lifecycle 事件（action: create / claim / complete / fail）
 ///   - record_message          — Teammate 對話 message 單筆寫入（v4.0.1 由 record_conversation rename / 對齊 AgentMessage entity + mcp_messages table）
 ///   - record_token_usage      — LLM call 後 token 消耗單筆寫入
@@ -42,6 +44,28 @@ public sealed class RecordTools
         return team.Id.ToString();
     }
 
+    [McpServerTool, Description("Close an Agent Team execution session (mark Status='closed' + set ClosedAt). Idempotent — calling on an already-closed team returns 'already closed'.")]
+    public static async Task<string> CloseTeam(
+        AppDbContext db,
+        RecordNotificationService notify,
+        [Description("Team ID (Guid string)")] string teamId)
+    {
+        if (!Guid.TryParse(teamId, out var parsedTeamId))
+            return "Error: invalid teamId Guid";
+
+        var team = await db.AgentTeams.FindAsync(parsedTeamId);
+        if (team is null) return $"Error: team {teamId} not found";
+        if (team.Status == "closed") return "already closed";
+
+        team.Status = "closed";
+        team.ClosedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        _ = Task.Run(() => notify.SendAsync($"🏁 Agent Team 收尾 — **{team.Name}** (id=`{team.Id.ToString()[..8]}`)"));
+
+        return "closed";
+    }
+
     [McpServerTool, Description("Register a new teammate (lead or member) in an existing team. Returns the new teammate_id (Guid string).")]
     public static async Task<string> RegisterTeammate(
         AppDbContext db,
@@ -63,6 +87,23 @@ public sealed class RecordTools
         db.AgentTeammates.Add(teammate);
         await db.SaveChangesAsync();
         return teammate.Id.ToString();
+    }
+
+    [McpServerTool, Description("Mark a teammate as finished (set FinishedAt). Idempotent — calling on an already-finished teammate returns 'already finished'. Does not push Discord notification (avoid spam).")]
+    public static async Task<string> FinishTeammate(
+        AppDbContext db,
+        [Description("Teammate ID (Guid string)")] string teammateId)
+    {
+        if (!Guid.TryParse(teammateId, out var parsedTeammateId))
+            return "Error: invalid teammateId Guid";
+
+        var teammate = await db.AgentTeammates.FindAsync(parsedTeammateId);
+        if (teammate is null) return $"Error: teammate {teammateId} not found";
+        if (teammate.FinishedAt is not null) return "already finished";
+
+        teammate.FinishedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return "finished";
     }
 
     [McpServerTool, Description("Record a task lifecycle event. Action: 'create' creates new task and returns task_id / 'claim' assigns to teammate / 'complete' marks done / 'fail' marks failed.")]

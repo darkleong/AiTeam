@@ -97,6 +97,29 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ---
 
+### ~~F8：Team / Teammate lifecycle 收尾方法缺~~（v4.0.2 處理）
+
+**範圍**（已處理 / 2026-05-26 / hello-world smoke test 觀察到 Dashboard team 一直 active）：
+
+`AgentTeam` 有 `Status` + `ClosedAt` 欄位、`AgentTeammate` 有 `FinishedAt` 欄位、但 MCP server **沒有對應寫入 tool**。team 完成後永遠 Status='active' / ClosedAt 永遠 null / teammate FinishedAt 永遠 null。
+
+修法：加 2 個 MCP tool。
+
+- `close_team(teamId)` — Status='closed' + ClosedAt=now / idempotent（已 closed 回 'already closed'）/ Discord push 🏁 Agent Team 收尾通知
+- `finish_teammate(teammateId)` — FinishedAt=now / idempotent / 不 push（避免洗版）
+
+涉及檔：
+- `src/AiTeam.Bot/McpTools/RecordTools.cs`（加 2 個 method `CloseTeam` + `FinishTeammate`）
+- `src/AiTeam.Bot/McpTools/HealthCheckTool.cs` + `Program.cs`（註解 tool 數 4 → 6 record tool / 共 8 個 MCP tool）
+- `agents/petra-pm.md`（工作流程 step 11 加 finish_teammate / step 12 加 close_team / 補「PM 可直接動手邊界」B 選項 SOP）
+- `CLAUDE.md` + `docs/Architecture.md`（tool 清單 6 → 8 / Discord 觸發點 3 → 4）
+
+不動：
+- entity schema（欄位早就存在 / 無 Migration）
+- 既有 5 個 MCP tool（純 additive）
+
+---
+
 ### ~~F7：MCP tool 名 `record_conversation` 與 entity / table 命名不一致~~（v4.0.1 處理）
 
 **範圍**（已處理 / 2026-05-26 / hello-world smoke test 觀察到）：
