@@ -66,7 +66,7 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ---
 
-### F10：Dashboard / Bot container timezone 設定（Asia/Taipei）
+### ~~F10：Dashboard / Bot container timezone 設定（Asia/Taipei）~~（2026-05-27 處理 / commit f4b1901）
 
 **範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
 
@@ -120,7 +120,7 @@ environment:
 
 ---
 
-### F12：Tasks 表加 Description 顯示
+### ~~F12：Tasks 表加 Description 顯示~~（2026-05-27 處理 / commit da7a152）
 
 **範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
 
