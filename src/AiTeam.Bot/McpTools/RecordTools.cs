@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using AiTeam.Bot.Services;
 using AiTeam.Data;
 using AiTeam.Data.Records;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class RecordTools
     [McpServerTool, Description("Register a new Claude Code Agent Team execution session. Returns the new team_id (Guid string) to use in subsequent record calls.")]
     public static async Task<string> RegisterTeam(
         AppDbContext db,
+        RecordNotificationService notify,
         [Description("Team name (e.g., 'feature-x-team', 'bug-investigation-team')")] string name,
         [Description("High-level intent the boss gave to this team (optional)")] string? description = null)
     {
@@ -34,6 +36,9 @@ public sealed class RecordTools
         };
         db.AgentTeams.Add(team);
         await db.SaveChangesAsync();
+
+        _ = Task.Run(() => notify.SendAsync($"📋 新 Agent Team 開始 — **{name}** (id=`{team.Id.ToString()[..8]}`)\n{description ?? ""}".TrimEnd()));
+
         return team.Id.ToString();
     }
 
@@ -63,6 +68,7 @@ public sealed class RecordTools
     [McpServerTool, Description("Record a task lifecycle event. Action: 'create' creates new task and returns task_id / 'claim' assigns to teammate / 'complete' marks done / 'fail' marks failed.")]
     public static async Task<string> RecordTask(
         AppDbContext db,
+        RecordNotificationService notify,
         [Description("Action: create | claim | complete | fail")] string action,
         [Description("Team ID (required for create)")] string? teamId = null,
         [Description("Task ID (required for claim/complete/fail)")] string? taskId = null,
@@ -112,6 +118,7 @@ public sealed class RecordTools
                 tc.Status = "completed";
                 tc.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                _ = Task.Run(() => notify.SendAsync($"✅ Task 完成 — **{tc.Title}** (id=`{tc.Id.ToString()[..8]}`)"));
                 return "completed";
 
             case "fail":
@@ -124,6 +131,7 @@ public sealed class RecordTools
                 tf.ErrorMessage = errorMessage;
                 tf.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                _ = Task.Run(() => notify.SendAsync($"❌ Task 失敗 — **{tf.Title}** (id=`{tf.Id.ToString()[..8]}`)\nError: {errorMessage ?? "（無訊息）"}"));
                 return "failed";
 
             default:

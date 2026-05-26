@@ -326,6 +326,53 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："feat(stage92): Dashboard MCP Records 表格頁（1 頁 5 tab）+ Home placeholder + NavMenu 重整"
+`f9959a5` — feat(stage92): Dashboard MCP Records 表格頁（1 頁 5 tab）+ Home placeholder + NavMenu 重整
+
+---
+
+## Stage 93 — Discord notification 改造
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：MCP record event 觸發 Discord push（fire-and-forget）。HITL 雙向砍（Stage 89 已大砍）後改純被動通知。
+
+### 新檔（1 檔）
+
+- `src/AiTeam.Bot/Services/RecordNotificationService.cs` — Singleton service / inject DiscordSocketClient + IOptions&lt;DiscordSettings&gt; / `SendAsync(message)` push TaskUpdates channel / 失敗 swallow
+
+### 改檔（2 檔）
+
+- `src/AiTeam.Bot/Program.cs` — `builder.Services.AddSingleton<RecordNotificationService>()` 註冊
+- `src/AiTeam.Bot/McpTools/RecordTools.cs` — 3 個 fire-and-forget push hook：
+  - `RegisterTeam` end → 📋 新 Agent Team 開始
+  - `RecordTask` complete case → ✅ Task 完成
+  - `RecordTask` fail case → ❌ Task 失敗（含 errorMessage）
+
+### 設計拍板
+
+| 項 | 決策 | 理由 |
+|---|---|---|
+| Channel 選擇 | TaskUpdates（既有頻道「任務動態」）| 對齊「Task 進度通知」語義、不擾 Alerts 真警報 |
+| 觸發點 | 3 個（register_team / task complete / task fail） | minimal scope、避免 token usage 每筆都 push 洗版 |
+| Fire 方式 | `_ = Task.Run(() => notify.SendAsync(...))` | fire-and-forget / 不阻 MCP tool 回應 / Discord 失敗不影響 record 寫入 |
+| Service 層 | 新 RecordNotificationService（不改 DiscordAlertService） | 解耦：Alert 走 #警報 / Record 走 #任務動態 / 兩者語義不同 |
+
+### 自決紀錄
+
+1. **RecordConversation / RecordTokenUsage 不 push**：每筆都通知會洗版 / Stage 後續可加 milestone（每 100 messages / token cost 達閾值）/ minimal scope 先不做
+2. **token milestone push 延後**：對應 Christ 拍板 #10 第 3 項（token 消耗記錄），但即時 push 過頻、延 Stage 後續評估
+3. **RecordTask claim 不 push**：Christ 不需要看「teammate 認領 task」這個雜訊、只關心 complete / fail
+
+### Build 結果
+
+- `dotnet build AiTeam.slnx`：**0 Error**
+
+### 影響後續 Stage
+
+- Stage 94：端到端驗證會驗 Discord 收到 4 則通知（1 team + 3 task complete）
+
+### Commit
+
+待 commit："feat(stage93): Discord notification 改造 — RecordNotificationService push TaskUpdates channel + RecordTools 3 個 fire-and-forget hook（register_team / task complete / task fail）"
 
 ---

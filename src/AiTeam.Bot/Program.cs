@@ -33,6 +33,7 @@ builder.Services.AddSingleton<AlertRateLimiter>();
 builder.Services.AddSingleton<DiscordAlertService>();
 builder.Services.AddSingleton<TokenCostEstimator>();
 builder.Services.AddSingleton<TokenLogService>();
+builder.Services.AddSingleton<RecordNotificationService>();
 builder.Services.AddSingleton<GitHubService>();
 builder.Services.AddSingleton<OpsAgentService>();
 
