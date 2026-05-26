@@ -55,6 +55,7 @@
                 <MudTh>TeamId</MudTh>
                 <MudTh>TeammateId</MudTh>
                 <MudTh>Title</MudTh>
+                <MudTh>Description</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>CreatedAt</MudTh>
                 <MudTh>CompletedAt</MudTh>
@@ -63,6 +64,7 @@
                 <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
                 <MudTd>@(context.TeammateId?.ToString()[..8] + "…" ?? "—")</MudTd>
                 <MudTd>@context.Title</MudTd>
+                <MudTd>@(context.Description ?? "—")</MudTd>
                 <MudTd>@context.Status</MudTd>
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@(context.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
