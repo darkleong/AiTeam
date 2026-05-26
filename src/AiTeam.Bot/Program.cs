@@ -49,7 +49,8 @@ builder.Services.AddControllers();
 // Stage 91 補 register_team / record_task / record_conversation / record_token_usage 4 個 record tool
 builder.Services.AddMcpServer()
     .WithHttpTransport()
-    .WithTools<HealthCheckTool>();
+    .WithTools<HealthCheckTool>()
+    .WithTools<RecordTools>();
 
 // Discord（v4-rewrite 暫保留 GatewayIntents 完整 / Stage 93 Discord notification 改造階段重評）
 builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig

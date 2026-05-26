@@ -1,9 +1,17 @@
+using AiTeam.Data.Records;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    // Stage 91：v4-rewrite MCP record system 5 個新表（Agent* prefix 區分既有 Team entity / table mcp_* prefix）
+    public DbSet<AgentTeam>       AgentTeams       => Set<AgentTeam>();
+    public DbSet<AgentTeammate>   AgentTeammates   => Set<AgentTeammate>();
+    public DbSet<AgentTask>       AgentTasks       => Set<AgentTask>();
+    public DbSet<AgentMessage>    AgentMessages    => Set<AgentMessage>();
+    public DbSet<AgentTokenUsage> AgentTokenUsages => Set<AgentTokenUsage>();
+
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Project> Projects => Set<Project>();
     // Stage 87 A4：AgentConfigs DbSet 砍（agent_configs 表 DROP TABLE / Petra LLM 配置 SoT 收回 talents.Name="Petra" row）
@@ -318,6 +326,57 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Stage 76：retry path polling 紀律（Status + NextRetryAt — 守 backoff timing）
             e.HasIndex(x => new { x.Status, x.NextRetryAt })
                 .HasDatabaseName("ix_petra_inbox_status_next_retry");
+        });
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Stage 91：v4-rewrite MCP record system — 5 個新表
+        // ─────────────────────────────────────────────────────────────────────
+
+        modelBuilder.Entity<AgentTeam>(e =>
+        {
+            e.ToTable("mcp_teams");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<AgentTeammate>(e =>
+        {
+            e.ToTable("mcp_teammates");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.HasIndex(x => x.TeamId);
+        });
+
+        modelBuilder.Entity<AgentTask>(e =>
+        {
+            e.ToTable("mcp_tasks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.DependenciesJson).HasColumnType("jsonb");
+            e.HasIndex(x => x.TeamId);
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<AgentMessage>(e =>
+        {
+            e.ToTable("mcp_messages");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.Content).HasColumnType("text");
+            e.Property(x => x.ToolCallJson).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.TeammateId, x.CreatedAt });
+            e.HasIndex(x => x.TaskId);
+        });
+
+        modelBuilder.Entity<AgentTokenUsage>(e =>
+        {
+            e.ToTable("mcp_token_usage");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
+            e.Property(x => x.EstimatedCostUsd).HasPrecision(18, 6);
+            e.HasIndex(x => new { x.TeammateId, x.CreatedAt });
+            e.HasIndex(x => x.TaskId);
         });
     }
 }

@@ -223,6 +223,67 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："feat(stage90): MCP server endpoint — ModelContextProtocol.AspNetCore 1.3.0 + Bearer auth + /mcp route + HealthCheckTool"
+`314292e` — feat(stage90): MCP server endpoint — ModelContextProtocol.AspNetCore + Bearer auth + /mcp route + HealthCheckTool
+
+---
+
+## Stage 91 — MCP record tools + DB schema 新表
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：5 個新 entity（Agent* prefix）+ 5 個 MCP record tool + EF Migration 生成。
+
+### 新檔（3 檔）
+
+- `src/AiTeam.Data/Records/RecordEntities.cs` — 5 個 entity（AgentTeam / AgentTeammate / AgentTask / AgentMessage / AgentTokenUsage）
+- `src/AiTeam.Bot/McpTools/RecordTools.cs` — `[McpServerToolType]` class 內含 5 個 `[McpServerTool]` method
+- `src/AiTeam.Data/Migrations/20260526054149_Stage91McpRecordSchema.cs` + Designer — EF 自動生成
+
+### 改檔（2 檔）
+
+- `src/AiTeam.Data/AppDbContext.cs` — 加 5 個 DbSet + 5 個 OnModelCreating 段（用 mcp_* table prefix）
+- `src/AiTeam.Bot/Program.cs` — `.WithTools<RecordTools>()` 註冊
+
+### Schema 設計
+
+| Entity | Table | 用途 |
+|---|---|---|
+| AgentTeam | mcp_teams | Claude Code Agent Team execution session（lead 命名 / Status active/closed） |
+| AgentTeammate | mcp_teammates | Team 內 individual teammate（Role lead/member、Model、SpawnedAt/FinishedAt） |
+| AgentTask | mcp_tasks | Task lifecycle current state（Status pending/in_progress/completed/failed、DependenciesJson、ErrorMessage） |
+| AgentMessage | mcp_messages | Teammate 對話 message（Role user/assistant/tool、Content、ToolCallJson） |
+| AgentTokenUsage | mcp_token_usage | LLM call token 消耗（Input/Output/CacheCreation/CacheRead Tokens + EstimatedCostUsd） |
+
+### MCP Tool 設計
+
+| Tool | Args | Returns |
+|---|---|---|
+| register_team | name, description? | team_id |
+| register_teammate | teamId, name, model?, role? | teammate_id |
+| record_task | action(create/claim/complete/fail), teamId/taskId, ... | task_id 或狀態字串 |
+| record_conversation | teammateId, role, content, taskId?, toolCallJson? | message_id |
+| record_token_usage | teammateId, inputTokens, outputTokens, taskId?, cacheCreation?, cacheRead?, model?, estimatedCostUsd? | usage_id |
+
+### 自決紀錄
+
+1. **加第 5 個 tool `register_teammate`**：原 Stage 91 task description 只列 4 個 tool / 但 teammate spawn 是運作必經事件 / 不寫等於資料不完整。對齊運作流程加入。
+2. **record_task 用 action-based**（4 action 在 1 tool）：對齊 task description「1 個 record_task tool」/ 保持 5 個 tool 總數可控。Trade-off：違反「tool 單一職責」但保 5-tool minimal scope。
+3. **舊 entity drop 延後到 Stage 95**：talents / SkillPrompt / TalentPrompt / PetraSession / PetraSessionMessage / TaskMemory / TalentMemory / PetraInbox + 對應 DbSet + Entities.cs class + Migration drop table — Stage 95 結案前一次處理（避免 Stage 91 cascade reference 修 DashboardAgentService / TokenLogService / TalentDto / MonitoringTokens 等多檔）。
+4. **Entity / Table 命名**：Class 用 `Agent` prefix（區分既有 Team entity / 人員團隊）/ Table 用 `mcp_` prefix（強調 MCP write 來源）。
+
+### Build 結果
+
+- `dotnet build AiTeam.slnx`：**0 Error / 96 Warning**（warning 全為既有 NU1902 vulnerability + Playwright MSTEST0037）
+- `dotnet ef migrations add Stage91McpRecordSchema --project src/AiTeam.Data --startup-project src/AiTeam.Dashboard --context AppDbContext`：**成功**
+
+### 影響後續 Stage
+
+- Stage 92：Dashboard 5 個 MudTable 表格頁顯示這 5 個表
+- Stage 93：Discord notification 改造可用 RecordTools 觸發點（task completed / token milestone 等）
+- Stage 94：端到端驗證跑 register_team → register_teammate → record_task → record_conversation → record_token_usage 完整鏈
+
+### Commit
+
+待 commit："feat(stage91): MCP record tools + DB schema 新表 — 5 entity (mcp_*) + 5 tool (RecordTools.cs) + EF Migration Stage91McpRecordSchema"
 
 ---
