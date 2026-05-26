@@ -419,5 +419,6 @@ FodyWeavers.xsd
 
 # Claude Code
 .claude/
+.mcp.json
 
 *.lscache

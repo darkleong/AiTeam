@@ -28,6 +28,7 @@ services:
       - -c
       - "chown -R appuser:appuser /tmp/aiteam-workspace && exec gosu appuser dotnet AiTeam.Bot.dll"
     environment:
+      TZ: "Asia/Taipei"
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Discord__BotToken: "${DISCORD_BOT_TOKEN}"
       Discord__GuildId: "${DISCORD_GUILD_ID}"
@@ -59,6 +60,7 @@ services:
     ports:
       - "127.0.0.1:5051:8080"   # 只綁定 localhost / 外部裝置無法直連（走 Tailscale Funnel）
     environment:
+      TZ: "Asia/Taipei"
       ConnectionStrings__AiTeamDb: "Host=postgres;Database=aiteam;Username=aiteam;Password=${POSTGRES_PASSWORD}"
       Dashboard__AdminEmail: "${DASHBOARD_ADMIN_EMAIL}"
       Dashboard__AdminPassword: "${DASHBOARD_ADMIN_PASSWORD}"
