@@ -2,25 +2,30 @@
 
 ## 專案背景
 
-AI 團隊執行軟體開發（老闆 + AI Talent 協作）：
+AiTeam **v4.0.0 純記錄系統**（執行端 + 記錄端 分離架構）：
 
-- **v5.5 production active 6 Talent**：Victoria CEO / Petra PM / Cody Dev / Vera Code Reviewer / Quinn QA / Sage 收尾歸檔員（完整描述見 [docs/Architecture.md](docs/Architecture.md)）
-- **核心工具**：Discord（Discord.Net）+ PostgreSQL + Blazor Dashboard（MudBlazor 8.x / InteractiveServer）
-- **LLM 配置**：Petra 走 `LlmProviderFactory.Create("Petra")` → Anthropic Sonnet 4.6 production active default（DB SoT `talents.Provider/Model` Dashboard 動態調 / Stage 87 從 `agent_configs` 遷入）/ Cody/Vera/Quinn/Sage 走 Claude Code CLI subprocess / Victoria flag forward only
+- **執行端**：Christ 本機 Claude Code Agent Team（v2.1.32+ / `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
+- **記錄端**：AiTeam Bot 容器（MCP server endpoint / HTTP / Bearer auth / `/mcp` route）+ PostgreSQL + Blazor Dashboard
+- **Lead persona**：`agents/petra-pm.md`（Petra / model=opus / Claude Code Agent Team lead）
+- **執行流程**：Christ → `claude --agent petra-pm` → Petra spawn teammate（natural language）→ teammate work + call MCP record tool 寫 AiTeam DB
 - **部署**：Windows 11 本機 Docker Compose（非雲端）
+
+> v4.0.0 之前的 v5.5 6 Talent / HITL / Aria-Forge 工作模式：請查 git log 看 v3.79.0 commit / 已全砍（v4-rewrite Stage 88-95）。
 
 ---
 
 ## 規劃文件
 
-實作前讀 `docs/planning/Stage_{N}_Roadmap.md`：
-
 ```
 docs/
-  README.md          ← 各子資料夾說明
-  Architecture.md    ← v5.5 系統架構全景（三層分工 / HITL / Petra 動態 SubtaskPlan / Worker CLI / 程式碼位置索引）
-  planning/          ← Stage Roadmap + Future_Feature
-  conventions/       ← 編程規範
+  Architecture.md             ← v4.0.0 系統架構全景（MCP server + 5 mcp_* 表 + Claude Code Agent Team 集成）
+  planning/
+    Phase_v4_Roadmap.md       ← v4-rewrite Phase 規劃書（Stage 88-95）
+    Phase_v4_Execution_Log.md ← v4-rewrite 執行紀錄（含每 Stage 自決紀錄）
+    Phase_v4_Stage94_E2E_Guide.md  ← 端到端驗證指南（Christ 本機跑）
+    Phase_v4_Followup.md      ← v4 結案後 follow-up 候選清單
+    Future_Feature.md         ← 系統級 future feature
+  conventions/                ← 編程規範
 ```
 
 ---
@@ -45,39 +50,61 @@ UI 元件庫 = **MudBlazor 8.x**。
 ## 專案結構
 
 ```
-AiTeam.slnx         ← 解決方案檔位於 repo root（注意 .slnx 不是 .sln）
+AiTeam.slnx         ← 解決方案檔（注意 .slnx 不是 .sln）
+  ├── agents/
+  │   ├── petra-pm.md       ← Petra subagent definition（Christ copy 到 ~/.claude/agents/）
+  │   └── .mcp.json.example ← Claude Code .mcp.json 範例
   └── src/
       ├── AiTeam.AppHost          ← Aspire 入口
       ├── AiTeam.ServiceDefaults  ← 共用遙測 / 健康檢查
-      ├── AiTeam.Bot              ← Discord Bot 主程式 + Agent 邏輯
-      ├── AiTeam.Dashboard        ← Blazor Web App(MudBlazor 8.x / InteractiveServer）
-      ├── AiTeam.Data             ← EF Core DbContext / Entities / Repositories / Migrations
-      ├── AiTeam.Shared           ← 共用 DTO / 介面 / 常數
-      └── AiTeam.Tests.Playwright ← Playwright E2E 截圖測試
+      ├── AiTeam.Bot              ← MCP server endpoint + 記錄寫入 + Discord 通知
+      │   ├── McpAuth/            ← Bearer auth middleware
+      │   ├── McpTools/           ← 6 個 MCP tool（HealthCheckTool + RecordTools 5 method）
+      │   ├── Services/RecordNotificationService.cs ← Discord push TaskUpdates channel
+      │   └── ...
+      ├── AiTeam.Dashboard        ← Blazor Web App / MudTable × 5 顯示 mcp_* 記錄
+      ├── AiTeam.Data             ← EF Core DbContext / Records/ entity / Migrations
+      └── AiTeam.Shared           ← 共用 DTO
 ```
 
-建置：`dotnet build AiTeam.slnx`（從 repo root 執行）
+建置：`dotnet build AiTeam.slnx`（從 repo root）
+
+---
+
+## MCP server endpoint
+
+- **Route**：`/mcp`（Bot 容器內嵌、port 8080）
+- **Transport**：HTTP（不是 stdio）
+- **Auth**：Bearer token / `Authorization: Bearer {AgentSettings.InternalApiKey}`
+- **Tools**：6 個
+  - `HealthCheck` — Bot 連線 + DB ready 確認
+  - `register_team` — Claude Code Agent Team session 註冊
+  - `register_teammate` — Lead 或 member spawn 時註冊
+  - `record_task` — Task lifecycle（action: create / claim / complete / fail）
+  - `record_conversation` — Teammate 對話 message
+  - `record_token_usage` — LLM call token 消耗
+- **Tech**：`ModelContextProtocol.AspNetCore` 1.3.0（Microsoft + Anthropic 官方合作 SDK）
+
+Claude Code 端 `.mcp.json` 配置範例見 `agents/.mcp.json.example`。
 
 ---
 
 ## 部署環境
 
-Windows 11 本機 Docker Compose（非雲端）：
+Windows 11 本機 Docker Compose：
 - Bot / Dashboard / PostgreSQL 均本機容器
 - Bot 容器內無法執行 host `docker` / `docker compose` 指令
 - 涉及容器操作走 GitHub Actions self-hosted runner
 
-**自動部署**：push to main → GitHub Actions self-hosted runner 自動 `docker compose build + up`。驗收步驟不該含「手動部署 / 重啟容器」/ 只需 commit & push 等自動部署完成。
+**自動部署**：push to main → GitHub Actions self-hosted runner 自動 `docker compose build + up`。
 
 ---
 
 ## ops 配置改動 SoP
 
-修改 Token / 系統設定 / docker-compose 配置依下表：
-
 | 改動類型 | 路徑 | 生效時間 |
 |---|---|---|
-| Token limit / 系統設定（全域月限 / per-agent 日月限）| Dashboard 設定頁 → reload-cache 自動觸發 | 5 分鐘內（不重啟）|
+| Token limit / 系統設定 | Dashboard 設定頁 → reload-cache 自動觸發 | 5 分鐘內（不重啟）|
 | docker-compose.prod.yml / appsettings.json 預設值 | commit + push → CI/CD `docker compose up -d --force-recreate` | push 後 ~5 分鐘 |
 
 ⚠️ **不要單獨 `docker restart aiteam-bot`** — restart 不 reload env / 必須 recreate。
@@ -87,36 +114,16 @@ Windows 11 本機 Docker Compose（非雲端）：
 - **Bot 自己** service env：`AgentSettings__*` prefix（如 `AgentSettings__InternalApiKey`）
 - **Dashboard 視 Bot 為外部 service** env：`Bot__*` prefix（如 `Bot__InternalApiKey` / `Bot__InternalUrl`）
 
-動 docker-compose env 前必 grep 既有 naming convention verify（避免 Dashboard 端 IOptions 讀 null 等 silent fail）。
-
-### 配置 SoT
-
-| 設定 | SoT | fallback |
-|---|---|---|
-| Token limit（全域 / per-agent）| DB（`app_settings` + `talents`）| appsettings.json |
-| 其他 AgentSettings（RulesCacheTtlMinutes 等）| docker-compose.prod.yml env | appsettings.json |
-| Discord / GitHub / DB 連線 | docker-compose.prod.yml env | 無 fallback |
-
----
-
-## 重要設計原則
-
-- **動態 Agent 清單**：從 DB 載入 / 不寫死
-- **Agent 模型可獨立配置**：每個 Agent Provider/Model 經 Dashboard 設定頁管理
-- **所有設定**集中在 `appsettings.json` 或動態 `AppSettings` 表 / 不寫死
-- **Discord + Dashboard 雙通道**：老闆確認點同時在 Discord 按鈕 + Dashboard 操作中心 / 任一端回覆即鎖（樂觀鎖先到先贏）
-
 ---
 
 ## 版本號管理（SemVer）
 
 格式 `MAJOR.MINOR.PATCH`：
-- **patch**：hotfix / 小 bug 修正
+- **patch**：hotfix
 - **minor**：Stage 完成（每 Stage 通常 minor bump）
-- **major**：架構層面重大改變
+- **major**：架構層面重大改變（如 v4.0.0 = 純記錄系統重構）
 
-修改：`src/Directory.Build.props` `<Version>` 標籤（Stage 26 起集中管理）。
-
+修改：`src/Directory.Build.props` `<Version>` 標籤。
 目前版本 / 最新 Stage 以 [`/CHANGELOG.md`](./CHANGELOG.md) 為準。
 
 ---
@@ -133,7 +140,7 @@ dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam
 **AiTeam 特殊紀律**：
 - `startup-project` 必須 `src/AiTeam.Dashboard`（含 `Microsoft.EntityFrameworkCore.Design`）/ 用 `AppHost` 找不到 DLL
 - 多 DbContext 必加 `--context AppDbContext`
-- Bot 容器啟動自動 `MigrateAsync()` AppDbContext（`Bot/Program.cs:184`）/ push 後容器 recreate 自動套用 / 不需手動跑 `dotnet ef database update`
+- Bot 容器啟動自動 `MigrateAsync()` AppDbContext / push 後容器 recreate 自動套用
 
 ---
 

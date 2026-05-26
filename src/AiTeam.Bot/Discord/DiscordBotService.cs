@@ -7,11 +7,11 @@ using Microsoft.Extensions.Options;
 namespace AiTeam.Bot.Discord;
 
 /// <summary>
-/// Discord Bot 主服務，負責連線、接收指令、發送訊息。
+/// Discord Bot 主服務（v4-rewrite：純被動通知 / 不再處理 slash command / 不再 routing CEO 自然語言 / 不再 ButtonExecuted）。
+/// 用途：Bot 啟動 → 連 Discord → 等 DiscordAlertService / 後續 MCP 通知服務透過 client 發訊息。
 /// </summary>
 public class DiscordBotService(
     DiscordSocketClient client,
-    CommandHandler commandHandler,
     IOptions<DiscordSettings> settings,
     IServiceScopeFactory scopeFactory,
     ILogger<DiscordBotService> logger) : BackgroundService
@@ -29,7 +29,6 @@ public class DiscordBotService(
         await client.LoginAsync(TokenType.Bot, _settings.BotToken);
         await client.StartAsync();
 
-        // 保持服務運行直到取消
         await Task.Delay(Timeout.Infinite, stoppingToken);
     }
 
@@ -43,15 +42,13 @@ public class DiscordBotService(
     {
         logger.LogInformation("Discord Bot 已上線，登入為 {Username}", client.CurrentUser.Username);
         await client.SetStatusAsync(UserStatus.Online);
-        await client.SetGameAsync("等待指令...");
-
-        // Ready 後 Guild 快取才完整，此時才能註冊斜線指令
-        await commandHandler.RegisterCommandsAsync();
+        await client.SetGameAsync("AiTeam 記錄系統");
         await EnsureChannelsAsync();
     }
 
     /// <summary>
-    /// 檢查並自動建立缺少的頻道。
+    /// v4-rewrite：6 Talent 專屬頻道砍（CeoChannel/PmChannel/DevChannel/ReviewerChannel/QaChannel/DocChannel）。
+    /// 只保留 TaskUpdates / Alerts / DailySummary 通知頻道（純被動 push 用）。
     /// </summary>
     private async Task EnsureChannelsAsync()
     {
@@ -64,13 +61,6 @@ public class DiscordBotService(
             _settings.Channels.TaskUpdates,
             _settings.Channels.Alerts,
             _settings.Channels.DailySummary,
-            // v5.5 6 Talent 專屬頻道
-            _settings.Channels.CeoChannel,
-            _settings.Channels.PmChannel,
-            _settings.Channels.DevChannel,
-            _settings.Channels.ReviewerChannel,
-            _settings.Channels.QaChannel,
-            _settings.Channels.DocChannel,
         };
 
         foreach (var name in required)

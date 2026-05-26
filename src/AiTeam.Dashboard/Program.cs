@@ -66,8 +66,7 @@ builder.Services.AddControllersWithViews();
 builder.Services.Configure<AgentTokenLimits>(builder.Configuration.GetSection("AgentSettings"));
 
 // Dashboard Services
-// Stage 83 子項 7 議題 E1：拆 DashboardTaskService 568 行 → DashboardInteractionQueryService（HITL/Queue）+ DashboardDeploymentService（v4 TaskItem/Log）
-builder.Services.AddScoped<DashboardInteractionQueryService>();
+// v4-rewrite：DashboardInteractionQueryService 砍（HITL 整套砍）
 builder.Services.AddScoped<DashboardDeploymentService>();
 builder.Services.AddScoped<DashboardProjectService>();
 builder.Services.AddScoped<DashboardAgentService>();

@@ -1,8 +1,8 @@
 # Future Feature — 未來功能候選清單
 
-> 版本：v15.0
+> 版本：v16.0
 > 建立日期：2026-04-01
-> 最後更新：2026-05-25（v14.0 Stage 86 Dashboard 改造結案 / v15.0 Stage 87 Dashboard 改造收口 + v4 LLM 配置 SoT 統一結案 + Stage 87+ → Stage 88+ 重命名 + Dashboard 改造 3 Stage 大段落徹底收口）
+> 最後更新：2026-05-26（v16.0 — Phase v4-rewrite Stage 88-95 結案 / AiTeam 從「執行 + 記錄」轉「純記錄 MCP server」/ 加入 v4-rewrite Followup section）
 > 詳細實作紀錄：[CHANGELOG.md](../../CHANGELOG.md) + [Architecture.md](../Architecture.md)
 
 ---
@@ -13,6 +13,7 @@
 |---|---|---|
 | 一 | v5.5 完整收口 + Stage 88+ 候選 | ✅ Phase 1-4 全 deliver + Stage 84 拆解收口 + Stage 85 Dashboard 救火 + Stage 86 Dashboard 改造 + Stage 87 改造收口 + v4 LLM SoT 統一 / Dashboard 改造 3 Stage 大段落結束 |
 | 二 | 客戶專案交付流程與驗收閘門 | 🟡 中優先級（AiTeam 開始承接客戶專案時前置必要） |
+| 三 | **Phase v4-rewrite Followup**（v4.0.0 結案後候選清單）| ✅ 已彙整於 [Phase_v4_Followup.md](Phase_v4_Followup.md)（F1-F6 / 含舊 entity drop + cascading reference 修 / token milestone push / Dashboard 進階功能 / Channels 整理 / NavMenu 重評 / petra-pm 微調）|
 
 ---
 

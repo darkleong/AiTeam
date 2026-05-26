@@ -1,14 +1,13 @@
-using Anthropic.SDK;
 using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
+using AiTeam.Bot.McpAuth;
+using AiTeam.Bot.McpTools;
 using AiTeam.Data;
 using AiTeam.Data.Extensions;
 using AiTeam.Bot.Discord;
 using AiTeam.Bot.GitHub;
 using AiTeam.Bot.Ops;
-using AiTeam.Bot.Orchestration.Petra;
 using AiTeam.Bot.Services;
-using AiTeam.Data.Repositories;
 using Discord.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
@@ -23,126 +22,38 @@ builder.AddAiTeamData("AiTeamDb");
 // 設定
 builder.Services.Configure<DiscordSettings>(builder.Configuration.GetSection("Discord"));
 builder.Services.Configure<AgentSettings>(builder.Configuration.GetSection("AgentSettings"));
-builder.Services.Configure<AgentSettings>(o =>
-    builder.Configuration.GetSection("Agents").Bind(o.Agents));
 builder.Services.Configure<GitHubSettings>(builder.Configuration.GetSection("GitHub"));
 builder.Services.Configure<OpsSettings>(builder.Configuration.GetSection("OpsSettings"));
 builder.Services.Configure<WorkflowSettings>(builder.Configuration.GetSection("WorkflowSettings"));
-builder.Services.AddSingleton<WorkflowSettingsResolver>();
 
-// Anthropic
-var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? "";
-builder.Services.AddSingleton(new AnthropicClient(anthropicApiKey));
-
-// Gemini（Stage 37-1 / FF 四第一階段：API 層 Agent 可選 Google Gemini Flash）
-// HttpClient BaseAddress 末尾保留 slash；GeminiProvider 內相對路徑不可開頭加 slash。
-builder.Services.AddHttpClient("Gemini", c =>
-{
-    var baseUrl = (builder.Configuration["Gemini:BaseUrl"]
-                   ?? "https://generativelanguage.googleapis.com/v1").TrimEnd('/');
-    c.BaseAddress = new Uri(baseUrl + "/");
-});
-
-builder.Services.AddScoped<LlmProviderFactory>();
-
-// Rules（取代 Notion，從 PostgreSQL 讀取）
+// 核心 service（dashboard / 通知 / token 記錄 / 維運）
 builder.Services.AddSingleton<RulesService>();
-// 動態系統設定（TTL cache，免重啟生效）
 builder.Services.AddSingleton<AppSettingsService>();
-// Stage 38：Agent Provider/Model 動態設定快取（DB 權威，Dashboard 可改，TTL 5 分）
-// Stage 87 A2：AgentConfigCache → TalentMetaCache（v4 collapse 最後殘留收口 / DbSet talents 表 / cache key Talent.Name）
-builder.Services.AddSingleton<TalentMetaCache>();
-
-// Agents（v5.5 production active 6 Talent baseline）
-// Stage 84：v5 IAgentTool ecosystem 整套砍 — DevAgentService/QaAgentService/DocAgentService/ReviewerAgentService class + IAgentTool registration 全砍
-// 留 CeoAgentService（v5.5 active）+ OpsAgentService Singleton（HealthCheckJob 相依）
-builder.Services.AddScoped<CeoAgentService>();
-builder.Services.AddSingleton<OpsAgentService>();                          // Singleton：HealthCheckJob 相依（class 仍 Singleton 供 Quartz scheduled job 用）
-
-// Stage 63B：Petra Orchestrator + Recovery hosted service（v5 動態架構 PoC）
-// Stage 83：PetraSessionRepository 移到 AddAiTeamData extension（Bot + Dashboard 共用 Repository pattern / DRY）
-// Stage 84：PetraOrchestratorService 拆 5 sub-service（Scoped lifecycle / 對齊主入口 / Commons → Git → Talent dispatch → Replan → PlanConfirmation → 主）
-builder.Services.AddScoped<PetraContextBuilder>();
-builder.Services.AddScoped<PetraGitFinalizationService>();
-builder.Services.AddScoped<PetraTalentDispatchService>();
-builder.Services.AddScoped<PetraDynamicReplanService>();
-builder.Services.AddScoped<PetraPlanConfirmationService>();
-builder.Services.AddScoped<PetraOrchestratorService>();
-builder.Services.AddHostedService<PetraSessionRecoveryService>();
-
-// Stage 75：v5.5 Phase 3 — PetraInbox 接收層 queue（Layer 1）
-// PetraInboxRepository 已由 AddAiTeamData extension 註冊（Bot + Dashboard 共用 Repository pattern）
-// Stage 77：v5.5 Phase 3 補強 — fire-and-forget A2 完整版（Channel + multi-consumer + bounded fan-out + graceful shutdown drain）
-//   PetraInboxChannel Singleton（process-wide Bounded queue / Capacity=20 / FullMode=Wait）
-//   PetraInboxProcessor 退化為 pure producer（poll DB → push channel）
-//   PetraDispatchWorker N=3 default consumer loop（multi-consumer Task.WhenAll + Stage 76 retry path 整套搬遷）
-builder.Services.AddSingleton<PetraInboxChannel>();
-builder.Services.AddHostedService<PetraInboxProcessor>();
-builder.Services.AddHostedService<PetraDispatchWorker>();
-
-// Stage 80：HITL plan_confirm 4 decision dispatch consumer（取代 Stage 78c 砍掉的 InteractionProcessor 在此 Stage 範圍內的 routing 角色）
-builder.Services.AddHostedService<PlanConfirmationProcessor>();
-
-// Stage 69：v5.5 Phase 2 Step 3 — 跨 session 長期持久記憶 Repository
-builder.Services.AddScoped<MemoryRepository>();
-
-// Stage 72：v5.5 Phase 2 Step 5 — Prompt DB 化（SkillPrompt + TalentPrompt 兩層 schema）
-// PromptRepository（Scoped — 對齊 MemoryRepository 既有 lifecycle）+ PromptResolver（Singleton + 5-min TTL cache + IServiceScopeFactory 解 Singleton-Scoped 雷 — 對齊 AppSettingsService pattern）
-builder.Services.AddScoped<PromptRepository>();
-builder.Services.AddSingleton<PromptResolver>();
-
-// Stage 74：v5.5 Phase 3 Step 8 — per-Skill Model 三層 fallback chain（Singleton + 5-min TTL cache + IServiceScopeFactory 對齊 PromptResolver pattern）
-builder.Services.AddSingleton<TalentSkillModelResolver>();
-
-// Stage 75：v5.5 Phase 3 — per-Talent serialization lock（Singleton + ConcurrentDictionary<Guid, SemaphoreSlim>）
-builder.Services.AddSingleton<TalentDispatchLockService>();
-
-// Stage 67：v5.5 Phase 1 Step 2 — Skill registry (code-defined / Singleton) + Talent factory (runtime DB query / Singleton + IServiceScopeFactory)
-// Talent register 走 ITalentFactory.GetAllAsync(ct) 取代「DI scan IEnumerable<ITalent>」pattern — 解 app.Build 時 DB 還沒 ready 的時序問題 + Phase 3 dynamic CRUD 自然解
-builder.Services.AddSingleton<AiTeam.Bot.Orchestration.Petra.Skills.ISkillRegistry, AiTeam.Bot.Orchestration.Petra.Skills.DefaultSkillRegistry>();
-builder.Services.AddSingleton<ITalentFactory, DefaultTalentFactory>();
-
-// Stage 78c 議題 8：Pm/ folder 整套砍（PmAgentCommons / PmReviewService / ReviewAppealService / DevPlanAppealService / PmRoutingService — 100% v4 path / 0 v5.5 caller）
-
-// Stage 85 子項 1：AlertRateLimiter（per event type per N min 限頻 / Singleton 跨 caller 共用 state）
 builder.Services.AddSingleton<AlertRateLimiter>();
-
-// Discord 警報服務（向 #警報 頻道發送 Token 異常等警報）
 builder.Services.AddSingleton<DiscordAlertService>();
+builder.Services.AddSingleton<TokenCostEstimator>();
+builder.Services.AddSingleton<TokenLogService>();
+builder.Services.AddSingleton<RecordNotificationService>();
+builder.Services.AddSingleton<GitHubService>();
+builder.Services.AddSingleton<OpsAgentService>();
 
-// Dashboard 推送（本機 Aspire 用 http+dashboard://，Docker 用 Dashboard:PushUrl 設定）
+// Dashboard 推送
 var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashboard://aiteam-dashboard";
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri(dashboardPushUrl));
 builder.Services.AddSingleton<DashboardPushService>();
-// Stage 56：FF 四十三 修 — TotalCostUsd fallback 估算 helper（CLI / API path 共用）
-builder.Services.AddSingleton<TokenCostEstimator>();
-// Stage 44：CLI Agent token 寫入共用 helper（內建 try-catch 不阻塞主流程，獨立 scope DbContext）
-builder.Services.AddSingleton<TokenLogService>();
-// Stage 28a：BossInteraction 寫入與 Discord 回覆同步
-builder.Services.AddSingleton<InteractionService>();
 
-// GitHub
-builder.Services.AddSingleton<GitHubService>();
-
-// Stage 11：Claude Code subprocess 封裝（供 DevAgentService 使用）
-// Stage 17：Proxy pattern — ClaudeCodeProxy 依 MockMode flag 路由到 real 或 mock
-// Stage 78c 議題 3：MockClaudeCodeService 留（LLM 層 Mock 對 v5.5 path Cody/Vera/Quinn/Sage 仍有效 / forge-self-verify skill 真實依賴）
-builder.Services.AddSingleton<ClaudeCodeService>();
-builder.Services.AddSingleton<MockClaudeCodeService>();
-builder.Services.AddSingleton<IClaudeCodeService, ClaudeCodeProxy>();
 builder.Services.AddControllers();
 
-// Stage 78c：v4 Pipeline framework 整套砍 — TaskGroupService / AgentQueueService / AgentQueueProcessor / WorkflowEngine /
-//   MeetingOrchestrationService / AppealOrchestrationService / QaCoordinationService / ProposalConfirmationService /
-//   BossNotificationService / BossResponseHandlerService / EpicChainService / PipelineRoutingService /
-//   InteractionProcessor / MockScenarioService / AgentQueueControlService /
-//   Workflows/Pipeline + Kickoff + Design + Appeal/ folder factory+CheckpointStore + Framework*Router /
-//   SlashCommandRouter / WebhookController / Pm/ folder
-// 對應 DI 註冊整套砍 — v5.5 path（PetraInboxProcessor + PetraDispatchWorker + PetraOrchestratorService）取代
+// Stage 90：MCP server（v4-rewrite 核心）— ModelContextProtocol.AspNetCore 1.3.0
+// HTTP transport / Bearer auth middleware（重用 AgentSettings.InternalApiKey）/ /mcp route
+// Stage 91 補 register_team / record_task / record_conversation / record_token_usage 4 個 record tool
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<HealthCheckTool>()
+    .WithTools<RecordTools>();
 
-// Discord（Stage 7：加入 GuildMessages + MessageContent 以接收自然語言訊息）
-// 注意：MessageContent 是 Privileged Intent，需在 Discord Developer Portal 手動開啟
+// Discord（v4-rewrite 暫保留 GatewayIntents 完整 / Stage 93 Discord notification 改造階段重評）
 builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
 {
     LogLevel       = Discord.LogSeverity.Info,
@@ -151,10 +62,6 @@ builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
                    | Discord.GatewayIntents.MessageContent
 }));
 builder.Services.AddSingleton<ConversationContextStore>();
-// Stage 36：Discord Routing — Store + ButtonRouter + CommandHandler（Stage 78c 議題 4：SlashCommandRouter 整檔砍）
-builder.Services.AddSingleton<AiTeam.Bot.Discord.Routing.PendingConfirmationStore>();
-builder.Services.AddSingleton<AiTeam.Bot.Discord.Routing.ButtonCallbackRouter>();
-builder.Services.AddSingleton<CommandHandler>();
 builder.Services.AddHostedService<DiscordBotService>();
 
 // Quartz 健康檢查排程
@@ -171,19 +78,21 @@ builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
 var app = builder.Build();
 
+// Stage 90：MCP Bearer auth middleware（必須在 MapMcp 之前 / 只攔 /mcp* path）
+app.UseMiddleware<McpBearerAuthMiddleware>();
+
 app.MapDefaultEndpoints();
 app.MapControllers();
 
-// 啟動時自動套用 EF Core Migrations，並 Seed 初始資料
-// Stage 87 A2：Stage 38 AgentConfig 補 seed 段砍（agent_configs 表 Stage 87 A4 DROP TABLE / Talent baseline 6 row 已由 DbSeeder.EnsureTalentsAsync seed Provider/Model）
+// Stage 90：MCP server endpoint 掛在 /mcp（HTTP transport / Claude Code .mcp.json type=http url=http://...:5050/mcp）
+app.MapMcp("/mcp");
+
+// 啟動時自動套用 EF Core Migrations
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db);
-
-    // Stage 87 A2：預熱 TalentMetaCache（取代 Stage 38 AgentConfigCache.WarmupAsync）
-    await scope.ServiceProvider.GetRequiredService<TalentMetaCache>().WarmupAsync();
 }
 
 app.Run();

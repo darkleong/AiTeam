@@ -34,16 +34,6 @@ services:
       Discord__Channels__TaskUpdates: "任務動態"
       Discord__Channels__Alerts: "警報"
       Discord__Channels__DailySummary: "每日摘要"
-      Discord__Channels__CeoChannel: "victoria-ceo"
-      Discord__Channels__PmChannel: "petra-pm"
-      Discord__Channels__DevChannel: "cody-dev"
-      Discord__Channels__ReviewerChannel: "vera-reviewer"
-      Discord__Channels__QaChannel: "quinn-qa"
-      Discord__Channels__DocChannel: "sage-doc"
-      Anthropic__ApiKey: "${AITEAM_ANTHROPIC_KEY}"
-      Gemini__ApiKey: "${AITEAM_GEMINI_KEY}"
-      # Gemini v1 stable 不支援 systemInstruction 欄位（400 BadRequest）/ 必走 v1beta
-      Gemini__BaseUrl: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
       GitHub__PersonalAccessToken: "${GITHUB_PAT}"
       GitHub__Owner: "darkleong"
       GitHub__DefaultRepo: "AiTeam"
@@ -52,8 +42,8 @@ services:
       Dashboard__PushUrl: "http://aiteam-dashboard:8080"
       AgentSettings__RulesCacheTtlMinutes: "60"
       AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
+      # v4-rewrite Stage 90：InternalApiKey 同時當 MCP server Bearer auth key（重用 / 不另開新 env var）
       AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
-      AgentSettings__SkipCeoConfirm: "false"
     volumes:
       # workspace 持久化 — Bot recreate 不蒸發手動 git clone / compose 自動建 named volume 不走 external（git clone 可重建 / 不需 external 護身符 vs postgres 真實資料）
       - aiteam-workspace-data:/tmp/aiteam-workspace
