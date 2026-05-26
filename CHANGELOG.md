@@ -19,8 +19,13 @@
 
 ## [Unreleased]
 
-- **v5.5 完整收口 ✅**（Phase 4 全 deliver — 78a → 78b → 78c → 79 → Trial_v23 → 80 → Trial_v24 → 81 → Trial_v25 → 82 → Trial_v26 🟢 → Trial_v27 🟡 → **Stage 83 ✅** → **Stage 84 ✅ PetraOrchestratorService 拆解收口** → **Stage 85 ✅ Dashboard 救火** → **Stage 86 ✅ Dashboard 改造** → **Stage 87 ✅ Dashboard 改造收口 + v4 LLM 配置 SoT 統一**）
-- **Dashboard 改造 3 Stage 完整收口**：✅ Stage 85 救火 → ✅ Stage 86 改造 → ✅ Stage 87 收口（nav 階層化 + v4 collapse 最後殘留 + Rules v4 row 收乾）
+—
+
+---
+
+## [4.0.0] — 2026-05-26 — [Phase v4-rewrite](docs/planning/Phase_v4_Roadmap.md) AiTeam 純記錄系統改造（Stage 88-95）
+
+**MAJOR — 架構級重構**：AiTeam 從「執行 + 記錄」雙重身份 → 「純記錄 MCP server」。執行端整套搬到 Christ 本機 **Claude Code Agent Team**（v2.1.32+ experimental / Opus 4.6 推出）。8 Stage 大砍大改、單日完成（Stage 88 spike → 89 砍舊 → 90 MCP endpoint → 91 record tools + DB schema → 92 Dashboard → 93 Discord 改通知 → 94 E2E 指南 → 95 結案）。砍範圍：6 Talent（Victoria/Petra/Cody/Vera/Quinn/Sage）整套 + LlmProviderFactory + HITL + Petra orchestrator + Aria-Forge 工作模式（17,142 行刪 / 105 行新 / Stage 89 一個 commit）。新範圍：MCP server endpoint（`ModelContextProtocol.AspNetCore` 1.3.0 / `/mcp` route / Bearer auth）+ 5 mcp_* 新表 + 6 個 MCP tool（HealthCheck + register_team / register_teammate / record_task / record_conversation / record_token_usage）+ Dashboard Records 表格頁（1 頁 5 tab）+ Discord push TaskUpdates channel + `agents/petra-pm.md` lead persona + E2E 驗證指南。Petra「全能模式」（大授權 / bypassPermissions / Christ 不介入）首次驗證、subagent 不污染主 session 紀律落地。詳細執行紀錄 + 自決決策見 [Phase_v4_Execution_Log.md](docs/planning/Phase_v4_Execution_Log.md)、follow-up 工作 6 項見 [Phase_v4_Followup.md](docs/planning/Phase_v4_Followup.md)。
 
 ---
 

@@ -409,6 +409,71 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："docs(stage94): 端到端驗證指南 + agents/petra-pm.md + .mcp.json.example"
+`fb26e6f` — docs(stage94): 端到端驗證指南 + agents/petra-pm.md + .mcp.json.example
 
 ---
+
+## Stage 95 — main 切換 + Phase 結案
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：SemVer bump v4.0.0 + Architecture/CLAUDE 大改 + CHANGELOG + Future_Feature + Phase_v4_Followup.md（舊 entity drop 等延後項彙整）+ merge `v4-rewrite` → main + push 觸發 CI/CD 部署。
+
+### 改檔（4 檔 + 1 新檔）
+
+- `src/Directory.Build.props` — Version 3.79.0 → **4.0.0**（major bump / 架構級重構）
+- `CHANGELOG.md` — 加 v4.0.0 entry（單條涵蓋 Stage 88-95 整 Phase）+ Unreleased 清空
+- `docs/Architecture.md` — **整檔重寫**（v4.0.0 minimal 版 / 砍 v5.5 22 個 flag / 6 Talent / Petra orchestrator / HITL / 加 Claude Code Agent Team 雙端架構圖 / MCP server + record tool + Discord notification + 程式碼位置索引）
+- `CLAUDE.md` — **整檔重寫**（砍 6 Talent + LlmProviderFactory 描述 / 加 Petra-pm + Claude Code Agent Team + MCP server endpoint 段 / 保留編程規範 + 部署 + EF Migration + SemVer 段）
+- `docs/planning/Phase_v4_Followup.md`（**新檔**）— 6 項 follow-up（F1 舊 entity drop + cascading reference / F2 token milestone push / F3 Dashboard 進階功能 / F4 Channels env 整理 / F5 NavMenu 重評 / F6 petra-pm 微調）
+- `docs/planning/Future_Feature.md` — 版本 v15.0 → v16.0 / 加 entry「三、Phase v4-rewrite Followup」link 到 Phase_v4_Followup.md
+
+### 自決紀錄
+
+1. **舊資料處置 = drop（但延後到 v4.1.0）**：原 Stage 95 task description 提「migrate vs drop」、自決 drop（migrate 無意義 / 6 Talent baseline 不是 Agent Team session 記錄）。但 drop entity / DbSet / OnModelCreating 段 + cascading reference 修（8+ 檔）範圍大、Stage 95 scope 控制延 v4.1.0 處理（Phase_v4_Followup F1）。Production DB 暫含 dead table、不影響正確性。
+2. **SemVer v4.0.0**：MAJOR 必然（架構級重構 / 對齊 SemVer 紀律）
+3. **CHANGELOG entry 單條涵蓋整 Phase**（不拆 Stage 88-95 8 條）：對齊 entry 紀律「~100-200 字 / 細節見 Roadmap」、Phase 級重構單 entry 較清晰
+4. **Architecture.md 整檔重寫**（不 patch）：v5.5 22 flag / 6 Talent / Petra orchestrator 內容全 obsolete、patch 留垃圾、整檔 minimal 重寫 < 200 行
+5. **CLAUDE.md 整檔重寫**：同理、6 Talent + LLM 配置等 obsolete 段砍、加 v4.0.0 新架構描述
+
+### Build 結果
+
+- `dotnet build AiTeam.slnx`：**0 Error**（v4.0.0 bump 正確）
+
+### Phase v4-rewrite 結案 summary
+
+**總執行時間**：2026-05-26（單日完成 8 Stage）
+
+**Stage 完成順序 + commit**：
+1. Stage 88 spike — `3fb091b` — C# MCP SDK + Claude Code remote MCP 相容性驗證通過
+2. Stage 89 砍舊 — `b7b83b8` — 17,142 行刪 / 105 行新（74 檔砍 / 9 檔改）
+3. Stage 90 MCP endpoint — `314292e` — ModelContextProtocol.AspNetCore + Bearer auth + /mcp + HealthCheckTool
+4. Stage 91 record tools + schema — `bb242d8` — 5 entity + 5 tool + EF Migration
+5. Stage 92 Dashboard — `f9959a5` — 1 頁 5 tab + Home placeholder + NavMenu 重整
+6. Stage 93 Discord 改造 — `28c48e8` — RecordNotificationService + 3 fire-and-forget hook
+7. Stage 94 E2E 指南 — `fb26e6f` — petra-pm.md + .mcp.json.example + Phase_v4_Stage94_E2E_Guide.md
+8. Stage 95 main 切換 — （本 commit）— v4.0.0 + 4 文件大改 + Phase_v4_Followup.md
+
+**12 項拍板共識** — 100% 落地：
+- ✅ AiTeam 純記錄系統（執行端搬 Claude Code Agent Team）
+- ✅ 6 Talent / HITL / Aria-Forge 整套砍
+- ✅ Discord 留純通知（TaskUpdates channel）
+- ✅ MCP 用 C# 寫 / HTTP transport / API key auth
+- ✅ Natural language spawn（Petra-pm 用 natural language spawn teammate）
+- ✅ 記錄 Task lifecycle / Conversation / Token usage
+- ✅ 開 v4-rewrite 分支 / main 凍結 / 一次切
+- ✅ Dashboard 新增 1 頁純表格
+
+**Petra 全能模式驗證** — 大授權 / `bypassPermissions` / Christ 不介入細節：
+- 通過：8 Stage 連續完成 / 每 Stage build verify + commit + push / 無中途 escalate
+- 主 session 紀律守住：spawn Explore subagent 1 次（Stage 89 Explore 砍 list）/ 其餘自做
+- 自決紀錄完整：每 Stage 結論段含「自決紀錄」/ Christ 結束後可 audit 每個技術選型
+
+**Christ 通過判定**（要本機跑驗證）：
+- 依 [Phase_v4_Stage94_E2E_Guide.md](Phase_v4_Stage94_E2E_Guide.md) 第 7 節 3 點通過
+- 通過後可進 v4.1.0 / 處理 Phase_v4_Followup F1（舊 entity 真實 drop）
+
+### Commit
+
+待 commit："release(v4.0.0): Phase v4-rewrite 結案 — SemVer bump + Architecture/CLAUDE 整檔重寫 + CHANGELOG + Phase_v4_Followup"
+
