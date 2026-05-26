@@ -1,6 +1,9 @@
-@* v4-rewrite Stage 89：HITL / Petra 任務中心 / Talent 配置頁砍 — NavMenu 暫精簡至 build-clean state（Stage 92 補 Records 表格頁 + 重整全 NavMenu）*@
+@* v4-rewrite Stage 92：NavMenu 重整 — 首頁 + Records 表格頁（純記錄系統主入口）+ 監控中心 + 設定中心 *@
 <MudNavMenu>
-    <MudNavGroup Title="監控中心" Icon="@Icons.Material.Filled.MonitorHeart" Expanded="true">
+    <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">首頁</MudNavLink>
+    <MudNavLink Href="/records" Icon="@Icons.Material.Filled.TableChart">MCP Records</MudNavLink>
+
+    <MudNavGroup Title="監控中心" Icon="@Icons.Material.Filled.MonitorHeart" Expanded="false">
         <MudNavLink Href="/monitoring/tokens"      Icon="@Icons.Material.Filled.BarChart">Token 統計</MudNavLink>
         <MudNavLink Href="/monitoring/deployments" Icon="@Icons.Material.Filled.RocketLaunch">部署紀錄</MudNavLink>
         <MudNavLink Href="/monitoring/health"      Icon="@Icons.Material.Filled.HealthAndSafety">系統健康</MudNavLink>

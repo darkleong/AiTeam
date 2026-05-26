@@ -1,0 +1,116 @@
+@page "/records"
+@using AiTeam.Data.Records
+
+<PageTitle>Records — AiTeam</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">MCP Records 表格檢視</MudText>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    顯示 Claude Code Agent Team 透過 MCP server 寫入的 5 類記錄（每表顯示最近 100 筆）。
+</MudText>
+
+<MudTabs Elevation="2" Rounded="true" PanelClass="pa-4">
+    <MudTabPanel Text="@($"Teams ({_teams.Count})")">
+        <MudTable Items="_teams" Dense="true" Striped="true" Bordered="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Description</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>CreatedAt</MudTh>
+                <MudTh>ClosedAt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Name</MudTd>
+                <MudTd>@(context.Description ?? "—")</MudTd>
+                <MudTd>@context.Status</MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                <MudTd>@(context.ClosedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="@($"Teammates ({_teammates.Count})")">
+        <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true">
+            <HeaderContent>
+                <MudTh>TeamId</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Model</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>SpawnedAt</MudTh>
+                <MudTh>FinishedAt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
+                <MudTd>@context.Name</MudTd>
+                <MudTd>@(context.Model ?? "—")</MudTd>
+                <MudTd>@context.Role</MudTd>
+                <MudTd>@context.SpawnedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                <MudTd>@(context.FinishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="@($"Tasks ({_tasks.Count})")">
+        <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true">
+            <HeaderContent>
+                <MudTh>TeamId</MudTh>
+                <MudTh>TeammateId</MudTh>
+                <MudTh>Title</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>CreatedAt</MudTh>
+                <MudTh>CompletedAt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
+                <MudTd>@(context.TeammateId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@context.Title</MudTd>
+                <MudTd>@context.Status</MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+                <MudTd>@(context.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="@($"Messages ({_messages.Count})")">
+        <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true">
+            <HeaderContent>
+                <MudTh>TeammateId</MudTh>
+                <MudTh>TaskId</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>Content（前 200 字）</MudTh>
+                <MudTh>CreatedAt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
+                <MudTd>@(context.TaskId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@context.Role</MudTd>
+                <MudTd>@(context.Content.Length > 200 ? context.Content[..200] + "…" : context.Content)</MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="@($"Token Usage ({_tokenUsages.Count})")">
+        <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true">
+            <HeaderContent>
+                <MudTh>TeammateId</MudTh>
+                <MudTh>TaskId</MudTh>
+                <MudTh>Model</MudTh>
+                <MudTh>Input</MudTh>
+                <MudTh>Output</MudTh>
+                <MudTh>CacheRead</MudTh>
+                <MudTh>Cost USD</MudTh>
+                <MudTh>CreatedAt</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
+                <MudTd>@(context.TaskId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@(context.Model ?? "—")</MudTd>
+                <MudTd>@context.InputTokens</MudTd>
+                <MudTd>@context.OutputTokens</MudTd>
+                <MudTd>@(context.CacheReadTokens?.ToString() ?? "—")</MudTd>
+                <MudTd>@(context.EstimatedCostUsd?.ToString("F6") ?? "—")</MudTd>
+                <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>

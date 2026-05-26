@@ -1,0 +1,22 @@
+@page "/"
+
+<PageTitle>AiTeam — 記錄系統</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    <MudText Typo="Typo.h3" Class="mb-4">AiTeam v4 — 純記錄系統</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        執行端搬到 Christ 本機 Claude Code Agent Team / AiTeam 透過 MCP server endpoint 接收記錄。
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-6 mud-text-secondary">
+        MCP server endpoint：<MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">/mcp</MudChip>（HTTP / Bearer auth）
+    </MudText>
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Href="/records" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.TableChart">
+            開 Records 表格頁
+        </MudButton>
+        <MudButton Href="/monitoring/tokens" Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.BarChart">
+            Token 統計
+        </MudButton>
+    </MudStack>
+</MudContainer>

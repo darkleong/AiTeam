@@ -284,6 +284,48 @@ claude mcp add --transport http aiteam-records --scope project http://localhost:
 
 ### Commit
 
-待 commit："feat(stage91): MCP record tools + DB schema 新表 — 5 entity (mcp_*) + 5 tool (RecordTools.cs) + EF Migration Stage91McpRecordSchema"
+`bb242d8` — feat(stage91): MCP record tools + DB schema 新表
+
+---
+
+## Stage 92 — Dashboard 表格頁（minimal）
+
+**開始 / 完成**：2026-05-26
+
+**範圍**：1 頁 5 MudTab 顯示 5 個 mcp_* 表 + Home placeholder + NavMenu 重整。
+
+### 新檔（3 檔）
+
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor` — `@page "/records"` / MudTabs × 5 / MudTable × 5（Teams / Teammates / Tasks / Messages / Token Usage）
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor.cs` — `[Inject] AppDbContext` / OnInitializedAsync 載 5 list / Take(100) + OrderByDesc
+- `src/AiTeam.Dashboard/Components/Pages/Home/Home.razor` — placeholder（v4 純記錄系統介紹 + Records 入口 + Token 統計入口）
+
+### 改檔（1 檔）
+
+- `src/AiTeam.Dashboard/Components/Layout/NavMenu.razor` — 重整：首頁 + MCP Records + 監控中心（3）+ 設定中心（5）
+
+### 設計拍板
+
+| 項 | 決策 | 理由 |
+|---|---|---|
+| 表格結構 | 1 頁 5 MudTab | 對齊拍板 #12「新增 1 頁」/ NavMenu 1 link |
+| Data source | 直接 AppDbContext.AsNoTracking() | minimal scope / 無 Repository / 無 service 層 |
+| 顯示量 | Take(100) | 防大量資料卡 UI / 無 pagination（後 phase 重評）|
+| 欄位顯示 | Guid 顯示前 8 字元 + ellipsis | 可讀性 / 完整 Guid 過長 |
+| 時間顯示 | ToLocalTime() + "yyyy-MM-dd HH:mm:ss" | Christ 在 Windows / 本地時區友善 |
+| 進階功能 | filter / sort / pagination 全延後 | 對齊拍板 #12「無其他功能」/ 視覺化 stats 全延後 |
+
+### Build 結果
+
+- `dotnet build AiTeam.slnx`：**0 Error**
+
+### 影響後續 Stage
+
+- Stage 93：Discord notification 改造 — RecordTools 內加 fire-and-forget push（minimal）
+- Stage 94：端到端驗證 — 開 Records 頁看 MCP tool 寫入是否真到 DB
+
+### Commit
+
+待 commit："feat(stage92): Dashboard MCP Records 表格頁（1 頁 5 tab）+ Home placeholder + NavMenu 重整"
 
 ---
