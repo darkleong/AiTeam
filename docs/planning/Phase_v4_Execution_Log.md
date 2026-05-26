@@ -29,6 +29,73 @@
 - 本檔內 Stage 88 結論段（SDK 推薦 + Claude Code 連線機制 + 影響 Stage 90 實作路徑）
 - commit："spike(stage88): C# MCP SDK + Claude Code remote MCP 相容性驗證"
 
-### 進度
+### 結論（2026-05-26 完成）
 
-（執行中）
+**兩個 P0 風險均解除、無 fallback 需求。**
+
+#### 1. C# .NET MCP SDK — 官方 SDK 成熟、production-ready
+
+- **官方 package**：`ModelContextProtocol.AspNetCore` 1.3.0（2026-05-08 release）
+- **維護方**：Microsoft + Anthropic + MCP open protocol org 三方合作（非社群孤兒包）
+- **三層 package**：
+  - `ModelContextProtocol.Core` — 最小依賴（client / low-level server）
+  - `ModelContextProtocol` — 主 package（hosting + DI extensions）
+  - **`ModelContextProtocol.AspNetCore`** ← Stage 90 要用這個（HTTP server）
+- **依賴**：`Microsoft.Extensions.AI`（MS 官方 AI abstraction）
+- **目前狀態**：`--prerelease` flag 安裝（已穩定、36 releases、active maintenance）
+- **裝法**：`dotnet add package ModelContextProtocol.AspNetCore --prerelease`
+
+#### 2. Claude Code remote HTTP MCP — 官方完整支援
+
+`.mcp.json` 配置完整支援我們設計：
+
+```json
+{
+  "mcpServers": {
+    "aiteam-records": {
+      "type": "http",
+      "url": "${AITEAM_MCP_URL:-http://localhost:5xxx/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${AITEAM_MCP_API_KEY}"
+      },
+      "timeout": 30000
+    }
+  }
+}
+```
+
+**關鍵特性**：
+- 3 個 scope：local（personal）/ **project（git share / `.mcp.json`）** / user — Stage 94 走 project scope
+- 環境變數展開 `${VAR}` / `${VAR:-default}` — API key 適合 env var 存
+- 自動 reconnect（5 attempts / exponential backoff）
+- 401/403 不 retry（auth 錯誤直接 fail）
+- **Agent Teams 自動繼承 project-scoped MCP servers**（teammate 不用個別 config）
+
+CLI 加 server（給 Stage 94 文件用）：
+```bash
+claude mcp add --transport http aiteam-records --scope project http://localhost:5xxx/mcp \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+### 影響 Stage 90 實作路徑
+
+- **用官方 SDK**（不 fallback 手寫）— scope 大幅簡化
+- **Bot 容器內嵌 MCP server**：既有 ASP.NET Core 服務直接加 `ModelContextProtocol.AspNetCore` middleware
+- **Bearer token auth**：標準 ASP.NET Core middleware 驗 `Authorization` header（不用造輪子）
+- **Port 配置**：建議用 `5000` 或 docker-compose 已配的非 80 port、route prefix `/mcp`
+
+### 觀察 / 自決紀錄
+
+- **MCP tool 定義方式**：GitHub README 沒給 code example、Stage 90 實作時 fetch `csharp.sdk.modelcontextprotocol.io/concepts/getting-started.html` 拿完整 sample（不阻塞 spike 結論）
+- **`alwaysLoad: true`** 配置可用、避免我們 4 個 record tool 被 deferred loading 機制隱藏、Stage 94 `.mcp.json` 範例加上
+
+### 產出
+
+- 本檔結論段
+- 下一步進 Stage 89
+
+### Commit
+
+待 commit："spike(stage88): C# MCP SDK + Claude Code remote MCP 相容性驗證通過"
+
+---
