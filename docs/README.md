@@ -38,7 +38,7 @@
 | `Phase_v4_Execution_Log.md` | v4-rewrite 執行紀錄（含每 Stage 自決紀錄）|
 | `Phase_v4_Stage94_E2E_Guide.md` | 端到端驗證指南（Christ 本機跑）|
 | `Phase_v4_Followup.md` | v4 結案後 follow-up 候選清單 |
-| `Future_Feature.md` | active 功能候選 + 客戶交付規劃 |
+| ~~`Future_Feature.md`~~ | v3-v5 active 功能候選 + 客戶交付規劃 / 2026-05-28 v4.1.1 housekeeping 搬至 [`_archive/stages-pre-v4/`](./_archive/stages-pre-v4/)（95% 內容為 v5 條目對 v4 N/A / 5% 客戶交付段 conceptual valid 但 mechanism 全變 / 未來累積 v4 future feature 再新建檔）|
 | ~~`Stage_7_Roadmap.md` ~ `Stage_87_Roadmap.md`~~ | v3-v5 + v4-rewrite 前 Stage 規劃書 / 2026-05-27 v4.1.1 全盤 housekeeping 搬至 [`_archive/stages-pre-v4/`](./_archive/stages-pre-v4/)（早期 Stage 1-6 在 [`_archive/early-stages/`](./_archive/early-stages/)）|
 
 ---

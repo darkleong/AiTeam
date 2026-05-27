@@ -24,7 +24,6 @@ docs/
     Phase_v4_Execution_Log.md ← v4-rewrite 執行紀錄（含每 Stage 自決紀錄）
     Phase_v4_Stage94_E2E_Guide.md  ← 端到端驗證指南（Christ 本機跑）
     Phase_v4_Followup.md      ← v4 結案後 follow-up 候選清單
-    Future_Feature.md         ← 系統級 future feature
   conventions/                ← 編程規範
 ```
 

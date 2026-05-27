@@ -13,14 +13,14 @@
 
 ## 子資料夾（7 個 / 依歸檔時間倒序）
 
-### `stages-pre-v4/` — v3-v5 + v4-rewrite 前 Stage Roadmap（89 檔）
+### `stages-pre-v4/` — v3-v5 + v4-rewrite 前 Stage Roadmap + Future_Feature（90 檔）
 
-> 歸檔日期：2026-05-27（v4.1.1 全盤 housekeeping）
-> 原位置：`docs/planning/Stage_*.md`
+> 歸檔日期：2026-05-27 ~ 2026-05-28（v4.1.1 全盤 housekeeping）
+> 原位置：`docs/planning/Stage_*.md` + `docs/planning/Future_Feature.md`
 
-Stage 7 ~ Stage 87 規劃書（含 v3-v5 演進全程 + v4-rewrite 前最後一輪 Stage 87 Talent token limits + 模板 `_template/Stage_Template.md`）。v4-rewrite Stage 88-95 細節在 [`planning/Phase_v4_Roadmap.md`](../planning/Phase_v4_Roadmap.md) + [`Phase_v4_Execution_Log.md`](../planning/Phase_v4_Execution_Log.md) / 不在本 archive。
+Stage 7 ~ Stage 87 規劃書（含 v3-v5 演進全程 + v4-rewrite 前最後一輪 Stage 87 Talent token limits + 模板 `_template/Stage_Template.md`）+ `Future_Feature.md`（v3-v5 active 功能候選 + Stage 88+ 候選 12 條 + 客戶交付規劃）。v4-rewrite Stage 88-95 細節在 [`planning/Phase_v4_Roadmap.md`](../planning/Phase_v4_Roadmap.md) + [`Phase_v4_Execution_Log.md`](../planning/Phase_v4_Execution_Log.md) / 不在本 archive。
 
-歷史價值：refactor-sop.md 引用「Stage 34-36 / 59 / 84-87 SOP 累積」可 trace 回此 archive 看實際 case study。
+歷史價值：refactor-sop.md 引用「Stage 34-36 / 59 / 84-87 SOP 累積」可 trace 回此 archive 看實際 case study / Future_Feature.md 內含 Stage 67-83 Phase 1-4 phased delivery 完整脈絡。
 
 ### `experiments-pre-v4/` — v5 時代 self-implement 試驗（26 檔）
 

@@ -105,7 +105,7 @@ tests/
 docs/
 ├── README.md                        ← 資料夾導覽
 ├── Architecture.md                  ← v4 系統架構全景
-├── planning/                        ← Phase v4 規劃（Phase_v4_*.md + Future_Feature.md）
+├── planning/                        ← Phase v4 規劃（Phase_v4_*.md × 4）
 ├── conventions/                     ← 編程規範（必讀）
 └── _archive/                        ← 歷史歸檔（Stage / Trial / 早期 Agent 設計 7 個 sub-folder）
 ```
@@ -201,7 +201,6 @@ push to main → GitHub Actions self-hosted runner 自動 build + `docker compos
 | 版本變更紀錄 | [CHANGELOG.md](./CHANGELOG.md) |
 | 系統架構全景 | [docs/Architecture.md](./docs/Architecture.md) |
 | Petra subagent SoT | [agents/petra-pm.md](./agents/petra-pm.md) |
-| Active 功能候選 | [docs/planning/Future_Feature.md](./docs/planning/Future_Feature.md) |
 | Phase v4-rewrite 規劃 + 執行紀錄 | [Phase_v4_Roadmap.md](./docs/planning/Phase_v4_Roadmap.md) + [Phase_v4_Execution_Log.md](./docs/planning/Phase_v4_Execution_Log.md) |
 | Phase v4 follow-up 清單 | [Phase_v4_Followup.md](./docs/planning/Phase_v4_Followup.md) |
 | 端到端驗證指南 | [Phase_v4_Stage94_E2E_Guide.md](./docs/planning/Phase_v4_Stage94_E2E_Guide.md) |
