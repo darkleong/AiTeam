@@ -93,7 +93,7 @@ environment:
 
 ---
 
-### F11：移除 `mcp_token_usage` 的 CacheRead / CostUSD 欄位
+### ~~F11：移除 `mcp_token_usage` 的 CacheRead / CostUSD 欄位~~（2026-05-27 處理 / commit 780548b）
 
 **範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板「暫時用不到」處理）：
 
@@ -145,7 +145,7 @@ Dashboard MCP Records / Tasks 表只顯示 TeamId / TeammateId / Title / Status 
 
 ---
 
-### F13：MCP Records 5 分頁拆到 NavMenu 子項
+### ~~F13：MCP Records 5 分頁拆到 NavMenu 子項~~（2026-05-27 處理 / commit 780548b）
 
 **範圍**（2026-05-26 / hello-world smoke test 觀察 / Christ 拍板處理）：
 
@@ -193,7 +193,54 @@ Records.razor：
 
 ---
 
+### F14：`.claude/agents/cody.md` tools list 沒含 MCP record tool
+
+**範圍**（2026-05-27 / F11+F13 spawn cody-1 過程觀察）：
+
+`.claude/agents/cody.md` 第 4 行 `tools: Read, Edit, Write, Grep, Glob, Bash` / 沒含任何 `mcp__aiteam-records__*` tool。當 Petra spawn cody 處理 task / cody 無法自呼叫：
+
+- `record_task(action="claim")`
+- `record_message`
+- `record_token_usage`
+- `record_task(action="complete")`
+
+違反 `agents/petra-pm.md` step 8/9 紀律「teammate 自己做、非 lead」。
+
+**當前 workaround**：Petra 代記錄（spawn cody → cody return → Petra 用 cody 的 return 內容代 call MCP record / token usage 用 Agent tool return 的 total_tokens 估算拆 input/output）。F11+F13 已用此 workaround 完成。
+
+**修法選項**：
+- **推薦 A**：cody.md tools list 加 `mcp__aiteam-records__record_task`, `mcp__aiteam-records__record_message`, `mcp__aiteam-records__record_token_usage` 3 個 / cody 直接自呼叫 / 對齊既有紀律。
+- **B**：放寬 `agents/petra-pm.md` step 8/9 為「teammate 自做或 lead 代做」/ 不改 cody.md / 但邏輯上 lead 代做不精準（teammate 自己的 LLM token 該算在 teammate 自己帳上 / Agent tool return 的 total_tokens 拆 input/output 是估算 / 不準）。
+
+**涉及檔**（推薦 A）：
+- `.claude/agents/cody.md`（tools list 加 3 個 MCP tool）
+
+**為何延後**：F11+F13 已用 workaround 完成 / 不阻塞當下交付 / 下次 spawn cody 前處理即可。
+
+---
+
 ## 低優先（重評時機）
+
+### F15：`record_task(action="claim")` 重複 claim 沒 reject
+
+**範圍**（2026-05-27 / F11+F13 開 team 過程觀察）：
+
+`record_task(action="claim", taskId, teammateId)` 對**已 claimed task** 重複呼叫 / 直接 overwrite TeammateId / 返回 "claimed"（沒 reject "already claimed by X"）。
+
+**落地觀察**：Petra 先誤 claim task 給 `petra-pm` teammate_id / 後再 claim 給 `cody-1` teammate_id / DB 直接 overwrite / 兩次都返回 "claimed" / 無 warning。
+
+**行為合理性議題**：
+- 若視為「容錯」 → 當前行為 OK（允許 re-assign / 改換 worker）
+- 若視為「應 reject 避免 race condition / 誤覆蓋」 → 應 idempotent + reject if already claimed by different teammate（同 teammate 重 claim 仍 OK / cross teammate reject）
+
+**修法**：`record_task(action="claim")` 邏輯 — 若 `task.TeammateId` 已存在且 != 新 teammateId → 返回 `"already claimed by {existing teammateId}"` / 不 overwrite。
+
+**涉及檔**：
+- `src/AiTeam.Bot/McpTools/RecordTools.cs` `RecordTask` method claim branch
+
+**為何延後**：當前單 Petra session 自處 claim 流程不易出錯 / race condition 風險未來真 multi-Petra session 場景才會曝露 / 但留紀錄當設計議題。
+
+---
 
 ### F5：NavMenu 結構重評
 
