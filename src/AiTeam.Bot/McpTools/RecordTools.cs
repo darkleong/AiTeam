@@ -28,6 +28,7 @@ public sealed class RecordTools
     public static async Task<string> RegisterTeam(
         AppDbContext db,
         RecordNotificationService notify,
+        RecordsHubNotifyService hubNotify,
         [Description("Team name (e.g., 'feature-x-team', 'bug-investigation-team')")] string name,
         [Description("High-level intent the boss gave to this team (optional)")] string? description = null)
     {
@@ -38,6 +39,7 @@ public sealed class RecordTools
         };
         db.AgentTeams.Add(team);
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
 
         _ = Task.Run(() => notify.SendAsync($"📋 新 Agent Team 開始 — **{name}** (id=`{team.Id.ToString()[..8]}`)\n{description ?? ""}".TrimEnd()));
 
@@ -48,6 +50,7 @@ public sealed class RecordTools
     public static async Task<string> CloseTeam(
         AppDbContext db,
         RecordNotificationService notify,
+        RecordsHubNotifyService hubNotify,
         [Description("Team ID (Guid string)")] string teamId)
     {
         if (!Guid.TryParse(teamId, out var parsedTeamId))
@@ -60,6 +63,7 @@ public sealed class RecordTools
         team.Status = "closed";
         team.ClosedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
 
         _ = Task.Run(() => notify.SendAsync($"🏁 Agent Team 收尾 — **{team.Name}** (id=`{team.Id.ToString()[..8]}`)"));
 
@@ -69,6 +73,7 @@ public sealed class RecordTools
     [McpServerTool, Description("Register a new teammate (lead or member) in an existing team. Returns the new teammate_id (Guid string).")]
     public static async Task<string> RegisterTeammate(
         AppDbContext db,
+        RecordsHubNotifyService hubNotify,
         [Description("Parent team_id (Guid string from register_team)")] string teamId,
         [Description("Teammate name (e.g., 'petra-pm' for lead, 'cody-1' for member)")] string name,
         [Description("Model used (e.g., 'sonnet', 'opus', 'haiku', or full model id)")] string? model = null,
@@ -86,12 +91,14 @@ public sealed class RecordTools
         };
         db.AgentTeammates.Add(teammate);
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
         return teammate.Id.ToString();
     }
 
     [McpServerTool, Description("Mark a teammate as finished (set FinishedAt). Idempotent — calling on an already-finished teammate returns 'already finished'. Does not push Discord notification (avoid spam).")]
     public static async Task<string> FinishTeammate(
         AppDbContext db,
+        RecordsHubNotifyService hubNotify,
         [Description("Teammate ID (Guid string)")] string teammateId)
     {
         if (!Guid.TryParse(teammateId, out var parsedTeammateId))
@@ -103,6 +110,7 @@ public sealed class RecordTools
 
         teammate.FinishedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
         return "finished";
     }
 
@@ -110,6 +118,7 @@ public sealed class RecordTools
     public static async Task<string> RecordTask(
         AppDbContext db,
         RecordNotificationService notify,
+        RecordsHubNotifyService hubNotify,
         [Description("Action: create | claim | complete | fail")] string action,
         [Description("Team ID (required for create)")] string? teamId = null,
         [Description("Task ID (required for claim/complete/fail)")] string? taskId = null,
@@ -135,6 +144,7 @@ public sealed class RecordTools
                 };
                 db.AgentTasks.Add(task);
                 await db.SaveChangesAsync();
+                hubNotify.FireAndForget();
                 return task.Id.ToString();
 
             case "claim":
@@ -155,6 +165,7 @@ public sealed class RecordTools
                 t.Status = "in_progress";
                 t.ClaimedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                hubNotify.FireAndForget();
                 return "claimed";
 
             case "complete":
@@ -166,6 +177,7 @@ public sealed class RecordTools
                 tc.Status = "completed";
                 tc.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                hubNotify.FireAndForget();
                 _ = Task.Run(() => notify.SendAsync($"✅ Task 完成 — **{tc.Title}** (id=`{tc.Id.ToString()[..8]}`)"));
                 return "completed";
 
@@ -179,6 +191,7 @@ public sealed class RecordTools
                 tf.ErrorMessage = errorMessage;
                 tf.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                hubNotify.FireAndForget();
                 _ = Task.Run(() => notify.SendAsync($"❌ Task 失敗 — **{tf.Title}** (id=`{tf.Id.ToString()[..8]}`)\nError: {errorMessage ?? "（無訊息）"}"));
                 return "failed";
 
@@ -190,6 +203,7 @@ public sealed class RecordTools
     [McpServerTool, Description("Record a single message from a teammate (user / assistant / tool).")]
     public static async Task<string> RecordMessage(
         AppDbContext db,
+        RecordsHubNotifyService hubNotify,
         [Description("Teammate ID (Guid string)")] string teammateId,
         [Description("Role: user | assistant | tool")] string role,
         [Description("Message content (text)")] string content,
@@ -216,12 +230,14 @@ public sealed class RecordTools
         };
         db.AgentMessages.Add(msg);
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
         return msg.Id.ToString();
     }
 
     [McpServerTool, Description("Record token usage from a single LLM call (Input / Output tokens only).")]
     public static async Task<string> RecordTokenUsage(
         AppDbContext db,
+        RecordsHubNotifyService hubNotify,
         [Description("Teammate ID (Guid string)")] string teammateId,
         [Description("Input tokens count")] int inputTokens,
         [Description("Output tokens count")] int outputTokens,
@@ -248,6 +264,7 @@ public sealed class RecordTools
         };
         db.AgentTokenUsages.Add(usage);
         await db.SaveChangesAsync();
+        hubNotify.FireAndForget();
         return usage.Id.ToString();
     }
 }

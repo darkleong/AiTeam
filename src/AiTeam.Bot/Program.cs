@@ -42,6 +42,8 @@ var dashboardPushUrl = builder.Configuration["Dashboard:PushUrl"] ?? "http+dashb
 builder.Services.AddHttpClient("aiteam-dashboard", client =>
     client.BaseAddress = new Uri(dashboardPushUrl));
 builder.Services.AddSingleton<DashboardPushService>();
+// F16：MCP record 寫入後 fire-and-forget 通知 Dashboard SignalR RecordsHub（重用 "aiteam-dashboard" named client）
+builder.Services.AddSingleton<RecordsHubNotifyService>();
 
 builder.Services.AddControllers();
 
@@ -64,6 +66,9 @@ builder.Services.AddSingleton(new DiscordSocketClient(new DiscordSocketConfig
 }));
 builder.Services.AddSingleton<ConversationContextStore>();
 builder.Services.AddHostedService<DiscordBotService>();
+
+// F2：每日早 9 點 Asia/Taipei 觸發 / mcp_* 表 24h 彙總 + 累積 grand total / Discord push #每日摘要
+builder.Services.AddHostedService<DailyMcpSummaryService>();
 
 // Quartz 健康檢查排程
 builder.Services.AddQuartz(q =>

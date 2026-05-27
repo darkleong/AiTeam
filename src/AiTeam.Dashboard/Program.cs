@@ -1,4 +1,5 @@
 using AiTeam.Dashboard.Configuration;
+using AiTeam.Dashboard.Hubs;
 using AiTeam.Dashboard.Identity;
 using MudBlazor.Services;
 using AiTeam.Dashboard.Services;
@@ -90,6 +91,8 @@ app.UseAntiforgery();
 app.MapDefaultEndpoints();
 app.MapControllers();
 app.MapHub<AgentStatusHub>("/hubs/agent-status");
+// F16：MCP records 寫入即時 broadcast → Records.razor 整段 reload
+app.MapHub<RecordsHub>("/records-hub");
 app.MapRazorComponents<AiTeam.Dashboard.Components.App>()
     .AddInteractiveServerRenderMode();
 

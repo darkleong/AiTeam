@@ -1,6 +1,8 @@
 using AiTeam.Data;
 using AiTeam.Data.Records;
+using AiTeam.Dashboard.Hubs;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiTeam.Dashboard.Components.Pages.Records;
@@ -8,13 +10,16 @@ namespace AiTeam.Dashboard.Components.Pages.Records;
 /// <summary>
 /// Stage 92：v4-rewrite Dashboard MCP Records 表格頁（minimal scope）。
 /// F13 重構：原 5 MudTab 改成依 route param Section 條件 render 對應 MudTable。
+/// F16：訂閱 RecordsHub /records-hub 收到 RecordsUpdated event → 整段 reload 不必 F5 refresh。
 /// 路由：/records（default 顯示 teams）/ /records/{Section} — Section ∈ teams / teammates / tasks / messages / token-usage。
 /// 每表顯示最近 100 筆（CreatedAt desc / SpawnedAt desc）。
 /// 無 filter / sort / pagination 進階功能（後續 phase 重評）。
 /// </summary>
-public partial class Records
+public partial class Records : IAsyncDisposable
 {
-    [Inject] private AppDbContext Db { get; set; } = null!;
+    [Inject] private AppDbContext      Db     { get; set; } = null!;
+    [Inject] private NavigationManager Nav    { get; set; } = null!;
+    [Inject] private ILogger<Records>  Logger { get; set; } = null!;
 
     /// <summary>NavMenu 子項對應的 section key（teams / teammates / tasks / messages / token-usage / null）</summary>
     [Parameter] public string? Section { get; set; }
@@ -25,12 +30,55 @@ public partial class Records
     private List<AgentMessage>    _messages    = new();
     private List<AgentTokenUsage> _tokenUsages = new();
 
+    private HubConnection? _hub;
+
     protected override async Task OnInitializedAsync()
+    {
+        await ReloadAllAsync();
+        await ConnectHubAsync();
+    }
+
+    private async Task ReloadAllAsync()
     {
         _teams       = await Db.AgentTeams.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(100).ToListAsync();
         _teammates   = await Db.AgentTeammates.AsNoTracking().OrderByDescending(x => x.SpawnedAt).Take(100).ToListAsync();
         _tasks       = await Db.AgentTasks.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(100).ToListAsync();
         _messages    = await Db.AgentMessages.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(100).ToListAsync();
         _tokenUsages = await Db.AgentTokenUsages.AsNoTracking().OrderByDescending(x => x.CreatedAt).Take(100).ToListAsync();
+    }
+
+    private async Task ConnectHubAsync()
+    {
+        try
+        {
+            _hub = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/records-hub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hub.On(RecordsHub.ReceiveRecordsUpdated, async () =>
+            {
+                try
+                {
+                    await ReloadAllAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Records RecordsUpdated handler 例外");
+                }
+            });
+
+            await _hub.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Records SignalR Hub 連線失敗（非關鍵 / 頁面仍可用）");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null) await _hub.DisposeAsync();
     }
 }

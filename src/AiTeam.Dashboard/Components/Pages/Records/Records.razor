@@ -1,5 +1,7 @@
 @page "/records"
 @page "/records/{Section?}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IAsyncDisposable
 @using AiTeam.Data.Records
 
 <PageTitle>Records — AiTeam</PageTitle>
