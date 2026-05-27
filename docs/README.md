@@ -39,7 +39,7 @@
 | `Phase_v4_Stage94_E2E_Guide.md` | 端到端驗證指南（Christ 本機跑）|
 | `Phase_v4_Followup.md` | v4 結案後 follow-up 候選清單 |
 | `Future_Feature.md` | active 功能候選 + 客戶交付規劃 |
-| `Stage_7_Roadmap.md` ~ `Stage_87_Roadmap.md` | v3-v5 + v4-rewrite Stage 規劃書（早期 Stage 1-6 歸檔至 [`_archive/early-stages/`](./_archive/early-stages/)）|
+| ~~`Stage_7_Roadmap.md` ~ `Stage_87_Roadmap.md`~~ | v3-v5 + v4-rewrite 前 Stage 規劃書 / 2026-05-27 v4.1.1 全盤 housekeeping 搬至 [`_archive/stages-pre-v4/`](./_archive/stages-pre-v4/)（早期 Stage 1-6 在 [`_archive/early-stages/`](./_archive/early-stages/)）|
 
 ---
 
@@ -58,9 +58,11 @@
 
 ---
 
-### `experiments/` — Self-implement 試驗紀錄
+### ~~`experiments/`~~ — Self-implement 試驗紀錄（已歸檔）
 
-v5 時代 Christ 對 AiTeam 系統做 self-implement 試驗的觀察紀錄（`Trial_vN_*.md` × 27 + `Spike_v1_*.md`）。每次試驗驗證一個假設、是 Future_Feature 條目觸發前的真實流程觀察證據。v4-rewrite 後不再新增（執行模式換成 Claude Code Agent Team / 不再需要 self-implement Petra orchestrator）。
+v5 時代 Christ 對 AiTeam 系統做 self-implement 試驗的觀察紀錄（`Trial_vN_*.md` × 26 + `Spike_v1_*.md`）。每次試驗驗證一個假設、是 Future_Feature 條目觸發前的真實流程觀察證據。
+
+v4-rewrite 後執行模式換成 Claude Code Agent Team / 不再做 self-implement / 2026-05-27 v4.1.1 全盤 housekeeping 整個資料夾搬至 [`_archive/experiments-pre-v4/`](./_archive/experiments-pre-v4/)。
 
 ---
 

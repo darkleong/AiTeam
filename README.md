@@ -105,10 +105,9 @@ tests/
 docs/
 ├── README.md                        ← 資料夾導覽
 ├── Architecture.md                  ← v4 系統架構全景
-├── planning/                        ← Phase v4 規劃 + Stage 7-87 歷史 Roadmap
+├── planning/                        ← Phase v4 規劃（Phase_v4_*.md + Future_Feature.md）
 ├── conventions/                     ← 編程規範（必讀）
-├── experiments/                     ← Self-implement 試驗紀錄
-└── _archive/                        ← 歷史歸檔
+└── _archive/                        ← 歷史歸檔（Stage / Trial / 早期 Agent 設計 7 個 sub-folder）
 ```
 
 建置：`dotnet build AiTeam.slnx`（從 repo root）。
@@ -206,6 +205,6 @@ push to main → GitHub Actions self-hosted runner 自動 build + `docker compos
 | Phase v4-rewrite 規劃 + 執行紀錄 | [Phase_v4_Roadmap.md](./docs/planning/Phase_v4_Roadmap.md) + [Phase_v4_Execution_Log.md](./docs/planning/Phase_v4_Execution_Log.md) |
 | Phase v4 follow-up 清單 | [Phase_v4_Followup.md](./docs/planning/Phase_v4_Followup.md) |
 | 端到端驗證指南 | [Phase_v4_Stage94_E2E_Guide.md](./docs/planning/Phase_v4_Stage94_E2E_Guide.md) |
-| Stage 詳細實作（v3-v5 歷史 + v4-rewrite）| [Stage_*_Roadmap.md](./docs/planning/) |
-| Self-implement 試驗（v5 時代）| [docs/experiments/](./docs/experiments/) |
-| 早期設計歸檔 | [docs/_archive/](./docs/_archive/) |
+| Stage 詳細實作（v3-v5 + v4-rewrite 前 / 已歸檔）| [docs/_archive/stages-pre-v4/](./docs/_archive/stages-pre-v4/) |
+| Self-implement 試驗（v5 時代 / 已歸檔）| [docs/_archive/experiments-pre-v4/](./docs/_archive/experiments-pre-v4/) |
+| 早期設計歸檔總覽（7 個 sub-folder）| [docs/_archive/](./docs/_archive/) |
