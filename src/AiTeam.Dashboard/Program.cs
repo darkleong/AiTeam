@@ -69,12 +69,12 @@ builder.Services.Configure<AgentTokenLimits>(builder.Configuration.GetSection("A
 // v4-rewrite：DashboardInteractionQueryService 砍（HITL 整套砍）
 // v4.0.4 cleanup：DashboardProjectService / DashboardRuleService / DashboardBotService 砍
 //   （Settings/Rules/Projects/Tokens 5 子頁砍 → 對應 Service 0 caller）
+// v4.0.5 F1：DashboardAgentService 砍（Talent entity DROP TABLE 後 0 caller）
+//           DashboardCeoCommandService 砍（Bot 端 /internal/ceo/command endpoint 已砍 / 0 frontend caller dead path）
 builder.Services.AddScoped<DashboardDeploymentService>();
-builder.Services.AddScoped<DashboardAgentService>();
 builder.Services.AddScoped<DashboardAppSettingsService>();
 builder.Services.AddScoped<DashboardTokenService>();
 builder.Services.AddScoped<InteractionRespondService>();
-builder.Services.AddScoped<DashboardCeoCommandService>();
 // Stage 86 子項 6：Theme 切換 Scoped service（per Blazor circuit / 跨 component instance 共享 state + event）
 builder.Services.AddScoped<IThemeService, ThemeService>();
 builder.Services.AddHttpClient();
