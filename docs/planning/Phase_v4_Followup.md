@@ -221,6 +221,35 @@ Records.razor：
 
 ## 低優先（重評時機）
 
+### F17：Dashboard mobile responsive 排版
+
+**範圍**（2026-05-27 / Christ 外出用手機透過 Funnel 連 Dashboard 觀察）：
+
+Dashboard 整套對手機（mobile breakpoint xs/sm）排版不友善：
+- NavMenu drawer mobile behavior（左側欄占太大空間 / 沒 hamburger toggle）
+- 5 個 Records MudTable（teams / teammates / tasks / messages / token-usage）+ filter bar 在窄寬度被擠壓 / 文字 wrap 嚴重 / 水平 scroll 不順
+- 趨勢圖 MudChart 寬度比例 / 標籤 overlap
+- Team Detail page 4 個 nested MudTable 同樣
+- 字級 / spacing / touch target 沒對 mobile 優化
+
+**修法方向**（細節屆時拍）：
+- MudGrid breakpoint xs/sm/md/lg 分層配置
+- MudTable 小螢幕改成卡片化（或水平 scroll wrapper）
+- NavMenu 加 hamburger toggle / drawer 模式
+- 字級 spacing 用 MudBlazor Typography responsive
+- 觸控按鈕 ≥ 44px
+
+**涉及檔**（預估）：
+- `src/AiTeam.Dashboard/Components/Layout/MainLayout.razor` + `NavMenu.razor`
+- `src/AiTeam.Dashboard/Components/Pages/Records/Records.razor` + `.razor.cs`（5 sections + filter bar）
+- `src/AiTeam.Dashboard/Components/Pages/Records/RecordsTrends.razor` / `RecordTeamDetail.razor`
+- 監控中心 3 頁
+
+**為何延後**：Christ 拍「後續功能完善穩定後才處理手機端排版」/ 純 UX / 不影響功能 / 桌面端不受影響 / 緊急時手機可 horizontal scroll 仍能讀。
+
+---
+
+
 ### ~~F15：`record_task(action="claim")` 重複 claim 沒 reject~~（2026-05-27 處理 / commit ea79698）
 
 **範圍**（2026-05-27 / F11+F13 開 team 過程觀察）：
