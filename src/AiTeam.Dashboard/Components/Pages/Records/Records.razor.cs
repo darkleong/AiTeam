@@ -17,9 +17,10 @@ namespace AiTeam.Dashboard.Components.Pages.Records;
 /// </summary>
 public partial class Records : IAsyncDisposable
 {
-    [Inject] private AppDbContext      Db     { get; set; } = null!;
-    [Inject] private NavigationManager Nav    { get; set; } = null!;
-    [Inject] private ILogger<Records>  Logger { get; set; } = null!;
+    [Inject] private AppDbContext      Db            { get; set; } = null!;
+    [Inject] private NavigationManager Nav           { get; set; } = null!;
+    [Inject] private IConfiguration    Configuration { get; set; } = null!;
+    [Inject] private ILogger<Records>  Logger        { get; set; } = null!;
 
     /// <summary>NavMenu 子項對應的 section key（teams / teammates / tasks / messages / token-usage / null）</summary>
     [Parameter] public string? Section { get; set; }
@@ -51,8 +52,14 @@ public partial class Records : IAsyncDisposable
     {
         try
         {
+            // F16 fix: 對齊既有 Monitoring 三頁 hub pattern — 用 Dashboard:HubBaseUrl config（docker container localhost:8080）/ fallback to Nav.ToAbsoluteUri（dev mode）
+            var hubBaseUrl = Configuration["Dashboard:HubBaseUrl"];
+            var hubUrl = string.IsNullOrEmpty(hubBaseUrl)
+                ? Nav.ToAbsoluteUri("/records-hub").ToString()
+                : $"{hubBaseUrl.TrimEnd('/')}/records-hub";
+
             _hub = new HubConnectionBuilder()
-                .WithUrl(Nav.ToAbsoluteUri("/records-hub"))
+                .WithUrl(hubUrl)
                 .WithAutomaticReconnect()
                 .Build();
 
