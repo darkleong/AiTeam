@@ -1,8 +1,0 @@
-@* Stage 87 B0：/settings 入口 redirect 到 /settings/workflow（對齊既有 AgentsRedirect / RulesRedirect pattern）*@
-@page "/settings"
-@attribute [Authorize]
-@inject NavigationManager Nav
-
-@code {
-    protected override void OnInitialized() => Nav.NavigateTo("/settings/workflow", forceLoad: false);
-}

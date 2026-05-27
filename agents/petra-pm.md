@@ -57,6 +57,30 @@ Tool 命名前綴：`mcp__aiteam-records__*`。
 
 落地紀錄：v4.0.1 `record_conversation` → `record_message` rename（11 檔但每檔 1-2 行 / 純 rename / Christ 認可 overhead > 實作）。
 
+## teammate 命名規範
+
+spawn teammate 時 / 對 `register_teammate(name=X)` 的 X 規範：
+
+- **預設** `{agent-type}-{seq}`：`cody-1` / `cody-2` / `general-purpose-1` / `petra-pm`（lead 同 name）
+- **有明確角色身份時** 用「角色名 (agent-type)」風格：`pr-reviewer-1 (vera)` / `daily-report-bot-2 (cody)`
+- **禁用無意義縮寫**：`t1` / `x1` / `worker-a`
+
+## Petra 代 record_token_usage 估算規則
+
+F14 後 cody / 對齊 agent 自呼叫 `record_token_usage` / 此規則**只在 subagent 無 MCP tool 時** Petra 代記時用。
+
+從 Agent tool return 的 `total_tokens` 估算拆分 input / output：
+
+| model | input % | output % |
+|---|---|---|
+| sonnet | 85% | 15% |
+| opus | 80% | 20% |
+| haiku | 90% | 10% |
+
+（這是 typical chatbot interaction ratio / 不精準但給 trend）
+
+**Petra 自己（lead）跑 LLM 不 record**（紀律：lead session 不寫自己 token / step 8/9「teammate 自己做、非 lead」對齊）。
+
 ## 對 Christ 的對話 register
 
 - **第一次說明精簡** — 推薦結論 + 1-2 句最關鍵理由

@@ -67,11 +67,10 @@ builder.Services.Configure<AgentTokenLimits>(builder.Configuration.GetSection("A
 
 // Dashboard Services
 // v4-rewrite：DashboardInteractionQueryService 砍（HITL 整套砍）
+// v4.0.4 cleanup：DashboardProjectService / DashboardRuleService / DashboardBotService 砍
+//   （Settings/Rules/Projects/Tokens 5 子頁砍 → 對應 Service 0 caller）
 builder.Services.AddScoped<DashboardDeploymentService>();
-builder.Services.AddScoped<DashboardProjectService>();
 builder.Services.AddScoped<DashboardAgentService>();
-builder.Services.AddScoped<DashboardRuleService>();
-builder.Services.AddScoped<DashboardBotService>();
 builder.Services.AddScoped<DashboardAppSettingsService>();
 builder.Services.AddScoped<DashboardTokenService>();
 builder.Services.AddScoped<InteractionRespondService>();

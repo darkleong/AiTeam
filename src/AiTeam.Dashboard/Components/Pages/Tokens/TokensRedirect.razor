@@ -1,8 +1,0 @@
-@page "/tokens"
-@attribute [Authorize]
-@inject NavigationManager Nav
-
-@* Stage 83 子項 5：/tokens redirect → /monitoring（MonitoringHub Token 統計 tab — Stage 84+ 可保留 /tokens 為詳細圖表頁如真實需求出現） *@
-@code {
-    protected override void OnInitialized() => Nav.NavigateTo("/monitoring", forceLoad: false);
-}
