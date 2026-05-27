@@ -41,10 +41,11 @@ public class InternalController(
 
     /// <summary>
     /// 清除 Bot 端 Cache，下次存取時自動從 DB 重新載入。
-    /// scope: rules | agents | agent-config | all（預設 all）
-    /// - agents       = AppSettings 資料表快取（AppSettingsService；legacy 命名，對應 app_settings 資料表）
-    /// - agent-config = Stage 87 A2：talents 資料表的 Provider/Model/TokenLimit 快取（TalentMetaCache / 取代 Stage 38 AgentConfigCache / scope 名稱保留對齊 Dashboard 既有 ReloadCacheAsync("agent-config") caller）
-    /// - all          = Stage 72 新增：含 PromptResolver（skill_prompts / talent_prompts 快取 — production rollback SQL UPDATE + reload-cache `all` 5 分鐘內生效）
+    /// scope: rules | agents | all（預設 all）
+    /// - rules  = RulesService（規則快取）
+    /// - agents = AppSettingsService（app_settings 資料表快取；legacy 命名）
+    /// - all    = 全清（rules + agents）
+    /// v4-rewrite：原 agent-config (TalentMetaCache) + PromptResolver scope 已砍 / 註解對齊。
     /// </summary>
     [HttpPost("reload-cache")]
     public IActionResult ReloadCache([FromQuery] string scope = "all")

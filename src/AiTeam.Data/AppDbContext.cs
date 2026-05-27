@@ -99,9 +99,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId).IsRequired(false);
             // Stage 44：對齊 Anthropic 帳單精度（USD 第六位，如 $0.008487）
             e.Property(x => x.TotalCostUsd).HasPrecision(18, 6);
-            // Stage 81 補強 #B：PetraSessionId non-unique index — `UpdateSessionCostUsdAsync WHERE PetraSessionId=...` 高頻 SumAsync query 性能保險。
-            // 對齊既有 TaskId FK 紀律（無顯式 HasIndex 但 FK 自動 index）— PetraSessionId 非 FK / 需顯式 HasIndex。
-            e.HasIndex(x => x.PetraSessionId);
         });
 
         modelBuilder.Entity<AppSetting>(e =>

@@ -361,6 +361,45 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 
 ---
 
+### F18：cody 自呼叫 record_token_usage 紀律補正
+
+**範圍**（2026-05-27 / v4.1.1 patch 1 第一輪 cody 自呼叫 MCP record 觀察 / F14 紀律首輪實證觀察期）：
+
+`.claude/agents/cody.md` tools list F14 加入 `mcp__aiteam-records__record_*` 3 tool 後 / cody 確實能自呼叫 record_task / record_message / record_token_usage（F14 落地確認）。但首輪 patch 1（candidate F）cody 自報 token_usage 出現 2 個小漂移：
+
+- `model` 欄位寫 `"opus"` / 但 cody 實際 model = sonnet
+- `input_tokens` / `output_tokens` 是 cody 自己估的數字（"估算值 / 28000 + 1200"）/ 非實際 LLM call usage metadata 累計值
+
+**為何延後**：patch 1 後續 patch（C+D+E 合包 + candidate A）已用更明確 spec 補強（spec 內寫「model **必須填 sonnet**」/「**用實際 LLM 累計值 / 不要瞎寫**」）/ 後續 2 cody 都對齊 / 並非 hard bug。但長期該寫進 cody.md SOP 而非每次 spec 內提醒。
+
+**修法**：`.claude/agents/cody.md` 補一段 SOP：
+- `record_token_usage` `model` 欄位 = 你被 spawn 時實際使用的 model name（從 system context 確認）
+- `input_tokens` / `output_tokens` 從 Agent tool harness 提供的 usage metadata 累計值取 / 不憑直覺估
+
+**涉及檔**：
+- `.claude/agents/cody.md`（在 gitignore / 本機生效）
+
+**為何低優先**：v4.1.1 已用 spec 內提醒 workaround 補強 / cody 已對齊 / 不阻塞當下交付。
+
+---
+
+### ~~F19：v4.1.0 post-release polish（candidate A-F）~~（2026-05-27 處理 / v4.1.1）
+
+**範圍**（2026-05-27 / v4.1.0 release 後前 Petra spawn cody 過程觀察的 6 條 cody 範圍外發現 candidate / 本輪一次清）：
+
+| ID | 範圍 | 落地 |
+|---|---|---|
+| A | TokenLog v3 dead chain 大清（MonitoringTokens per-PetraSession dead query + TokenLogService.LogCliUsageAsync 0 caller + TokenLog.PetraSessionId dead column + InternalController L42-48 註解過期 + 連動 TokenCostEstimator + TokenUsage DTO + AppDbContext HasIndex）| v4.1.1 patch 2 / cody-a-patch2-1 |
+| B | Internal API 補 Bearer auth | **跳過本輪**（Christ 2026-05-27 拍跳 / 留下輪 v4.2.0 專做 auth 紀律 / 影響 Bot → Dashboard 7 push call）|
+| C | Records.razor.cs DbContext → IDbContextFactory（SignalR callback + OnInitialized 並發 race / 對齊 MonitoringTokens factory pattern）| v4.1.1 patch 1 / cody-cde-patch1-1 |
+| D | RecordsTrends 加 SignalR（對齊 Records.razor F16 HubConnection pattern）| v4.1.1 patch 1 |
+| E | Trends UTC group → local group（修 7/30 天跨日邊界資料錯歸日）| v4.1.1 patch 1 |
+| F | AgentSettings__DailyReportCron dead env 清（Bot 0 caller / docker-compose + appsettings.json + AgentSettings.cs 3 處）| v4.1.1 patch 1 / cody-f-deadcfg-1（同時 F14 探針 cody 自呼叫 MCP record 首輪實證生效）|
+
+**B 為何跳過**：風險中（動 7 個 push call header）/ 影響本輪版號（做了 = v4.2.0 minor / 跳過 = v4.1.1 patch）/ Christ 出門 async 不想單獨拍動 auth 紀律的改動 / 留下輪專做。
+
+---
+
 ## 標記紀律
 
 新增 follow-up：append 到對應優先級下、加日期 + 來源 reference（哪個 Stage 觀察到）。

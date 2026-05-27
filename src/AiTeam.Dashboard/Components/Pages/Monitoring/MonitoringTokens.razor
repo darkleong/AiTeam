@@ -35,7 +35,6 @@
     <MudSelect T="string" Value="_selectedDimension" ValueChanged="OnDimensionChangedAsync"
                Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="max-width:200px">
         <MudSelectItem Value="@("per-Talent")">per-Talent</MudSelectItem>
-        <MudSelectItem Value="@("per-PetraSession")">per-PetraSession</MudSelectItem>
         @* Stage 86 子項 4.4：per-Skill 維度 — TokenLog 0 SkillName column / 顯 stub MudAlert *@
         <MudSelectItem Value="@("per-Skill")">per-Skill</MudSelectItem>
     </MudSelect>
@@ -105,35 +104,9 @@ else if (_selectedDimension == "per-Skill")
 {
     <MudAlert Severity="Severity.Info">
         <strong>per-Skill 維度待 SkillName column 補完才有資料。</strong><br/>
-        目前 token_logs 紀錄 AgentName / Stage / PetraSessionId 但無 SkillName 欄位。
+        目前 token_logs 紀錄 AgentName / Stage 但無 SkillName 欄位。
         補完後此維度可 GROUP BY SkillName 顯示各 Skill 用量分佈。
     </MudAlert>
-}
-else if (_selectedDimension == "per-PetraSession")
-{
-    @if (_perSessionRows.Count == 0)
-    {
-        <MudAlert Severity="Severity.Info">今日無 PetraSession Token 紀錄。</MudAlert>
-    }
-    else
-    {
-        <MudTable Items="_perSessionRows" Dense="true" Hover="true" Height="calc(100vh - 100px)" FixedHeader="true" T="PerSessionRow">
-            <HeaderContent>
-                <MudTh>PetraSessionId</MudTh>
-                <MudTh Style="text-align:right">Row Count</MudTh>
-                <MudTh Style="text-align:right">Input</MudTh>
-                <MudTh Style="text-align:right">Output</MudTh>
-                <MudTh Style="text-align:right">Cost (USD)</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd>@context.PetraSessionId.ToString()[..8]</MudTd>
-                <MudTd Style="text-align:right">@context.RowCount</MudTd>
-                <MudTd Style="text-align:right">@context.TotalInputTokens.ToString("N0")</MudTd>
-                <MudTd Style="text-align:right">@context.TotalOutputTokens.ToString("N0")</MudTd>
-                <MudTd Style="text-align:right">@context.TotalCostUsd.ToString("F4")</MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
 }
 
 @* TokenLogDetail drawer — 點 per-Agent row 開 *@
@@ -172,12 +145,6 @@ else if (_selectedDimension == "per-PetraSession")
                         <MudText Typo="Typo.body2">
                             Cost: @(log.TotalCostUsd?.ToString("F6") ?? "—") USD
                         </MudText>
-                        @if (log.PetraSessionId.HasValue)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                PetraSession: @log.PetraSessionId.Value.ToString()[..8]
-                            </MudText>
-                        }
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             @log.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm:ss")
                         </MudText>

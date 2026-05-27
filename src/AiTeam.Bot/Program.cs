@@ -1,4 +1,3 @@
-using AiTeam.Bot.Agents;
 using AiTeam.Bot.Configuration;
 using AiTeam.Bot.McpAuth;
 using AiTeam.Bot.McpTools;
@@ -31,8 +30,6 @@ builder.Services.AddSingleton<RulesService>();
 builder.Services.AddSingleton<AppSettingsService>();
 builder.Services.AddSingleton<AlertRateLimiter>();
 builder.Services.AddSingleton<DiscordAlertService>();
-builder.Services.AddSingleton<TokenCostEstimator>();
-builder.Services.AddSingleton<TokenLogService>();
 builder.Services.AddSingleton<RecordNotificationService>();
 builder.Services.AddSingleton<GitHubService>();
 builder.Services.AddSingleton<OpsAgentService>();

@@ -19,10 +19,10 @@ namespace AiTeam.Dashboard.Components.Pages.Records;
 /// </summary>
 public partial class Records : IAsyncDisposable
 {
-    [Inject] private AppDbContext      Db            { get; set; } = null!;
-    [Inject] private NavigationManager Nav           { get; set; } = null!;
-    [Inject] private IConfiguration    Configuration { get; set; } = null!;
-    [Inject] private ILogger<Records>  Logger        { get; set; } = null!;
+    [Inject] private IDbContextFactory<AppDbContext> DbFactory     { get; set; } = null!;
+    [Inject] private NavigationManager               Nav           { get; set; } = null!;
+    [Inject] private IConfiguration                  Configuration { get; set; } = null!;
+    [Inject] private ILogger<Records>                Logger        { get; set; } = null!;
 
     /// <summary>NavMenu 子項對應的 section key（teams / teammates / tasks / messages / token-usage / null）</summary>
     [Parameter] public string? Section { get; set; }
@@ -58,11 +58,13 @@ public partial class Records : IAsyncDisposable
     private async Task ReloadAllAsync()
     {
         // F3-A：砍 .Take(100) / 全載入（client-side sort + paging + filter）
-        _teams       = await Db.AgentTeams.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
-        _teammates   = await Db.AgentTeammates.AsNoTracking().OrderByDescending(x => x.SpawnedAt).ToListAsync();
-        _tasks       = await Db.AgentTasks.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
-        _messages    = await Db.AgentMessages.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
-        _tokenUsages = await Db.AgentTokenUsages.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
+        // patch1-C：用 IDbContextFactory 開短命 scope / 避免 SignalR callback 與 OnInitializedAsync 並發共用 scoped DbContext（非 thread-safe）
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _teams       = await db.AgentTeams.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
+        _teammates   = await db.AgentTeammates.AsNoTracking().OrderByDescending(x => x.SpawnedAt).ToListAsync();
+        _tasks       = await db.AgentTasks.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
+        _messages    = await db.AgentMessages.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
+        _tokenUsages = await db.AgentTokenUsages.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
     }
 
     #region F3-A Filter delegates

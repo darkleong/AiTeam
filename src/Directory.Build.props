@@ -5,9 +5,10 @@
     <!-- v4.0.1：MCP tool 名 record_conversation → record_message rename / 對齊 AgentMessage entity + mcp_messages table 命名（Phase_v4_Followup F7）。 -->
     <!-- v4.0.2：補 close_team / finish_teammate 2 個 lifecycle MCP tool（v4.0.0 漏設計 / Phase_v4_Followup F8）+ Petra SOP 補「PM 可直接動手邊界」B 選項。 -->
     <!-- v4.1.0：multiple follow-up 一次清（Christ 拍 C 全自動 / Petra 4 patch / cody 5 spawn）— F10/F11/F12/F13/F14/F15/F1/F2/F3/F4/F5/F6/F16 / Records 系列大清理 + 進階 UI + SignalR 即時更新 + 每日 Discord 彙總。 -->
-    <Version>4.1.0</Version>
-    <AssemblyVersion>4.1.0</AssemblyVersion>
-    <FileVersion>4.1.0</FileVersion>
+    <!-- v4.1.1：v4.1.0 post-release polish（candidate A-F / 2 cody spawn / F14 紀律首輪實證 cody 自呼叫 MCP record 生效）— Records IDbContextFactory + RecordsTrends SignalR + Trends 時區跨日 + DailyReportCron dead env 清 + TokenLog v3 dead chain 大清（TokenLogService/TokenCostEstimator/TokenUsage 砍 + PetraSessionId column drop + per-PetraSession dimension dead query 砍 + InternalController 註解對齊）。 -->
+    <Version>4.1.1</Version>
+    <AssemblyVersion>4.1.1</AssemblyVersion>
+    <FileVersion>4.1.1</FileVersion>
     <!-- 明確設定 InformationalVersion，避免 SDK 附加 commit hash 後綴 -->
     <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>

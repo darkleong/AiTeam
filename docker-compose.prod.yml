@@ -42,7 +42,6 @@ services:
       GitHub__WebhookSecret: "${GITHUB_WEBHOOK_SECRET}"
       Dashboard__PushUrl: "http://aiteam-dashboard:8080"
       AgentSettings__RulesCacheTtlMinutes: "60"
-      AgentSettings__DailyReportCron: "0 0 9,21 * * ?"
       # v4-rewrite Stage 90：InternalApiKey 同時當 MCP server Bearer auth key（重用 / 不另開新 env var）
       AgentSettings__InternalApiKey: "${BOT_INTERNAL_API_KEY}"
     volumes:

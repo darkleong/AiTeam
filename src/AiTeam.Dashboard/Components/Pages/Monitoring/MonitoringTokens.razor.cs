@@ -33,7 +33,6 @@ public partial class MonitoringTokens : IAsyncDisposable
     #region Private State
 
     private TokenSummaryDto?    _todaySummary;
-    private List<PerSessionRow> _perSessionRows    = [];
     private List<TokenLog>      _selectedAgentLogs = [];
 
     private string _selectedDimension = "per-Talent";
@@ -81,7 +80,6 @@ public partial class MonitoringTokens : IAsyncDisposable
             int.TryParse(limitRow?.Value, out _globalMonthlyLimitK);
 
             BuildPerTalentChart();
-            await LoadPerSessionAsync(start, end);
         }
         catch (Exception ex)
         {
@@ -140,33 +138,6 @@ public partial class MonitoringTokens : IAsyncDisposable
                 Data = _todaySummary.AgentSummaries.Select(a => (double)a.TotalOutputTokens / 1000).ToArray(),
             },
         ];
-    }
-
-    private async Task LoadPerSessionAsync(DateTime start, DateTime end)
-    {
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            _perSessionRows = await db.TokenLogs
-                .AsNoTracking()
-                .Where(t => t.CreatedAt >= start && t.CreatedAt < end && t.PetraSessionId != null)
-                .GroupBy(t => t.PetraSessionId!.Value)
-                .Select(g => new PerSessionRow
-                {
-                    PetraSessionId    = g.Key,
-                    RowCount          = g.Count(),
-                    TotalInputTokens  = g.Sum(l => l.InputTokens),
-                    TotalOutputTokens = g.Sum(l => l.OutputTokens),
-                    TotalCostUsd      = g.Sum(l => l.TotalCostUsd ?? 0m),
-                })
-                .OrderByDescending(r => r.TotalInputTokens + r.TotalOutputTokens)
-                .Take(50)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "LoadPerSessionAsync 失敗");
-        }
     }
 
     private async Task OnDimensionChangedAsync(string newValue)
@@ -258,14 +229,5 @@ public partial class MonitoringTokens : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_hubConnection is not null) await _hubConnection.DisposeAsync();
-    }
-
-    public class PerSessionRow
-    {
-        public Guid    PetraSessionId    { get; set; }
-        public int     RowCount          { get; set; }
-        public int     TotalInputTokens  { get; set; }
-        public int     TotalOutputTokens { get; set; }
-        public decimal TotalCostUsd      { get; set; }
     }
 }

@@ -23,6 +23,17 @@
 
 ---
 
+## [4.1.1] — 2026-05-27 — [Phase_v4_Followup F18-F19](docs/planning/Phase_v4_Followup.md) v4.1.0 post-release polish
+
+**PATCH — 前 Petra 交接 6 條 cody 範圍外發現一次清**（2 cody spawn / 全程 cody 自呼叫 MCP record 落地 / F14 紀律首輪實證生效）：
+
+- **Records 並發 thread-safety**：Records.razor.cs DbContext → IDbContextFactory（對齊 MonitoringTokens 既有 factory pattern / SignalR callback + OnInitialized 並發 race 修）+ RecordsTrends 加 SignalR（對齊 Records.razor F16 ReloadAll pattern / 不必 F5 刷新）+ Trends 7/30 天 UTC group → local date group（修跨日邊界資料錯歸日 / XAxis label local 不變）
+- **dead code 清**：DailyReportCron env 砍（Bot 0 caller / docker-compose + appsettings.json + AgentSettings.cs property 3 處）+ v3 TokenLog dead chain 整套砍（TokenLogService / TokenCostEstimator / TokenUsage DTO 3 file delete + Program.cs DI 砍 + Entities.cs TokenLog.PetraSessionId column 砍 + AppDbContext HasIndex 連動 + Migration drop_column）+ MonitoringTokens per-PetraSession dimension dead query 砍（razor + razor.cs）+ InternalController L42-48 註解對齊 v4-rewrite 實際 scope（rules/agents/all / 砍 TalentMetaCache + PromptResolver 過期描述）
+
+詳細落地見 git log 2026-05-27 + Phase_v4_Followup.md F18-F19 commit hash。
+
+---
+
 ## [4.1.0] — 2026-05-27 — [Phase_v4_Followup](docs/planning/Phase_v4_Followup.md) Records 系列大清理 + 進階 UI + SignalR + 每日 Discord 彙總
 
 **MINOR — multiple follow-up 一次清**（Christ 拍 C 全自動 / Petra 4 patch / cody 5 spawn / 16 task / 全程 AiTeam MCP record 落地）：

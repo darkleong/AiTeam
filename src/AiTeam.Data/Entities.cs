@@ -221,11 +221,6 @@ public class TokenLog
     /// <summary>Stage 56：TotalCostUsd 是否為 fallback 估算值（true = 由 TokenCostEstimator 推算；false = 由 LLM provider 直接回傳）。</summary>
     public bool IsEstimated { get; set; }
 
-    /// <summary>Stage 81：v5 PetraSession 對應 session id（v5 path adapter dispatch 時透傳）— `UpdateSessionCostUsdAsync WHERE PetraSessionId=...` 精準累計用。
-    /// nullable：v4 caller / 既有 row 全 null 不擾 / 0 行為改變。對齊既有 TaskId nullable FK 紀律。
-    /// v4.0.5 F1：PetraSession entity 已 DROP TABLE / 此 column 留作 backward-compat dead column / Petra follow-up 評估是否續砍。</summary>
-    public Guid? PetraSessionId { get; set; }
-
     public TaskItem? Task { get; set; }
 
     /// <summary>
