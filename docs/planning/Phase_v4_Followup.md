@@ -361,7 +361,7 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 
 ---
 
-### F18：cody 自呼叫 record_token_usage 紀律補正
+### ~~F18：cody 自呼叫 record_token_usage 紀律補正~~（2026-05-27 處理 / .claude/agents/cody.md + ~/.claude/agents/petra-pm.md 在 gitignore / 本機生效）
 
 **範圍**（2026-05-27 / v4.1.1 patch 1 第一輪 cody 自呼叫 MCP record 觀察 / F14 紀律首輪實證觀察期）：
 
@@ -380,6 +380,31 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 - `.claude/agents/cody.md`（在 gitignore / 本機生效）
 
 **為何低優先**：v4.1.1 已用 spec 內提醒 workaround 補強 / cody 已對齊 / 不阻塞當下交付。
+
+---
+
+### F20：petra-pm.md user-level 4 處過期描述
+
+**範圍**（2026-05-27 / F18 處理時順手發現 / 不擴大 F18 scope 標 follow-up）：
+
+`~/.claude/agents/petra-pm.md`（user-level / Christ 個人 setup）4 處 v4-rewrite 前的描述未對齊：
+
+| # | 行 | 過期內容 | 應對齊 |
+|---|---|---|---|
+| 1 | L8（step 8）| `record_conversation(teammate_id, role, content, ...)` | v4.0.1 已 rename `record_message`（F7 處理）|
+| 2 | L9（step 9）| `record_token_usage(..., estimated_cost_usd?)` | v4.0.6 estimated_cost_usd 欄位已砍（F11 處理）/ tool signature 無此參數 |
+| 3 | L41-44（不做的事）| spawn `cody-dev` / `vera-reviewer` / `quinn-qa` / `sage-doc` 4 種 teammate | v4-rewrite 後 talent 系統砍 / 實際只剩 `cody` subagent |
+| 4 | L8 | `tool_call_json?` 參數 | record_message tool schema 是 `toolCallJson` camelCase（小 diff / 跨平台 MCP serialization 自動處理 / 但描述對齊更乾淨）|
+
+**修法**：對應 4 處改字串 / 無 production code 動 / 純 SOP 文件對齊。
+
+**為何延後**：
+- petra-pm.md user-level 文件 / 不阻塞 production
+- Petra 本機目前實作 SOP 已對齊（用 `record_message` 不用 `record_conversation` / 只 spawn `cody` 不 spawn `vera/quinn/sage`）/ 文件過期不影響行為
+- Christ 可拍是否一次清
+
+**涉及檔**：
+- `~/.claude/agents/petra-pm.md`（user-level / gitignore）
 
 ---
 
