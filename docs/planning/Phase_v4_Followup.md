@@ -383,9 +383,9 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 
 ---
 
-### F20：petra-pm.md user-level 4 處過期描述
+### ~~F20：petra-pm.md user-level 4 處過期描述~~（2026-05-27 處理 / 範圍升級為整份對齊）
 
-**範圍**（2026-05-27 / F18 處理時順手發現 / 不擴大 F18 scope 標 follow-up）：
+**原範圍**（2026-05-27 / F18 處理時順手發現 / 不擴大 F18 scope 標 follow-up）：
 
 `~/.claude/agents/petra-pm.md`（user-level / Christ 個人 setup）4 處 v4-rewrite 前的描述未對齊：
 
@@ -396,15 +396,25 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 | 3 | L41-44（不做的事）| spawn `cody-dev` / `vera-reviewer` / `quinn-qa` / `sage-doc` 4 種 teammate | v4-rewrite 後 talent 系統砍 / 實際只剩 `cody` subagent |
 | 4 | L8 | `tool_call_json?` 參數 | record_message tool schema 是 `toolCallJson` camelCase（小 diff / 跨平台 MCP serialization 自動處理 / 但描述對齊更乾淨）|
 
-**修法**：對應 4 處改字串 / 無 production code 動 / 純 SOP 文件對齊。
+**範圍升級**（處理時 diff 兩份檔觀察）：user-level 不只 4 處過期、整份停在 v4.0.0 狀態 / 缺：
+- step 11-12（F8 補 `finish_teammate` + `close_team`）
+- step 5 末段（F18 補「task spec 必須標 `model:`」紀律）/ 此段前 Petra 也漏補 repo SoT
+- 「PM 可直接動手邊界」整段（v4.0.2 拍板）
+- 「teammate 命名規範」整段
+- 「Petra 代 record_token_usage 估算規則」整段
+- 「不做的事」L42-45 4 行 talent name 過期 / repo SoT 同樣未對齊
 
-**為何延後**：
-- petra-pm.md user-level 文件 / 不阻塞 production
-- Petra 本機目前實作 SOP 已對齊（用 `record_message` 不用 `record_conversation` / 只 spawn `cody` 不 spawn `vera/quinn/sage`）/ 文件過期不影響行為
-- Christ 可拍是否一次清
+**修法**（PM 邊界 3 條件全中 / Petra 自處 / 不 spawn cody / 對齊 v4.0.1 rename 前例）：
+- repo SoT `agents/petra-pm.md`「不做的事」5 行縮 2 行 + talent name 改 cody / step 5 補 F18 model 紀律
+- user-level `~/.claude/agents/petra-pm.md` 整份覆蓋 repo SoT（Copy-Item / diff 0 行確認對齊）
 
 **涉及檔**：
-- `~/.claude/agents/petra-pm.md`（user-level / gitignore）
+- `agents/petra-pm.md`（repo SoT / 進 commit）
+- `~/.claude/agents/petra-pm.md`（user-level / gitignore / cp）
+
+**為何無 version bump**：純 SOP 文件 polish / 不影響 production code / 對齊 F18 純 doc followup commit 前例。
+
+**為何 user-level 改動入了 repo 範圍**：F18 處理時前 Petra 把 F18 紀律只補到 user-level / 沒同步 repo SoT / 形成 SoT 與 deployment 不一致。F20 順手把 SoT 一併補齊 + user-level 從 SoT 重新覆蓋 / 避免兩份持續分歧。下次 Petra session 啟動會 load 新 user-level / F8/F18 紀律全到位（受 F9 upstream blocker 影響 / 本 session 仍 load 舊版）。
 
 ---
 
