@@ -42,7 +42,7 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ## 中優先（功能完善）
 
-### F2：Token milestone Discord push
+### ~~F2：Token milestone Discord push~~（2026-05-27 處理 / commit 165b062 / v4.0.6 / 拍板改每日 09:00 彙總 / threshold 邏輯廢）
 
 **範圍**：record_token_usage 每筆都不 push（避免洗版），但達 milestone 時 push（例如累積 cost > $X / 累積 token > N）。
 
