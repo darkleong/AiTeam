@@ -23,6 +23,19 @@
 
 ---
 
+## [4.1.0] — 2026-05-27 — [Phase_v4_Followup](docs/planning/Phase_v4_Followup.md) Records 系列大清理 + 進階 UI + SignalR + 每日 Discord 彙總
+
+**MINOR — multiple follow-up 一次清**（Christ 拍 C 全自動 / Petra 4 patch / cody 5 spawn / 16 task / 全程 AiTeam MCP record 落地）：
+
+- **dead code 大清**（淨 -2987 行）：F1 v3-v5 9 entity drop（Talent/TalentSkill/TaskMemory/TalentMemory/SkillPrompt/TalentPrompt/PetraSession/PetraSessionMessage/PetraInbox）+ Migration drop_tables / F5 設定中心 5 子頁 + 對應 Service / F4 6 dead Discord Channels field / F11 mcp_token_usage CacheRead+CostUSD 欄位（Migration drop column × 3）
+- **Records 進階 UI**（F3）：5 表 sort（每欄 MudTableSortLabel）+ paging（MudTablePager 25/50/100/200 / 去 Take(100) 限制）+ filter（每表 2 維度自決）+ drill-down /records/team/{id} 完整 timeline + /records/trends 3 個 MudChart 折線
+- **即時通知**（F16）：Bot 寫 MCP record → Dashboard SignalR push → Records 自動 reload 不必 F5 / F2 每日 09:00 Discord 彙總（24h SUM + per model + active team + completed task + grand total）
+- **基礎建設**：F10 container TZ=Asia/Taipei / F12 Tasks 表加 Description 欄 / F13 Records 5 分頁拆 NavMenu sub-route + @switch render / F15 record_task claim cross teammate reject / F6 petra-pm.md 加 teammate 命名 + token 估算規則 / F14 cody.md tools list 加 MCP record tool
+
+詳細執行 16 task + 5 patch series（v4.0.4 → v4.0.7）見 git log 2026-05-27 + [Phase_v4_Followup.md](docs/planning/Phase_v4_Followup.md) 各條 commit hash。
+
+---
+
 ## [4.0.2] — 2026-05-26 — [Phase_v4_Followup F8](docs/planning/Phase_v4_Followup.md) Team / Teammate lifecycle 收尾方法補 + Petra SOP 邊界
 
 **PATCH — design gap 補洞**：v4.0.0 漏設計、`AgentTeam` / `AgentTeammate` 欄位有 `ClosedAt` / `FinishedAt` 但無 MCP tool 寫入、team 完成後永遠 active / teammate 永遠未 finished（hello-world smoke test 觀察到）。加 2 個 standalone MCP tool：`close_team`（Status='closed' + ClosedAt + Discord 🏁 push）、`finish_teammate`（FinishedAt / 不 push 避免洗版）/ 都 idempotent / 純 additive 無 Migration。Petra `agents/petra-pm.md` 工作流程 step 11/12 加 lifecycle close、補「PM 可直接動手邊界」B 選項 SOP（規模小 + 零設計決策 + post-deliver polish 三條件同時成立才適用 / Christ 拍板）。共 8 個 MCP tool（HealthCheck + RecordTools 7 method）。

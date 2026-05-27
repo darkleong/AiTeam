@@ -52,7 +52,7 @@ cascading reference 修（grep 顯示至少 8 檔）：
 
 ---
 
-### F3：Dashboard Records 表格進階功能
+### ~~F3：Dashboard Records 表格進階功能~~（2026-05-27 處理 / commit a767b50 / v4.0.7 / 全包 sort+paging+filter+趨勢圖+drill-down detail page）
 
 **範圍**：對應拍板 #12 延後項目：
 - filter（by team / teammate / status / date range）
