@@ -212,17 +212,14 @@ public sealed class RecordTools
         return msg.Id.ToString();
     }
 
-    [McpServerTool, Description("Record token usage from a single LLM call. Estimated cost in USD is computed by caller (or null).")]
+    [McpServerTool, Description("Record token usage from a single LLM call (Input / Output tokens only).")]
     public static async Task<string> RecordTokenUsage(
         AppDbContext db,
         [Description("Teammate ID (Guid string)")] string teammateId,
         [Description("Input tokens count")] int inputTokens,
         [Description("Output tokens count")] int outputTokens,
         [Description("Associated task ID (optional)")] string? taskId = null,
-        [Description("Cache creation tokens (optional)")] int? cacheCreationTokens = null,
-        [Description("Cache read tokens (optional)")] int? cacheReadTokens = null,
-        [Description("Model used (optional, e.g., 'sonnet', 'opus')")] string? model = null,
-        [Description("Estimated cost in USD (optional, caller computes)")] decimal? estimatedCostUsd = null)
+        [Description("Model used (optional, e.g., 'sonnet', 'opus')")] string? model = null)
     {
         if (!Guid.TryParse(teammateId, out var tmId))
             return "Error: invalid teammateId Guid";
@@ -240,10 +237,7 @@ public sealed class RecordTools
             TaskId = parsedTaskId,
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
-            CacheCreationTokens = cacheCreationTokens,
-            CacheReadTokens = cacheReadTokens,
             Model = model,
-            EstimatedCostUsd = estimatedCostUsd,
         };
         db.AgentTokenUsages.Add(usage);
         await db.SaveChangesAsync();

@@ -127,7 +127,7 @@ Petra 不用 subagent definition file spawn / 用 natural language 描述：
 | `mcp_teammates` | `AgentTeammate` | Team 內 individual teammate（Role lead/member、Model、SpawnedAt/FinishedAt） |
 | `mcp_tasks` | `AgentTask` | Task lifecycle current state（Status pending/in_progress/completed/failed） |
 | `mcp_messages` | `AgentMessage` | Teammate 對話 message（Role user/assistant/tool、Content、ToolCallJson） |
-| `mcp_token_usage` | `AgentTokenUsage` | LLM call token 消耗（Input/Output/Cache + EstimatedCostUsd） |
+| `mcp_token_usage` | `AgentTokenUsage` | LLM call token 消耗（Input/Output tokens） |
 
 ### Dashboard `/records` 頁
 
@@ -149,7 +149,7 @@ Petra 不用 subagent definition file spawn / 用 natural language 描述：
 | `finish_teammate` | teammateId | Teammate 結束（v4.0.2 補 / 寫 FinishedAt / idempotent）|
 | `record_task` | action(create/claim/complete/fail), teamId/taskId, ... | Task lifecycle 每個狀態變化 |
 | `record_message` | teammateId, role, content, taskId?, toolCallJson? | Teammate 每個 message turn（v4.0.1 由 `record_conversation` rename / 對齊 `AgentMessage` entity + `mcp_messages` table）|
-| `record_token_usage` | teammateId, inputTokens, outputTokens, taskId?, cacheCreation?, cacheRead?, model?, estimatedCostUsd? | 每次 LLM call 後 |
+| `record_token_usage` | teammateId, inputTokens, outputTokens, taskId?, model? | 每次 LLM call 後 |
 
 ### Tool 註冊（attribute pattern）
 

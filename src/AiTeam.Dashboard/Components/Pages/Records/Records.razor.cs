@@ -7,13 +7,17 @@ namespace AiTeam.Dashboard.Components.Pages.Records;
 
 /// <summary>
 /// Stage 92：v4-rewrite Dashboard MCP Records 表格頁（minimal scope）。
-/// 5 tab × 5 MudTable 顯示 mcp_teams / mcp_teammates / mcp_tasks / mcp_messages / mcp_token_usage。
+/// F13 重構：原 5 MudTab 改成依 route param Section 條件 render 對應 MudTable。
+/// 路由：/records（default 顯示 teams）/ /records/{Section} — Section ∈ teams / teammates / tasks / messages / token-usage。
 /// 每表顯示最近 100 筆（CreatedAt desc / SpawnedAt desc）。
 /// 無 filter / sort / pagination 進階功能（後續 phase 重評）。
 /// </summary>
 public partial class Records
 {
     [Inject] private AppDbContext Db { get; set; } = null!;
+
+    /// <summary>NavMenu 子項對應的 section key（teams / teammates / tasks / messages / token-usage / null）</summary>
+    [Parameter] public string? Section { get; set; }
 
     private List<AgentTeam>       _teams       = new();
     private List<AgentTeammate>   _teammates   = new();

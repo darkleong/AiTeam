@@ -1,7 +1,13 @@
 @* v4-rewrite Stage 92：NavMenu 重整 — 首頁 + Records 表格頁（純記錄系統主入口）+ 監控中心 + 設定中心 *@
 <MudNavMenu>
     <MudNavLink Href="/" Icon="@Icons.Material.Filled.Home" Match="NavLinkMatch.All">首頁</MudNavLink>
-    <MudNavLink Href="/records" Icon="@Icons.Material.Filled.TableChart">MCP Records</MudNavLink>
+    <MudNavGroup Title="MCP Records" Icon="@Icons.Material.Filled.TableChart" Expanded="true">
+        <MudNavLink Href="/records/teams"        Icon="@Icons.Material.Filled.Group"            Match="NavLinkMatch.All">Teams</MudNavLink>
+        <MudNavLink Href="/records/teammates"    Icon="@Icons.Material.Filled.People"           Match="NavLinkMatch.All">Teammates</MudNavLink>
+        <MudNavLink Href="/records/tasks"        Icon="@Icons.Material.Filled.Assignment"       Match="NavLinkMatch.All">Tasks</MudNavLink>
+        <MudNavLink Href="/records/messages"     Icon="@Icons.Material.Filled.Message"          Match="NavLinkMatch.All">Messages</MudNavLink>
+        <MudNavLink Href="/records/token-usage"  Icon="@Icons.Material.Filled.MonetizationOn"   Match="NavLinkMatch.All">Token Usage</MudNavLink>
+    </MudNavGroup>
 
     <MudNavGroup Title="監控中心" Icon="@Icons.Material.Filled.MonitorHeart" Expanded="false">
         <MudNavLink Href="/monitoring/tokens"      Icon="@Icons.Material.Filled.BarChart">Token 統計</MudNavLink>

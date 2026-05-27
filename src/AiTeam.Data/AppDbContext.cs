@@ -374,7 +374,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.ToTable("mcp_token_usage");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("gen_random_uuid()");
-            e.Property(x => x.EstimatedCostUsd).HasPrecision(18, 6);
             e.HasIndex(x => new { x.TeammateId, x.CreatedAt });
             e.HasIndex(x => x.TaskId);
         });

@@ -80,9 +80,6 @@ public class AgentTokenUsage
     public Guid? TaskId { get; set; }
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
-    public int? CacheCreationTokens { get; set; }
-    public int? CacheReadTokens { get; set; }
     public string? Model { get; set; }
-    public decimal? EstimatedCostUsd { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
