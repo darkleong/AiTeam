@@ -193,7 +193,7 @@ Records.razor：
 
 ---
 
-### F14：`.claude/agents/cody.md` tools list 沒含 MCP record tool
+### ~~F14：`.claude/agents/cody.md` tools list 沒含 MCP record tool~~（2026-05-27 處理 / .claude/agents/cody.md 在 gitignore / 本機生效）
 
 **範圍**（2026-05-27 / F11+F13 spawn cody-1 過程觀察）：
 
@@ -221,7 +221,7 @@ Records.razor：
 
 ## 低優先（重評時機）
 
-### F15：`record_task(action="claim")` 重複 claim 沒 reject
+### ~~F15：`record_task(action="claim")` 重複 claim 沒 reject~~（2026-05-27 處理 / commit ea79698）
 
 **範圍**（2026-05-27 / F11+F13 開 team 過程觀察）：
 
