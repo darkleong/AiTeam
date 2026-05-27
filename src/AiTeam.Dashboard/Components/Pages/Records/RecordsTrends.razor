@@ -1,0 +1,55 @@
+@page "/records/trends"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using AiTeam.Data.Records
+
+<PageTitle>Records 趨勢 — AiTeam</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">MCP Records 趨勢圖</MudText>
+<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+    依 mcp_* 表彙整時序統計：過去 7 天 token 消耗（總量 + by-model 拆分）+ 過去 30 天 active team / completed task 數量。
+</MudText>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-2">過去 7 天每日 Token 消耗（總量）</MudText>
+    @if (_tokenDailyTotalSeries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">過去 7 天無 token 使用紀錄。</MudAlert>
+    }
+    else
+    {
+        <MudChart ChartType="ChartType.Line"
+                  ChartSeries="@_tokenDailyTotalSeries"
+                  XAxisLabels="@_dailyXAxisLabels"
+                  Width="100%" Height="320px" />
+    }
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-2">過去 7 天每日 Token 消耗（by Model）</MudText>
+    @if (_tokenDailyByModelSeries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">過去 7 天無 by-model token 紀錄。</MudAlert>
+    }
+    else
+    {
+        <MudChart ChartType="ChartType.Line"
+                  ChartSeries="@_tokenDailyByModelSeries"
+                  XAxisLabels="@_dailyXAxisLabels"
+                  Width="100%" Height="320px" />
+    }
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h6" Class="mb-2">過去 30 天 Active Team / Completed Task 數量</MudText>
+    @if (_teamTaskMonthlySeries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">過去 30 天無 team / task 紀錄。</MudAlert>
+    }
+    else
+    {
+        <MudChart ChartType="ChartType.Line"
+                  ChartSeries="@_teamTaskMonthlySeries"
+                  XAxisLabels="@_monthlyXAxisLabels"
+                  Width="100%" Height="320px" />
+    }
+</MudPaper>

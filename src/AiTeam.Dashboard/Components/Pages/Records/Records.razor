@@ -8,21 +8,40 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">MCP Records 表格檢視</MudText>
 <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
-    顯示 Claude Code Agent Team 透過 MCP server 寫入的 5 類記錄（每表顯示最近 100 筆）。
+    顯示 Claude Code Agent Team 透過 MCP server 寫入的 5 類記錄（client-side sort / filter / paging 全開）。
 </MudText>
 
 @switch ((Section ?? "teams").ToLowerInvariant())
 {
     case "teammates":
         <MudText Typo="Typo.h6" Class="mb-2">Teammates（@_teammates.Count）</MudText>
-        <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true">
+        @* F3-A filter：Model 下拉 + Role 下拉 *@
+        <MudGrid Spacing="2" Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_teammatesModelFilter" Label="Model" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("sonnet")">sonnet</MudSelectItem>
+                    <MudSelectItem Value="@("opus")">opus</MudSelectItem>
+                    <MudSelectItem Value="@("haiku")">haiku</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_teammatesRoleFilter" Label="Role" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("lead")">lead</MudSelectItem>
+                    <MudSelectItem Value="@("member")">member</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Filter="new Func<AgentTeammate, bool>(FilterTeammate)" T="AgentTeammate">
             <HeaderContent>
-                <MudTh>TeamId</MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Model</MudTh>
-                <MudTh>Role</MudTh>
-                <MudTh>SpawnedAt</MudTh>
-                <MudTh>FinishedAt</MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.TeamId))">TeamId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Model ?? string.Empty))">Model</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Role))">Role</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeammate, object>(x => x.SpawnedAt))">SpawnedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => (object?)x.FinishedAt ?? DateTime.MinValue))">FinishedAt</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
@@ -32,20 +51,39 @@
                 <MudTd>@context.SpawnedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@(context.FinishedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+            </PagerContent>
         </MudTable>
         break;
 
     case "tasks":
         <MudText Typo="Typo.h6" Class="mb-2">Tasks（@_tasks.Count）</MudText>
-        <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true">
+        @* F3-A filter：Status 下拉 + Title 模糊搜尋 *@
+        <MudGrid Spacing="2" Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_tasksStatusFilter" Label="Status" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("pending")">pending</MudSelectItem>
+                    <MudSelectItem Value="@("in_progress")">in_progress</MudSelectItem>
+                    <MudSelectItem Value="@("completed")">completed</MudSelectItem>
+                    <MudSelectItem Value="@("failed")">failed</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField T="string" @bind-Value="_tasksTitleSearch" Label="Title 模糊搜尋" Margin="Margin.Dense" Variant="Variant.Outlined" Immediate="true" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+        <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Filter="new Func<AgentTask, bool>(FilterTask)" T="AgentTask">
             <HeaderContent>
-                <MudTh>TeamId</MudTh>
-                <MudTh>TeammateId</MudTh>
-                <MudTh>Title</MudTh>
-                <MudTh>Description</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>CreatedAt</MudTh>
-                <MudTh>CompletedAt</MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.TeamId))">TeamId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.TeammateId ?? Guid.Empty))">TeammateId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Title))">Title</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Description ?? string.Empty))">Description</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Status))">Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTask, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.CompletedAt ?? DateTime.MinValue))">CompletedAt</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
@@ -56,18 +94,36 @@
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@(context.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+            </PagerContent>
         </MudTable>
         break;
 
     case "messages":
         <MudText Typo="Typo.h6" Class="mb-2">Messages（@_messages.Count）</MudText>
-        <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true">
+        @* F3-A filter：Role 下拉 + Content 關鍵字 *@
+        <MudGrid Spacing="2" Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_messagesRoleFilter" Label="Role" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("user")">user</MudSelectItem>
+                    <MudSelectItem Value="@("assistant")">assistant</MudSelectItem>
+                    <MudSelectItem Value="@("tool")">tool</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="5">
+                <MudTextField T="string" @bind-Value="_messagesContentSearch" Label="Content 關鍵字" Margin="Margin.Dense" Variant="Variant.Outlined" Immediate="true" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+        <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Filter="new Func<AgentMessage, bool>(FilterMessage)" T="AgentMessage">
             <HeaderContent>
-                <MudTh>TeammateId</MudTh>
-                <MudTh>TaskId</MudTh>
-                <MudTh>Role</MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.TeammateId))">TeammateId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => (object?)x.TaskId ?? Guid.Empty))">TaskId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.Role))">Role</MudTableSortLabel></MudTh>
                 <MudTh>Content（前 200 字）</MudTh>
-                <MudTh>CreatedAt</MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentMessage, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
@@ -76,19 +132,34 @@
                 <MudTd>@(context.Content.Length > 200 ? context.Content[..200] + "…" : context.Content)</MudTd>
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+            </PagerContent>
         </MudTable>
         break;
 
     case "token-usage":
         <MudText Typo="Typo.h6" Class="mb-2">Token Usage（@_tokenUsages.Count）</MudText>
-        <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true">
+        @* F3-A filter：Model 下拉 *@
+        <MudGrid Spacing="2" Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_tokenUsagesModelFilter" Label="Model" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("sonnet")">sonnet</MudSelectItem>
+                    <MudSelectItem Value="@("opus")">opus</MudSelectItem>
+                    <MudSelectItem Value="@("haiku")">haiku</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Filter="new Func<AgentTokenUsage, bool>(FilterTokenUsage)" T="AgentTokenUsage">
             <HeaderContent>
-                <MudTh>TeammateId</MudTh>
-                <MudTh>TaskId</MudTh>
-                <MudTh>Model</MudTh>
-                <MudTh>Input</MudTh>
-                <MudTh>Output</MudTh>
-                <MudTh>CreatedAt</MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.TeammateId))">TeammateId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => (object?)x.TaskId ?? Guid.Empty))">TaskId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.Model ?? string.Empty))">Model</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.InputTokens))">Input</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.OutputTokens))">Output</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTokenUsage, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
@@ -98,18 +169,38 @@
                 <MudTd>@context.OutputTokens</MudTd>
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+            </PagerContent>
         </MudTable>
         break;
 
     default:
         <MudText Typo="Typo.h6" Class="mb-2">Teams（@_teams.Count）</MudText>
-        <MudTable Items="_teams" Dense="true" Striped="true" Bordered="true" Hover="true">
+        @* F3-A filter：Status 下拉 + Name 模糊搜尋 *@
+        <MudGrid Spacing="2" Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" @bind-Value="_teamsStatusFilter" Label="Status" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("all")">全部</MudSelectItem>
+                    <MudSelectItem Value="@("active")">active</MudSelectItem>
+                    <MudSelectItem Value="@("closed")">closed</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField T="string" @bind-Value="_teamsNameSearch" Label="Name 模糊搜尋" Margin="Margin.Dense" Variant="Variant.Outlined" Immediate="true" Clearable="true" />
+            </MudItem>
+        </MudGrid>
+        @* F3-B drill-down：OnRowClick 跳轉 team detail page *@
+        <MudTable Items="_teams" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Filter="new Func<AgentTeam, bool>(FilterTeam)" T="AgentTeam"
+                  OnRowClick="@((TableRowClickEventArgs<AgentTeam> args) => OnTeamRowClick(args))"
+                  RowClass="cursor-pointer">
             <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Description</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>CreatedAt</MudTh>
-                <MudTh>ClosedAt</MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Description ?? string.Empty))">Description</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Status))">Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeam, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => (object?)x.ClosedAt ?? DateTime.MinValue))">ClosedAt</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Name</MudTd>
@@ -118,6 +209,9 @@
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
                 <MudTd>@(context.ClosedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[]{25, 50, 100, 200}" />
+            </PagerContent>
         </MudTable>
         break;
 }
