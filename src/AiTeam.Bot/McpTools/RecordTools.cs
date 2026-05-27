@@ -106,7 +106,7 @@ public sealed class RecordTools
         return "finished";
     }
 
-    [McpServerTool, Description("Record a task lifecycle event. Action: 'create' creates new task and returns task_id / 'claim' assigns to teammate / 'complete' marks done / 'fail' marks failed.")]
+    [McpServerTool, Description("Record a task lifecycle event. Action: 'create' creates new task and returns task_id / 'claim' assigns to teammate (idempotent same teammate / reject cross teammate) / 'complete' marks done / 'fail' marks failed.")]
     public static async Task<string> RecordTask(
         AppDbContext db,
         RecordNotificationService notify,
@@ -144,6 +144,13 @@ public sealed class RecordTools
                     return "Error: invalid Guid";
                 var t = await db.AgentTasks.FindAsync(clTaskId);
                 if (t is null) return $"Error: task {taskId} not found";
+                // F15: 已 claim 不 overwrite — 同 teammate idempotent / cross teammate reject
+                if (t.TeammateId is not null)
+                {
+                    return t.TeammateId == clTmId
+                        ? "already claimed"
+                        : $"already claimed by {t.TeammateId}";
+                }
                 t.TeammateId = clTmId;
                 t.Status = "in_progress";
                 t.ClaimedAt = DateTime.UtcNow;
