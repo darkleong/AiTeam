@@ -7,7 +7,7 @@
 
 ## 高優先（影響 DB / production 穩定性）
 
-### F1：舊 entity drop + cascading reference 修
+### ~~F1：舊 entity drop + cascading reference 修~~（2026-05-27 處理 / commit 781d111 / v4.0.5）
 
 **範圍**：Stage 89 大砍時保留的舊 entity / table 真實 drop。
 
