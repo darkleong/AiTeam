@@ -183,7 +183,7 @@ Records.razor：
 
 ---
 
-### F4：Channels / docker-compose env 整理
+### ~~F4：Channels / docker-compose env 整理~~（2026-05-27 處理 / commit 792b14e / v4.0.4）
 
 **範圍**：v4-rewrite 後 dead env / config：
 - `DiscordSettings.Channels.CeoChannel/PmChannel/DevChannel/ReviewerChannel/QaChannel/DocChannel` C# field 仍存在（appsettings.json / docker-compose 已砍但 class field 留）
@@ -242,7 +242,7 @@ Records.razor：
 
 ---
 
-### F5：NavMenu 結構重評
+### ~~F5：NavMenu 結構重評~~（2026-05-27 處理 / commit 792b14e / v4.0.4 / 拍 A 砍設定中心 5 子頁）
 
 **範圍**：v4-rewrite 後 NavMenu 簡化為「首頁 + MCP Records + 監控中心 + 設定中心」。但 `/settings/workflow` 內容（v5/v6 flag）已大砍、頁面可能空 / 無內容。
 
@@ -250,7 +250,7 @@ Records.razor：
 
 ---
 
-### F6：Petra-pm subagent definition 微調
+### ~~F6：Petra-pm subagent definition 微調~~（2026-05-27 處理 / commit 792b14e / v4.0.4 / 只做 teammate 命名 + token 估算 2 條 / 其他 Christ 拍維持觀察）
 
 **範圍**：`agents/petra-pm.md` 第一版完成。Christ 真實使用後可能需要：
 - 工作流程細節調整
