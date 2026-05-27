@@ -45,7 +45,7 @@
 │  │ AiTeam.Bot                                            │     │
 │  │  ├─ MCP server endpoint (/mcp)                       │     │
 │  │  │   ├─ HealthCheckTool                              │     │
-│  │  │   └─ RecordTools (5 method)                       │     │
+│  │  │   └─ RecordTools (7 method)                       │     │
 │  │  ├─ McpBearerAuthMiddleware (驗 InternalApiKey)       │     │
 │  │  ├─ RecordNotificationService (Discord push)         │     │
 │  │  └─ EF Core Migration runner (啟動 MigrateAsync)     │     │
@@ -190,7 +190,7 @@ DI 自動 inject AppDbContext / RecordNotificationService / 對 LLM 隱藏。
 | MCP middleware | `src/AiTeam.Bot/McpAuth/McpBearerAuthMiddleware.cs` |
 | MCP route map | `src/AiTeam.Bot/Program.cs` `app.MapMcp("/mcp")` |
 | HealthCheck tool | `src/AiTeam.Bot/McpTools/HealthCheckTool.cs` |
-| 5 record tool | `src/AiTeam.Bot/McpTools/RecordTools.cs` |
+| 7 record method | `src/AiTeam.Bot/McpTools/RecordTools.cs` |
 | Discord push | `src/AiTeam.Bot/Services/RecordNotificationService.cs` |
 | Records 5 entity | `src/AiTeam.Data/Records/RecordEntities.cs` |
 | AppDbContext DbSet | `src/AiTeam.Data/AppDbContext.cs:7-12`（5 個 AgentXxx DbSet） |

@@ -118,7 +118,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 | 84 | PetraOrchestratorService（v5 ecosystem + v5.5 拆解合集）| 2266 | 主檔 193（**-91.5%**）+ 5 sub-service + 1 helper + 1 DTO + 1 Commons 合計 2075 | 主檔極致瘦身 | Opus 1M + ultrathink | ~400-500K / 1M = 40-50%（single session 完成） |
 
 **觀察**：
-- **「SOP 累積後同類工作越做越省」** — Stage 36 規模最大但 context 倍率（×1.49）反而比 Stage 34（×1.60）低；**Stage 59 倍率 ×1.09**（SOP 累積第 4 次 + 新立 workflow_aria.md 第 5+6 條紀律生效 partial read + 不寫 code 範例）— FF 二十系列拆解倍率從 ×1.49-1.65 降到 ×1.09
+- **「SOP 累積後同類工作越做越省」** — Stage 36 規模最大但 context 倍率（×1.49）反而比 Stage 34（×1.60）低；**Stage 59 倍率 ×1.09**（SOP 累積第 4 次 + 當時新立 Aria 工作紀律生效 partial read + 不寫 code 範例 / v4-rewrite 後 Aria 角色併入 Petra / 紀律精神保留於本檔）— FF 二十系列拆解倍率從 ×1.49-1.65 降到 ×1.09
 - **Opus 1M 是大型拆解的舒適區**，Sonnet 200K 邊界緊
 - **拆完行數總合可能變多**（Stage 34 997 vs 原 1415 只減 30%；Stage 59 1859 vs 原 1759 = +5.7%）—— 這是正常的，目的是**降低單檔 Read 成本**不是減總碼量
 - **dispatch / guard / 路由型主檔瘦身比例典型 -50%~-60%**（Stage 59 踩坑 #3 — vs Stage 34-36 純拆 -73%~-85% 是因為 Stage 34-36 拆對象是「同類別怪物合併」沒 dispatch 主入口；Stage 59 拆對象是「單檔含 dispatch + 多子職責」必留 dispatch 結構 ProcessBossResponseAsync 主 switch + FireOneStepAsync framework Pipeline entry guard + HandleAgentCompletedAsync Pipeline path 接管 callback）— spike 第一步必須精準分離「可搬走的 method body」vs「必留的 dispatch 結構」
@@ -169,7 +169,7 @@ C# 編譯器在 `Parent.X` namespace 內優先解析同層 child namespace，若
 - ✅ 小段 Edit（< 30 行 / 純 ASCII / 結構封閉）
 - ✅ Write 整檔（大段 Razor / 含中文混排 / 跨多 nested element / 多處同檔砍）
 
-對應 Forge 工作流程紀律已寫進 `workflow_forge.md` 第三節「實作中」+ 第六節「不該做的事」（memory user-local），本紀律是跨 Stage 對齊 git 版本。
+（Stage 85 當時對應 Forge 工作紀律寫於 user-local `workflow_forge.md` / v4-rewrite 後 Forge 角色併入 Petra 該檔已砍 / 紀律精神保留於本檔。）
 
 ---
 

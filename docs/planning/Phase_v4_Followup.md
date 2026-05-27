@@ -435,6 +435,26 @@ MCP tool 名 `record_conversation` 與 C# entity `AgentMessage` + DB table `mcp_
 
 ---
 
+### F21：docs/conventions/ 殘留 v5 dead path reference
+
+**範圍**（2026-05-27 / 全盤整理時 grep 擴大 pattern 撈到 / 不擴大本輪 scope 標 follow-up）：
+
+`docs/conventions/csharp.md` L280 引用「Stage 81 真實案例 `PetraOrchestratorService.cs:1844`」/ 該檔已被 F1（v4.0.5）砍 v3-v5 dead entity 時整個 `Orchestration/Petra/` 子目錄一併移除 / 形成 dead link。
+
+**修法**（推薦保留教學案例 + 移除 dead link）：
+- L280 改寫：「Stage 81 真實案例（v5 時代 / `PetraOrchestratorService.cs` v4-rewrite 後已砍 / 案例保留於 git history）」
+- 或：把案例 inline 改寫成不帶 file path 的代碼示範 / 不依賴 dead link
+
+**潛在連動議題**：可能還有其他 `docs/conventions/*.md` 或 `docs/Architecture.md` 含 v5 dead path reference（如 `Orchestration/Petra/*` / `Agents/Pm/*` / `LlmProviderFactory` 等）/ 處理 F21 時一併 grep 清。
+
+**為何延後**：教學 case 描述不影響當前 v4 code / git history 仍可查 / 不是 production 路徑。本輪全盤整理 grep 擴大撈到的新發現 / 不擴大本輪 scope。
+
+**涉及檔**：
+- `docs/conventions/csharp.md`（L280 起 / 可能更多）
+- 潛在：其他 `docs/conventions/*.md` / `docs/Architecture.md`
+
+---
+
 ## 標記紀律
 
 新增 follow-up：append 到對應優先級下、加日期 + 來源 reference（哪個 Stage 觀察到）。
