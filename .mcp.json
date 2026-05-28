@@ -2,7 +2,7 @@
   "mcpServers": {
     "aiteam-records": {
       "type": "http",
-      "url": "${AITEAM_MCP_URL:-http://localhost:5050/mcp}",
+      "url": "${AITEAM_MCP_URL:-http://localhost:5052/mcp}",
       "headers": {
         "Authorization": "Bearer ${AITEAM_MCP_API_KEY}"
       },

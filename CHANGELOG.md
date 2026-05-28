@@ -23,6 +23,34 @@
 
 ---
 
+## [4.1.3] — 2026-05-28 — Agent 命名去人格化（A 路線）+ reviewer / syncer 加入
+
+**PATCH — Christ 拍 A 全 commit 走純職能命名**：repo 內 agent 全部脫人格化（給團隊通用易交接）/ 個人 personality 版本搬到 user-level `~/.claude/agents/` 作熟悉隊友 overlay。
+
+- **repo agents 去人格化**：`lead.md`（name: `petra-pm` → `lead` / 移除「Petra」「女性稱謂妳」「不過度情感化」「有幽默感」personality 段）+ `coder.md`（name: `cody` → `coder` / 「妳」→「你」/ 「Christ」→「boss」/ 對齊純職能 PM SOP）+ 大幅瘦身（對話 register / 觀察異常段刪 / 已在 `team.md` 涵蓋）
+- **新加 reviewer + syncer**：`reviewer.md`（read-only diff review / sonnet / 無 Edit/Write tool 硬隔離 / 補 coder→commit 中間 review 洞 / 嚴重度分級 Blocker/Concern/Suggestion）+ `syncer.md`（doc-only sync / sonnet / 只動 `docs/` + root markdown / 嚴禁動 `src/` 與 `.claude/`）
+- **personality 版搬 user-level**：`~/.claude/agents/petra-pm.md` + `~/.claude/agents/cody.md` 重建保留 Petra / Cody / 「妳」女性稱謂 / personality 段 / 未來 Christ 個人專案可繼續用熟悉隊友
+- **settings 連動**：`.claude/settings.json` `agent: petra-pm` → `agent: lead`
+- **CLAUDE.md 同步**：Lead persona 引用 + 加 reviewer/syncer 段 + onboarding 段補個人 overlay 路線
+- **`.gitignore` 細化**：補 `.claude/worktrees/` ignore（個人 git worktree state / runtime）+ 註解標清楚共享項（agents/output-styles/skills/settings.json/.mcp.json）vs 個人覆蓋項。`.claude/skills/` **不** ignore（對齊 agents 邏輯 / 未來 project skill 跟 team 走）
+
+Christ 拍板理由：「給團隊就該完全通用」+「熟悉的隊友留我身邊」雙軌設計（repo 純職能 / user-level 個人 personality）。
+
+---
+
+## [4.1.2] — 2026-05-28 — 團隊 *.md 配置整理 + `.claude/` 進 git
+
+**PATCH — Christ 拍 A 路線 / Petra 自處（規模小 + 零設計決策 + post-deliver polish 三條件滿足）**：為現實生活團隊成員 onboarding 預備、把分散在 repo `agents/` + 個人 `~/.claude/` 的 *.md 配置整理進 `.claude/` 並 commit。
+
+- **`.gitignore` 鬆綁**：原本 `.claude/` + `.mcp.json` 全 ignore、改為只 ignore 個人覆蓋（`settings.local.json` / `scheduled_tasks.lock` / `.credentials.json` / `projects/`）
+- **agents 搬家 + 改職能命名**：`agents/petra-pm.md` → `.claude/agents/lead.md`（frontmatter `name: petra-pm` 保留）/ `.claude/agents/cody.md` → `.claude/agents/coder.md`（frontmatter `name: cody` 保留）— 檔名脫鉤人名、依 [Claude Code docs](https://code.claude.com/docs/en/sub-agents) 「identity comes only from the `name` frontmatter field」
+- **output-style 升專案級**：建 `.claude/output-styles/team.md`（語言 / register / 工作態度 / 簡潔 / 觀察異常 / 太高深訊號）+ `.claude/settings.json` 加 `"outputStyle": "team"`、個人偏好（稱謂等）走 `~/.claude/output-styles/` overlay
+- **通用技術知識搬 repo**：個人 memory `reference_aspire_url.md` → `docs/reference/aspire-url.md`
+- **CLAUDE.md 加 onboarding 段**：團隊成員 5 步驟啟動指引（env var / Agent Teams flag / `claude` 啟動）
+- **清空殼**：`agents/` 資料夾 + `agents/.mcp.json.example` 砍（`.mcp.json` 進 git 後不再需要 example）
+
+---
+
 ## [4.1.1] — 2026-05-27 — [Phase_v4_Followup F18-F19](docs/planning/Phase_v4_Followup.md) v4.1.0 post-release polish
 
 **PATCH — 前 Petra 交接 6 條 cody 範圍外發現一次清**（2 cody spawn / 全程 cody 自呼叫 MCP record 落地 / F14 紀律首輪實證生效）：

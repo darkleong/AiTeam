@@ -4,10 +4,10 @@
 
 AiTeam **v4.0.0 純記錄系統**（執行端 + 記錄端 分離架構）：
 
-- **執行端**：Christ 本機 Claude Code Agent Team（v2.1.32+ / `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
+- **執行端**：本機 Claude Code Agent Team（v2.1.32+ / `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
 - **記錄端**：AiTeam Bot 容器（MCP server endpoint / HTTP / Bearer auth / `/mcp` route）+ PostgreSQL + Blazor Dashboard
-- **Lead persona**：`agents/petra-pm.md`（Petra / model=opus / Claude Code Agent Team lead）
-- **執行流程**：Christ → `claude --agent petra-pm` → Petra spawn teammate（natural language）→ teammate work + call MCP record tool 寫 AiTeam DB
+- **Lead persona**：[.claude/agents/lead.md](.claude/agents/lead.md)（frontmatter name=`lead` / model=opus / 純職能 / 無 personality）
+- **執行流程**：clone repo → `claude`（`.claude/settings.json` 自動套用 `agent: lead` 啟動 Lead）→ Lead spawn teammate（coder / reviewer / syncer）→ teammate work + call MCP record tool 寫 AiTeam DB
 - **部署**：Windows 11 本機 Docker Compose（非雲端）
 
 > v4.0.0 之前的 v5.5 6 Talent / HITL / Aria-Forge 工作模式：請查 git log 看 v3.79.0 commit / 已全砍（v4-rewrite Stage 88-95）。
@@ -49,22 +49,31 @@ UI 元件庫 = **MudBlazor 8.x**。
 ## 專案結構
 
 ```
-AiTeam.slnx         ← 解決方案檔（注意 .slnx 不是 .sln）
-  ├── agents/
-  │   ├── petra-pm.md       ← Petra subagent definition（Christ copy 到 ~/.claude/agents/）
-  │   └── .mcp.json.example ← Claude Code .mcp.json 範例
+AiTeam.slnx                ← 解決方案檔（注意 .slnx 不是 .sln）
+  ├── .claude/             ← Claude Code 共享配置（commit 進 git / team 共用）
+  │   ├── agents/         ← 全純職能命名 / 無 personality（個人 personality 版走 ~/.claude/agents/）
+  │   │   ├── lead.md      ← Lead persona（PM / opus / name=lead）
+  │   │   ├── coder.md     ← Coder subagent（實作 / sonnet / name=coder）
+  │   │   ├── reviewer.md  ← Reviewer subagent（read-only diff review / sonnet / name=reviewer）
+  │   │   └── syncer.md    ← Syncer subagent（doc 同步 / sonnet / name=syncer）
+  │   ├── output-styles/
+  │   │   └── team.md      ← 團隊對話紀律（繁中 / register / 工作態度）
+  │   └── settings.json    ← 預設啟動 lead persona + 套 team output-style
+  ├── .mcp.json            ← MCP server 配置（敏感 key 走 ${AITEAM_MCP_API_KEY} 環境變數）
   └── src/
       ├── AiTeam.AppHost          ← Aspire 入口
       ├── AiTeam.ServiceDefaults  ← 共用遙測 / 健康檢查
       ├── AiTeam.Bot              ← MCP server endpoint + 記錄寫入 + Discord 通知
       │   ├── McpAuth/            ← Bearer auth middleware
-      │   ├── McpTools/           ← 6 個 MCP tool（HealthCheckTool + RecordTools 5 method）
+      │   ├── McpTools/           ← 8 個 MCP tool（HealthCheckTool + RecordTools 7 method）
       │   ├── Services/RecordNotificationService.cs ← Discord push TaskUpdates channel
       │   └── ...
       ├── AiTeam.Dashboard        ← Blazor Web App / MudTable × 5 顯示 mcp_* 記錄
       ├── AiTeam.Data             ← EF Core DbContext / Records/ entity / Migrations
       └── AiTeam.Shared           ← 共用 DTO
 ```
+
+> **命名約定**（v4.1.3 走 A 路線拍板）：repo 內 agents **檔名與 frontmatter name 都用職能**（`lead` / `coder` / `reviewer` / `syncer`）/ 純功能 / 無 personality / 通用易交接。個人 personality 版本（女性名 + 個性）走 `~/.claude/agents/` user level overlay（不進 repo / 不影響團隊）。
 
 建置：`dotnet build AiTeam.slnx`（從 repo root）
 
@@ -86,7 +95,7 @@ AiTeam.slnx         ← 解決方案檔（注意 .slnx 不是 .sln）
   - `record_token_usage` — LLM call token 消耗
 - **Tech**：`ModelContextProtocol.AspNetCore` 1.3.0（Microsoft + Anthropic 官方合作 SDK）
 
-Claude Code 端 `.mcp.json` 配置範例見 `agents/.mcp.json.example`。
+Claude Code 端 `.mcp.json` 配置直接見 repo root [`.mcp.json`](.mcp.json)（敏感資料走 `${AITEAM_MCP_API_KEY}` 環境變數）。
 
 ---
 
@@ -148,3 +157,23 @@ dotnet ef database update --project src/AiTeam.Data --startup-project src/AiTeam
 ## 開發語言
 
 程式碼註解使用繁體中文 / 變數與方法名使用英文。
+
+---
+
+## 給新團隊成員：本機 onboarding
+
+1. **clone repo** → cwd 為 repo root
+2. **設環境變數**：
+   - `AITEAM_MCP_API_KEY` — Bot MCP server bearer token（跟 Christ 拿）
+   - `AITEAM_MCP_URL`（可選 / 預設 `http://localhost:5052/mcp`）
+3. **裝 Claude Code v2.1.32+** + 啟用 Agent Teams：
+   - 設環境變數 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`、或在 `~/.claude/settings.json` 加 `"env": {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}`
+4. **啟動**：在 repo root 跑 `claude`
+   - `.claude/settings.json` 自動套用 `agent: lead`（PM / opus）
+   - 自動套用 `outputStyle: team`（繁中 / 對話紀律）
+   - `.mcp.json` 自動載入 `aiteam-records` MCP server 連線
+   - Lead 會視任務 spawn `coder` / `reviewer` / `syncer` teammate
+5. **個人偏好覆蓋**（可選）：
+   - 對話風格 → 放 `~/.claude/output-styles/<name>.md` + 在 `.claude/settings.local.json` 設 `"outputStyle": "<name>"`
+   - Agent personality（給隊友取名加個性）→ 放 `~/.claude/agents/<name>.md`、frontmatter name 不衝突即可（user level、project agent 優先序更高、但 user agent 可在其他無 project agent 的專案用）
+   - `settings.local.json` 在 `.gitignore` 排除 / 不影響團隊

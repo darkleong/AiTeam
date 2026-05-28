@@ -417,8 +417,13 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# Claude Code
-.claude/
-.mcp.json
+# Claude Code — 共享配置進 git、個人覆蓋 / runtime 排除
+# 共享（進 git）：.claude/agents/、.claude/output-styles/、.claude/skills/、.claude/settings.json、.mcp.json
+# 個人覆蓋 / runtime（ignore）：
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/.credentials.json
+.claude/projects/
+.claude/worktrees/
 
 *.lscache
