@@ -60,14 +60,25 @@ public sealed class RecordTools
         if (team is null) return $"Error: team {teamId} not found";
         if (team.Status == "closed") return "already closed";
 
+        // cascade auto-finish：team close 時、把該 team 內所有未 FinishedAt 的 teammate 一次補上 FinishedAt
+        var now = DateTime.UtcNow;
+        var pendingTeammates = await db.AgentTeammates
+            .Where(t => t.TeamId == parsedTeamId && t.FinishedAt == null)
+            .ToListAsync();
+        foreach (var tm in pendingTeammates)
+        {
+            tm.FinishedAt = now;
+        }
+        var cascadeCount = pendingTeammates.Count;
+
         team.Status = "closed";
-        team.ClosedAt = DateTime.UtcNow;
+        team.ClosedAt = now;
         await db.SaveChangesAsync();
         hubNotify.FireAndForget();
 
         _ = Task.Run(() => notify.SendAsync($"🏁 Agent Team 收尾 — **{team.Name}** (id=`{team.Id.ToString()[..8]}`)"));
 
-        return "closed";
+        return $"closed (cascade-finished {cascadeCount} teammates)";
     }
 
     [McpServerTool, Description("Register a new teammate (lead or member) in an existing team. Returns the new teammate_id (Guid string).")]

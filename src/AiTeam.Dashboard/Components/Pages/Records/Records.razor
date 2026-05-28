@@ -6,11 +6,6 @@
 
 <PageTitle>Records — AiTeam</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">MCP Records 表格檢視</MudText>
-<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
-    顯示 Claude Code Agent Team 透過 MCP server 寫入的 5 類記錄（client-side sort / filter / paging 全開）。
-</MudText>
-
 @switch ((Section ?? "teams").ToLowerInvariant())
 {
     case "teammates":
@@ -36,12 +31,12 @@
         <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true"
                   Filter="new Func<AgentTeammate, bool>(FilterTeammate)" T="AgentTeammate">
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.TeamId))">TeamId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.TeamId))">Team Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Model ?? string.Empty))">Model</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Role))">Role</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeammate, object>(x => x.SpawnedAt))">SpawnedAt</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => (object?)x.FinishedAt ?? DateTime.MinValue))">FinishedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeammate, object>(x => x.SpawnedAt))">Spawned At</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => (object?)x.FinishedAt ?? DateTime.MinValue))">Finished At</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
@@ -77,17 +72,17 @@
         <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true"
                   Filter="new Func<AgentTask, bool>(FilterTask)" T="AgentTask">
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.TeamId))">TeamId</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.TeammateId ?? Guid.Empty))">TeammateId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.TeamId))">Team Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.TeammateId ?? Guid.Empty))">Teammate Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Title))">Title</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Description ?? string.Empty))">Description</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Status))">Status</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTask, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.CompletedAt ?? DateTime.MinValue))">CompletedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTask, object>(x => x.CreatedAt))">Created At</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => (object?)x.CompletedAt ?? DateTime.MinValue))">Completed At</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeamId.ToString()[..8]…</MudTd>
-                <MudTd>@(context.TeammateId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@(context.TeammateId.HasValue ? context.TeammateId.Value.ToString()[..8] + "…" : "—")</MudTd>
                 <MudTd>@context.Title</MudTd>
                 <MudTd>@(context.Description ?? "—")</MudTd>
                 <MudTd>@context.Status</MudTd>
@@ -119,15 +114,15 @@
         <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true"
                   Filter="new Func<AgentMessage, bool>(FilterMessage)" T="AgentMessage">
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.TeammateId))">TeammateId</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => (object?)x.TaskId ?? Guid.Empty))">TaskId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.TeammateId))">Teammate Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => (object?)x.TaskId ?? Guid.Empty))">Task Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.Role))">Role</MudTableSortLabel></MudTh>
                 <MudTh>Content（前 200 字）</MudTh>
-                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentMessage, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentMessage, object>(x => x.CreatedAt))">Created At</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
-                <MudTd>@(context.TaskId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@(context.TaskId.HasValue ? context.TaskId.Value.ToString()[..8] + "…" : "—")</MudTd>
                 <MudTd>@context.Role</MudTd>
                 <MudTd>@(context.Content.Length > 200 ? context.Content[..200] + "…" : context.Content)</MudTd>
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
@@ -154,16 +149,16 @@
         <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true"
                   Filter="new Func<AgentTokenUsage, bool>(FilterTokenUsage)" T="AgentTokenUsage">
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.TeammateId))">TeammateId</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => (object?)x.TaskId ?? Guid.Empty))">TaskId</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.TeammateId))">Teammate Id</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => (object?)x.TaskId ?? Guid.Empty))">Task Id</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.Model ?? string.Empty))">Model</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.InputTokens))">Input</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.OutputTokens))">Output</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTokenUsage, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTokenUsage, object>(x => x.CreatedAt))">Created At</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.TeammateId.ToString()[..8]…</MudTd>
-                <MudTd>@(context.TaskId?.ToString()[..8] + "…" ?? "—")</MudTd>
+                <MudTd>@(context.TaskId.HasValue ? context.TaskId.Value.ToString()[..8] + "…" : "—")</MudTd>
                 <MudTd>@(context.Model ?? "—")</MudTd>
                 <MudTd>@context.InputTokens</MudTd>
                 <MudTd>@context.OutputTokens</MudTd>
@@ -199,8 +194,8 @@
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Description ?? string.Empty))">Description</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Status))">Status</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeam, object>(x => x.CreatedAt))">CreatedAt</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => (object?)x.ClosedAt ?? DateTime.MinValue))">ClosedAt</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeam, object>(x => x.CreatedAt))">Created At</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => (object?)x.ClosedAt ?? DateTime.MinValue))">Closed At</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Name</MudTd>
