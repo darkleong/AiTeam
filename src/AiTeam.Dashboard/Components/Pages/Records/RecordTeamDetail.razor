@@ -44,7 +44,7 @@ else
 
     @* 2. Teammates 區塊 *@
     <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-2">Teammates（@_teammates.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Teammates</MudText>
         <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true" T="AgentTeammate">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
@@ -68,7 +68,7 @@ else
 
     @* 3. Tasks 區塊 *@
     <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-2">Tasks（@_tasks.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Tasks</MudText>
         <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true" T="AgentTask">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.Title))">Title</MudTableSortLabel></MudTh>
@@ -94,7 +94,7 @@ else
 
     @* 4. Token Usage 區塊（join teammate name） *@
     <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-2">Token Usage（@_tokenUsages.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Token Usage</MudText>
         <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true" T="TokenUsageRow">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<TokenUsageRow, object>(x => x.TeammateName))">Teammate Name</MudTableSortLabel></MudTh>
@@ -120,7 +120,7 @@ else
 
     @* 5. Messages 區塊（timeline / CreatedAt asc） *@
     <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-2">Messages（@_messages.Count / 按 CreatedAt asc 排成 timeline）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Messages（按 CreatedAt asc 排成 timeline）</MudText>
         <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true" T="MessageRow">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<MessageRow, object>(x => x.TeammateName))">Teammate Name</MudTableSortLabel></MudTh>

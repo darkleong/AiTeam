@@ -9,7 +9,7 @@
 @switch ((Section ?? "teams").ToLowerInvariant())
 {
     case "teammates":
-        <MudText Typo="Typo.h6" Class="mb-2">Teammates（@_teammates.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Teammates</MudText>
         @* F3-A filter：Model 下拉 + Role 下拉 *@
         <MudGrid Spacing="2" Class="mb-3">
             <MudItem xs="12" sm="6" md="3">
@@ -53,7 +53,7 @@
         break;
 
     case "tasks":
-        <MudText Typo="Typo.h6" Class="mb-2">Tasks（@_tasks.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Tasks</MudText>
         @* F3-A filter：Status 下拉 + Title 模糊搜尋 *@
         <MudGrid Spacing="2" Class="mb-3">
             <MudItem xs="12" sm="6" md="3">
@@ -96,7 +96,7 @@
         break;
 
     case "messages":
-        <MudText Typo="Typo.h6" Class="mb-2">Messages（@_messages.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Messages</MudText>
         @* F3-A filter：Role 下拉 + Content 關鍵字 *@
         <MudGrid Spacing="2" Class="mb-3">
             <MudItem xs="12" sm="6" md="3">
@@ -134,7 +134,7 @@
         break;
 
     case "token-usage":
-        <MudText Typo="Typo.h6" Class="mb-2">Token Usage（@_tokenUsages.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Token Usage</MudText>
         @* F3-A filter：Model 下拉 *@
         <MudGrid Spacing="2" Class="mb-3">
             <MudItem xs="12" sm="6" md="3">
@@ -171,7 +171,7 @@
         break;
 
     default:
-        <MudText Typo="Typo.h6" Class="mb-2">Teams（@_teams.Count）</MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">Teams</MudText>
         @* F3-A filter：Status 下拉 + Name 模糊搜尋 *@
         <MudGrid Spacing="2" Class="mb-3">
             <MudItem xs="12" sm="6" md="3">
