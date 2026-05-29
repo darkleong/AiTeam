@@ -5,11 +5,14 @@
 
 <PageTitle>Records 趨勢 — AiTeam</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">MCP Records 趨勢圖</MudText>
-<MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
-    依 mcp_* 表彙整時序統計：過去 7 天 token 消耗（總量 + by-model 拆分）+ 過去 30 天 active team / completed task 數量。
-</MudText>
+<div class="page-header">
+    <MudText Typo="Typo.h4">MCP Records 趨勢圖</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        依 mcp_* 表彙整時序統計：過去 7 天 token 消耗（總量 + by-model 拆分）+ 過去 30 天 active team / completed task 數量。
+    </MudText>
+</div>
 
+<div class="page-body">
 <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudText Typo="Typo.h6" Class="mb-2">過去 7 天每日 Token 消耗（總量）</MudText>
     @if (_tokenDailyTotalSeries.Count == 0)
@@ -54,3 +57,4 @@
                   Width="100%" Height="320px" />
     }
 </MudPaper>
+</div>
