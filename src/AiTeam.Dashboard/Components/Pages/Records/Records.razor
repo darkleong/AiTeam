@@ -29,6 +29,7 @@
             </MudItem>
         </MudGrid>
         <MudTable Items="_teammates" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Height="calc(100vh - 280px)" FixedHeader="true"
                   Filter="new Func<AgentTeammate, bool>(FilterTeammate)" T="AgentTeammate">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeammate, object>(x => x.TeamId))">Team Id</MudTableSortLabel></MudTh>
@@ -70,6 +71,7 @@
             </MudItem>
         </MudGrid>
         <MudTable Items="_tasks" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Height="calc(100vh - 280px)" FixedHeader="true"
                   Filter="new Func<AgentTask, bool>(FilterTask)" T="AgentTask">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTask, object>(x => x.TeamId))">Team Id</MudTableSortLabel></MudTh>
@@ -112,6 +114,7 @@
             </MudItem>
         </MudGrid>
         <MudTable Items="_messages" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Height="calc(100vh - 280px)" FixedHeader="true"
                   Filter="new Func<AgentMessage, bool>(FilterMessage)" T="AgentMessage">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentMessage, object>(x => x.TeammateId))">Teammate Id</MudTableSortLabel></MudTh>
@@ -147,6 +150,7 @@
             </MudItem>
         </MudGrid>
         <MudTable Items="_tokenUsages" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Height="calc(100vh - 280px)" FixedHeader="true"
                   Filter="new Func<AgentTokenUsage, bool>(FilterTokenUsage)" T="AgentTokenUsage">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTokenUsage, object>(x => x.TeammateId))">Teammate Id</MudTableSortLabel></MudTh>
@@ -187,6 +191,7 @@
         </MudGrid>
         @* F3-B drill-down：OnRowClick 跳轉 team detail page *@
         <MudTable Items="_teams" Dense="true" Striped="true" Bordered="true" Hover="true"
+                  Height="calc(100vh - 280px)" FixedHeader="true"
                   Filter="new Func<AgentTeam, bool>(FilterTeam)" T="AgentTeam"
                   OnRowClick="@((TableRowClickEventArgs<AgentTeam> args) => OnTeamRowClick(args))"
                   RowClass="cursor-pointer">
