@@ -39,6 +39,7 @@ public partial class Records : IAsyncDisposable
 
     private string _teamsStatusFilter       = "all";
     private string _teamsNameSearch         = string.Empty;
+    private string _teamsProjectSearch      = string.Empty;
     private string _teammatesModelFilter    = "all";
     private string _teammatesRoleFilter     = "all";
     private string _tasksStatusFilter       = "all";
@@ -75,6 +76,9 @@ public partial class Records : IAsyncDisposable
             return false;
         if (!string.IsNullOrWhiteSpace(_teamsNameSearch)
             && x.Name.IndexOf(_teamsNameSearch, StringComparison.OrdinalIgnoreCase) < 0)
+            return false;
+        if (!string.IsNullOrWhiteSpace(_teamsProjectSearch)
+            && (x.ProjectName is null || x.ProjectName.IndexOf(_teamsProjectSearch, StringComparison.OrdinalIgnoreCase) < 0))
             return false;
         return true;
     }

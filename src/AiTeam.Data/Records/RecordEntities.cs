@@ -19,6 +19,8 @@ public class AgentTeam
     public Guid Id { get; set; }
     /// <summary>Claude Code team name（lead session 命名 / e.g., "feature-x-team"）</summary>
     public string Name { get; set; } = "";
+    /// <summary>Repo / project 名（caller register_team 時 detect 後填入）</summary>
+    public string? ProjectName { get; set; }
     /// <summary>老闆給 team 的 high-level intent（nullable）</summary>
     public string? Description { get; set; }
     /// <summary>active / closed</summary>

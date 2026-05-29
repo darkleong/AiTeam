@@ -23,6 +23,18 @@
 
 ---
 
+## [4.2.0] — 2026-05-29 — MCP Records 加 Project tracking + v4.1.3 後 batch polish
+
+**MINOR — Christ 拍 A 三層 fallback / 為跨 project 共用同一 MCP server endpoint 鋪路**：MCP Records 全鏈路加 ProjectName tracking 讓未來個人多 project 共用同個 server 可區分來源。同 minor 含 v4.1.3 release 後一連串 Dashboard polish + DB cleanup + 防呆紀律補。
+
+- **ProjectName 全鏈路**：AgentTeam 加 ProjectName property + Migration AddTeamProjectName schema add + backfill 既有 SET='AiTeam' / RegisterTeam 加 projectName 參數 / Dashboard Teams 表加 Project sortable 欄 + 模糊搜尋 filter / RecordTeamDetail 頂部 card 加 Project 顯示 / lead.md step 2 加 detect projectName SOP（`git remote get-url origin` → `git rev-parse --show-toplevel` basename → cwd basename 三層 fallback）
+- **Dashboard polish**：Records.razor + RecordTeamDetail.razor header label 加空格（TeamId → Team Id 等 25 處）+ 刪頂部標題段 + 砍區塊 count（`Teams(10)` → `Teams`）+ null 顯示 bug 修（`null + "…" ?? "—"` 永遠走 `"…"` 改 `.HasValue` ternary）+ 5 分頁表格 fill viewport（`Height="calc(100vh - 280px)"` + FixedHeader）
+- **DB cleanup + 防呆**：close_team 加 cascade auto-finish（team close 時補 finish 未結束 teammate）+ FixHistoricalTeammateNames（cody-{a-patch2,cde-patch1,f-deadcfg}-1 → cody-1/2/3）+ CleanupTestTeamsAndStaleNames（砍 4 個 test team cascade / petra-pm × 7 → petra）+ BackfillMissingRecordReferences（補 8 task TeammateId / 5 token usage TaskId / 2 lead FinishedAt）
+
+Christ 拍板理由：跨 project MCP server 共用要識別來源 + Dashboard 觀察殘留統一掃過 + close_team cascade 防 lead 漏 call finish_teammate。
+
+---
+
 ## [4.1.3] — 2026-05-28 — Agent 命名去人格化（A 路線）+ reviewer / syncer 加入
 
 **PATCH — Christ 拍 A 全 commit 走純職能命名**：repo 內 agent 全部脫人格化（給團隊通用易交接）/ 個人 personality 版本搬到 user-level `~/.claude/agents/` 作熟悉隊友 overlay。

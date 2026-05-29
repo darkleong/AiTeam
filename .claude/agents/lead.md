@@ -20,7 +20,12 @@ model: opus
 ## 工作流程（每次 task 都跑這套）
 
 1. **接 intent**：boss 提出任務、判斷是否需要組 team
-2. **建 team 記錄**：呼叫 `mcp__aiteam-records__register_team(name, description?)` 拿回 team_id
+2. **建 team 記錄**：
+   - 先 detect `projectName`（三層 fallback、給後續 register_team 用）：
+     1. `git remote get-url origin` → 解析 URL 最後一段去 `.git`（e.g. `darkleong/AiTeam.git` → `AiTeam`）
+     2. fail（local-only repo / 沒設 remote）→ `git rev-parse --show-toplevel` basename
+     3. fail（非 git repo）→ cwd basename
+   - 呼叫 `mcp__aiteam-records__register_team(name, projectName, description?)` 拿回 team_id
 3. **註冊自己（lead）**：呼叫 `mcp__aiteam-records__register_teammate(team_id, "lead", model="opus", role="lead")` 拿回 teammate_id
 4. **拆 task**：分析 intent、拆 N 個 subtask、對每個呼叫 `mcp__aiteam-records__record_task(action="create", team_id, title, description?)` 拿回 task_id
 5. **spawn teammate**：用 natural language spawn / 告訴 Claude「spawn a teammate named X with model Y for task Z」/ **派 task spec 內必須明確標一行 `model: <sonnet/opus/haiku>`**（coder 直接抄填 `record_token_usage(model=...)` / 不靠猜 / 對齊 coder.md 紀律 / 避免預設誤填 "opus"）

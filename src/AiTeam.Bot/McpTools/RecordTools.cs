@@ -30,12 +30,14 @@ public sealed class RecordTools
         RecordNotificationService notify,
         RecordsHubNotifyService hubNotify,
         [Description("Team name (e.g., 'feature-x-team', 'bug-investigation-team')")] string name,
-        [Description("High-level intent the boss gave to this team (optional)")] string? description = null)
+        [Description("High-level intent the boss gave to this team (optional)")] string? description = null,
+        [Description("Project / repo name（caller detect from git remote / repo root basename / nullable）")] string? projectName = null)
     {
         var team = new AgentTeam
         {
             Name = name,
             Description = description,
+            ProjectName = projectName,
         };
         db.AgentTeams.Add(team);
         await db.SaveChangesAsync();

@@ -8,9 +8,10 @@
     <!-- v4.1.1：v4.1.0 post-release polish（candidate A-F / 2 cody spawn / F14 紀律首輪實證 cody 自呼叫 MCP record 生效）— Records IDbContextFactory + RecordsTrends SignalR + Trends 時區跨日 + DailyReportCron dead env 清 + TokenLog v3 dead chain 大清（TokenLogService/TokenCostEstimator/TokenUsage 砍 + PetraSessionId column drop + per-PetraSession dimension dead query 砍 + InternalController 註解對齊）。 -->
     <!-- v4.1.2：團隊 *.md 配置整理（Christ 拍 A 路線 / Petra 自處）— .gitignore 鬆綁讓 .claude/ + .mcp.json 進 git / agents 從 repo root agents/ 搬 .claude/agents/ 並改職能命名（lead.md + coder.md）/ output-styles/team.md 升專案級（個人偏好走 user overlay）/ docs/reference/aspire-url.md 從個人 memory 搬進 repo / CLAUDE.md 加 onboarding 段。 -->
     <!-- v4.1.3：Agent 命名去人格化（Christ 拍 A 路線）+ reviewer/syncer 加入 — repo agents 全部脫人格（Petra→Lead / Cody→Coder / 妳→你 / Christ→boss / personality 段刪 / 對話 register 段刪因已在 team.md）+ 新加 reviewer.md（read-only diff review / 無 Edit/Write）+ syncer.md（doc-only / 嚴禁動 src/）+ personality 版搬 user-level ~/.claude/agents/ 保留 Petra/Cody 給 Christ 個人專案用 + settings.json agent: lead + CLAUDE.md onboarding 補個人 overlay 路線。 -->
-    <Version>4.1.3</Version>
-    <AssemblyVersion>4.1.3</AssemblyVersion>
-    <FileVersion>4.1.3</FileVersion>
+    <!-- v4.2.0：MCP Records 加 ProjectName tracking（Christ 拍 A 三層 fallback）+ batch polish — AgentTeam 加 ProjectName 屬性 + Migration AddTeamProjectName schema + backfill 既有='AiTeam' / register_team 加 projectName 參數 / Dashboard Teams 表加 Project 欄 + filter / RecordTeamDetail 加 Project card / lead.md step 2 加 detect projectName SOP（git remote → git rev-parse → cwd basename 三層 fallback）。同 minor 含前期累積 polish — header label 加空格 + 刪標題段 + null 顯示 bug 修 + 計算數字砍 + 5 分頁表格 fill viewport + close_team cascade auto-finish + Records UI null/timestamp 補 backfill + 砍 4 個 test team 殘留 + 殘留 petra-pm → petra。 -->
+    <Version>4.2.0</Version>
+    <AssemblyVersion>4.2.0</AssemblyVersion>
+    <FileVersion>4.2.0</FileVersion>
     <!-- 明確設定 InformationalVersion，避免 SDK 附加 commit hash 後綴 -->
     <InformationalVersion>$(Version)</InformationalVersion>
   </PropertyGroup>

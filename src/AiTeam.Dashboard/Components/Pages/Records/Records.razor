@@ -188,6 +188,9 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudTextField T="string" @bind-Value="_teamsNameSearch" Label="Name 模糊搜尋" Margin="Margin.Dense" Variant="Variant.Outlined" Immediate="true" Clearable="true" />
             </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField T="string" @bind-Value="_teamsProjectSearch" Label="Project 模糊搜尋" Margin="Margin.Dense" Variant="Variant.Outlined" Immediate="true" Clearable="true" />
+            </MudItem>
         </MudGrid>
         @* F3-B drill-down：OnRowClick 跳轉 team detail page *@
         <MudTable Items="_teams" Dense="true" Striped="true" Bordered="true" Hover="true"
@@ -197,6 +200,7 @@
                   RowClass="cursor-pointer">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Name))">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.ProjectName ?? string.Empty))">Project</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Description ?? string.Empty))">Description</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="@(new Func<AgentTeam, object>(x => x.Status))">Status</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="@(new Func<AgentTeam, object>(x => x.CreatedAt))">Created At</MudTableSortLabel></MudTh>
@@ -204,6 +208,7 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd>@context.Name</MudTd>
+                <MudTd>@(context.ProjectName ?? "—")</MudTd>
                 <MudTd>@(context.Description ?? "—")</MudTd>
                 <MudTd>@context.Status</MudTd>
                 <MudTd>@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
